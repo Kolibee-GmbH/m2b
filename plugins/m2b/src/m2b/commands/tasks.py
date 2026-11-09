@@ -16,7 +16,6 @@ from m2b.commands.times import parse_day_or_moment
 from m2b.config.machine import load_machine_config
 from m2b.config.store_settings import require_store_writable
 from m2b.tasks.base import Task, Tasks
-from m2b.tasks.markdown import MarkdownTasks
 
 
 def _tasks(context: Context) -> Tasks:
@@ -28,9 +27,8 @@ def tasks_list(arguments: argparse.Namespace, context: Context) -> int:
     configured = _tasks(context)
     configured.check_reachable()
     found = configured.items(marker=arguments.marker, include_completed=arguments.include_completed)
-    if isinstance(configured, MarkdownTasks):
-        for _, problem in configured.unreadable():
-            print(f"m2b: {problem}; this task is left out until the file is fixed", file=sys.stderr)
+    for _, problem in configured.unreadable():
+        print(f"m2b: {problem}; this task is left out until the file is fixed", file=sys.stderr)
     if arguments.json:
         print_json([_task_json(task) for task in found])
         return 0

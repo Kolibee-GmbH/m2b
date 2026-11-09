@@ -45,7 +45,9 @@ ways and recommend the first:
 m2b setup inspect --store-backend <icloud or folder> --store-path "<folder>" --json
 ```
 
-If `store_exists` is `false`, the folder is not there yet: ask the owner to create it, then inspect
+If `store_path_problem` is set and this machine is to curate, read it to the owner and ask for
+another folder before anything else; a machine that only captures may keep the folder. If
+`store_exists` is `false`, the folder is not there yet: ask the owner to create it, then inspect
 again. The answer shows what the store holds: `store_settings` (`store.json`), `profile`, `distillate`
 (whether `memory/MEMORY.md` exists) and this machine's `machine_config`. A store that holds any of
 them is in use: this machine joins it, and you ask only what is missing below. Setup downloads

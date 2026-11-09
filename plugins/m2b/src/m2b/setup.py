@@ -158,6 +158,7 @@ def inspect(machine: MachinePaths, location: StoreLocation | None) -> dict[str, 
     machine config and no store named gives ``"store": null``, and a store folder that does not
     exist yet in a folder that does (the quick start's ``~/m2b``) gives ``"store_exists": false``.
     A folder whose parent is missing too may be a volume that is not mounted, and stays unreachable.
+    ``store_path_problem`` says why a curating machine could not use the path, before the interview.
     """
     config = read_json_object(machine.config_file)
     if location is None:
@@ -170,6 +171,7 @@ def inspect(machine: MachinePaths, location: StoreLocation | None) -> dict[str, 
     store.fetch(EXISTING, FETCH_TIMEOUT_SECONDS)
     return {
         "store": {"backend": location.backend, "path": str(location.path)},
+        "store_path_problem": store_path.problem(location.path),
         "store_exists": True,
         "store_settings": read_store_json_object(store, STORE_SETTINGS_FILE_NAME),
         "profile": read_store_json_object(store, PROFILE_FILE_NAME),
@@ -181,6 +183,7 @@ def inspect(machine: MachinePaths, location: StoreLocation | None) -> dict[str, 
 def _nothing_there(location: StoreLocation | None, config: dict[str, Any] | None) -> dict[str, Any]:
     return {
         "store": {"backend": location.backend, "path": str(location.path)} if location is not None else None,
+        "store_path_problem": store_path.problem(location.path) if location is not None else None,
         "store_exists": False,
         "store_settings": None,
         "profile": None,

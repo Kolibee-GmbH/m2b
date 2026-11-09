@@ -431,6 +431,30 @@ class SettingsCommandTest(CommandTest):
         )
         self.assertEqual(self.run_command("config", "get", "machine_id")[1].strip(), "sb-test-m1")
 
+    def test_config_set_refuses_a_store_path_curation_cannot_use_on_the_curating_machine(self) -> None:
+        """Covers: B81"""
+        self.set_up(calendar="none")
+        before = self.machine.config_file.read_text(encoding="utf-8")
+
+        code, _, err = self.run_command("config", "set", "store.path", str(self.store_root.parent / "Notes (2026)"))
+
+        self.assertEqual(code, cli.EXIT_USAGE, err)
+        self.assertIn("(", err)
+        self.assertEqual(self.machine.config_file.read_text(encoding="utf-8"), before)
+
+    def test_config_set_keeps_such_a_store_path_on_a_machine_that_only_captures(self) -> None:
+        """Covers: B81"""
+        self.set_up(calendar="none")
+        settings = json.loads((self.store_root / "store.json").read_text(encoding="utf-8"))
+        settings["curating_machine"] = "sb-test-m2"
+        (self.store_root / "store.json").write_text(json.dumps(settings), encoding="utf-8")
+        linked = self.store_root.parent / "Dropbox (Personal)"
+        linked.symlink_to(self.store_root)
+
+        code, _, err = self.run_command("config", "set", "store.path", str(linked))
+
+        self.assertEqual(code, cli.EXIT_OK, err)
+
     def test_config_set_refuses_a_value_the_config_does_not_allow(self) -> None:
         self.set_up()
 

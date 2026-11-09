@@ -3,7 +3,7 @@
 <p align="center"><em>A second brain for Claude Code. Say "remember this" in any session; every new session already knows.</em></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/status-pre--release-lightgrey?style=flat-square" alt="Status: pre-release">
+  <a href="https://github.com/b33eep/m2b/releases"><img src="https://img.shields.io/github/v/release/b33eep/m2b?style=flat-square" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/Claude%20Code-2.1.319%2B-c96442?style=flat-square" alt="Claude Code 2.1.319 or later">
   <img src="https://img.shields.io/badge/Python-3.9%2B-3776ab?style=flat-square" alt="Python 3.9 or later">
@@ -17,11 +17,6 @@
   <a href="docs/getting-started.md">Getting started</a> ·
   <a href="CHANGELOG.md">Changelog</a>
 </p>
-
-> [!NOTE]
-> m2b is not released yet; the marketplace install below works once the repository is
-> published. Until then, install from a checkout: clone this repository, run
-> `/plugin marketplace add <path to the checkout>` in Claude Code, then `/plugin install m2b@m2b`.
 
 ## TL;DR
 

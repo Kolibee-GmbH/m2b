@@ -438,6 +438,16 @@ class InspectTest(SetupTest):
         self.assertTrue(result["distillate"])
         self.assertIsNone(result["machine_config"])
 
+    def test_inspect_names_a_store_path_curation_cannot_use_before_the_interview(self) -> None:
+        """Covers: B81"""
+        target = self.store_root.parent / "Notes (2026)"
+
+        result = self.run_json("setup", "inspect", "--store-backend", "folder", "--store-path", str(target))
+
+        self.assertIn("(", result["store_path_problem"])
+        clean = self.run_json("setup", "inspect", "--store-backend", "folder", "--store-path", str(self.store_root))
+        self.assertIsNone(clean["store_path_problem"])
+
     def test_inspect_without_a_store_answer_uses_the_configured_store_and_an_empty_one_says_new(self) -> None:
         self.apply(self.answers())
         for name in ("store.json", "profile.json", "STORE.md", "memory/MEMORY.md"):
@@ -462,6 +472,7 @@ class FirstRunInspectTest(SetupTest):
             result,
             {
                 "store": None,
+                "store_path_problem": None,
                 "store_exists": False,
                 "store_settings": None,
                 "profile": None,

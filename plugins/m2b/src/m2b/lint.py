@@ -32,7 +32,6 @@ from m2b.notes.names import NoteName
 from m2b.store.base import Store, StoreError, fetch_command
 from m2b.tasks import markers
 from m2b.tasks.base import Tasks, TasksError
-from m2b.tasks.markdown import MarkdownTasks
 from m2b.topic_match import MIN_WORD_CHARACTERS
 
 __all__ = ["Finding", "LintReport", "TasksError", "fix", "scan"]
@@ -355,8 +354,9 @@ def _links(store: Store, report: LintReport, relative: str, corpus: _Corpus) -> 
 
 def _tasks(store: Store, report: LintReport, tasks: Tasks, corpus: _Corpus) -> None:
     try:
-        # Only the Markdown backend reads tasks/; a folder left from before a switch is no one's.
-        for path, problem in tasks.unreadable() if isinstance(tasks, MarkdownTasks) else []:
+        # Only a backend that keeps tasks as files has any; a tasks/ folder left from before a switch
+        # to another backend is no one's.
+        for path, problem in tasks.unreadable():
             report.add("task-file", ACTION, path, f"{problem}; the task is left out until the file is fixed")
     except TasksError as error:
         report.add("tasks-unreadable", INFO, TASKS, f"the tasks could not be read, so not checked: {error}")
