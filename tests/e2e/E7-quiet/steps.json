@@ -1,0 +1,8 @@
+{
+  "description": "E7 quiet: a capture with the quiet marker is found by search, and rediscover never offers it, although it shares a word with the current section of the distillate.",
+  "steps": [
+    {"run": ["m2b", "search", "--", "larch"], "stdout": "\\Acorpus/2026/05/20260512T061500Z-cli-a1b2\\.md:6: The shed roof needs larch boards; Dana knows a sawmill\\.\\n\\Z"},
+    {"run": ["m2b", "rediscover", "--today", "2026-11-07"], "stdout": "\\ANo old notes to bring back\\.\\n\\Z"},
+    {"run": ["m2b", "rediscover", "--today", "2026-11-07", "--count", "10"], "stdout": "\\ANo old notes to bring back\\.\\n\\Z"}
+  ]
+}

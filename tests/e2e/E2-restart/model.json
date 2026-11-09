@@ -1,0 +1,49 @@
+{
+  "description": "E2 at the model level: two real runs over a capture with a follow-up and one with a link; the second run creates no second task, ref or corpus file.",
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ]
+    }
+  ],
+  "invariants": [
+    {
+      "run_state": "succeeded"
+    },
+    {
+      "no_denials": true
+    },
+    {
+      "count": 0,
+      "glob": "inbox/*"
+    },
+    {
+      "count": 2,
+      "glob": "corpus/2026/11/*.md"
+    },
+    {
+      "count": 1,
+      "glob": "tasks/*.md",
+      "content": "m2b:capture 20261107T091500Z-cli-a1b2\\.md follow-up"
+    },
+    {
+      "count": 1,
+      "glob": "tasks/*.md",
+      "content": "m2b:capture 20261107T091600Z-cli-c3d4\\.md "
+    },
+    {
+      "once": "https://example\\.org/shed\\]",
+      "glob": "corpus/2026/11/20261107T091600Z-cli-c3d4.md"
+    }
+  ]
+}

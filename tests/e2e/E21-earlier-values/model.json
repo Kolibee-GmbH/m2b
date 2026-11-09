@@ -1,0 +1,44 @@
+{
+  "description": "E21 at the model level: a real ingest step files a capture that changes a fact. Dana lived in Zurich; the capture says she moved to Bern. The fact file then says Bern, and keeps Zurich under `## Earlier` with the day of the capture. Run it after each Claude Code minor update: the filing is the model's, not m2b's code.",
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "Dana moved from Zurich to Bern"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ]
+    }
+  ],
+  "invariants": [
+    {
+      "matches": "(?s)Bern.*## Earlier\\n\\n- [^\\n]*Zurich[^\\n]*\\(until 20\\d\\d-\\d\\d-\\d\\d\\)\\n.*## Evidence",
+      "path": "memory/dana.md"
+    },
+    {
+      "matches": "Bern",
+      "path": "memory/MEMORY.md"
+    },
+    {
+      "run_state": "succeeded"
+    },
+    {
+      "count": 0,
+      "glob": "memory/MEMORY.md",
+      "content": "Zurich"
+    },
+    {
+      "no_denials": true
+    },
+    {
+      "count": 0,
+      "glob": "inbox/*"
+    }
+  ]
+}

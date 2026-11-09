@@ -1,0 +1,29 @@
+{
+  "description": "E20 an older m2b beside a newer store: a store whose format this m2b does not know yet, as a second machine sees it before its update. A capture still goes into the inbox; `m2b curate --force` refuses with a line saying to update m2b and changes nothing; `m2b doctor` names the format as the problem.",
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "Dana's sister Kim moves to Lyon in March"
+      ],
+      "stdout": "^inbox/\\d{8}T\\d{6}Z-cli-[0-9a-f]{4}\\.md\\n$"
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "exit": 2
+    },
+    {
+      "run": [
+        "m2b",
+        "doctor"
+      ],
+      "exit": 1,
+      "stdout": "store-format: newer \\(the store has format 99, this m2b knows \\d+: update m2b on this machine\\)"
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "store_files": {
+    "store.json": "{\n  \"format\": 2,\n  \"tasks\": {\"backend\": \"markdown\"},\n  \"curating_machine\": \"sb-test-e2e\",\n  \"journal_since\": \"2026-11-01\"\n}\n",
+    "profile.json": "{\n  \"version\": 1,\n  \"owner\": \"Alex\",\n  \"language\": \"en\",\n  \"spheres\": [\n    {\"id\": \"acme\", \"label\": \"Acme Ltd\", \"billable\": true, \"match\": {\"path_under\": [\"~/code/acme\"]}},\n    {\"id\": \"private\", \"default\": true}\n  ],\n  \"customers\": [\"Globex\"]\n}\n",
+    "memory/MEMORY.md": "# Memory\n\n## Facts\n\n## Current\n\n- Planning the trip to Porto\n",
+    "state/core/candidates.json": "{\n  \"format\": 1,\n  \"candidates\": {}\n}\n",
+    "state/parts/worklog/ledger.csv": "period,start,end,minutes,sphere,billable,topic,customer,project,activity\n"
+  },
+  "store_patterns": [
+    {
+      "path": "corpus/????/??/????????T??????Z-worklog-????.md",
+      "content": "\\-\\-\\-\\\ncreated:\\ [^\\\"\\n]+\\\nsource:\\ worklog\\\nkind:\\ worklog\\\ncurated:\\ true\\\n\\-\\-\\-\\\n\\\n\\#\\ Worklog\\ \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}\\ to\\ \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}\\\n\\\n\\#\\#\\ Sessions\\\n\\\nNo\\ sessions\\ in\\ this\\ period\\.\\\n\\\n\\#\\#\\ Booking\\ proposals\\\n\\\nNone\\.\\\n\\\n\\#\\#\\ Proposed\\ for\\ memory\\\n\\\n\\-\\ Robin\\ moves\\ to\\ Lyon\\ in\\ May\\\n\\\n\\#\\#\\ Could\\ not\\ read\\\n\\\n\\-\\ recorder:\\ no\\ recordings\\ in\\ [^\n]+/home/\\.local/state/m2b/worklog;\\ is\\ the\\ recorder\\ installed\\?\\\n\\-\\ herdr:\\ herdr\\ did\\ not\\ answer\\ \\([^\n]+/no\\-herdr\\ was\\ not\\ found\\);\\ activity\\ while\\ herdr\\ was\\ not\\ running\\ is\\ missing\\\n\\-\\ transcripts:\\ no\\ Claude\\ Code\\ transcripts\\ in\\ [^\n]+/claude\\-config/projects\\\n\\-\\ inbox:\\ the\\ store\\ has\\ no\\ inbox\\ at\\ [^\n]+/store/inbox\\\n<!\\-\\-\\ m2b:curation\\ \\-\\->\\\nfiled:\\ current\\ only\\\n"
+    },
+    {
+      "path": "inbox/????????T??????Z-candidate-????.md",
+      "content": "\\-\\-\\-\\\ncreated:\\ [^\\\"\\n]+\\\nsource:\\ candidate\\\nfrom_candidate:\\ [0-9a-f]{12}\\\n\\-\\-\\-\\\nRobin\\ moves\\ to\\ Lyon\\ in\\ May\\\n"
+    },
+    {
+      "path": "state/parts/worklog/ledger.json",
+      "content": "\\{\\\n\\ \"version\":\\ 1,\\\n\\ \"periods\":\\ \\{\\\n\\ \\ \"[0-9a-f]{12}\":\\ \\{\\\n\\ \\ \\ \"start\":\\ \"[^\\\"\\n]+\",\\\n\\ \\ \\ \"end\":\\ \"[^\\\"\\n]+\",\\\n\\ \\ \\ \"spans\":\\ \\[\\]\\\n\\ \\ \\}\\\n\\ \\}\\\n\\}\\\n"
+    },
+    {
+      "path": "state/parts/worklog/watermark.json",
+      "content": "\\{\"version\":\\ 1,\\ \"end\":\\ \"[^\\\"\\n]+\",\\ \"period\":\\ \"[0-9a-f]{12}\"\\}\\\n"
+    },
+    {
+      "path": "state/parts/worklog/ledger.xlsx",
+      "content": "PK.*"
+    },
+    {
+      "path": "state/core/last-run.json",
+      "content": "\\{\\\n\\ \\ \"state\":\\ \"succeeded\",\\\n\\ \\ \"machine_id\":\\ \"sb\\-test\\-e2e\",\\\n\\ \\ \"started_at\":\\ \"[^\\\"\\n]+\",\\\n\\ \\ \"finished_at\":\\ \"[^\\\"\\n]+\",\\\n\\ \\ \"last_succeeded_at\":\\ \"[^\\\"\\n]+\",\\\n\\ \\ \"steps\":\\ \\[\\\n\\ \\ \\ \\ \\{\\\n\\ \\ \\ \\ \\ \\ \"name\":\\ \"harvest\",\\\n\\ \\ \\ \\ \\ \\ \"result\":\\ \"succeeded\"\\\n\\ \\ \\ \\ \\},\\\n\\ \\ \\ \\ \\{\\\n\\ \\ \\ \\ \\ \\ \"name\":\\ \"worklog\",\\\n\\ \\ \\ \\ \\ \\ \"result\":\\ \"succeeded\"\\\n\\ \\ \\ \\ \\},\\\n\\ \\ \\ \\ \\{\\\n\\ \\ \\ \\ \\ \\ \"name\":\\ \"ingest\",\\\n\\ \\ \\ \\ \\ \\ \"result\":\\ \"succeeded\"\\\n\\ \\ \\ \\ \\},\\\n\\ \\ \\ \\ \\{\\\n\\ \\ \\ \\ \\ \\ \"name\":\\ \"refresh\",\\\n\\ \\ \\ \\ \\ \\ \"result\":\\ \"skipped\",\\\n\\ \\ \\ \\ \\ \\ \"detail\":\\ \"no\\ fact\\ is\\ past\\ its\\ day\"\\\n\\ \\ \\ \\ \\},\\\n\\ \\ \\ \\ \\{\\\n\\ \\ \\ \\ \\ \\ \"name\":\\ \"lint\",\\\n\\ \\ \\ \\ \\ \\ \"result\":\\ \"succeeded\"\\\n\\ \\ \\ \\ \\},\\\n\\ \\ \\ \\ \\{\\\n\\ \\ \\ \\ \\ \\ \"name\":\\ \"journal\",\\\n\\ \\ \\ \\ \\ \\ \"result\":\\ \"succeeded\"\\\n\\ \\ \\ \\ \\},\\\n\\ \\ \\ \\ \\{\\\n\\ \\ \\ \\ \\ \\ \"name\":\\ \"review\",\\\n\\ \\ \\ \\ \\ \\ \"result\":\\ \"succeeded\"\\\n\\ \\ \\ \\ \\}\\\n\\ \\ \\],\\\n\\ \\ \"findings\":\\ \\[\\],\\\n\\ \\ \"parts\":\\ \\[\\\n\\ \\ \\ \\ \"worklog\"\\\n\\ \\ \\]\\\n\\}\\\n"
+    }
+  ]
+}

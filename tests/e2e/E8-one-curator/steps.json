@@ -1,0 +1,110 @@
+{
+  "description": "E8 one curator: a run started in the background holds the lock while its lint model step works (on a memory link only the model can repair), so a second run started meanwhile returns at once with already running; a machine not named in store.json refuses without writing the run record; curate take-over names it, after which it runs, and the machine named before stops at its preflight. Exactly one run happens each time.",
+  "model": {
+    "skills": {
+      "/m2b:lint": [
+        {
+          "actions": [
+            {
+              "sleep": 3
+            }
+          ]
+        },
+        {
+          "actions": []
+        }
+      ]
+    }
+  },
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force",
+        "--detach"
+      ],
+      "stdout": "\\Aa curation run started in the background"
+    },
+    {
+      "run": [
+        "sh",
+        "-c",
+        "until m2b status --json | grep -q '\"state\": \"running\"'; do sleep 0.1; done"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "stdout": "\\Aa curation run is already running on this machine\\n\\Z"
+    },
+    {
+      "run": [
+        "sh",
+        "-c",
+        "until m2b status --json | grep -q '\"state\": \"succeeded\"'; do sleep 0.1; done"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "config",
+        "set",
+        "machine_id",
+        "sb-test-other"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "stdout": "\\Athis machine \\(sb-test-other\\) is not the curating machine; sb-test-e2e is"
+    },
+    {
+      "run": [
+        "m2b",
+        "status",
+        "--json"
+      ],
+      "stdout": "\"machine_id\": \"sb-test-e2e\",\n    \"started_at\""
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "take-over"
+      ],
+      "stdout": "\\Athis machine \\(sb-test-other\\) curates the store now; sb-test-e2e stops at its next run\\.\\n\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "stdout": "\\Athe curation run succeeded\\n\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "config",
+        "set",
+        "machine_id",
+        "sb-test-e2e"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "stdout": "\\Athis machine \\(sb-test-e2e\\) is not the curating machine; sb-test-other is"
+    }
+  ]
+}

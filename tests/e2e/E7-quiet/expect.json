@@ -1,0 +1,8 @@
+{
+  "store_files": {
+    "corpus/2026/05/20260512T061500Z-cli-a1b2.md": "---\ncreated: 2026-05-12T08:15:00+02:00\nsource: cli\nquiet: true\n---\nThe shed roof needs larch boards; Dana knows a sawmill.\n",
+    "memory/MEMORY.md": "# Memory\n\n## Facts\n\n## Current\n\n- Building the garden shed with Alex\n",
+    "store.json": "{\n  \"format\": 2,\n  \"tasks\": {\"backend\": \"markdown\"},\n  \"curating_machine\": \"sb-test-e2e\",\n  \"journal_since\": \"2026-11-01\"\n}\n",
+    "profile.json": "{\n  \"version\": 1,\n  \"owner\": \"Alex\",\n  \"language\": \"en\"\n}\n"
+  }
+}

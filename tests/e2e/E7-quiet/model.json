@@ -1,0 +1,62 @@
+{
+  "description": "E7 at the model level: a quiet capture is filed by a real run, found by search, never offered by rediscover, and never brought up in the distillate or the review; a task it states is still the owner's task.",
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "--quiet",
+        "The larch by the gate needs pruning in March"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "search",
+        "--",
+        "larch"
+      ],
+      "stdout": "larch by the gate"
+    },
+    {
+      "run": [
+        "m2b",
+        "rediscover",
+        "--today",
+        "2026-11-07",
+        "--count",
+        "10"
+      ],
+      "stdout": "\\A(?![\\s\\S]*larch)"
+    }
+  ],
+  "invariants": [
+    {
+      "run_state": "succeeded"
+    },
+    {
+      "no_denials": true
+    },
+    {
+      "count": 0,
+      "glob": "inbox/*"
+    },
+    {
+      "count": 0,
+      "glob": "memory/MEMORY.md",
+      "content": "(?i)larch"
+    },
+    {
+      "count": 0,
+      "glob": "tasks/*.md",
+      "content": "(?is)m2b:review.*larch"
+    }
+  ]
+}

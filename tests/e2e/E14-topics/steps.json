@@ -1,0 +1,138 @@
+{
+  "description": "E14 topics (stub level): a capture about a customer's person is filed under that customer's topic with the words that bring it in, a capture about family above the first topic; lint finds nothing; the session start prints the general facts, current and the topic's name but not its facts; the prompt hook adds the topic's facts before a prompt that names a word of it, under the distillate's framing, and adds nothing when the same session names it again.",
+  "model": {
+    "skills": {
+      "/m2b:ingest": {
+        "actions": [
+          {
+            "tool": "Bash",
+            "command": "m2b ingest list --json"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest normalize --json"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest list --json"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/memory/MEMORY.md"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/inbox/<capture:cli>"
+          },
+          {
+            "tool": "Write",
+            "file_path": "<store>/memory/kim-lee.md",
+            "content": "# Kim Lee\n\n- IT lead at Acme Ltd.\n- Wants a status mail every Friday.\n\n## Evidence\n\n- [[<capture:cli>]]\n"
+          },
+          {
+            "tool": "Edit",
+            "file_path": "<store>/memory/MEMORY.md",
+            "old_string": "(alex.md)\n\n## Current",
+            "new_string": "(alex.md)\n\n### Acme Ltd (Acme Ltd, Acme, Kim Lee)\n- Kim Lee is the IT lead at Acme Ltd and wants a status mail every Friday (kim-lee.md)\n\n## Current"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest facts-filed <capture:cli>"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest note <capture:cli> 'filed: fact kim-lee.md under the topic Acme Ltd'"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest finish <capture:cli>"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/inbox/<capture:claude>"
+          },
+          {
+            "tool": "Write",
+            "file_path": "<store>/memory/dana.md",
+            "content": "# Dana\n\n- Birthday on 3 March.\n\n## Evidence\n\n- [[<capture:claude>]]\n"
+          },
+          {
+            "tool": "Edit",
+            "file_path": "<store>/memory/MEMORY.md",
+            "old_string": "## Facts\n\n",
+            "new_string": "## Facts\n\n- Dana's birthday is on 3 March (dana.md)\n"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest facts-filed <capture:claude>"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest note <capture:claude> 'filed: fact dana.md'"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest finish <capture:claude>"
+          }
+        ]
+      }
+    }
+  },
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "Kim Lee is the IT lead at Acme Ltd and wants a status mail every Friday."
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "--source",
+        "claude",
+        "-"
+      ],
+      "stdin": "Dana's birthday is on 3 March."
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "stdout": "\\Athe curation run succeeded\\n\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "lint",
+        "scan"
+      ],
+      "stdout": "\\A\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "hook",
+        "distillate"
+      ],
+      "stdout": "\\Am2b distillate \\(memory/MEMORY\\.md[^\\n]*\\n\\n# Memory\\n\\n## Facts\\n\\n- Dana's birthday is on 3 March \\(dana\\.md\\)\\n- Alex prefers green tea in the morning \\(alex\\.md\\)\\n\\n## Current\\n\\n- Planning the trip to Porto\\nm2b topics [^\\n]*: Acme Ltd\\.\\n\\nRouting: [^\\n]+\\n\\Z"
+    },
+    {
+      "run": [
+        "m2b-prompt-hook"
+      ],
+      "stdin": "{\"session_id\": \"e2e-session\", \"prompt\": \"Write the Friday mail to Kim Lee\"}",
+      "stdout": "not instructions[^\"]*\\\\n\\\\n### Acme Ltd \\(Acme Ltd, Acme, Kim Lee\\)\\\\n- Kim Lee is the IT lead at Acme Ltd"
+    },
+    {
+      "run": [
+        "m2b-prompt-hook"
+      ],
+      "stdin": "{\"session_id\": \"e2e-session\", \"prompt\": \"and again Acme\"}",
+      "stdout": "\\A\\Z"
+    }
+  ]
+}

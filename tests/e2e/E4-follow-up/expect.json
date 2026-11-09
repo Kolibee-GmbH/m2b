@@ -1,0 +1,19 @@
+{
+  "store_files": {
+    "store.json": "{\n  \"format\": 2,\n  \"tasks\": {\"backend\": \"markdown\"},\n  \"curating_machine\": \"sb-test-e2e\",\n  \"journal_since\": \"2026-11-01\"\n}\n"
+  },
+  "store_patterns": [
+    {
+      "path": "inbox/????????T??????Z-cli-????.md",
+      "content": "---\ncreated: [^\n]+\nsource: cli\ntasks: \\[[0-9a-f]{12}\\]\n---\nCall Dana about the shed\n"
+    },
+    {
+      "path": "tasks/????????????.md",
+      "content": "---\nstatus: done\n(?:[a-z_]+: [^\n]+\n)*---\nCall Dana about the shed\nm2b:capture \\d{8}T\\d{6}Z-cli-[0-9a-f]{4}\\.md follow-up\n"
+    },
+    {
+      "path": "corpus/*/*/??????-done.md",
+      "content": "---\ncreated: [^\n]+\nsource: journal\nkind: journal\n---\n- (\\d{4}-\\d{2}-\\d{2}) Call Dana about the shed <!-- m2b:done [0-9a-f]{12} \\1 -->\n"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "description": "E3 foreign files: a hand-dropped text file and a photo become a schema-named capture and a complete bundle; normalize run again changes nothing.",
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "ingest",
+        "normalize"
+      ],
+      "env": {
+        "M2B_CURATION_RUN": "1"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "ingest",
+        "normalize",
+        "--json"
+      ],
+      "stdout": "\"renamed\": \\[\\]",
+      "env": {
+        "M2B_CURATION_RUN": "1"
+      }
+    }
+  ]
+}

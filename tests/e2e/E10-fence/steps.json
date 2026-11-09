@@ -1,0 +1,47 @@
+{
+  "description": "E10 fence (stub level): a model step searches, reads and reports within its rules; its read of memory/ and its write into it lie outside them, are denied, the write never happens, and the run reports both as actions.",
+  "model": {
+    "actions": [
+      {
+        "tool": "Bash",
+        "command": "m2b search passport"
+      },
+      {
+        "tool": "Read",
+        "file_path": "<store>/corpus/2026/11/20261103T081200Z-cli-c3d4.md"
+      },
+      {
+        "tool": "Read",
+        "file_path": "<store>/memory/MEMORY.md"
+      },
+      {
+        "tool": "Write",
+        "file_path": "<store>/memory/MEMORY.md",
+        "content": "# Memory\n\n## Facts\n\n- The passport office opens at eight on Tuesdays\n"
+      },
+      {
+        "tool": "Bash",
+        "command": "m2b curate report --step search --kind info --text 'one note about the passport office'"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "model",
+        "--skill",
+        "m2b:search",
+        "--allow",
+        "Bash(m2b search *)",
+        "--allow",
+        "Bash(m2b curate report *)",
+        "--allow",
+        "Read(<store>/corpus/**)"
+      ],
+      "exit": 1,
+      "stdout": "info: search: one note about the passport office\\naction: search: the model step m2b:search was denied Read: /[^\\n]+/memory/MEMORY\\.md\\naction: search: the model step m2b:search was denied Write: /[^\\n]+/memory/MEMORY\\.md\\n"
+    }
+  ]
+}

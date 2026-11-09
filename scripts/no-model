@@ -1,0 +1,5 @@
+#!/bin/sh
+# A stand-in for claude that does nothing and ends well: point M2B_MODEL_RUNNER at it to try a
+# curation run without a model. Its model steps succeed without filing anything, so captures stay
+# in the inbox; every other step of the run is real.
+printf '%s\n' '{"type": "result", "subtype": "success", "is_error": false, "result": "no model", "permission_denials": []}'

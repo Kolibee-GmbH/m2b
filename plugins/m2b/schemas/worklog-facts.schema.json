@@ -1,0 +1,381 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://m2b.invalid/schemas/worklog-facts.schema.json",
+  "title": "m2b worklog facts",
+  "description": "What m2b-worklog collect gathers for one period, and what the worklog verdict reads. A source or a session's git that could not be read says so; it never reads as empty.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "period",
+    "sources",
+    "spheres",
+    "customers",
+    "sessions",
+    "captures"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "period": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end",
+        "origin"
+      ],
+      "properties": {
+        "start": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "end": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "origin": {
+          "enum": [
+            "watermark",
+            "first run",
+            "watermark, limited to three days"
+          ]
+        }
+      }
+    },
+    "sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recorder",
+        "herdr",
+        "transcripts",
+        "inbox"
+      ],
+      "properties": {
+        "recorder": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "detail"
+          ],
+          "properties": {
+            "state": {
+              "enum": [
+                "read",
+                "could not read"
+              ]
+            },
+            "detail": {
+              "type": "string"
+            }
+          }
+        },
+        "herdr": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "detail"
+          ],
+          "properties": {
+            "state": {
+              "enum": [
+                "read",
+                "could not read"
+              ]
+            },
+            "detail": {
+              "type": "string"
+            }
+          }
+        },
+        "transcripts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "detail"
+          ],
+          "properties": {
+            "state": {
+              "enum": [
+                "read",
+                "could not read"
+              ]
+            },
+            "detail": {
+              "type": "string"
+            }
+          }
+        },
+        "inbox": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "detail"
+          ],
+          "properties": {
+            "state": {
+              "enum": [
+                "read",
+                "could not read"
+              ]
+            },
+            "detail": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "spheres": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "label",
+          "billable",
+          "default"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "billable": {
+            "type": "boolean"
+          },
+          "default": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "customers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "sessions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "workspace",
+          "repo",
+          "label",
+          "folder",
+          "sphere",
+          "minutes",
+          "blocks",
+          "git",
+          "commits",
+          "state"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "workspace": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "repo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "folder": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sphere": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "minutes": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "agent",
+              "human",
+              "focus",
+              "transcript"
+            ],
+            "properties": {
+              "agent": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "human": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "focus": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "transcript": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "start",
+                "end",
+                "minutes",
+                "prompts"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^b[0-9]+$"
+                },
+                "start": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "end": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "minutes": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "The work inside the block, without its gaps; what the ledger books"
+                },
+                "prompts": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "git": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "detail"
+            ],
+            "properties": {
+              "state": {
+                "enum": [
+                  "read",
+                  "could not read"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              }
+            }
+          },
+          "commits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "time",
+                "subject"
+              ],
+              "properties": {
+                "time": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "subject": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "state": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "agent",
+              "last_answer"
+            ],
+            "properties": {
+              "agent": {
+                "enum": [
+                  "working",
+                  "blocked",
+                  "idle",
+                  null
+                ]
+              },
+              "last_answer": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "captures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "created",
+          "source"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

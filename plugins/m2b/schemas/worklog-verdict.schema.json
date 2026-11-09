@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://m2b.invalid/schemas/worklog-verdict.schema.json",
+  "title": "m2b worklog verdict",
+  "description": "The model's judgement of one facts file: per session its topic and state, a sphere where the facts left it open, per block a customer, project and activity, and memory candidates. Bookings are proposals only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "sessions",
+    "candidates"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "sessions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "topic",
+          "state",
+          "blocks"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "topic": {
+            "type": "string",
+            "minLength": 1
+          },
+          "state": {
+            "enum": [
+              "done",
+              "open",
+              "waiting"
+            ]
+          },
+          "state_detail": {
+            "type": "string"
+          },
+          "sphere": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "blocks": {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "customer",
+                    "activity"
+                  ],
+                  "properties": {
+                    "customer": {
+                      "type": "string"
+                    },
+                    "project": {
+                      "type": "string"
+                    },
+                    "activity": {
+                      "type": "string"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "session": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

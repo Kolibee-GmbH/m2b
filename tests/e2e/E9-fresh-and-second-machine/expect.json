@@ -1,0 +1,17 @@
+{
+  "store_files": {
+    "profile.json": "{\n  \"version\": 1,\n  \"owner\": \"Alex\",\n  \"language\": \"en\"\n}\n",
+    "memory/MEMORY.md": "# Memory\n\n## Facts\n\n## Current\n",
+    "STORE.md": "# m2b store\n\nThis folder is an m2b store, format 2. It is written by the m2b plugin for Claude Code;\nthis file is generated from `store.json` and says what anything else may do here.\n\n- `inbox/`: new captures. Create a new file, never change one: a name like\n  `20261107T091500Z-<source>-<4 hex>.md`, time in UTC, a frontmatter block with `created` (with\n  offset) and `source` (your own lowercase name), then the text.\n- Tasks: one Markdown file per task in `tasks/`.\n- `corpus/`, `memory/`, `profile.json`: read only.\n- `state/addons/<your name>/`: your own state.\n\nNever move, rename, edit or delete anything else. Only the curating machine curates.\n"
+  },
+  "store_patterns": [
+    {
+      "path": "store.json",
+      "content": "\\{\n  \"format\": 2,\n  \"tasks\": \\{\n    \"backend\": \"markdown\"\n  \\},\n  \"curating_machine\": \"sb-test-e2e\",\n  \"journal_since\": \"\\d{4}-\\d{2}-\\d{2}\"\n\\}\n"
+    },
+    {
+      "path": "inbox/????????T??????Z-cli-????.md",
+      "content": "---\ncreated: [^\n]+\nsource: cli\n---\nDana keeps the spare key under the blue pot\n"
+    }
+  ]
+}

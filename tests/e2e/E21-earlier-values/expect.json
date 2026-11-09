@@ -1,0 +1,16 @@
+{
+ "store_files": {
+  "profile.json": "{\n  \"version\": 1,\n  \"owner\": \"Alex\",\n  \"language\": \"en\"\n}\n",
+  "memory/MEMORY.md": "# Memory\n\n## Facts\n\n- Dana lives in Zurich (dana.md)\n\n## Current\n",
+  "memory/dana.md": "# Dana\n\n- Lives in Zurich.\n\n## Evidence\n\n- [[20261003T080000Z-cli-d4e5.md]]\n",
+  "corpus/2026/10/20261003T080000Z-cli-d4e5.md": "---\ncreated: 2026-10-03T10:00:00+02:00\nsource: cli\ncurated: true\n---\nDana lives in Zurich\n",
+  "store.json": "{\n  \"format\": 2,\n  \"tasks\": {\n    \"backend\": \"markdown\"\n  },\n  \"curating_machine\": \"sb-test-e2e\",\n  \"journal_since\": \"2026-11-01\"\n}\n",
+  "state/core/candidates.json": "{\n  \"format\": 1,\n  \"candidates\": {}\n}\n"
+ },
+ "store_patterns": [
+  {
+   "path": "state/core/last-run.json",
+   "content": "\\{\\n  \"state\": \"succeeded\",\\n  \"machine_id\": \"sb-test-e2e\",\\n  \"started_at\": \"[^\"]+\",\\n  \"finished_at\": \"[^\"]+\",\\n  \"steps\": \\[\\n    \\{\\n      \"name\": \"migrate-2\",\\n      \"result\": \"succeeded\"\\n    \\},\\n.*"
+  }
+ ]
+}

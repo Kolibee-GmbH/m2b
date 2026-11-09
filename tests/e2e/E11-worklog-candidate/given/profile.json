@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "owner": "Alex",
+  "language": "en",
+  "spheres": [
+    {"id": "acme", "label": "Acme Ltd", "billable": true, "match": {"path_under": ["~/code/acme"]}},
+    {"id": "private", "default": true}
+  ],
+  "customers": ["Globex"]
+}

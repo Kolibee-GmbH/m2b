@@ -1,0 +1,7 @@
+{
+  "review.title": "m2b: review",
+  "candidate.prefix": "Remember?",
+  "review.run": "Curation run of {time}",
+  "review.failure": "The step {step} failed: {error}",
+  "current.prefix": "Still current?"
+}

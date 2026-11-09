@@ -1,0 +1,61 @@
+{
+  "description": "E11 candidate loop (stub level): one candidate ticked and harvested into an inbox capture with source candidate, its task deleted; one dropped, its task deleted, its text remembered, and refused when proposed again; one ticked whose capture a crashed harvest had written already, so this harvest only deletes its task; a new proposal is recorded. Filing the capture as a fact is the ingest skill's, checked at the model level.",
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "tasks",
+        "complete",
+        "aaaa00000001"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "tasks",
+        "drop",
+        "bbbb00000002"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "harvest"
+      ],
+      "stdout": "\\Acaptured inbox/\\d{8}T\\d{6}Z-candidate-[0-9a-f]{4}\\.md\\ndropped: Alex plays chess\\n\\Z",
+      "env": {
+        "M2B_CURATION_RUN": "1"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "harvest"
+      ],
+      "stdout": "\\A\\Z",
+      "env": {
+        "M2B_CURATION_RUN": "1"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "tasks",
+        "add",
+        "--candidate",
+        "alex plays  chess"
+      ],
+      "stdout": "\\Arefused: a candidate with the same text was dropped within 90 days\\n\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "tasks",
+        "add",
+        "--candidate",
+        "Sam rides a red bike"
+      ],
+      "stdout": "\\A[0-9a-f]{12}\\n\\Z"
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "description": "E6 at the model level: with claude unreachable both model steps fail, the review names it and the next attempt waits; with claude back a forced run succeeds and completes the review.",
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "config",
+        "set",
+        "executables.claude",
+        "/nonexistent/sb-test-claude"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "exit": 1,
+      "stdout": "\\Athe curation run failed: ingest: cannot start /nonexistent/sb-test-claude"
+    },
+    {
+      "run": [
+        "m2b",
+        "curate"
+      ],
+      "stdout": "\\Ano curation run is due: the last run failed"
+    },
+    {
+      "run": [
+        "m2b",
+        "config",
+        "set",
+        "executables.claude",
+        "claude"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ]
+    }
+  ],
+  "invariants": [
+    {
+      "run_state": "succeeded"
+    },
+    {
+      "no_denials": true
+    },
+    {
+      "count": 0,
+      "glob": "inbox/*"
+    },
+    {
+      "count": 1,
+      "glob": "corpus/2026/11/20261107T080000Z-cli-e5f6.md"
+    },
+    {
+      "count": 1,
+      "glob": "tasks/*.md",
+      "content": "status: done(.|\\n)*m2b:review"
+    }
+  ]
+}

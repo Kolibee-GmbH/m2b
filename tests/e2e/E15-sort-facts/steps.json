@@ -1,0 +1,55 @@
+{
+  "description": "E15 sort facts (stub level): `m2b curate --sort-facts` runs whether due or not; its fenced step, allowed to edit the distillate alone, moves a customer's fact under a new topic and leaves a family fact for every session; code finds nothing changed beyond headings and order; lint finds nothing; the next session start lists the topic and leaves its fact out.",
+  "model": {
+    "skills": {
+      "/m2b:sort-facts": {
+        "actions": [
+          {
+            "tool": "Bash",
+            "command": "m2b refresh due --json"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/memory/MEMORY.md"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/memory/kim-lee.md"
+          },
+          {
+            "tool": "Edit",
+            "file_path": "<store>/memory/MEMORY.md",
+            "old_string": "- Kim Lee is the IT lead at Acme Ltd (kim-lee.md)\n\n## Current",
+            "new_string": "\n### Acme Ltd (Acme Ltd, Acme, Kim Lee)\n- Kim Lee is the IT lead at Acme Ltd (kim-lee.md)\n\n## Current"
+          }
+        ]
+      }
+    }
+  },
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--sort-facts"
+      ],
+      "stdout": "\\Athe curation run succeeded\\n\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "lint",
+        "scan"
+      ],
+      "stdout": "\\A\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "hook",
+        "distillate"
+      ],
+      "stdout": "- Dana's birthday is on 3 March \\(dana\\.md\\)\\n\\n## Current\\n\\n- Planning the trip to Porto\\nm2b topics [^\\n]*: Acme Ltd\\.\\n\\nRouting"
+    }
+  ]
+}

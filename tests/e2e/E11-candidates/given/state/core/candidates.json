@@ -1,0 +1,20 @@
+{
+  "format": 1,
+  "candidates": {
+    "aaaa00000001": {
+      "text": "Dana prefers tea",
+      "state": "open",
+      "since": "2026-11-06T09:00:00+00:00"
+    },
+    "bbbb00000002": {
+      "text": "Alex plays chess",
+      "state": "open",
+      "since": "2026-11-06T09:00:00+00:00"
+    },
+    "cccc00000003": {
+      "text": "Robin lives in Lyon",
+      "state": "open",
+      "since": "2026-11-06T09:00:00+00:00"
+    }
+  }
+}

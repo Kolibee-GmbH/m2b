@@ -1,0 +1,9 @@
+#!/bin/sh
+# The herdr part's command: runs this plugin's m2b_herdr package.
+set -eu
+plugin_root=$(cd "$(dirname "$0")/.." && pwd)
+# -I keeps the working directory (the user's project in Claude Code) and PYTHONPATH off sys.path,
+# so no file there can stand in for this package or the standard library; Python 3.9 has no -P.
+exec "${M2B_PYTHON:-python3}" -I -c \
+    'import sys; sys.path.insert(0, sys.argv.pop(1)); from m2b_herdr.cli import main; sys.exit(main())' \
+    "$plugin_root/src" "$@"

@@ -1,0 +1,198 @@
+#!/bin/sh
+# The repository's proof.
+#
+#   scripts/check --quick <suite>    one suite with python3 on PATH: m2b (the core), worklog, backup,
+#                                    herdr, or band (the mod's tests)
+#   scripts/check                    everything; exits 1 when any part fails
+#
+# The full run covers the unit tests of the core, of each part and of the repository tools (with
+# python3, and on macOS also with /usr/bin/python3 when that is Python 3.9), ruff, mypy,
+# the shell linter, the plugin manifest, the tests of the band mod, the B/X coverage report and
+# the end-to-end scenarios at the stub level.
+#
+# The parts' tests sit in plugins/m2b/tests/parts/<part>/ under a folder without __init__.py, so
+# the core's discovery does not descend into them and each runs as its own suite.
+set -eu
+
+readonly RUFF_VERSION=0.16.3
+# mypy 2 no longer type-checks for Python 3.9.
+readonly MYPY_VERSION=1.19.1
+readonly LEGACY_PYTHON=/usr/bin/python3
+
+repo_root=$(cd "$(dirname "$0")/.." && pwd)
+cd "$repo_root"
+
+failed_parts=""
+
+# POSIX sh has no local variables, so the functions below read their arguments as $1..$n
+# and give every variable they set a name no other function uses.
+
+usage() {
+    echo "usage: scripts/check [--quick m2b|worklog|backup|herdr|band]" >&2
+    exit 2
+}
+
+# Arguments: python, tests folder, label, import roots.
+run_unit_tests() {
+    unit_tests_python=$1
+    unit_tests_dir=$2
+    unit_tests_label=$3
+    shift 3
+    # Turns the remaining arguments (the import roots) into --import-root pairs.
+    for unit_tests_root in "$@"; do
+        set -- "$@" --import-root "$unit_tests_root"
+        shift
+    done
+    PYTHONPATH="$repo_root/scripts" "$unit_tests_python" -m repo_tools.unit_tests \
+        --tests "$unit_tests_dir" --label "$unit_tests_label" "$@"
+}
+
+readonly PLUGIN=plugins/m2b
+
+# Arguments: python, suite (m2b for the core, else a part's name).
+run_suite() {
+    if [ "$2" = m2b ]; then
+        run_unit_tests "$1" "$PLUGIN/tests" m2b "$PLUGIN/src"
+    else
+        run_unit_tests "$1" "$PLUGIN/tests/parts/$2" "$2" "$PLUGIN/src"
+    fi
+}
+
+suites() {
+    echo m2b
+    for suite_folder in "$PLUGIN"/tests/parts/*/; do
+        basename "$suite_folder"
+    done
+}
+
+# Arguments: part name, command. Runs one part and records its name when it fails.
+part() {
+    part_name=$1
+    shift
+    echo "== $part_name"
+    if ! "$@"; then
+        failed_parts="$failed_parts $part_name"
+    fi
+}
+
+# Arguments: tool, pinned version, the tool's arguments.
+dev_tool() {
+    dev_tool_name=$1
+    dev_tool_version=$2
+    shift 2
+    if command -v uvx >/dev/null 2>&1; then
+        uvx --quiet --from "$dev_tool_name==$dev_tool_version" "$dev_tool_name" "$@"
+    elif command -v "$dev_tool_name" >/dev/null 2>&1; then
+        "$dev_tool_name" "$@"
+    else
+        echo "$dev_tool_name is not installed and uvx is missing; install uv to run it" >&2
+        return 1
+    fi
+}
+
+python_version_of() {
+    "$1" -c 'import sys; print(sys.version)'
+}
+
+pythons_to_test() {
+    echo python3
+    if [ "$(uname -s)" = Darwin ] && [ -x "$LEGACY_PYTHON" ] \
+        && "$LEGACY_PYTHON" -c 'import sys; sys.exit(sys.version_info[:2] != (3, 9))' \
+        && [ "$(python_version_of "$LEGACY_PYTHON")" != "$(python_version_of python3)" ]; then
+        echo "$LEGACY_PYTHON"
+    fi
+}
+
+all_unit_tests() {
+    unit_status=0
+    for unit_python in $(pythons_to_test); do
+        for unit_suite in $(suites); do
+            run_suite "$unit_python" "$unit_suite" || unit_status=1
+        done
+        run_unit_tests "$unit_python" scripts/repo_tools/tests repo-tools scripts "$PLUGIN/src" \
+            || unit_status=1
+    done
+    return "$unit_status"
+}
+
+ruff_checks() {
+    dev_tool ruff "$RUFF_VERSION" check . && dev_tool ruff "$RUFF_VERSION" format --check .
+}
+
+mypy_checks() {
+    mypy_status=0
+    MYPYPATH="$PLUGIN/src" dev_tool mypy "$MYPY_VERSION" "$PLUGIN/src" || mypy_status=1
+    # The worklog's recorder runs from its own copy outside any package, so it is checked on its own.
+    dev_tool mypy "$MYPY_VERSION" "$PLUGIN/recorder/record.py" || mypy_status=1
+    MYPYPATH=scripts:plugins/m2b/src dev_tool mypy "$MYPY_VERSION" -p repo_tools || mypy_status=1
+    return "$mypy_status"
+}
+
+shell_checks() {
+    if ! command -v shellcheck >/dev/null 2>&1; then
+        echo "shellcheck not installed; skipped"
+        return 0
+    fi
+    shellcheck scripts/check scripts/e2e scripts/e2e-shortcut-setup scripts/no-model scripts/readme-images \
+        "$PLUGIN"/bin/m2b "$PLUGIN"/bin/m2b-herdr "$PLUGIN"/bin/m2b-worklog "$PLUGIN"/bin/m2b-backup
+}
+
+manifest_checks() {
+    if ! command -v claude >/dev/null 2>&1; then
+        echo "claude not installed; skipped"
+        return 0
+    fi
+    claude plugin validate --strict . && claude plugin validate --strict "$PLUGIN"
+}
+
+# The band is a mod in TypeScript; its tests run in Claude Code's own test kit.
+band_tests() {
+    if ! command -v claude >/dev/null 2>&1; then
+        echo "claude not installed; skipped"
+        return 0
+    fi
+    claude plugin test "$PLUGIN"
+}
+
+coverage_report() {
+    PYTHONPATH="$repo_root/scripts" python3 -m repo_tools.coverage_check
+}
+
+if [ "$#" -gt 0 ]; then
+    [ "$1" = --quick ] && [ "$#" -eq 2 ] || usage
+    if [ "$2" = band ]; then
+        quick_status=0
+        claude plugin test "$PLUGIN" || quick_status=1
+        exit "$quick_status"
+    fi
+    if [ "$2" != m2b ] && [ ! -d "$PLUGIN/tests/parts/$2" ]; then
+        echo "no such suite: $2" >&2
+        usage
+    fi
+    if run_suite python3 "$2"; then
+        exit 0
+    fi
+    exit 1
+fi
+
+# Locally a missing claude skips the manifest and band checks; in CI that would pass a run in
+# which they never ran, so there it ends the run before anything starts.
+if [ "${CI:-}" = true ] && ! command -v claude >/dev/null 2>&1; then
+    echo "check: claude is not installed; CI needs it for the manifest and band checks" >&2
+    exit 1
+fi
+
+part unit-tests all_unit_tests
+part ruff ruff_checks
+part mypy mypy_checks
+part shellcheck shell_checks
+part manifests manifest_checks
+part band band_tests
+part coverage coverage_report
+part e2e scripts/e2e --level stub
+
+if [ -n "$failed_parts" ]; then
+    echo "check: FAILED:$failed_parts"
+    exit 1
+fi
+echo "check: passed"

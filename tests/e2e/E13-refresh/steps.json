@@ -1,0 +1,65 @@
+{
+  "description": "E13 refresh (stub level): a fact past its until starts the refresh step, allowed to edit that fact file and the distillate alone; it rewrites the fact in the past tense and drops until, while a fact whose day is still ahead and the current section stay as they are; the current item untouched since January becomes the question whether it is still current.",
+  "model": {
+    "skills": {
+      "/m2b:refresh": {
+        "actions": [
+          {
+            "tool": "Bash",
+            "command": "m2b refresh due --json"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/memory/MEMORY.md"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/memory/sam.md"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/corpus/2026/01/20260103T120500Z-claude-b71e.md"
+          },
+          {
+            "tool": "Write",
+            "file_path": "<store>/memory/sam.md",
+            "content": "# Sam\n\n- Repairs boats at the harbour.\n- Brought the plywood for the shed roof on 14 January.\n\n## Evidence\n\n- [[20260103T120500Z-claude-b71e.md]]\n"
+          },
+          {
+            "tool": "Edit",
+            "file_path": "<store>/memory/MEMORY.md",
+            "old_string": "- Sam brings plywood for the shed roof on 14 January (sam.md)",
+            "new_string": "- Sam brought the plywood for the shed roof on 14 January (sam.md)"
+          }
+        ]
+      }
+    }
+  },
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "refresh",
+        "due"
+      ],
+      "stdout": "\\Amemory/sam\\.md \\(until 2026-01-14\\)\\n"
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "stdout": "\\Athe curation run succeeded\\n\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "refresh",
+        "due",
+        "--json"
+      ],
+      "stdout": "\"facts\": \\[\\]"
+    }
+  ]
+}

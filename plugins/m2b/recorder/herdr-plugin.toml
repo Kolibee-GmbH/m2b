@@ -1,0 +1,46 @@
+# The worklog's activity recorder, a herdr plugin. m2b-worklog recorder install copies this folder
+# to ~/.local/share/m2b/worklog-recorder/ and links the copy, because herdr keeps the manifest's
+# absolute path and a plugin cache folder disappears after an update.
+#
+# Every event runs record.py, which writes one line per event only while the m2b plugin is
+# installed and on in Claude Code and the local switch file says recording is on; the worklog
+# part's session-start hook writes that switch.
+
+id = "m2b.worklog-recorder"
+name = "m2b worklog recorder"
+version = "0.1.0"
+min_herdr_version = "0.9.0"
+description = "Records agent status, focus and workspace changes for the m2b worklog"
+platforms = ["macos", "linux"]
+
+[[events]]
+on = "pane.agent_status_changed"
+command = ["python3", "record.py"]
+
+[[events]]
+on = "pane.exited"
+command = ["python3", "record.py"]
+
+[[events]]
+on = "pane.closed"
+command = ["python3", "record.py"]
+
+[[events]]
+on = "pane.focused"
+command = ["python3", "record.py"]
+
+[[events]]
+on = "workspace.focused"
+command = ["python3", "record.py"]
+
+[[events]]
+on = "workspace.created"
+command = ["python3", "record.py"]
+
+[[events]]
+on = "worktree.opened"
+command = ["python3", "record.py"]
+
+[[events]]
+on = "workspace.closed"
+command = ["python3", "record.py"]

@@ -1,0 +1,4 @@
+{
+  "description": "Harness self-test: no steps, the store must come out exactly as it went in.",
+  "steps": []
+}

@@ -1,0 +1,75 @@
+{
+  "description": "E1 at the model level: a fact and a task captured, one real curation run files them, a second run adds nothing.",
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "Alex prefers green tea in the morning"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "Call the plumber about the kitchen leak before 2026-11-20"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "hook",
+        "distillate"
+      ],
+      "stdout": "(?i)green tea"
+    }
+  ],
+  "invariants": [
+    {
+      "run_state": "succeeded"
+    },
+    {
+      "no_denials": true
+    },
+    {
+      "count": 0,
+      "glob": "inbox/*"
+    },
+    {
+      "count": 2,
+      "glob": "corpus/*/*/*-cli-*.md"
+    },
+    {
+      "matches": "(?i)green tea",
+      "path": "memory/MEMORY.md"
+    },
+    {
+      "once": "\\[\\[\\d{8}T\\d{6}Z-cli-[0-9a-f]{4}\\.md\\]\\]",
+      "glob": "memory/*.md"
+    },
+    {
+      "count": 1,
+      "glob": "tasks/*.md",
+      "content": "m2b:capture \\S+-cli-\\S+ "
+    },
+    {
+      "count": 1,
+      "glob": "tasks/*.md",
+      "content": "(?i)plumber"
+    }
+  ]
+}

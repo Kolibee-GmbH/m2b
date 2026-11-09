@@ -1,0 +1,4 @@
+{
+  "description": "E18 remember beside Claude Code's auto memory: a scenario for the model level, where a real session with both memories on is told to remember a fact about a person. At the stub level there is no session to run, so the store stays as given.",
+  "steps": []
+}

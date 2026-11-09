@@ -1,0 +1,91 @@
+{
+  "description": "E6 failing step (B13): the ingest model step fails; lint, journal and the review still run, the review task names the failure, the run record says failed and `m2b status` shows it; without --force the next attempt waits (backoff) instead of starting another model run; the next session start prints one line about the failed run; then a run succeeds, files the capture, completes the review task, and the session-start line is gone.",
+  "model": {
+    "skills": {
+      "/m2b:ingest": [
+        {
+          "actions": [
+            {
+              "tool": "Bash",
+              "command": "m2b ingest list --json"
+            }
+          ],
+          "outcome": "error"
+        },
+        {
+          "actions": [
+            {
+              "tool": "Bash",
+              "command": "m2b ingest note 20261107T080000Z-cli-e5f6.md 'filed: nothing to file'"
+            },
+            {
+              "tool": "Bash",
+              "command": "m2b ingest finish 20261107T080000Z-cli-e5f6.md"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "exit": 1,
+      "stdout": "\\Athe curation run failed: ingest: the model run failed \\(error_during_execution\\): done"
+    },
+    {
+      "run": [
+        "m2b",
+        "tasks",
+        "list",
+        "--marker",
+        "review",
+        "--json"
+      ],
+      "stdout": "The step ingest failed"
+    },
+    {
+      "run": [
+        "m2b",
+        "status",
+        "--json"
+      ],
+      "stdout": "\"state\": \"failed\""
+    },
+    {
+      "run": [
+        "m2b",
+        "curate"
+      ],
+      "stdout": "\\Ano curation run is due: the last run failed; the next attempt waits until "
+    },
+    {
+      "run": [
+        "m2b",
+        "hook",
+        "distillate"
+      ],
+      "stdout": "\\Am2b: the last curation run on sb-test-e2e failed at [^\\n]+: ingest: "
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "stdout": "\\Athe curation run succeeded\\n\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "hook",
+        "distillate"
+      ],
+      "stdout": "\\Am2b distillate "
+    }
+  ]
+}

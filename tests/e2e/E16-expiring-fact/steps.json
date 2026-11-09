@@ -1,0 +1,105 @@
+{
+  "description": "E16 expiring fact (stub level): a capture about Sam that ends on a known day is filed into a fact file of its own with until, beside Sam's lasting fact file; lint finds nothing; once the day has passed, refresh names only the new file, so Sam's lasting fact is never rewritten.",
+  "model": {
+    "skills": {
+      "/m2b:ingest": {
+        "actions": [
+          {
+            "tool": "Bash",
+            "command": "m2b ingest list --json"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest normalize --json"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest list --json"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/memory/MEMORY.md"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/memory/sam.md"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/inbox/<capture:cli>"
+          },
+          {
+            "tool": "Write",
+            "file_path": "<store>/memory/sam-plywood.md",
+            "content": "---\nuntil: 2099-11-12\n---\n# Sam: plywood\n\n- Brings the plywood on Thursday 12 November 2099.\n\n## Evidence\n\n- [[<capture:cli>]]\n"
+          },
+          {
+            "tool": "Edit",
+            "file_path": "<store>/memory/MEMORY.md",
+            "old_string": "(sam.md)\n",
+            "new_string": "(sam.md)\n- Sam brings the plywood on Thursday 12 November 2099 (sam-plywood.md)\n"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest facts-filed <capture:cli>"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest note <capture:cli> 'filed: fact sam-plywood.md, until 2099-11-12'"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest finish <capture:cli>"
+          }
+        ]
+      }
+    }
+  },
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "Sam brings the plywood on Thursday 12 November 2099."
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "stdout": "\\Athe curation run succeeded\\n\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "lint",
+        "scan"
+      ],
+      "stdout": "\\A\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "refresh",
+        "due",
+        "--json",
+        "--today",
+        "2099-11-12"
+      ],
+      "stdout": "\"facts\": \\[\\]"
+    },
+    {
+      "run": [
+        "m2b",
+        "refresh",
+        "due",
+        "--json",
+        "--today",
+        "2099-11-13"
+      ],
+      "stdout": "(?s)\\A(?!.*\"sam\\.md\").*\"file\": \"sam-plywood\\.md\""
+    }
+  ]
+}

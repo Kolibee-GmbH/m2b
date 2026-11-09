@@ -1,0 +1,227 @@
+{
+  "description": "E2 restart: every ingest step runs twice, as after a crash right after it; the rerun creates no second task, no second note line and no second corpus file. Then a curation run whose ingest model step crashes halfway (task, ref and note done, the capture not moved) fails and opens the review task; the next run repeats the whole ingest and leaves one task, one ref, one note line and one corpus file, and completes the review.",
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "ingest",
+        "task",
+        "20261107T091500Z-cli-a1b2.md",
+        "--key",
+        "passport",
+        "--title",
+        "Renew passport",
+        "--due",
+        "2026-11-30"
+      ],
+      "env": {
+        "M2B_CURATION_RUN": "1"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "ingest",
+        "task",
+        "20261107T091500Z-cli-a1b2.md",
+        "--key",
+        "passport",
+        "--title",
+        "Renew passport",
+        "--due",
+        "2026-11-30"
+      ],
+      "env": {
+        "M2B_CURATION_RUN": "1"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "ingest",
+        "task",
+        "20261107T091500Z-cli-a1b2.md",
+        "--follow-up"
+      ],
+      "env": {
+        "M2B_CURATION_RUN": "1"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "ingest",
+        "task",
+        "20261107T091500Z-cli-a1b2.md",
+        "--follow-up"
+      ],
+      "env": {
+        "M2B_CURATION_RUN": "1"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "ingest",
+        "ref",
+        "20261107T091500Z-cli-a1b2.md",
+        "https://example.org/passport-office"
+      ],
+      "env": {
+        "M2B_CURATION_RUN": "1"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "ingest",
+        "ref",
+        "20261107T091500Z-cli-a1b2.md",
+        "https://example.org/passport-office"
+      ],
+      "env": {
+        "M2B_CURATION_RUN": "1"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "ingest",
+        "note",
+        "20261107T091500Z-cli-a1b2.md",
+        "filed: passport task"
+      ],
+      "env": {
+        "M2B_CURATION_RUN": "1"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "ingest",
+        "note",
+        "20261107T091500Z-cli-a1b2.md",
+        "filed: passport task"
+      ],
+      "env": {
+        "M2B_CURATION_RUN": "1"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "ingest",
+        "facts-filed",
+        "20261107T091500Z-cli-a1b2.md"
+      ],
+      "env": {
+        "M2B_CURATION_RUN": "1"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "ingest",
+        "facts-filed",
+        "20261107T091500Z-cli-a1b2.md"
+      ],
+      "env": {
+        "M2B_CURATION_RUN": "1"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "ingest",
+        "finish",
+        "20261107T091500Z-cli-a1b2.md"
+      ],
+      "env": {
+        "M2B_CURATION_RUN": "1"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "ingest",
+        "finish",
+        "20261107T091500Z-cli-a1b2.md"
+      ],
+      "env": {
+        "M2B_CURATION_RUN": "1"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "exit": 1,
+      "stdout": "\\Athe curation run failed: ingest: exit 1"
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "stdout": "\\Athe curation run succeeded\\n\\Z"
+    }
+  ],
+  "model": {
+    "skills": {
+      "/m2b:ingest": [
+        {
+          "actions": [
+            {
+              "tool": "Bash",
+              "command": "m2b ingest list --json"
+            },
+            {
+              "tool": "Bash",
+              "command": "m2b ingest task 20261107T091600Z-cli-c3d4.md --key dana --title 'Ask Dana about the shed plans'"
+            },
+            {
+              "tool": "Bash",
+              "command": "m2b ingest ref 20261107T091600Z-cli-c3d4.md https://example.org/shed"
+            },
+            {
+              "tool": "Bash",
+              "command": "m2b ingest note 20261107T091600Z-cli-c3d4.md 'filed: task dana'"
+            }
+          ],
+          "outcome": "no-result"
+        },
+        {
+          "actions": [
+            {
+              "tool": "Bash",
+              "command": "m2b ingest list --json"
+            },
+            {
+              "tool": "Bash",
+              "command": "m2b ingest task 20261107T091600Z-cli-c3d4.md --key dana --title 'Ask Dana about the shed plans'"
+            },
+            {
+              "tool": "Bash",
+              "command": "m2b ingest ref 20261107T091600Z-cli-c3d4.md https://example.org/shed"
+            },
+            {
+              "tool": "Bash",
+              "command": "m2b ingest note 20261107T091600Z-cli-c3d4.md 'filed: task dana'"
+            },
+            {
+              "tool": "Bash",
+              "command": "m2b ingest facts-filed 20261107T091600Z-cli-c3d4.md"
+            },
+            {
+              "tool": "Bash",
+              "command": "m2b ingest finish 20261107T091600Z-cli-c3d4.md"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

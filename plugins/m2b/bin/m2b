@@ -1,0 +1,15 @@
+#!/bin/sh
+# The core plugin's command: runs this plugin's m2b package. Inside Claude Code this
+# folder is on the Bash tool's PATH; everyone else goes through the launcher in ~/.local/bin,
+# which sets M2B_PYTHON to the python3 that setup recorded.
+set -eu
+plugin_root=$(cd "$(dirname "$0")/.." && pwd)
+# -I keeps the working directory (the user's project in Claude Code) and PYTHONPATH off sys.path,
+# so no file there can stand in for this package or the standard library; Python 3.9 has no -P.
+# The version check comes first: on an older Python the package fails on import with a traceback.
+exec "${M2B_PYTHON:-python3}" -I -c \
+    'import sys
+if sys.version_info < (3, 9):
+    sys.exit("m2b needs Python 3.9 or newer; %s is %s" % (sys.executable, sys.version.split()[0]))
+sys.path.insert(0, sys.argv.pop(1)); from m2b.cli import main; sys.exit(main())' \
+    "$plugin_root/src" "$@"

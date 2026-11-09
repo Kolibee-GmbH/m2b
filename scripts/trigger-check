@@ -1,0 +1,8 @@
+#!/bin/sh
+# Checks that the client skills trigger on everyday phrases, with the real model and the user's own
+# Claude login, for example: scripts/trigger-check --skill m2b:capture --language de
+set -eu
+
+repo_root=$(cd "$(dirname "$0")/.." && pwd)
+PYTHONPATH="$repo_root/scripts:$repo_root/plugins/m2b/src${PYTHONPATH:+:$PYTHONPATH}" \
+    exec python3 -m repo_tools.trigger_check "$@"

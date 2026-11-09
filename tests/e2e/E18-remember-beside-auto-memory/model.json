@@ -1,0 +1,47 @@
+{
+  "description": "E18 at the model level: a curation run with nothing to file records a success, so the next session start starts none. Then a real Claude Code session with m2b and Claude Code's own memory both on is told to remember a fact about a person: m2b's inbox gets it in the owner's words, and Claude Code's memory folder for the session, which the session names at its start, stays empty. Run it after each Claude Code minor update: the answer is the model's, not m2b's code.",
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ]
+    },
+    {
+      "run": [
+        "claude",
+        "-p",
+        "Remember that Dana's sister Kim moves to Lyon in March.",
+        "--setting-sources",
+        "project",
+        "--plugin-dir",
+        "{core_plugin}",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Skill",
+        "--max-turns",
+        "10",
+        "--model",
+        "sonnet",
+        "--output-format",
+        "stream-json",
+        "--verbose"
+      ],
+      "save": {
+        "auto_memory": "\"auto\":\"([^\"]+)\""
+      }
+    }
+  ],
+  "invariants": [
+    {
+      "count": 1,
+      "glob": "inbox/*-claude-*.md",
+      "content": "Dana's sister Kim moves to Lyon"
+    },
+    {
+      "empty_folder": "{auto_memory}"
+    }
+  ]
+}

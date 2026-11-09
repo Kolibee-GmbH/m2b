@@ -1,0 +1,25 @@
+{
+  "store_files": {
+    "memory/MEMORY.md": "# Memory\n\n## Facts\n\n- Sam brought the plywood for the shed roof on 14 January (sam.md)\n- Robin visits on 31 December 2099 (robin.md)\n\n## Current\n\n- Rebuilding the garden shed roof (since 2026-01-03)\n",
+    "memory/sam.md": "# Sam\n\n- Repairs boats at the harbour.\n- Brought the plywood for the shed roof on 14 January.\n\n## Evidence\n\n- [[20260103T120500Z-claude-b71e.md]]\n",
+    "memory/robin.md": "---\nuntil: 2099-12-31\n---\n# Robin\n\n- Visits on 31 December 2099.\n\n## Evidence\n\n- [[20260103T120500Z-claude-b71e.md]]\n",
+    "store.json": "{\n  \"format\": 2,\n  \"tasks\": {\"backend\": \"markdown\"},\n  \"curating_machine\": \"sb-test-e2e\",\n  \"journal_since\": \"2026-11-01\"\n}\n",
+    "profile.json": "{\n  \"version\": 1,\n  \"owner\": \"Alex\",\n  \"language\": \"en\"\n}\n",
+    "state/core/candidates.json": "{\n  \"format\": 1,\n  \"candidates\": {}\n}\n",
+    "corpus/2026/01/20260103T120500Z-claude-b71e.md": "---\ncreated: 2026-01-03T13:05:00+01:00\nsource: claude\ncurated: true\n---\nAgreed with Sam: he brings the plywood on 14 January. Robin visits on 31 December 2099.\n"
+  },
+  "store_patterns": [
+    {
+      "path": "state/core/last-run.json",
+      "content": "\\{\\\n\\ \\ \"state\":\\ \"succeeded\",\\\n\\ \\ \"machine_id\":\\ \"sb\\-test\\-e2e\",\\\n\\ \\ \"started_at\":\\ \"[^\"]+\",\\\n\\ \\ \"finished_at\":\\ \"[^\"]+\",\\\n\\ \\ \"steps\":\\ \\[\\\n\\ \\ \\ \\ \\{\\\n\\ \\ \\ \\ \\ \\ \"name\":\\ \"harvest\",\\\n\\ \\ \\ \\ \\ \\ \"result\":\\ \"succeeded\"\\\n\\ \\ \\ \\ \\},\\\n\\ \\ \\ \\ \\{\\\n\\ \\ \\ \\ \\ \\ \"name\":\\ \"ingest\",\\\n\\ \\ \\ \\ \\ \\ \"result\":\\ \"skipped\",\\\n\\ \\ \\ \\ \\ \\ \"detail\":\\ \"the\\ inbox\\ is\\ empty\"\\\n\\ \\ \\ \\ \\},\\\n\\ \\ \\ \\ \\{\\\n\\ \\ \\ \\ \\ \\ \"name\":\\ \"refresh\",\\\n\\ \\ \\ \\ \\ \\ \"result\":\\ \"succeeded\"\\\n\\ \\ \\ \\ \\},\\\n\\ \\ \\ \\ \\{\\\n\\ \\ \\ \\ \\ \\ \"name\":\\ \"lint\",\\\n\\ \\ \\ \\ \\ \\ \"result\":\\ \"succeeded\"\\\n\\ \\ \\ \\ \\},\\\n\\ \\ \\ \\ \\{\\\n\\ \\ \\ \\ \\ \\ \"name\":\\ \"journal\",\\\n\\ \\ \\ \\ \\ \\ \"result\":\\ \"succeeded\"\\\n\\ \\ \\ \\ \\},\\\n\\ \\ \\ \\ \\{\\\n\\ \\ \\ \\ \\ \\ \"name\":\\ \"review\",\\\n\\ \\ \\ \\ \\ \\ \"result\":\\ \"succeeded\"\\\n\\ \\ \\ \\ \\}\\\n\\ \\ \\],\\\n\\ \\ \"findings\":\\ \\[\\],\\\n\\ \\ \"parts\":\\ \\[\\]\\\n\\}\\\n"
+    },
+    {
+      "path": "tasks/????????????.md",
+      "content": "---\nstatus: open\ncreated: [^\n]+\n---\nStill current\\? Rebuilding the garden shed roof\nm2b:current [0-9a-f]{12}\n"
+    },
+    {
+      "path": "state/core/current-questions.json",
+      "content": "\\{\n  \"format\": 1,\n  \"asked\": \\{\n    \"[0-9a-f]{12}\": \"Rebuilding the garden shed roof\"\n  \\},\n  \"list\": \"markdown:\"\n\\}\n"
+    }
+  ]
+}

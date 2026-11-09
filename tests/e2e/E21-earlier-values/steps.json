@@ -1,0 +1,13 @@
+{
+  "description": "E21 earlier values: a store of format 1 gets format 2 at the next curation run, and nothing in memory/ changes, because format 2 only adds `## Earlier` to fact files. The run records the step migrate-2 and succeeds.",
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "stdout": "succeeded"
+    }
+  ]
+}

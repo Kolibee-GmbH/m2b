@@ -1,0 +1,13 @@
+{
+ "store_files": {
+  "store.json": "{\n  \"format\": 99,\n  \"tasks\": {\"backend\": \"markdown\"},\n  \"curating_machine\": \"sb-test-e2e\",\n  \"journal_since\": \"2026-11-01\"\n}\n",
+  "profile.json": "{\n  \"version\": 1,\n  \"owner\": \"Alex\",\n  \"language\": \"en\"\n}\n",
+  "memory/MEMORY.md": "# Memory\n\n## Facts\n\n- Dana likes old maps (dana.md)\n\n## Current\n"
+ },
+ "store_patterns": [
+  {
+   "path": "inbox/*-cli-*.md",
+   "content": "---\ncreated: [^\\n]+\nsource: cli\n---\nDana's sister Kim moves to Lyon in March\n"
+  }
+ ]
+}

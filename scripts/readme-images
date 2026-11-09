@@ -1,0 +1,8 @@
+#!/bin/sh
+# Records the README screenshots in docs/images/ from real Claude Code sessions against a demo store
+# with invented data. Needs claude (logged in), node and npm, Chrome or Chromium, ImageMagick and git;
+# each picture costs one model turn. Look at every picture before committing it.
+set -eu
+
+repo_root=$(cd "$(dirname "$0")/.." && pwd)
+PYTHONPATH="$repo_root/scripts${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m repo_tools.readme_images "$@"

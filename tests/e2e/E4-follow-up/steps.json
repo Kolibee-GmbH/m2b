@@ -1,0 +1,64 @@
+{
+  "description": "E4 follow-up: a capture with a follow-up creates a task due that day that names the capture, and the capture records the task; it is listed as an open task, todos lists it as due within the week; completing it puts it into the month's journal once, a second journal run adds nothing.",
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "Call Dana about the shed",
+        "--follow-up",
+        "2026-11-20"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "tasks",
+        "list",
+        "--marker",
+        "capture",
+        "--json"
+      ],
+      "save": {
+        "task": "\"id\": \"([0-9a-f]{12})\""
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "todos",
+        "--today",
+        "2026-11-17"
+      ],
+      "stdout": "\\ADue within 7 days:\\n  2026-11-20  Call Dana about the shed\\nCalendar: the calendar is not configured"
+    },
+    {
+      "run": [
+        "m2b",
+        "tasks",
+        "complete",
+        "{task}"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "journal"
+      ],
+      "stdout": "\\Acorpus/\\d{4}/\\d{2}/\\d{6}-done\\.md: 1 completed tasks added\\n\\Z",
+      "env": {
+        "M2B_CURATION_RUN": "1"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "journal"
+      ],
+      "stdout": "\\A\\Z",
+      "env": {
+        "M2B_CURATION_RUN": "1"
+      }
+    }
+  ]
+}

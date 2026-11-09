@@ -1,0 +1,126 @@
+{
+  "description": "E1 everyday, capture, the curation run and session start: a fact typed on the command line and one passed on standard input as the skill does become two inbox files, text verbatim; empty text writes nothing; `m2b curate --force` runs the whole pipeline once: the stub replays the ingest skill's commands under the step's real rules, filing the fact into memory with its evidence link and moving both captures into the corpus without a denial; lint leaves nothing to report; the run record says succeeded with every step; the next session start prints the distillate with the routing rule.",
+  "model": {
+    "skills": {
+      "/m2b:ingest": {
+        "actions": [
+          {
+            "tool": "Bash",
+            "command": "m2b ingest list --json"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest normalize --json"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest list --json"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/memory/MEMORY.md"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/inbox/<capture:cli>"
+          },
+          {
+            "tool": "Write",
+            "file_path": "<store>/memory/alex.md",
+            "content": "# Alex\n\n- Prefers green tea in the morning.\n\n## Evidence\n\n- [[<capture:cli>]]\n"
+          },
+          {
+            "tool": "Edit",
+            "file_path": "<store>/memory/MEMORY.md",
+            "old_string": "## Facts\n\n",
+            "new_string": "## Facts\n\n- Alex prefers green tea in the morning (alex.md)\n\n"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest facts-filed <capture:cli>"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest note <capture:cli> 'filed: fact alex.md'"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest finish <capture:cli>"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/inbox/<capture:claude>"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest note <capture:claude> 'filed: nothing to file'"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest finish <capture:claude>"
+          }
+        ]
+      }
+    }
+  },
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "Alex  prefers green tea,, in the morning"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "--source",
+        "claude",
+        "--quiet",
+        "-"
+      ],
+      "stdin": "Dana's \"maps\" stay $HOME\nsecond line"
+    },
+    {
+      "run": [
+        "m2b",
+        "capture",
+        ""
+      ],
+      "exit": 2
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "stdout": "\\Athe curation run succeeded\\n\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "status",
+        "--json"
+      ],
+      "stdout": "\"state\": \"succeeded\""
+    },
+    {
+      "run": [
+        "m2b",
+        "lint",
+        "scan"
+      ],
+      "stdout": "\\A\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "hook",
+        "distillate"
+      ],
+      "stdout": "\\Am2b distillate \\(memory/MEMORY\\.md[^\\n]*\\n\\n# Memory\\n(.*\\n)*- Alex prefers green tea in the morning \\(alex\\.md\\)\\n(.*\\n)*\\nRouting: [^\\n]+\\n\\Z"
+    }
+  ]
+}

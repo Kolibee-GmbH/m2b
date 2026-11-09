@@ -1,0 +1,25 @@
+{
+  "description": "E19 search across languages: a note written in German is found by its English words' translation in one search. `m2b search --any` with an English phrase and its German translation finds the German note; the English phrase alone finds nothing and says so. Search only reads, so the store stays as given.",
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "search",
+        "--",
+        "spare key"
+      ],
+      "stdout": "^No hits for 'spare key'\\.\\n$"
+    },
+    {
+      "run": [
+        "m2b",
+        "search",
+        "--any",
+        "--",
+        "spare key",
+        "Ersatzschlüssel"
+      ],
+      "stdout": "^corpus/2026/10/20261012T070000Z-cli-5e7a\\.md:6: Der Ersatzschlüssel für den Schuppen liegt unter dem blauen Blumentopf\\n$"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "review.title": "m2b: Durchsicht",
+  "candidate.prefix": "Merken?",
+  "review.run": "Kurationslauf vom {time}",
+  "review.failure": "Der Schritt {step} ist fehlgeschlagen: {error}",
+  "current.prefix": "Noch aktuell?"
+}

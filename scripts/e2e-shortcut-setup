@@ -1,0 +1,8 @@
+#!/bin/sh
+# Sets up, or with --remove removes, the test machine for the Shortcuts check: can a personal
+# automation start curation?
+set -eu
+
+repo_root=$(cd "$(dirname "$0")/.." && pwd)
+PYTHONPATH="$repo_root/scripts:$repo_root/plugins/m2b/src${PYTHONPATH:+:$PYTHONPATH}" \
+    exec python3 -m repo_tools.shortcut_setup "$@"

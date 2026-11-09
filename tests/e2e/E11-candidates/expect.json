@@ -1,0 +1,21 @@
+{
+  "store_files": {
+    "store.json": "{\n  \"format\": 2,\n  \"tasks\": {\"backend\": \"markdown\"},\n  \"curating_machine\": \"sb-test-e2e\",\n  \"journal_since\": \"2026-11-01\"\n}\n",
+    "inbox/20261107T020000Z-candidate-c3c3.md": "---\ncreated: 2026-11-07T03:00:00+01:00\nsource: candidate\nfrom_candidate: cccc00000003\n---\nRobin lives in Lyon\n",
+    "profile.json": "{\n  \"version\": 1,\n  \"owner\": \"Alex\",\n  \"language\": \"en\"\n}\n"
+  },
+  "store_patterns": [
+    {
+      "path": "inbox/????????T??????Z-candidate-????.md",
+      "content": "---\ncreated: [^\n]+\nsource: candidate\nfrom_candidate: aaaa00000001\n---\nDana prefers tea\n"
+    },
+    {
+      "path": "tasks/????????????.md",
+      "content": "---\nstatus: open\ncreated: [^\n]+\n---\nRemember\\? Sam rides a red bike\nm2b:candidate\n"
+    },
+    {
+      "path": "state/core/candidates.json",
+      "content": "(?=.*\"bbbb00000002\": \\{\n      \"text\": \"Alex plays chess\",\n      \"state\": \"dropped\",)(?=.*\"[0-9a-f]{12}\": \\{\n      \"text\": \"Sam rides a red bike\",\n      \"state\": \"open\",)(?!(?:.*\"text\"){3})\\{\n  \"format\": 1,\n  \"candidates\": \\{\n.*\\}\n"
+    }
+  ]
+}

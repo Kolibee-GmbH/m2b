@@ -1,0 +1,54 @@
+{
+  "description": "E16 at the model level: Sam already has a fact file with a lasting fact; a capture says he brings the plywood on Thursday. One real curation run files the plywood into a fact file of its own with until, and sam.md keeps no until.",
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "Sam brings the plywood for the shed on Thursday"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ]
+    }
+  ],
+  "invariants": [
+    {
+      "run_state": "succeeded"
+    },
+    {
+      "no_denials": true
+    },
+    {
+      "count": 0,
+      "glob": "inbox/*"
+    },
+    {
+      "count": 0,
+      "glob": "memory/sam.md",
+      "content": "until:"
+    },
+    {
+      "matches": "Lives next door and lends his tools",
+      "path": "memory/sam.md"
+    },
+    {
+      "count": 1,
+      "glob": "memory/*.md",
+      "content": "(?m)\\A---\\nuntil: \\d{4}-\\d{2}-\\d{2}\\n"
+    },
+    {
+      "count": 1,
+      "glob": "memory/*.md",
+      "content": "(?si)\\A---\\nuntil: .*plywood"
+    },
+    {
+      "matches": "(?im)^- [^\\n]*plywood[^\\n]*\\((?!sam\\.md\\))[a-z0-9-]+\\.md\\)$",
+      "path": "memory/MEMORY.md"
+    }
+  ]
+}

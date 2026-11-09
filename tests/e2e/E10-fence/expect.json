@@ -1,0 +1,8 @@
+{
+  "store_files": {
+    "corpus/2026/11/20261103T081200Z-cli-c3d4.md": "---\ncreated: 2026-11-03T09:12:00+01:00\nsource: cli\ncurated: true\n---\nThe passport office in town opens at eight on Tuesdays\n",
+    "memory/MEMORY.md": "# Memory\n\n## Facts\n\n## Current\n",
+    "store.json": "{\n  \"format\": 2,\n  \"tasks\": {\"backend\": \"markdown\"},\n  \"curating_machine\": \"sb-test-e2e\",\n  \"journal_since\": \"2026-11-01\"\n}\n",
+    "profile.json": "{\n  \"version\": 1,\n  \"owner\": \"Alex\",\n  \"language\": \"en\"\n}\n"
+  }
+}

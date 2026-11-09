@@ -1,0 +1,39 @@
+{
+  "description": "E19 at the model level: a real Claude Code session with m2b is asked in English where the spare key for the shed is, and the only note on it is in German, as the German distillate at session start suggests. The search skill searches the English word together with its German translation in one `m2b search --any` call and answers from the German note, in English, the language of the question. Run it after each Claude Code minor update: the answer is the model's, not m2b's code.",
+  "steps": [
+    {
+      "run": [
+        "claude",
+        "-p",
+        "Where did I put the spare key for the shed?",
+        "--setting-sources",
+        "project",
+        "--plugin-dir",
+        "{core_plugin}",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Skill",
+        "--max-turns",
+        "10",
+        "--model",
+        "sonnet",
+        "--output-format",
+        "stream-json",
+        "--verbose"
+      ],
+      "stdout": "(?s)(?=.*\"command\":\"m2b search --json --any --)(?=.*\"result\":\"(?:[^\"\\\\]|\\\\.)*[Bb]lue (?:flower ?)?pot)"
+    }
+  ],
+  "invariants": [
+    {
+      "count": 1,
+      "glob": "corpus/**/*.md",
+      "content": "Ersatzschlüssel"
+    },
+    {
+      "count": 0,
+      "glob": "inbox/*.md"
+    }
+  ]
+}

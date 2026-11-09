@@ -1,0 +1,90 @@
+{
+  "description": "E9 fresh and second machine (B37): setup on an empty store writes store.json, the profile, the folders, MEMORY.md and STORE.md; a first capture is found by search; setup again with the same answers changes nothing; a second machine with its own home joins the store without changing any file in it, and asking it to curate is answered with take-over.",
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "config",
+        "get",
+        "store.path"
+      ],
+      "save": {
+        "store": "\\A(.+)\\n"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "config",
+        "get",
+        "store.backend"
+      ],
+      "save": {
+        "backend": "\\A(.+)\\n"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "setup",
+        "inspect",
+        "--json"
+      ],
+      "stdout": "\"store_settings\": null"
+    },
+    {
+      "run": [
+        "m2b",
+        "setup",
+        "apply",
+        "--json",
+        "--answers",
+        "{\"store\": {\"backend\": \"{backend}\", \"path\": \"{store}\"}, \"tasks\": {\"backend\": \"markdown\"}, \"owner\": \"Alex\", \"language\": \"en\", \"calendar\": \"none\", \"curates\": true}"
+      ],
+      "stdout": "\"curating_machine\": \"sb-test-e2e\""
+    },
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "Dana keeps the spare key under the blue pot"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "search",
+        "spare key"
+      ],
+      "stdout": "spare key"
+    },
+    {
+      "run": [
+        "m2b",
+        "setup",
+        "apply",
+        "--answers",
+        "{\"store\": {\"backend\": \"{backend}\", \"path\": \"{store}\"}, \"tasks\": {\"backend\": \"markdown\"}, \"owner\": \"Alex\", \"language\": \"en\", \"calendar\": \"none\", \"curates\": true}"
+      ],
+      "stdout": "\\Anothing changed\\n\\Z"
+    },
+    {
+      "run": [
+        "sh",
+        "-c",
+        "M2B_HOME=\"$M2B_HOME/../second-home\" m2b setup apply --json --answers \"$0\"",
+        "{\"machine_id\": \"sb-test-second\", \"store\": {\"backend\": \"{backend}\", \"path\": \"{store}\"}, \"calendar\": \"none\", \"curates\": false}"
+      ],
+      "stdout": "\"written\": \\[\\n    \"[^\"]*second-home/\\.config/m2b/config\\.json\",\\n    \"[^\"]*second-home/\\.local/bin/m2b\"\\n  \\]"
+    },
+    {
+      "run": [
+        "sh",
+        "-c",
+        "M2B_HOME=\"$M2B_HOME/../second-home\" m2b setup apply --json --answers \"$0\"",
+        "{\"machine_id\": \"sb-test-second\", \"store\": {\"backend\": \"{backend}\", \"path\": \"{store}\"}, \"calendar\": \"none\", \"curates\": true}"
+      ],
+      "stdout": "sb-test-e2e curates this store\\. To move curation here, run m2b curate take-over"
+    }
+  ]
+}

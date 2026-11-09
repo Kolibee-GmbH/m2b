@@ -1,0 +1,28 @@
+{
+  "description": "E10 at the model level: the real lint skill run with only lint scan allowed is denied its lint fix, and the step reports the denial as an action.",
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "model",
+        "--skill",
+        "m2b:lint",
+        "--allow",
+        "Bash(m2b lint scan *)"
+      ],
+      "exit": 1,
+      "stdout": "action: lint: the model step m2b:lint was denied Bash"
+    }
+  ],
+  "invariants": [
+    {
+      "count": 1,
+      "glob": "memory/*"
+    },
+    {
+      "count": 1,
+      "glob": "corpus/2026/11/20261103T081200Z-cli-c3d4.md"
+    }
+  ]
+}

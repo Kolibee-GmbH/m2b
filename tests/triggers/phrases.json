@@ -1,0 +1,109 @@
+{
+  "description": "Everyday phrases each client skill must trigger on. Invented content; run with scripts/trigger-check.",
+  "skills": {
+    "m2b:capture": {
+      "en": [
+        "remember that Dana's birthday is on 3 March",
+        "note that Alex prefers green tea in the morning",
+        "don't forget: the bike needs new brakes before winter",
+        "remind me on Friday to call the plumber about the leak",
+        "put the dentist on Thursday at 10 in my Home calendar",
+        "keep this for me: the cabin key is under the blue flowerpot",
+        "jot down that Acme moved their office to Lake Street",
+        "I need to renew the car insurance in December, make sure I don't forget",
+        "save this idea: a shelf above the desk for the printer",
+        "Alex and I agreed that I pay for the concert tickets and Alex books the hotel, write that down"
+      ],
+      "de": [
+        "merk dir, dass Dana am 3. März Geburtstag hat",
+        "notier, dass Alex morgens grünen Tee mag",
+        "denk dran: das Velo braucht vor dem Winter neue Bremsen",
+        "erinnere mich am Freitag, den Sanitär wegen dem Leck anzurufen",
+        "trag mir den Zahnarzt am Donnerstag um 10 in den Kalender Home ein",
+        "das muss ich mir merken: der Hüttenschlüssel liegt unter dem blauen Blumentopf",
+        "schreib mir auf, dass Acme an die Seestrasse umgezogen ist",
+        "nicht vergessen: im Dezember die Autoversicherung erneuern",
+        "halt die Idee fest: ein Regal über dem Schreibtisch für den Drucker",
+        "Alex und ich haben abgemacht, dass ich die Konzerttickets zahle und Alex das Hotel bucht, merk dir das"
+      ]
+    },
+    "m2b:search": {
+      "en": [
+        "what did I note about Dana's birthday?",
+        "is there anything in my notes about the cabin key?",
+        "search my second brain for Acme",
+        "what do I know about the plumber we used last year?",
+        "did I write down which tea Alex likes?",
+        "look up my notes on the car insurance",
+        "what did I save about the shelf idea?",
+        "do my notes say who books the hotel for the concert?",
+        "find what I captured about Lake Street",
+        "what's in my second brain about the bike brakes?"
+      ],
+      "de": [
+        "was habe ich mir zu Danas Geburtstag notiert?",
+        "steht in meinen Notizen etwas über den Hüttenschlüssel?",
+        "such im Second Brain nach Acme",
+        "was weiss mein Second Brain über den Sanitär vom letzten Jahr?",
+        "habe ich aufgeschrieben, welchen Tee Alex mag?",
+        "schau in meinen Notizen nach der Autoversicherung",
+        "was habe ich zur Regal-Idee festgehalten?",
+        "steht in meinen Notizen, wer das Hotel fürs Konzert bucht?",
+        "find heraus, was ich zur Seestrasse erfasst habe",
+        "was steht in meinem Second Brain zu den Velobremsen?"
+      ]
+    },
+    "m2b:todos": {
+      "en": [
+        "what's on today?",
+        "what is still open?",
+        "show me my open tasks",
+        "what's due this week?",
+        "which appointments do I have today?",
+        "is anything overdue?",
+        "what do I have to do today?",
+        "give me my todo list",
+        "what's left on my plate?",
+        "any tasks or meetings for me today?"
+      ],
+      "de": [
+        "was steht heute an?",
+        "was ist noch offen?",
+        "zeig mir meine offenen Aufgaben",
+        "was ist diese Woche fällig?",
+        "welche Termine habe ich heute?",
+        "ist etwas überfällig?",
+        "was muss ich heute erledigen?",
+        "gib mir meine Todo-Liste",
+        "was liegt noch an?",
+        "habe ich heute Aufgaben oder Termine?"
+      ]
+    },
+    "m2b:rediscover": {
+      "en": [
+        "show me an old note",
+        "surprise me with something I wrote down months ago",
+        "what did I write back then?",
+        "bring up something forgotten from my notes",
+        "remind me of something I noted a while ago",
+        "pick a random old note for me",
+        "dig out an old note from my second brain",
+        "what's something from my notes I haven't looked at in ages?",
+        "rediscover an old idea of mine",
+        "show me what I was noting down last spring"
+      ],
+      "de": [
+        "zeig mir eine alte Notiz",
+        "überrasch mich mit etwas, das ich vor Monaten notiert habe",
+        "was habe ich damals aufgeschrieben?",
+        "hol etwas Vergessenes aus meinen Notizen hervor",
+        "erinnere mich an etwas, das ich vor einer Weile notiert habe",
+        "such mir zufällig eine alte Notiz aus",
+        "grab eine alte Notiz aus meinem Second Brain aus",
+        "was aus meinen Notizen habe ich ewig nicht mehr angeschaut?",
+        "zeig mir eine alte Idee von mir",
+        "zeig mir, was ich letzten Frühling notiert habe"
+      ]
+    }
+  }
+}

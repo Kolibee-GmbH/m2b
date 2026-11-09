@@ -1,0 +1,157 @@
+# Store format, version 2
+
+The store is a plain folder. Everything in it is a text file you can read and back up with any
+tool; m2b has no database and no hidden index. `STORE.md` in the store repeats the rules an
+add-on needs, generated from `store.json`.
+
+```
+<store>/
+├── STORE.md        the rules for add-ons, generated
+├── store.json      settings every machine shares
+├── profile.json    the owner's profile
+├── inbox/          new captures; every client only adds files here
+├── corpus/YYYY/MM/ the archive, by month, no topic folders
+├── memory/         MEMORY.md (the distillate) and one file per fact
+├── tasks/          only with the markdown task backend: one file per task
+└── state/
+    ├── core/       the run record, the memory candidates, the open "Still current?" questions
+    ├── parts/<part>/
+    └── addons/<add-on>/
+```
+
+## File names
+
+`YYYYMMDDTHHMMSSZ-<source>-<4 hex>.<ext>`, for example `20261107T091500Z-cli-a1b2.md`. The time is
+UTC, so names sort in capture order across time zones and daylight saving. `source` is a lowercase
+token that says who captured: `claude`, `cli`, `candidate`, `worklog`, or an add-on's own name.
+The name never changes after capture, because links point to it.
+
+A file with any other name may be dropped into `inbox/`; the next run gives it a name of this
+form and keeps the old name in the note's curation trailer. A file the run cannot file (a date it
+cannot read, a text that is not UTF-8, a capture in a subfolder) stays where it is, is named in
+the review task, and starts no further run until it changes. The journal of completed tasks is the
+one exception in the archive: `corpus/YYYY/MM/YYYYMM-done.md`, one per month.
+
+## A note
+
+```markdown
+---
+created: 2026-11-07T10:15:00+01:00
+source: cli
+---
+Dana's birthday is on 3 March
+```
+
+The frontmatter is a block between `---` lines, one `key: value` per line, lists inline as
+`[a, b]`. It is a small fixed subset, not YAML.
+
+| Key | Set by | Meaning |
+|---|---|---|
+| `created` | the client, required | capture time with its offset |
+| `source` | the client, required | who captured |
+| `quiet: true` | the client | keep the note out of everything proactive (rediscover, `## Current`); search still finds it |
+| `follow_up` | the client | a due date whose task is still to be created |
+| `kind` | the writer | `worklog`, `journal` or `sidecar`; absent on a plain capture |
+| `tasks` | capture, ingest | ids of the tasks created from this note |
+| `refs` | ingest | archive file names or URLs; merged, never replaced |
+| `from_candidate` | harvest | the candidate task a capture came from |
+| `facts_filed: true`, `curated: true` | the curator | how far ingest got; a client never writes these |
+
+**The captured text is never rewritten.** The curator appends its notes after a last line
+`<!-- m2b:curation -->` and sets `curated: true`.
+
+**Photos and other binary files** become a bundle: the original under the schema name, a reading
+copy when the format needs one (HEIC as JPEG on macOS), and a sidecar `<stem>.md` with
+`kind: sidecar`. The sidecar moves last, so a bundle in the archive is always complete.
+
+## Memory
+
+`memory/MEMORY.md` has two sections:
+
+```markdown
+# Memory
+
+## Facts
+
+- Dana's birthday is on 3 March (dana.md)
+
+### Acme Ltd (Acme, Kim Lee)
+- Kim Lee leads Acme's IT (kim-lee.md)
+
+## Current
+
+- Planning the trip to Porto (since 2026-10-02)
+```
+
+A facts line is `- <statement> (<fact file>)`. A fact file such as `memory/dana.md` holds the
+current truth and, under `## Evidence`, `[[corpus file]]` links, the first being the capture the
+fact came from. A capture is linked once per fact file, which makes filing a fact safe to repeat. A
+fact that stops being true on a known day has that day in the fact file's frontmatter, `until:
+2026-11-14`, and a file of its own (`sam-plywood.md` beside `sam.md`), because `until` holds for the
+whole file; a lasting fact has none. When a capture changes a fact, its old value stays in the fact
+file under `## Earlier`, above `## Evidence`, one line each, `- Lived in Zurich (until 2026-11-07)`,
+the day being the last one it held; lint reports a line in another form. Earlier values never go
+into `MEMORY.md`. A current item ends in `(since YYYY-MM-DD)`, the day the
+latest capture about it was made or the owner last confirmed it still holds. Both are optional for a
+reader, and lint reports one that is no date.
+
+Facts before the first `###` heading hold everywhere: every session starts with them. A topic is a
+group inside `## Facts`, headed `### <name> (<word>, <word>)`; the words are the last
+parenthesised group, two to five of them, each 3 to 40 characters, and the name at most 60. A
+session start lists the topics by name and brings in a topic's facts only when one of its words is
+in the project folder's path, or, before a prompt, when the prompt names one; a word matches whole
+and regardless of case. A new fact that holds everywhere goes
+above the first `###`, because a line added at the end of `## Facts` would land in the last topic.
+A reader that knows nothing of topics reads their lines as ordinary facts. What every session
+starts with aims at 2 KB, and so does each topic; lint reports more.
+
+## Tasks
+
+The curator's own tasks carry a marker as the first line of their notes, so they are found by
+marker, never by title: `m2b:review` for the review task, `m2b:candidate` for a memory candidate,
+`m2b:current` for a "Still current? ..." question about a current item, and
+`m2b:capture <file> <key>` for a task ingest made from a capture. On Apple Reminders, which has
+no dropped state, a dropped curator task carries the line `m2b:dropped` in its notes.
+
+With the `markdown` backend each task is `tasks/<id>.md`, the id twelve random hex characters:
+
+```markdown
+---
+status: open
+created: 2026-11-07T10:15:00+01:00
+due: 2026-11-20
+---
+Call the plumber about the shed
+m2b:capture 20261107T091500Z-cli-a1b2.md plumber
+```
+
+`status` is `open`, `done` or `dropped`; a finished task also has `done`. A file you add by hand
+gets its name as id. A task file m2b cannot read (another status, a date it cannot read, not
+UTF-8) is left out of every list and named by lint until it is fixed.
+
+## Who writes what
+
+| What | Created by | Changed by | Removed by |
+|---|---|---|---|
+| `inbox/` | clients, add-ons, harvest, the worklog | the curating machine (name, frontmatter, trailer; never the text) | ingest moves files into the archive; normalize removes conflict copies identical to their original |
+| `corpus/` | ingest, the journal | the journal (appends to the month's file) | lint, only conflict copies identical to their original |
+| `memory/` | ingest | ingest, refresh, the sorting step, a migration after an update, harvest (only `## Current`, from "Still current?" answers), lint (a broken link it repairs) | nobody |
+| `state/core/` | the curation run | the curating machine | harvest prunes settled candidates |
+| tasks (`tasks/` with the `markdown` backend, or the Reminders list) | you, add-ons, capture (a follow-up), ingest, the curation run (review, candidates, "Still current?" questions) | you; the band ticks or drops a curator task; the curation run completes its review task when nothing needs you | harvest and the refresh step, once a curator task is settled or its item is gone; you |
+| `state/parts/<p>/`, `state/addons/<a>/` | that part or add-on | the same | the same |
+
+Nothing captured is ever deleted by m2b.
+
+## Formats
+
+`format` in `store.json` counts the rules for curated content. It goes up when a new m2b changes
+a rule that content already in a store has to follow, or that an older m2b must not curate under.
+The curating machine then migrates the store at the start of its next run
+([Curation](curation.md#after-an-update)). The inbox is not part of the format: its file names and
+the frontmatter `created` and `source` stay the same, so a machine on an older m2b keeps
+capturing into a newer store.
+
+| Format | Since | What it holds |
+|---|---|---|
+| 1 | builds before 0.1.0 | dated facts and current items, topics in the distillate, a fact that ends on a day in a file of its own |
+| 2 | 0.1.0 | a changed fact's old value under `## Earlier` in its fact file; the migration changes nothing, so an m2b that knows only format 1 stops curating |
