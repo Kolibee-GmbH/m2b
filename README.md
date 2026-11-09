@@ -160,20 +160,23 @@ your list, such as a review task or a "Remember? ..." candidate.
 
 ### Capture
 
-Say "remember that Dana's birthday is on 3 March", "note this", "remind me to call the plumber on
-Friday" in any session. The `capture` skill writes one file into `inbox/` with your words
-verbatim. With a date it also creates a task that points back to the note. From a terminal or a
-script:
-
-```bash
-m2b capture "Dana's birthday is on 3 March"
-m2b capture --follow-up 2026-11-20 "Call the plumber about the shed"
-```
+In any session, say what you want kept: "remember that Dana's birthday is on 3 March", "note
+this", "remind me to call the plumber on Friday". You type no command: the `capture` skill writes
+one file into `inbox/` with your words verbatim, and with a date it also creates a task that
+points back to the note. Say that you want it kept; a sentence on its own, such as "Dana's
+birthday is on 3 March", stays part of the conversation and is not captured.
 
 With Apple Calendar set up, "put it in my calendar" creates an event in the calendar you name,
 never in a default one. Calendar entries are experimental.
 
 ![Asked to remember that the shed roof needs 40 screws and to be reminded on Thursday, Claude runs the capture skill, which writes one inbox file and a task due Thursday 12 November; the status line now counts 3 in the inbox](docs/images/capture.png)
+
+From a terminal or a script, without a Claude session, the same goes through the command:
+
+```bash
+m2b capture "Dana's birthday is on 3 March"
+m2b capture --follow-up 2026-11-20 "Call the plumber about the shed"
+```
 
 ### The distillate at session start
 
