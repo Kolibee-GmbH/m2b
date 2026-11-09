@@ -159,7 +159,9 @@ coverage_report() {
 }
 
 if [ "$#" -gt 0 ]; then
-    [ "$1" = --quick ] && [ "$#" -eq 2 ] || usage
+    if [ "$1" != --quick ] || [ "$#" -ne 2 ]; then
+        usage
+    fi
     if [ "$2" = band ]; then
         quick_status=0
         claude plugin test "$PLUGIN" || quick_status=1
