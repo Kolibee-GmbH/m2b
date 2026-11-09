@@ -3,7 +3,7 @@
 <p align="center"><em>A second brain for Claude Code. Say "remember this" in any session; every new session already knows.</em></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/status-pre--release-lightgrey?style=flat-square" alt="Status: pre-release">
+  <a href="https://github.com/b33eep/m2b/releases"><img src="https://img.shields.io/github/v/release/b33eep/m2b?style=flat-square" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/Claude%20Code-2.1.319%2B-c96442?style=flat-square" alt="Claude Code 2.1.319 or later">
   <img src="https://img.shields.io/badge/Python-3.9%2B-3776ab?style=flat-square" alt="Python 3.9 or later">
@@ -17,11 +17,6 @@
   <a href="docs/getting-started.md">Getting started</a> ·
   <a href="CHANGELOG.md">Changelog</a>
 </p>
-
-> [!NOTE]
-> m2b is not released yet; the marketplace install below works once the repository is
-> published. Until then, install from a checkout: clone this repository, run
-> `/plugin marketplace add <path to the checkout>` in Claude Code, then `/plugin install m2b@m2b`.
 
 ## TL;DR
 
@@ -230,12 +225,12 @@ next run files it; drop it in the band, or delete the task, and it does not come
 m2b is one plugin. Four parts of it are off until you set them up; each has its own setup skill,
 and `m2b parts list` shows which are on.
 
-| Part | What it adds | Setup |
-|---|---|---|
-| `band` | A band above the prompt with memory candidates and "Still current?" questions to keep or drop in place and the review task with its findings, and a status line such as `brain: 3 in inbox · curated 18:02` | `/m2b:band-setup` |
-| `backup` | After each run, a local snapshot: a mirror of the store, a dated attic of replaced files, a dump of the task list | `/m2b:backup-setup` |
-| `herdr` (experimental) | At session start, the other agent sessions open in herdr, the terminal workspace manager for agents, so overlapping work is noticed before it starts | `/m2b:herdr-setup` |
-| `worklog` (experimental) | A daily worklog of your sessions in herdr: topics, time spans per sphere of work, booking proposals for billable spheres, a ledger with CSV and XLSX exports. Records only on the curating machine | `/m2b:worklog-setup` |
+| Part | What it adds | Needs | Setup |
+|---|---|---|---|
+| `band` | A band above the prompt with memory candidates and "Still current?" questions to keep or drop in place and the review task with its findings, and a status line such as `brain: 3 in inbox · curated 18:02` | mods turned on in Claude Code | `/m2b:band-setup` |
+| `backup` | After each run, a local snapshot: a mirror of the store, a dated attic of replaced files, a dump of the task list | a folder for the snapshot, outside the store; the curating machine | `/m2b:backup-setup` |
+| `herdr` (experimental) | At session start, the other agent sessions open in [herdr](https://herdr.dev), the terminal workspace manager for agents, so overlapping work is noticed before it starts | herdr 0.9 or later, sessions started in a herdr pane | `/m2b:herdr-setup` |
+| `worklog` (experimental) | A daily worklog of your sessions in herdr: topics, time spans per sphere of work, booking proposals for billable spheres, a ledger with CSV and XLSX exports | herdr 0.9 or later; the curating machine, which alone records; your spheres of work and customers, which its setup asks for | `/m2b:worklog-setup` |
 
 Experimental means it works for its author and may change without notice: herdr is a terminal
 workspace manager most Claude Code users do not run, and the worklog is a timesheet tool inside a
@@ -268,6 +263,11 @@ sessions.
 recorder writes to `~/.local/state/m2b/worklog/`, the prompts of your Claude Code transcripts for
 the period (with credentials and long tokens redacted), your own git commits, and the inbox. Its
 ledger with time spans and booking proposals lands in the store under `state/parts/worklog/`.
+A time span is when a workspace was in use: an agent at work, the workspace in focus (herdr cannot
+tell typing from looking, so focus counts for a limited time after each event), or messages in its
+transcript at most 15 minutes apart, merged across gaps of up to 15 minutes; waiting for an
+approval does not count. An agent left working on its own, a loop through
+the night for one, counts as well, so check a booking proposal before you enter it.
 
 ## Configure
 
@@ -332,7 +332,7 @@ whether a run is due.
 - The task titles, notes and worklog m2b writes are in English or German; everything else it
   prints is in English. Your notes can be in any language.
 - On Linux there is no calendar backend, and a schedule is a cron line instead of a Shortcut.
-- The worklog needs herdr and records only the curating machine. It never books anything: its
+- The worklog needs [herdr](https://herdr.dev) and records only the curating machine. It never books anything: its
   bookings are proposals for you to enter.
 - Sync is whatever moves the folder. m2b has no sync and no server of its own.
 - Nothing captured is deleted automatically. What does get deleted: conflict copies identical

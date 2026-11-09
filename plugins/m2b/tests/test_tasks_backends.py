@@ -342,5 +342,18 @@ class OpenTasksTest(unittest.TestCase):
         self.assertEqual((apple._list, apple._command, apple._timeout), (TEST_LIST, ["/opt/x/reminders"], 7))
 
 
+class RemindersFileTest(unittest.TestCase):
+    def test_apple_reminders_keeps_no_task_files_and_lists_every_task(self) -> None:
+        """Covers: B59
+
+        Lint and m2b tasks list ask every backend for the task files it cannot read; Reminders has
+        none, so a tasks/ folder left from the Markdown backend is never read as its own.
+        """
+        reminders = AppleRemindersTasks("sb-test-inbox", command=("/sb-test/no-such-reminders",))
+
+        self.assertEqual(reminders.unreadable(), [])
+        self.assertTrue(reminders.lists_every_task())
+
+
 if __name__ == "__main__":
     unittest.main()

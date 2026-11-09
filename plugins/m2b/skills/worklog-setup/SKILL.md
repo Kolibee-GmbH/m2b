@@ -50,7 +50,9 @@ Ask, one question at a time, and only what is missing or what the owner wants to
    is `billable` (only billable spheres get booking proposals).
 2. **How each sphere is recognized**: parts of git remote URLs (`git_remote_contains`) and folders
    under the home folder (`path_under`, written with `~/`). A session matching none falls to the
-   default sphere.
+   default sphere. A sphere other than the default with neither is never matched, so its time
+   lands in the default sphere: when you see one, in the profile or in the answers, say so and
+   ask how its work can be recognized.
 3. **The default sphere**: one sphere gets `"default": true`.
 4. **Customers**: the names booking proposals may use, as the owner writes them on a timesheet.
    The worklog only reads this list; it never adds to it.

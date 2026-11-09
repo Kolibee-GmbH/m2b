@@ -153,6 +153,7 @@ class MalformedTest(LintFixture):
         self.write("tasks/0123456789ab.md", "---\nstatus: someday\n---\nCall Dana\n")
         reminders = mock.Mock(spec=Tasks)
         reminders.items.return_value = []
+        reminders.unreadable.return_value = []
 
         self.assertEqual(self.codes(tasks=reminders), [])
 
@@ -450,6 +451,7 @@ class TaskWithoutCaptureTest(LintFixture):
         self.assertIn("Renew passport", self.findings(tasks=tasks)[0].text)
 
         broken = mock.Mock()
+        broken.unreadable.return_value = []
         broken.items.side_effect = lint.TasksError("Reminders did not answer")
         self.assertEqual(self.codes(tasks=broken), [("tasks-unreadable", "info", "tasks")])
 
