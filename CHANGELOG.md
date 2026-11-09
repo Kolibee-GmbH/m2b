@@ -2,8 +2,8 @@
 
 All notable changes are listed here, per part of the one plugin `m2b`. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the plugin uses
-[semantic versioning](https://semver.org/) with tags `m2b--vX.Y.Z`, the form `claude plugin tag`
-creates. How a release is made is in [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
+[semantic versioning](https://semver.org/) with tags `vX.Y.Z`. How a release is made is in
+[CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## Unreleased
 

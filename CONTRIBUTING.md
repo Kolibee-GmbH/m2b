@@ -79,22 +79,21 @@ match, however many commits came since. A change reaches users only with a relea
 1. Pick the new version by [semantic versioning](https://semver.org/) and write it into
    `version` in `plugins/m2b/.claude-plugin/plugin.json`.
 2. In `CHANGELOG.md`, turn the entries under "Unreleased" into a section `## X.Y.Z - YYYY-MM-DD`
-   with the day of the release, and leave an empty "Unreleased" above it. Until the first release
-   there is no "Unreleased": changes go into the section of 0.1.0, which gets its date on the day
-   it is published.
+   with the day of the release, and leave an empty "Unreleased" above it.
 3. Run `scripts/check`; it must end with `check: passed`.
-4. Commit both files as `chore(release): m2b X.Y.Z` and get that commit onto `main` without
-   rewriting it (a fast-forward or a merge commit, no squash). The marketplace reads
-   `plugins/m2b` from `main`, not from a tag, so until the commit is there `/plugin update` keeps
-   reporting the old version.
-5. On `main`, at the release commit, tag and push the tag:
+4. Commit both files as `chore(release): m2b X.Y.Z`, open a pull request to `main` and merge it;
+   a squash merge is fine. The marketplace reads `plugins/m2b` from `main`, not from a tag, so
+   until the merge `/plugin update` keeps reporting the old version.
+5. On `main`, at the merged release, tag and push the tag:
 
    ```bash
-   claude plugin tag plugins/m2b --dry-run   # shows the tag, m2b--vX.Y.Z
-   claude plugin tag plugins/m2b --push
+   git switch main && git pull --ff-only
+   git tag vX.Y.Z && git push origin vX.Y.Z
    ```
 
-   `claude plugin tag` refuses a dirty working tree and a tag that exists already.
+   The tag starts `.github/workflows/release.yml`. It checks that the tag names the version in
+   `plugin.json` and sits on `main`, and publishes a GitHub release with that version's section
+   of the changelog as its notes.
 
 ## README images
 
