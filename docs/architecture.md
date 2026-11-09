@@ -13,7 +13,7 @@ flowchart LR
   hooks[Session-start hooks] --> cli
   prompt[Prompt hook] --> store
   band[Band mod] --> cli
-  outside[Shortcuts, add-ons] --> launcher["~/.local/bin/m2b"] --> cli
+  outside[Shortcuts, integrations] --> launcher["~/.local/bin/m2b"] --> cli
   cli --> store[(Store folder)]
   cli --> tasks[(Task backend)]
   cli --> runner[Curation run]
@@ -25,7 +25,7 @@ flowchart LR
 | Folder | What it holds |
 |---|---|
 | `plugins/m2b/src/m2b/` | the core: `cli.py` (every command), `store/`, `tasks/`, `calendar/` (backends behind one interface each), `config/` (`config.json`, `store.json`, `profile.json`), `curate/` (the run, the fenced model step, the run record), `hooks.py` (session start), `prompt_hook.py` (before every prompt, with its own command `bin/m2b-prompt-hook` so it does not load every command), `parts.py` (the optional parts and their steps) |
-| `plugins/m2b/src/m2b_worklog/`, `m2b_backup/`, `m2b_herdr/` | the optional parts; each calls the core only through the `m2b` command, as an add-on would |
+| `plugins/m2b/src/m2b_worklog/`, `m2b_backup/`, `m2b_herdr/` | the optional parts; each calls the core only through the `m2b` command, as an integration would |
 | `plugins/m2b/skills/` | one folder per skill; the ones a curation run starts (`ingest`, `refresh`, `sort-facts`, `lint`, `worklog-verdict`) say so in their description |
 | `plugins/m2b/hooks/` | `hooks.json` (session-start commands, the prompt hook and the band mod), `register.tsx` and its helpers (the band) |
 | `plugins/m2b/recorder/` | the worklog's herdr recorder, copied out of the plugin when set up |
@@ -35,7 +35,7 @@ flowchart LR
 
 ## Three rules the code keeps
 
-1. **Clients only add.** Skills, a Shortcut you write and add-ons write new files into `inbox/`
+1. **Clients only add.** Skills, a Shortcut you write and integrations write new files into `inbox/`
    and new tasks; the band only ticks or drops a curator task. Only the curation run moves,
    renames or edits, and only on the machine `store.json` names.
 2. **"Could not look" is never "nothing there".** Every answer that depends on a backend says

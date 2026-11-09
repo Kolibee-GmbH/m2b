@@ -9,6 +9,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- A program outside the marketplace that writes into the store is now called an integration;
+  [Integrations](docs/integrations.md) replaces `docs/addons.md`, and `STORE.md` gives an
+  integration its state folder under `state/integrations/<name>/` instead of `state/addons/`.
 - The workflows use action versions that run on Node 24
   ([#3](https://github.com/b33eep/m2b/pull/3)).
 

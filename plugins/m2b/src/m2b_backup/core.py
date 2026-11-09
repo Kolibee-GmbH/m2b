@@ -1,6 +1,6 @@
 """What the backup asks of the core, always through its launcher: settings, the task list, a finding.
 
-A part talks to the core only through ``m2b`` and the store format, as an add-on does.
+A part talks to the core only through ``m2b`` and the store format, as an integration does.
 """
 
 from __future__ import annotations

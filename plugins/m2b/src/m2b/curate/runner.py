@@ -881,7 +881,7 @@ def _interrupted_changes(copy: Path, store: Store) -> list[report.Finding]:
 
 
 def _preflight_paths(started: datetime.datetime) -> list[str]:
-    """What the run reads or writes; ``state/addons/`` belongs to add-ons and is never read."""
+    """What the run reads or writes; ``state/integrations/`` belongs to integrations and is never read."""
     this_month = started.date().replace(day=1)
     last_month = (this_month - datetime.timedelta(days=1)).replace(day=1)
     journals = [

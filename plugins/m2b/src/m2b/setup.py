@@ -388,7 +388,7 @@ def write_store_contract(store: Store, settings: StoreSettings) -> None:
 
 
 def store_contract(store_format: int, tasks_backend: str, tasks_list: str | None) -> str:
-    """``STORE.md``: what an add-on may do in this store, from ``store.json``."""
+    """``STORE.md``: what an integration may do in this store, from ``store.json``."""
     if tasks_backend == APPLE_REMINDERS:
         tasks = f'Apple Reminders, the list "{tasks_list}"'
     else:
@@ -403,7 +403,7 @@ this file is generated from `store.json` and says what anything else may do here
   offset) and `source` (your own lowercase name), then the text.
 - Tasks: {tasks}.
 - `{CORPUS}/`, `{MEMORY}/`, `profile.json`: read only.
-- `{STATE}/addons/<your name>/`: your own state.
+- `{STATE}/integrations/<your name>/`: your own state.
 
 Never move, rename, edit or delete anything else. Only the curating machine curates.
 """

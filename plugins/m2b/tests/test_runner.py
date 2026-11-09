@@ -7,7 +7,8 @@ import json
 import os
 import signal
 import sys
-from pathlib import Path
+import unittest
+from pathlib import Path, PurePosixPath
 from typing import Any
 from unittest import mock
 
@@ -18,6 +19,7 @@ from m2b.config import machine
 from m2b.config.profile import save_profile
 from m2b.config.store_settings import load_store_settings
 from m2b.curate import machine_state, memory_guard, model, runner
+from m2b.notes.layout import STATE
 from m2b.run_record import FAILED, RUN_RECORD, RUNNING, SUCCEEDED, load_run_record
 from m2b.store.base import StoreReadError
 from m2b.store.guard import DatalessGuard
@@ -815,6 +817,20 @@ class PreflightTest(RunnerTest):
         record = load_run_record(self.store)
         assert record is not None
         self.assertEqual(record.state, FAILED)
+
+
+class IntegrationStateTest(unittest.TestCase):
+    def test_the_run_never_asks_for_the_state_of_an_integration(self) -> None:
+        """Covers: B82"""
+        folder = PurePosixPath(STATE, "integrations")
+
+        reaching = [
+            path
+            for path in runner._preflight_paths(START)
+            if folder.is_relative_to(path) or PurePosixPath(path).is_relative_to(folder)
+        ]
+
+        self.assertEqual(reaching, [])
 
 
 class PartStepTest(RunnerTest):

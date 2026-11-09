@@ -1,6 +1,6 @@
 """The launcher ``~/.local/bin/m2b`` and plugin install paths.
 
-Callers outside Claude Code (Shortcuts, other plugins' hooks, add-ons) cannot rely on a path
+Callers outside Claude Code (Shortcuts, other plugins' hooks, integrations) cannot rely on a path
 into the plugin cache: it dies some days after an update. The launcher is a small shell script
 that reads the core's current user-scope ``installPath`` from Claude Code's
 ``installed_plugins.json`` at every call, so an update needs no step. ``M2B_CORE_ROOT``

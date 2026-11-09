@@ -38,7 +38,7 @@ class NoteName:
         if created.utcoffset() is None:
             raise ValueError(f"the capture time {created.isoformat()} has no offset")
         if not _SOURCE.match(source):
-            raise ValueError(f"the source {source!r} is not a lowercase token like claude or my-addon")
+            raise ValueError(f"the source {source!r} is not a lowercase token like claude or my-app")
         if not _EXTENSION.match(extension):
             raise ValueError(f"the extension {extension!r} must be letters and digits, like md or heic")
         suffix = suffix if suffix is not None else secrets.token_hex(_SUFFIX_BYTES)

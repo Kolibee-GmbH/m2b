@@ -518,6 +518,15 @@ class FirstRunInspectTest(SetupTest):
         self.assertIn("store: none named", out)
 
 
+class StoreContractTest(unittest.TestCase):
+    def test_the_contract_gives_an_integration_its_own_state_folder(self) -> None:
+        """Covers: B82"""
+        contract = setup.store_contract(2, "markdown", None)
+
+        self.assertIn("- `state/integrations/<your name>/`: your own state.", contract)
+        self.assertNotIn("add-on", contract.lower())
+
+
 class SetupSkillTest(unittest.TestCase):
     """Structure only: the questions live once, in the skill (X15)."""
 

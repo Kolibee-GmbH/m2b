@@ -8,7 +8,7 @@ beyond that, each with what breaks when it changes:
   (user scope, key ``m2b@m2b``). Read here, in ``launcher.RESOLVER`` (a copy that runs before any
   m2b code is found) and in the worklog recorder's ``m2b_installed`` (``recorder/record.py``, which
   runs from its own copy). When it changes, ``m2b doctor`` says the launcher cannot find m2b,
-  callers outside Claude Code (Shortcuts, add-ons) stop, and the recorder records nothing (B38).
+  callers outside Claude Code (Shortcuts, integrations) stop, and the recorder records nothing (B38).
 - ``enabledPlugins`` in Claude Code's managed settings (``MANAGED_SETTINGS`` in the recorder,
   ``M2B_MANAGED_SETTINGS`` in tests) and in the user's: only the worklog recorder reads them, to
   stop recording when m2b is turned off.

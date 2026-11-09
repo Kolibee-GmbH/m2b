@@ -90,9 +90,9 @@ code then compares the file and puts the old one back if any statement changed.
 
 Most setups need no schedule: the next session start on the curating machine files what waits. A
 schedule helps when captures reach the inbox while that machine starts no Claude Code session for
-days, for example captures from a second machine, or an add-on or a Shortcut that writes into the
-inbox. A scheduled `m2b curate` that is not due does nothing and exits 0, so it is safe to run
-daily.
+days, for example captures from a second machine, or an integration such as a Shortcut that
+writes into the inbox. A scheduled `m2b curate` that is not due does nothing and exits 0, so it
+is safe to run daily.
 
 A schedule calls the launcher `~/.local/bin/m2b`, which setup wrote with the absolute path of
 `python3`; the model steps use the absolute paths of `claude` and `reminders` that setup recorded,
