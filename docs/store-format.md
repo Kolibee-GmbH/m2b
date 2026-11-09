@@ -15,7 +15,7 @@ integration needs, generated from `store.json`.
 ├── tasks/          only with the markdown task backend: one file per task
 └── state/
     ├── core/       the run record, the memory candidates, the open "Still current?" questions
-    ├── parts/<part>/
+    ├── addons/<add-on>/
     └── integrations/<integration>/
 ```
 
@@ -138,7 +138,7 @@ UTF-8) is left out of every list and named by lint until it is fixed.
 | `memory/` | ingest | ingest, refresh, the sorting step, a migration after an update, harvest (only `## Current`, from "Still current?" answers), lint (a broken link it repairs) | nobody |
 | `state/core/` | the curation run | the curating machine | harvest prunes settled candidates |
 | tasks (`tasks/` with the `markdown` backend, or the Reminders list) | you, integrations, capture (a follow-up), ingest, the curation run (review, candidates, "Still current?" questions) | you; the band ticks or drops a curator task; the curation run completes its review task when nothing needs you | harvest and the refresh step, once a curator task is settled or its item is gone; you |
-| `state/parts/<p>/`, `state/integrations/<i>/` | that part or integration | the same | the same |
+| `state/addons/<a>/`, `state/integrations/<i>/` | that add-on or integration | the same | the same |
 
 Nothing captured is ever deleted by m2b.
 

@@ -1,19 +1,19 @@
 ---
 name: band-setup
-description: Turns on the m2b band above the prompt (open memory candidates to keep or drop, the open review, the state of curation in the status line) after checking that it can work on this machine - the launcher it calls and the task list it reads - and says what to fix when it cannot; "remove" turns it off. Use when the user says "set up the band", "the band is empty", "the band says could not look", "band einrichten", "das Band zeigt nichts", "turn the band off", or when the owner turns on the band part.
-allowed-tools: Bash(~/.local/bin/m2b doctor *), Bash(~/.local/bin/m2b status *), Bash(~/.local/bin/m2b parts *)
+description: Turns on the m2b band above the prompt (open memory candidates to keep or drop, the open review, the state of curation in the status line) after checking that it can work on this machine - the launcher it calls and the task list it reads - and says what to fix when it cannot; "remove" turns it off. Use when the user says "set up the band", "the band is empty", "the band says could not look", "band einrichten", "das Band zeigt nichts", "turn the band off", or when the owner turns on the band add-on.
+allowed-tools: Bash(~/.local/bin/m2b doctor *), Bash(~/.local/bin/m2b status *), Bash(~/.local/bin/m2b addons *)
 ---
 
 # Band setup
 
 The band calls `~/.local/bin/m2b` and nothing else, so it works once that launcher answers and the
-task list can be reached. You check, explain and turn the part on; you install nothing.
+task list can be reached. You check, explain and turn the add-on on; you install nothing.
 
 Run each `m2b` command in a Bash call of its own, as shown: nothing chained before or after it,
 no `echo $?`. This skill may run the command alone without asking, and Claude Code reports a
 failing exit code by itself.
 
-If the owner asked to turn the band off, run `~/.local/bin/m2b parts off band` and say that the
+If the owner asked to turn the band off, run `~/.local/bin/m2b addons off band` and say that the
 band and its status line are gone within a minute; nothing else changes.
 
 ## 1. The launcher
@@ -50,7 +50,7 @@ when there are no open memory candidates and no open review task.
 ## 3. Turn it on
 
 ```bash
-~/.local/bin/m2b parts on band
+~/.local/bin/m2b addons on band
 ```
 
 The band shows within a minute, and after the next turn at the latest.
@@ -59,5 +59,5 @@ The band shows within a minute, and after the next turn at the latest.
 
 The band is a mod: it needs a Claude Code version that runs plugins with function hooks, and mods
 turned on. Ask the owner to check in `/plugin` that m2b is enabled, and that
-`~/.local/bin/m2b parts list` shows `band` as `on`. The band reloads every 60 seconds and after each
-turn.
+`~/.local/bin/m2b addons list` shows `band` as `on`. The band reloads every 60 seconds and after
+each turn.

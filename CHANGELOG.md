@@ -12,6 +12,10 @@ All notable changes to this project are documented here. The format follows
 - A program outside the marketplace that writes into the store is now called an integration;
   [Integrations](docs/integrations.md) replaces `docs/addons.md`, and `STORE.md` gives an
   integration its state folder under `state/integrations/<name>/` instead of `state/addons/`.
+- The optional parts of m2b (band, backup, herdr, worklog) are now called add-ons: `m2b parts` is
+  `m2b addons`, the key `parts` in `config.json` is `addons`, and their state in the store moves
+  from `state/parts/<name>/` to `state/addons/<name>/`. `m2b parts` now ends with a usage error,
+  and a `config.json` that still has `parts` is refused until the key is renamed.
 - The workflows use action versions that run on Node 24
   ([#3](https://github.com/b33eep/m2b/pull/3)).
 

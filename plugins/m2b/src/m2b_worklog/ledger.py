@@ -1,6 +1,6 @@
 """The ledger: every worklog's time spans, keyed by its period, and two exports regenerated from it.
 
-``ledger.json`` in ``state/parts/worklog/`` is the record; a period already in it is not added
+``ledger.json`` in ``state/addons/worklog/`` is the record; a period already in it is not added
 again, which makes adding safe to repeat (B28). A span is one block: ``start`` and ``end`` are its
 bounds, ``minutes`` the work inside it, so a gap within a block is never booked. ``ledger.csv`` and
 ``ledger.xlsx`` are rebuilt from the whole ledger at every worklog and are not for editing: a
@@ -28,7 +28,7 @@ from m2b_worklog.sources.inbox import is_evicted
 LEDGER_VERSION = 1
 LEDGER = "ledger.json"
 # Where the ledger lives in the store, for the fetch command a message names.
-RELATIVE_FOLDER = "state/parts/worklog"
+RELATIVE_FOLDER = "state/addons/worklog"
 CSV_EXPORT = "ledger.csv"
 XLSX_EXPORT = "ledger.xlsx"
 COLUMNS = (

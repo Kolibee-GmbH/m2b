@@ -1,1 +1,1 @@
-"""The m2b backup part: a local snapshot of the store after each curation run."""
+"""The m2b backup add-on: a local snapshot of the store after each curation run."""

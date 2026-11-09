@@ -1,6 +1,6 @@
 """The ``m2b-backup`` command.
 
-``run`` makes one backup: the part's ``after_journal`` curation step, or a backup on demand.
+``run`` makes one backup: the add-on's ``after_journal`` curation step, or a backup on demand.
 Exit 0 when the backup was made, also with findings such as files not downloaded; 1 when it could
 not be made (target missing, core not answering); 2 when the backup is not set up on this machine.
 """
@@ -22,7 +22,7 @@ EXIT_NOT_SET_UP = 2
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="m2b-backup", description="The backup part of m2b.")
+    parser = argparse.ArgumentParser(prog="m2b-backup", description="The backup add-on of m2b.")
     commands = parser.add_subparsers(dest="command", required=True)
     run = commands.add_parser("run", help="mirror the store, prune the attic, dump the task list")
     run.add_argument("--today", help="the attic's day, YYYY-MM-DD (default: today)")

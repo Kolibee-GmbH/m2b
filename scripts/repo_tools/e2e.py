@@ -13,7 +13,7 @@ A scenario is a folder under ``tests/e2e/`` with:
   An optional ``"model": {"actions": [...], "outcome": "success"}`` scripts the model: every model
   run of the scenario replays these actions in the stub ``tests/fakes/fake_claude.py``, which
   denies what the step's rules do not allow (the action format is in the stub);
-  a part a scenario needs is turned on by one of its steps (``m2b parts on worklog``), as setup does;
+  an add-on a scenario needs is turned on by one of its steps (``m2b addons on worklog``), as setup does;
 - ``expect.json``: ``{"store_files": {"<path in store>": "<exact text>"}}`` and, for files
   with generated names (captures, task files), ``"store_patterns": [{"path": "<glob>",
   "content": "<regular expression>"}]``, each matching exactly one file in full. Together they
@@ -22,7 +22,7 @@ A scenario is a folder under ``tests/e2e/`` with:
 Steps run with ``M2B_HOME`` pointing at a fresh temporary folder that holds a
 test config, with the core plugin's ``bin/`` first on ``PATH``, and with ``M2B_MODEL_RUNNER``
 pointing at the stub, so no scenario starts the real model at this level. At this level
-``CLAUDE_CONFIG_DIR`` and ``M2B_HERDR`` point into the scenario's folder too, so a part never
+``CLAUDE_CONFIG_DIR`` and ``M2B_HERDR`` point into the scenario's folder too, so an add-on never
 reads the user's own transcripts or asks the user's herdr.
 
 At ``--level model`` only scenarios with a ``model.json`` run: ``{"steps": [...], "invariants":

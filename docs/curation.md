@@ -30,7 +30,7 @@ flowchart LR
 | Journal | code | adds the tasks you completed to the month's `corpus/YYYY/MM/YYYYMM-done.md` |
 | Review task | code | one task in your list when something needs you |
 
-`before_ingest`, `after_ingest` and `after_journal` are where the optional parts hook in: the
+`before_ingest`, `after_ingest` and `after_journal` are where the add-ons hook in: the
 worklog before ingest, the backup after the journal. A step that fails is reported in the review
 task and the run goes on.
 
@@ -59,7 +59,7 @@ step:
 | | After install, before setup | After its setup |
 |---|---|---|
 | core | nothing: the session-start hooks print nothing and no run starts until `/m2b:m2b setup` | the distillate at session start, a curation run at the next session start after a capture on the curating machine |
-| `band` | draws nothing and starts nothing while there is no launcher; after the core's setup, asks `m2b parts list` about once a minute | the band and the status line |
+| `band` | draws nothing and starts nothing while there is no launcher; after the core's setup, asks `m2b addons list` about once a minute | the band and the status line |
 | `backup` | nothing | a snapshot after each run |
 | `herdr` | prints nothing | one line per other agent session at session start |
 | `worklog` | prints nothing, records nothing | herdr events recorded on the curating machine, a daily worklog note |
@@ -141,7 +141,7 @@ is `~/.local/state/m2b/run.log`; a run that could not even write its record leav
 
 ## The status line
 
-With the `band` part on, one line below the prompt sums up the brain. It is refreshed about once a
+With the `band` add-on on, one line below the prompt sums up the brain. It is refreshed about once a
 minute and after each of your turns. Normally it reads `brain: 0 in inbox · curated 17:07`: the
 captures waiting for the next run, and when the last successful run ended (the time today, the date
 on an earlier day), or `not curated yet` while no curation run has succeeded. Claude Code draws a

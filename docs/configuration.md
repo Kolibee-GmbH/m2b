@@ -6,7 +6,7 @@ run refuses.
 
 | File | Where | Shared | Written by |
 |---|---|---|---|
-| `config.json` | `~/.config/m2b/` | no, one per machine | setup, `m2b config set`, `m2b parts on / off`, `m2b distillate off / on` |
+| `config.json` | `~/.config/m2b/` | no, one per machine | setup, `m2b config set`, `m2b addons on / off`, `m2b distillate off / on` |
 | `store.json` | the store's folder | yes, every machine | setup, `m2b curate take-over` |
 | `profile.json` | the store's folder | yes, every machine | setup, `m2b profile set / merge`, the worklog setup |
 
@@ -31,7 +31,7 @@ An example with invented values:
   "calendar": {"backend": "apple-calendar", "timeout_seconds": 20},
   "executables": {"python3": "/usr/bin/python3", "claude": "/opt/homebrew/bin/claude", "reminders": "/opt/homebrew/bin/reminders"},
   "curation": {"model_timeout_minutes": 15},
-  "parts": {
+  "addons": {
     "band": {"on": true},
     "backup": {"on": true, "target": "~/Backups/m2b", "attic_days": 30}
   }
@@ -51,20 +51,20 @@ An example with invented values:
 | `curation.max_budget_usd` | a spending cap per model step, from Claude Code's own estimate of API cost; it can differ from the bill and says little on a subscription | none |
 | `curation.max_turns` | the turns one model step may take before it stops and is reported | 100 |
 | `distillate.skip_under` | folders, absolute or starting with `~/`, in and below which sessions get no distillate; `m2b distillate off` and `on` change it | none |
-| `parts.<part>.on` | whether an optional part runs on this machine: `band`, `herdr`, `worklog`, `backup` | off |
-| `parts.<part>.*` | the part's own settings, such as `parts.backup.target`; kept when the part is turned off | |
+| `addons.<add-on>.on` | whether an add-on runs on this machine: `band`, `herdr`, `worklog`, `backup` | off |
+| `addons.<add-on>.*` | the add-on's own settings, such as `addons.backup.target`; kept when the add-on is turned off | |
 
-A part's setup skill turns it on once it is set up; by hand:
+An add-on's setup skill turns it on once it is set up; by hand:
 
 ```bash
-m2b parts list
-m2b parts on backup
-m2b parts off backup
+m2b addons list
+m2b addons on backup
+m2b addons off backup
 ```
 
-Two parts add a step to each curation run while they are on: the worklog before the inbox is
+Two add-ons add a step to each curation run while they are on: the worklog before the inbox is
 filed, the backup after the journal. Both run from the plugin's own folder, so an update needs no
-step, and a part that is off has no step and leaves nothing to clean up.
+step, and an add-on that is off has no step and leaves nothing to clean up.
 
 ## store.json, the store
 
@@ -124,7 +124,7 @@ For tests, development and unusual setups; none is needed in normal use.
 | `M2B_INSTALLED_PLUGINS` | another `installed_plugins.json`, read by the launcher and the worklog's recorder |
 | `M2B_MODEL_RUNNER` | an executable used in place of `claude` for model steps, such as `scripts/no-model` |
 | `M2B_PYTHON` | the Python the plugin commands run with |
-| `M2B_HERDR` | the `herdr` executable the herdr and worklog parts call |
+| `M2B_HERDR` | the `herdr` executable the herdr and worklog add-ons call |
 | `M2B_MANAGED_SETTINGS` | another managed settings file, read by the worklog's recorder for `enabledPlugins` in place of the system one (tests) |
 
 The core sets `M2B_CURATION_RUN` and `M2B_RUN_TOKEN` for the steps of a curation run, and

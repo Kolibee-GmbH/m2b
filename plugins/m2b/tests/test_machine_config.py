@@ -20,7 +20,7 @@ INVENTED_CONFIG: dict[str, Any] = {
     "calendar": {"backend": "apple-calendar", "timeout_seconds": 20},
     "executables": {"python3": "/usr/bin/python3", "claude": "/opt/homebrew/bin/claude"},
     "curation": {"model_timeout_minutes": 15},
-    "parts": {"band": {"on": True}, "backup": {"on": True, "target": "~/Backups/m2b", "attic_days": 30}},
+    "addons": {"band": {"on": True}, "backup": {"on": True, "target": "~/Backups/m2b", "attic_days": 30}},
 }
 
 
@@ -39,7 +39,7 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(config.calendar.backend, "apple-calendar")
         self.assertEqual(config.executables["python3"], "/usr/bin/python3")
         self.assertEqual(config.curation.model_timeout_minutes, 15)
-        self.assertEqual(config.parts["backup"], {"on": True, "target": "~/Backups/m2b", "attic_days": 30})
+        self.assertEqual(config.addons["backup"], {"on": True, "target": "~/Backups/m2b", "attic_days": 30})
 
     def test_the_store_path_comes_from_the_config_with_the_tilde_expanded_at_load(self) -> None:
         """Covers: X1"""
@@ -62,26 +62,26 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(config.calendar.backend, "none")
         self.assertEqual(config.calendar.timeout_seconds, 20)
         self.assertEqual(config.curation.model_timeout_minutes, 15)
-        self.assertEqual(config.parts, {})
+        self.assertEqual(config.addons, {})
 
-    def test_a_part_keeps_its_own_settings_beside_on(self) -> None:
-        raw = _config(parts={"worklog": {"on": False, "anything": [1, {"nested": True}]}})
+    def test_an_addon_keeps_its_own_settings_beside_on(self) -> None:
+        raw = _config(addons={"worklog": {"on": False, "anything": [1, {"nested": True}]}})
 
         config = machine.parse_machine_config(raw, HOME)
 
-        self.assertEqual(config.parts["worklog"], {"on": False, "anything": [1, {"nested": True}]})
+        self.assertEqual(config.addons["worklog"], {"on": False, "anything": [1, {"nested": True}]})
 
-    def test_an_unknown_part_names_the_known_ones(self) -> None:
+    def test_an_unknown_addon_names_the_known_ones(self) -> None:
         with self.assertRaises(InvalidConfigError) as caught:
-            machine.parse_machine_config(_config(parts={"bakcup": {"on": True}}), HOME)
+            machine.parse_machine_config(_config(addons={"bakcup": {"on": True}}), HOME)
 
-        self.assertIn("parts.bakcup", str(caught.exception))
+        self.assertIn("addons.bakcup", str(caught.exception))
         self.assertIn("band, herdr, worklog, backup", str(caught.exception))
 
     def test_on_must_be_true_or_false(self) -> None:
-        for part in ({"on": "yes"}, {"on": 1}, "on"):
-            with self.subTest(part=part), self.assertRaises(InvalidConfigError):
-                machine.parse_machine_config(_config(parts={"band": part}), HOME)
+        for addon in ({"on": "yes"}, {"on": 1}, "on"):
+            with self.subTest(addon=addon), self.assertRaises(InvalidConfigError):
+                machine.parse_machine_config(_config(addons={"band": addon}), HOME)
 
     def test_the_curation_model_and_turn_limit_default_to_a_small_model_and_100(self) -> None:
         config = machine.parse_machine_config(_config(), HOME)
@@ -137,7 +137,7 @@ class ParseTest(unittest.TestCase):
 
         self.assertIn("store.path", str(caught.exception))
 
-    def test_an_unknown_key_outside_parts_is_refused(self) -> None:
+    def test_an_unknown_key_outside_addons_is_refused(self) -> None:
         with self.assertRaises(InvalidConfigError) as caught:
             machine.parse_machine_config(_config(calender={"backend": "none"}), HOME)
 
@@ -228,7 +228,7 @@ class FileTest(unittest.TestCase):
 
         raw = json.loads(self.machine.config_file.read_text(encoding="utf-8"))
         self.assertEqual(raw["calendar"], {"backend": "apple-calendar", "timeout_seconds": 45})
-        self.assertEqual(raw["parts"], INVENTED_CONFIG["parts"])
+        self.assertEqual(raw["addons"], INVENTED_CONFIG["addons"])
         self.assertEqual(raw["store"]["path"], INVENTED_CONFIG["store"]["path"])
 
     def test_set_refuses_a_value_that_makes_the_config_invalid(self) -> None:
@@ -239,17 +239,17 @@ class FileTest(unittest.TestCase):
 
         self.assertEqual(json.loads(self.machine.config_file.read_text(encoding="utf-8")), INVENTED_CONFIG)
 
-    def test_a_part_turned_off_keeps_its_settings_and_on_again_changes_nothing_else(self) -> None:
+    def test_an_addon_turned_off_keeps_its_settings_and_on_again_changes_nothing_else(self) -> None:
         machine.save_machine_config(self.machine, INVENTED_CONFIG)
 
-        self.assertTrue(machine.set_part_on(self.machine, "backup", False))
-        self.assertFalse(machine.set_part_on(self.machine, "backup", False))
+        self.assertTrue(machine.set_addon_on(self.machine, "backup", False))
+        self.assertFalse(machine.set_addon_on(self.machine, "backup", False))
         raw = json.loads(self.machine.config_file.read_text(encoding="utf-8"))
-        self.assertEqual(raw["parts"]["backup"], {"on": False, "target": "~/Backups/m2b", "attic_days": 30})
-        self.assertTrue(machine.set_part_on(self.machine, "herdr", True))
+        self.assertEqual(raw["addons"]["backup"], {"on": False, "target": "~/Backups/m2b", "attic_days": 30})
+        self.assertTrue(machine.set_addon_on(self.machine, "herdr", True))
         raw = json.loads(self.machine.config_file.read_text(encoding="utf-8"))
-        self.assertEqual(raw["parts"]["herdr"], {"on": True})
-        self.assertEqual(raw["parts"]["band"], {"on": True})
+        self.assertEqual(raw["addons"]["herdr"], {"on": True})
+        self.assertEqual(raw["addons"]["band"], {"on": True})
 
 
 if __name__ == "__main__":

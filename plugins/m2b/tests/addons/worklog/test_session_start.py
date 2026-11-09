@@ -11,14 +11,14 @@ from m2b_worklog.paths import RECORDER_SOURCE, worklog_paths
 from worklog_fixtures import WorklogFixture
 
 
-def parts(worklog: bool) -> list[dict[str, object]]:
+def addons(worklog: bool) -> list[dict[str, object]]:
     return [{"name": "band", "on": True, "summary": "x"}, {"name": "worklog", "on": worklog, "summary": "y"}]
 
 
 class FakeStatus:
     """Stands in for ``subprocess.run`` on the launcher; records the command line.
 
-    ``m2b parts list`` gets ``parts_answer`` (the worklog part on unless given), ``m2b status`` the rest.
+    ``m2b addons list`` gets ``addons_answer`` (the worklog add-on on unless given), ``m2b status`` the rest.
     """
 
     def __init__(
@@ -27,18 +27,18 @@ class FakeStatus:
         returncode: int = 0,
         error: Exception | None = None,
         stderr: str = "",
-        parts_answer: object = None,
+        addons_answer: object = None,
     ) -> None:
         self.answer, self.returncode, self.error, self.stderr = answer, returncode, error, stderr
-        self.parts_answer = parts(True) if parts_answer is None else parts_answer
+        self.addons_answer = addons(True) if addons_answer is None else addons_answer
         self.calls: list[list[str]] = []
 
     def __call__(self, command: list[str], **options: Any) -> subprocess.CompletedProcess[str]:
         self.calls.append(command)
-        if command[1:3] == ["parts", "list"]:
-            if isinstance(self.parts_answer, Exception):
-                raise self.parts_answer
-            text = self.parts_answer if isinstance(self.parts_answer, str) else json.dumps(self.parts_answer)
+        if command[1:3] == ["addons", "list"]:
+            if isinstance(self.addons_answer, Exception):
+                raise self.addons_answer
+            text = self.addons_answer if isinstance(self.addons_answer, str) else json.dumps(self.addons_answer)
             return subprocess.CompletedProcess(command, 0, text, "")
         if self.error is not None:
             raise self.error
@@ -49,7 +49,7 @@ class FakeStatus:
 def status(curates: bool, worklog: bool = True) -> dict[str, object]:
     return {
         "machine_id": "alex-laptop",
-        "parts": {"band": False, "herdr": False, "worklog": worklog, "backup": False},
+        "addons": {"band": False, "herdr": False, "worklog": worklog, "backup": False},
         "curating_machine": "x",
         "this_machine_curates": curates,
         "inbox": {"count": 0},
@@ -82,12 +82,12 @@ class SessionStartTest(WorklogFixture):
         self.assertEqual(session_start.session_start(self.paths, self.environ, run), "")
         self.assertEqual(self.switch_value(), "on")
         launcher = str(self.home / ".local" / "bin" / "m2b")
-        self.assertEqual(run.calls, [[launcher, "parts", "list", "--json"], [launcher, "status", "--json"]])
+        self.assertEqual(run.calls, [[launcher, "addons", "list", "--json"], [launcher, "status", "--json"]])
 
         self.assertEqual(session_start.session_start(self.paths, self.environ, FakeStatus(status(False))), "")
         self.assertEqual(self.switch_value(), "off")
 
-    def test_the_worklog_part_turned_off_turns_recording_off_at_the_next_session(self) -> None:
+    def test_the_worklog_addon_turned_off_turns_recording_off_at_the_next_session(self) -> None:
         self.install_copy()
         self.assertEqual(session_start.session_start(self.paths, self.environ, FakeStatus(status(True))), "")
         self.assertEqual(self.switch_value(), "on")
@@ -129,9 +129,9 @@ class SessionStartTest(WorklogFixture):
                 self.assertTrue(output.startswith("m2b worklog: could not check which machine curates"), output)
                 self.assertEqual(self.switch_value(), "on")
 
-    def test_with_the_worklog_part_off_it_says_nothing_and_asks_nothing_else(self) -> None:
+    def test_with_the_worklog_addon_off_it_says_nothing_and_asks_nothing_else(self) -> None:
         """A core-only user: no line, no status probe, and no switch file written."""
-        run = FakeStatus({**status(False), "store_error": "store.json is not JSON"}, parts_answer=parts(False))
+        run = FakeStatus({**status(False), "store_error": "store.json is not JSON"}, addons_answer=addons(False))
 
         self.assertEqual(session_start.session_start(self.paths, self.environ, run), "")
         self.assertEqual(len(run.calls), 1)
@@ -141,11 +141,11 @@ class SessionStartTest(WorklogFixture):
         self.assertEqual(session_start.session_start(self.paths, self.environ, run), "")
         self.assertEqual(self.switch_value(), "off")
 
-    def test_parts_that_cannot_be_read_leave_the_switch_and_print_nothing(self) -> None:
+    def test_addons_that_cannot_be_read_leave_the_switch_and_print_nothing(self) -> None:
         self.switch("on")
         for name, answer in {"garbled": "not json", "timeout": subprocess.TimeoutExpired(["m2b"], 10)}.items():
             with self.subTest(name):
-                run = FakeStatus(status(True), parts_answer=answer)
+                run = FakeStatus(status(True), addons_answer=answer)
                 self.assertEqual(session_start.session_start(self.paths, self.environ, run), "")
                 self.assertEqual(self.switch_value(), "on")
 

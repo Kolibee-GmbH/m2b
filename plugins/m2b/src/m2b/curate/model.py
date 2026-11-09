@@ -1,11 +1,11 @@
-"""The fenced model run: the one way the core and its parts start the model.
+"""The fenced model run: the one way the core and its add-ons start the model.
 
 A product cannot rely on one user's permission rules, so every model step brings its own: it never
 prompts, never hangs on a prompt and never does more than its step needs.
 
 ``claude -p /<skill>`` starts from an empty folder with ``--setting-sources project`` (the user's
 own settings, permission rules and plugins stay out), ``--plugin-dir`` for this plugin, whose
-skills the core's and the parts' steps are, ``--permission-mode dontAsk`` (nothing runs that is not
+skills the core's and the add-ons' steps are, ``--permission-mode dontAsk`` (nothing runs that is not
 pre-approved) and ``--allowedTools`` from the step. ``<store>`` at the start of a ``Read`` or
 ``Edit`` rule names the configured store, so ``Read(<store>/inbox/**)`` covers the real folder.
 The run's ``result`` line lists the tool calls the fence denied.
@@ -234,7 +234,7 @@ def run_supervised(
 
     SIGTERM first, SIGKILL after ``grace_seconds``. Whatever the run left behind in its group is
     stopped when it ends, so no child keeps editing the store after its step. A supervisor that is
-    itself stopped with SIGTERM (a part step past its timeout that runs a model step) stops its
+    itself stopped with SIGTERM (an add-on step past its timeout that runs a model step) stops its
     child's group first, because that group is its own and the outer stop does not reach it.
     ``pass_fds`` hands the run's lock to the child, so a killed runner leaves the lock held until
     the child is gone. Without ``on_line`` the output is dropped.

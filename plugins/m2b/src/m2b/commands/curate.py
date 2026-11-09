@@ -49,12 +49,12 @@ def curate_take_over(arguments: argparse.Namespace, context: Context) -> int:
     print(f"this machine ({result.machine_id}) curates the store now; {result.previous} stops at its next run.")
     if result.record_problem:
         print(
-            f"{result.record_problem}; the parts that were on at {result.previous} are not known, "
-            f"so check there with m2b parts list"
+            f"{result.record_problem}; the add-ons that were on at {result.previous} are not known, "
+            f"so check there with m2b addons list"
         )
-    if result.parts:
-        print("These parts were on in the last run; set each up on this machine in Claude Code:")
-        for name in result.parts:
+    if result.addons:
+        print("These add-ons were on in the last run; set each up on this machine in Claude Code:")
+        for name in result.addons:
             print(f"- /m2b:{name}-setup")
     return 0
 

@@ -90,7 +90,7 @@ class Fixture(unittest.TestCase):
         )
 
     def watermark(self, moment: datetime.datetime) -> None:
-        path = self.store / "state" / "parts" / "worklog" / "watermark.json"
+        path = self.store / "state" / "addons" / "worklog" / "watermark.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps({"end": moment.isoformat()}), encoding="utf-8")
 
@@ -313,7 +313,7 @@ class PeriodTest(Fixture):
         )
 
     def test_a_watermark_that_cannot_be_read_or_lies_ahead_is_an_error(self) -> None:
-        path = self.store / "state" / "parts" / "worklog" / "watermark.json"
+        path = self.store / "state" / "addons" / "worklog" / "watermark.json"
         path.parent.mkdir(parents=True)
         for text in ["not json", '{"end": "2026-03-14T09:00:00"}', '{"end": "2026-03-15T09:00:00+01:00"}']:
             with self.subTest(text):

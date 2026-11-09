@@ -1,12 +1,12 @@
 ---
 name: worklog-setup
-description: Sets up the experimental m2b worklog on the curating machine - the owner's spheres of work, how each is recognized and which are billable, the customer list, the activity recorder in herdr, and turns the worklog part on - or turns it off with "remove". Use when the user says "set up the worklog", "worklog einrichten", "record my work in herdr", "add a customer to the worklog", "remove the worklog", "Worklog entfernen", or when the owner turns on the worklog part. Running it again with the same answers changes nothing.
-allowed-tools: Bash(m2b-worklog machine *), Bash(m2b-worklog recorder *), Bash(m2b-worklog hook *), Bash(m2b-worklog recordings *), Bash(m2b profile *), Bash(m2b parts on worklog), Bash(m2b parts off worklog)
+description: Sets up the experimental m2b worklog on the curating machine - the owner's spheres of work, how each is recognized and which are billable, the customer list, the activity recorder in herdr, and turns the worklog add-on on - or turns it off with "remove". Use when the user says "set up the worklog", "worklog einrichten", "record my work in herdr", "add a customer to the worklog", "remove the worklog", "Worklog entfernen", or when the owner turns on the worklog add-on. Running it again with the same answers changes nothing.
+allowed-tools: Bash(m2b-worklog machine *), Bash(m2b-worklog recorder *), Bash(m2b-worklog hook *), Bash(m2b-worklog recordings *), Bash(m2b profile *), Bash(m2b addons on worklog), Bash(m2b addons off worklog)
 ---
 
 # Worklog setup
 
-The worklog is the only part of m2b that records what the owner does. Once a day it writes a note
+The worklog is the only add-on of m2b that records what the owner does. Once a day it writes a note
 about the sessions of the last period, with time spans per sphere of work and booking proposals
 for billable spheres; the owner books by hand. You ask, and the commands below write everything.
 
@@ -81,11 +81,11 @@ m2b-worklog recorder install
 ```
 
 If it says herdr was not found or did not answer, tell the owner the worklog needs herdr running
-and stop here; running this setup again later finishes it. Then turn the part on, so each
+and stop here; running this setup again later finishes it. Then turn the add-on on, so each
 curation run writes the daily worklog before it files the inbox:
 
 ```bash
-m2b parts on worklog
+m2b addons on worklog
 ```
 
 And turn recording on now instead of at the next session:
@@ -99,7 +99,7 @@ m2b-worklog hook session-start
 In two or three sentences: herdr now records when agents work and which workspace has focus,
 into `~/.local/state/m2b/worklog/` on this machine only. The first worklog is written by the next
 curation run, covering at most the last three days, and then once a day. The note lands in the
-archive like any capture; the time spans are in `state/parts/worklog/ledger.csv` and
+archive like any capture; the time spans are in `state/addons/worklog/ledger.csv` and
 `ledger.xlsx` in the store, regenerated every day and not for editing.
 
 ## 6. Remove
@@ -107,7 +107,7 @@ archive like any capture; the time spans are in `state/parts/worklog/ledger.csv`
 One command after the other:
 
 ```bash
-m2b parts off worklog
+m2b addons off worklog
 ```
 
 ```bash

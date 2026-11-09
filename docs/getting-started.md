@@ -37,7 +37,7 @@ nor a model. Both end with a first capture, a curation run and a first search.
    `memory/MEMORY.md`), the folders and the launcher `~/.local/bin/m2b`, then runs `m2b doctor`
    and lists anything left for you to do by hand, such as the Reminders permission on macOS.
    Running it again with the same answers changes nothing. After the core, it offers each
-   optional part, one at a time.
+   add-on, one at a time.
 
    Outside Claude Code, the `m2b` command is that launcher. If `~/.local/bin` is not on your
    `PATH` (it is not by default on macOS), add it, for example in `~/.zshrc`:
@@ -70,8 +70,8 @@ nor a model. Both end with a first capture, a curation run and a first search.
    m2b search -- "spare key"
    ```
 
-The optional parts (band, herdr neighbours, worklog, backup) are off until their own setup skill
-turns them on; see the [README](../README.md#optional-parts).
+The add-ons (band, herdr neighbours, worklog, backup) are off until their own setup skill
+turns them on; see the [README](../README.md#add-ons).
 
 ## From the command line, without Claude Code
 
@@ -150,7 +150,7 @@ m2b config set executables.claude "$(command -v claude)"
 | `<store>/tasks/` | your tasks, with the `markdown` backend |
 | `~/.config/m2b/config.json` | this machine's settings |
 | `~/.local/state/m2b/` | lock, run log, temp files, the worklog's recordings |
-| `~/.local/share/m2b/` | the copy of the worklog's herdr recorder, with the worklog part |
+| `~/.local/share/m2b/` | the copy of the worklog's herdr recorder, with the worklog add-on |
 | `~/.local/bin/m2b` | the launcher scripts and schedules call |
 
 The machine paths are the same on macOS and Linux. m2b does not read `XDG_CONFIG_HOME`,

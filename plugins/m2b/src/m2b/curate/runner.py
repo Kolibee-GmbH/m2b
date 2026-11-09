@@ -42,6 +42,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from m2b import current_check, expiry, ingest, launcher, lint
+from m2b.addons import CURATION_SLOTS, Addon, names_on, steps_in
 from m2b.candidates import PREFIX_KEY
 from m2b.config.errors import ConfigError, NotSetUpError
 from m2b.config.machine import MachineConfig, load_machine_config
@@ -69,7 +70,6 @@ from m2b.notes.layout import (
     journal_name,
     waiting_on_evicted,
 )
-from m2b.parts import CURATION_SLOTS, Part, names_on, steps_in
 from m2b.paths import MachinePaths
 from m2b.review import StepFailure, review_is_open, update_review
 from m2b.run_record import (
@@ -400,15 +400,15 @@ class _Run:
             # The undated lines preflight read for ``--refresh-all`` are from before the migration.
             self.undated = None
         self._step(HARVEST, lambda: self._harvest(tasks, locale))
-        self._parts("before_ingest", token)
+        self._addons("before_ingest", token)
         self._step(INGEST, lambda: self._ingest(token))
-        self._parts("after_ingest", token)
+        self._addons("after_ingest", token)
         self._step(REFRESH, lambda: self._refresh(tasks, locale, token))
         if self.sort_facts:
             self._step(SORT, lambda: self._sort(token))
         self._step(LINT, lambda: self._lint(tasks, token))
         self._step(JOURNAL, lambda: self._journal(tasks))
-        self._parts("after_journal", token)
+        self._addons("after_journal", token)
 
     def _step(self, name: str, action: Callable[[], object], reported: bool = True) -> None:
         """Runs one step; a failure is recorded, and reported in the review unless it is the review.
@@ -760,15 +760,15 @@ class _Run:
         if run.denials:
             raise StepError(f"denied {len(run.denials)} tool call(s) outside its rules")
 
-    def _parts(self, slot: str, token: str) -> None:
-        for part in steps_in(slot, self.config.parts):
-            self._step(part.name, functools.partial(self._part, part, token))
+    def _addons(self, slot: str, token: str) -> None:
+        for addon in steps_in(slot, self.config.addons):
+            self._step(addon.name, functools.partial(self._addon, addon, token))
 
-    def _part(self, part: Part, token: str) -> None:
-        """A part's step, run from this plugin's folder while the part is on; a part that is off
-        runs nothing."""
-        assert part.step is not None
-        command = [str(launcher.PLUGIN_ROOT / part.step.command[0]), *part.step.command[1:]]
+    def _addon(self, addon: Addon, token: str) -> None:
+        """An add-on's step, run from this plugin's folder while the add-on is on; an add-on that
+        is off runs nothing."""
+        assert addon.step is not None
+        command = [str(launcher.PLUGIN_ROOT / addon.step.command[0]), *addon.step.command[1:]]
         environ = {**self.environ, model.CURATION_RUN_VARIABLE: "1", report.RUN_TOKEN_VARIABLE: token}
         timeout = self.config.curation.model_timeout_minutes * 60
         with model.empty_folder(self.machine.temp_dir) as work:
@@ -822,7 +822,7 @@ class _Run:
             last_succeeded_at=self.last_success,
             steps=tuple(self.steps),
             findings=findings,
-            parts=names_on(self.config.parts),
+            addons=names_on(self.config.addons),
         )
 
     def _write(self, record: RunRecord) -> None:
@@ -833,14 +833,14 @@ class _Run:
 
     def _step_timeouts(self) -> datetime.timedelta:
         """An upper bound on the run from its start: past it, a ``running`` record is an interrupted run."""
-        part_steps = sum(len(steps_in(slot, self.config.parts)) for slot in CURATION_SLOTS)
+        addon_steps = sum(len(steps_in(slot, self.config.addons)) for slot in CURATION_SLOTS)
         step = datetime.timedelta(
             minutes=self.config.curation.model_timeout_minutes, seconds=model.DEFAULT_GRACE_SECONDS
         )
         # Preflight fetches once, the journal once more for older month files.
         fetch = 2 * datetime.timedelta(seconds=self.fetch_timeout_seconds)
         backfill = len(expiry.batches(self.undated, BACKFILL_BATCH)) - 1 if self.undated is not None else 0
-        model_steps = MODEL_STEPS + max(backfill, 0) + part_steps + (1 if self.sort_facts else 0)
+        model_steps = MODEL_STEPS + max(backfill, 0) + addon_steps + (1 if self.sort_facts else 0)
         return fetch + step * model_steps + CODE_STEPS_MARGIN
 
 
@@ -892,7 +892,7 @@ def _preflight_paths(started: datetime.datetime) -> list[str]:
         STORE_SETTINGS_FILE_NAME,
         PROFILE_FILE_NAME,
         f"{STATE}/core",
-        f"{STATE}/parts",
+        f"{STATE}/addons",
         MEMORY,
         TASKS,
         *journals,

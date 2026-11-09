@@ -18,8 +18,8 @@ over a file.
 
 It never moves, renames, edits or deletes anything outside its own state folder. The core never
 reads `state/integrations/`. If an integration needs more than this, it belongs in the product,
-or the contract on this page grows first. m2b's own optional parts follow the same rules, with
-their state under `state/parts/<part>/`.
+or the contract on this page grows first. m2b's own add-ons follow the same rules, with
+their state under `state/addons/<add-on>/`.
 
 ## A capture from outside
 

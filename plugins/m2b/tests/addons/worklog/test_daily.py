@@ -24,7 +24,7 @@ from test_facts import NOW, PROFILE, Fixture, at
 
 COMMAND = Path(__file__).resolve().parents[3] / "bin" / "m2b-worklog"
 DAY_BEFORE = at(9) - datetime.timedelta(days=1)
-STATE = Path("state") / "parts" / "worklog"
+STATE = Path("state") / "addons" / "worklog"
 
 
 class Crash(Exception):
@@ -463,7 +463,7 @@ class RerunTest(DailyFixture):
         ):
             ledger.read(self.store / STATE)
 
-        self.assertIn("m2b store fetch state/parts/worklog/ledger.json downloads it", str(raised.exception))
+        self.assertIn("m2b store fetch state/addons/worklog/ledger.json downloads it", str(raised.exception))
 
     def test_an_unreadable_intent_stops_the_worklog(self) -> None:
         (self.store / STATE).mkdir(parents=True)

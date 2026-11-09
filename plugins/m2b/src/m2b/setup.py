@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from m2b import hooks, launcher
+from m2b.addons import ADDONS, is_on
 from m2b.config import store_path
 from m2b.config.errors import ConfigError, InvalidConfigError
 from m2b.config.json_file import read_json_object, read_store_json_object
@@ -48,7 +49,6 @@ from m2b.config.store_settings import (
 )
 from m2b.notes.layout import CORPUS, INBOX, MEMORY, MEMORY_INDEX, STATE, STORE_CONTRACT, TASKS
 from m2b.notes.memory_index import CURRENT_HEADING, FACTS_HEADING
-from m2b.parts import PARTS, is_on
 from m2b.paths import MachinePaths, expand
 from m2b.store.base import DEFAULT_FETCH_TIMEOUT_SECONDS, Store
 from m2b.store.factory import open_store
@@ -91,8 +91,8 @@ class SetupResult:
     take_over: str | None = None
     missing_executables: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
-    # Each optional part with whether it is on here; setup offers the ones that are off.
-    parts: list[dict[str, Any]] = field(default_factory=list)
+    # Each add-on with whether it is on here; setup offers the ones that are off.
+    addons: list[dict[str, Any]] = field(default_factory=list)
 
 
 def parse_answers(raw: object, home: Path) -> Answers:
@@ -264,8 +264,10 @@ def _apply(machine: MachinePaths, answers: Answers, environ: Mapping[str, str], 
         write_store_contract(store, settings)
         result.written.append(STORE_CONTRACT)
     _launcher(machine, config_raw, environ, result)
-    configured = parse_machine_config(config_raw, machine.home).parts
-    result.parts = [{"name": part.name, "on": is_on(configured, part.name), "summary": part.summary} for part in PARTS]
+    configured = parse_machine_config(config_raw, machine.home).addons
+    result.addons = [
+        {"name": addon.name, "on": is_on(configured, addon.name), "summary": addon.summary} for addon in ADDONS
+    ]
     return result
 
 

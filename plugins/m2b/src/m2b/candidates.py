@@ -1,6 +1,6 @@
 """Memory candidates: proposed as tasks, remembered in ``state/core/candidates.json``.
 
-The core owns a candidate's life, so any part can propose one and a tick is filed even without the
+The core owns a candidate's life, so any add-on can propose one and a tick is filed even without the
 worklog.
 
 A module proposes a fact the owner may want kept; it becomes a task with the candidate marker and

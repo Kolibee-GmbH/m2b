@@ -18,6 +18,7 @@ import datetime
 import json
 from typing import Any
 
+from m2b.addons import ADDONS, is_on
 from m2b.atomic_file import replace_atomically
 from m2b.commands import Context
 from m2b.commands.backends import configured_store, configured_tasks
@@ -30,7 +31,6 @@ from m2b.config.store_settings import describe_format, format_state, load_store_
 from m2b.curate import machine_state
 from m2b.curate.due import check_due
 from m2b.notes.layout import INBOX
-from m2b.parts import PARTS, is_on
 from m2b.paths import MachinePaths
 from m2b.run_record import RUNNING, RunRecordError, is_interrupted, load_run_record
 from m2b.store.base import Store, StoreError
@@ -45,7 +45,7 @@ def status_command(arguments: argparse.Namespace, context: Context) -> int:
     store = configured_store(config, context.machine)
     now = datetime.datetime.now().astimezone()
     answer: dict[str, Any] = {"machine_id": config.machine_id}
-    answer["parts"] = {part.name: is_on(config.parts, part.name) for part in PARTS}
+    answer["addons"] = {addon.name: is_on(config.addons, addon.name) for addon in ADDONS}
     try:
         settings = load_store_settings(store)
         curating: str | None = settings.curating_machine
@@ -179,8 +179,8 @@ def _print_text(answer: dict[str, Any]) -> None:
     store_format = answer.get("store_format")
     if store_format is not None:
         print(f"store format: {store_format['state']} ({store_format['detail']})")
-    on = [name for name, is_part_on in answer["parts"].items() if is_part_on]
-    print(f"parts on: {', '.join(on) if on else 'none'}")
+    on = [name for name, is_addon_on in answer["addons"].items() if is_addon_on]
+    print(f"add-ons on: {', '.join(on) if on else 'none'}")
 
 
 def _iso(moment: datetime.datetime) -> str:

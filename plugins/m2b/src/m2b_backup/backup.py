@@ -1,6 +1,6 @@
 """One backup: the settings, the target's checks, the mirror, the attic's pruning, the task dump.
 
-It runs as the part's ``after_journal`` step, or alone through ``m2b-backup run``. The target
+It runs as the add-on's ``after_journal`` step, or alone through ``m2b-backup run``. The target
 folder must exist: a disk that is not connected must not turn into a folder of that name on the
 startup disk. It may not lie inside the store, nor the store inside it, or each backup would copy
 the one before. What the owner should know (files not downloaded, a dump kept) goes to the curation
@@ -30,7 +30,7 @@ class BackupError(Exception):
 
 
 class NotSetUpError(Exception):
-    """No ``parts.backup`` in this machine's config."""
+    """No ``addons.backup`` in this machine's config."""
 
 
 class Core(Protocol):
@@ -67,13 +67,13 @@ def settings_of(raw: Any, home: Path) -> Settings:
     if raw is None:
         raise NotSetUpError("the backup is not set up on this machine; /m2b:backup-setup sets it up")
     if isinstance(raw, Mapping) and raw.get("on") is not True:
-        raise NotSetUpError("the backup part is off on this machine; /m2b:backup-setup turns it on")
+        raise NotSetUpError("the backup add-on is off on this machine; /m2b:backup-setup turns it on")
     if not isinstance(raw, Mapping) or not isinstance(raw.get("target"), str):
-        raise BackupError("parts.backup in config.json needs a target folder; /m2b:backup-setup sets it")
+        raise BackupError("addons.backup in config.json needs a target folder; /m2b:backup-setup sets it")
     target = _expand(raw["target"], home)
     days = raw.get("attic_days", DEFAULT_ATTIC_DAYS)
     if not isinstance(days, int) or isinstance(days, bool) or days < 1:
-        raise BackupError(f"parts.backup.attic_days must be a whole number of days, at least 1, not {days!r}")
+        raise BackupError(f"addons.backup.attic_days must be a whole number of days, at least 1, not {days!r}")
     return Settings(target, days)
 
 

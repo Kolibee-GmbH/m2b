@@ -12,7 +12,7 @@ beyond that, each with what breaks when it changes:
 - ``enabledPlugins`` in Claude Code's managed settings (``MANAGED_SETTINGS`` in the recorder,
   ``M2B_MANAGED_SETTINGS`` in tests) and in the user's: only the worklog recorder reads them, to
   stop recording when m2b is turned off.
-- Transcript files under ``~/.claude/projects/``: only the worklog part reads them, for the facts
+- Transcript files under ``~/.claude/projects/``: only the worklog add-on reads them, for the facts
   of a period (``m2b_worklog/sources/transcripts.py``); a source it cannot read is reported as such.
 - The mod API (``hooks/register.tsx``): the band, early-access API; when it changes, the band
   shows nothing and everything else works.

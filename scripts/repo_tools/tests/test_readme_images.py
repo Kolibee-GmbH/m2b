@@ -53,7 +53,7 @@ class BuildDemoTest(unittest.TestCase):
         self.assertIn("Spare shed key", (store / "memory" / "MEMORY.md").read_text(encoding="utf-8"))
         tasks = [path.read_text(encoding="utf-8") for path in (store / "tasks").glob("*.md")]
         self.assertEqual(len(tasks), 4)
-        # The band shows a core question, never a worklog candidate, which is an experimental part.
+        # The band shows a core question, never a worklog candidate, which only the worklog add-on proposes.
         self.assertEqual([task for task in tasks if "m2b:candidate" in task], [])
         (question,) = [task for task in tasks if "m2b:current" in task]
         self.assertIn("Still current? Planning the trip to Porto in spring", question)

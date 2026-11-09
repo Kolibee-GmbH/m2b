@@ -4,10 +4,10 @@ One curating machine per store, because the run's lock is local and iCloud gives
 lock; moving curation is this explicit step.
 
 It writes this machine's id into ``store.json``; the old machine stops at its next preflight,
-because it is no longer named. The parts that were on in the old machine's last run come from the
-run record, so the owner can set those parts up here. While the run record says a run is in progress on another
-machine and that run is not past its deadline, the take-over is refused: that run passed its
-preflight already and would curate alongside the first run here.
+because it is no longer named. The add-ons that were on in the old machine's last run come from
+the run record, so the owner can set those add-ons up here. While the run record says a run is in
+progress on another machine and that run is not past its deadline, the take-over is refused: that
+run passed its preflight already and would curate alongside the first run here.
 """
 
 from __future__ import annotations
@@ -34,8 +34,8 @@ class RunInProgressError(Exception):
 class TakeOver:
     machine_id: str
     previous: str | None
-    parts: tuple[str, ...]
-    # Why the parts of the last run are not known, when the run record could not be read.
+    addons: tuple[str, ...]
+    # Why the add-ons of the last run are not known, when the run record could not be read.
     record_problem: str | None = None
 
 
@@ -56,9 +56,9 @@ def take_over(
     except RunRecordError as error:
         # The next run's preflight rewrites it; an unreadable record must not keep curation where it is.
         record, problem = None, str(error)
-    parts = record.parts if record else ()
+    addons = record.addons if record else ()
     if settings.curating_machine == config.machine_id:
-        return TakeOver(config.machine_id, None, parts, problem)
+        return TakeOver(config.machine_id, None, addons, problem)
     if (
         record
         and record.state == RUNNING
@@ -71,4 +71,4 @@ def take_over(
         )
     raw = read_store_json_object(store, STORE_SETTINGS_FILE_NAME) or {}
     save_store_settings(store, {**raw, "curating_machine": config.machine_id})
-    return TakeOver(config.machine_id, settings.curating_machine, parts, problem)
+    return TakeOver(config.machine_id, settings.curating_machine, addons, problem)

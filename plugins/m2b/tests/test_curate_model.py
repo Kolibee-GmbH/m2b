@@ -1,4 +1,4 @@
-"""Fenced model runs: the one way the core and its parts start the model."""
+"""Fenced model runs: the one way the core and its add-ons start the model."""
 
 from __future__ import annotations
 
@@ -194,7 +194,7 @@ class ModelCommandTest(test_commands.CommandTest):
         self.assertEqual(call["environment"]["M2B_CURATION_RUN"], "1")
         self.assertRegex(call["environment"]["M2B_RUN_TOKEN"], r"^[0-9a-f]{32}$")
 
-    def test_a_part_skill_runs_from_this_plugin_alone(self) -> None:
+    def test_an_addon_skill_runs_from_this_plugin_alone(self) -> None:
         code, _, err = self.curate_model("--skill", "m2b:worklog-verdict", "--allow", "Read")
 
         self.assertEqual(code, cli.EXIT_OK, err)

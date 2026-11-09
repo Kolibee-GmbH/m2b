@@ -702,7 +702,7 @@ class RunRecordTest(unittest.TestCase):
 class HooksManifestTest(unittest.TestCase):
     manifest = Path(__file__).resolve().parents[1] / "hooks" / "hooks.json"
 
-    def test_session_start_runs_the_core_hooks_then_the_parts_through_the_plugin_commands(self) -> None:
+    def test_session_start_runs_the_core_hooks_then_the_addons_through_the_plugin_commands(self) -> None:
         manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
         hooks = manifest["hooks"]["SessionStart"]
         commands = [hook["command"] for entry in hooks for hook in entry["hooks"]]

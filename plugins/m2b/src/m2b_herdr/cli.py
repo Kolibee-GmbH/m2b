@@ -1,7 +1,7 @@
 """The ``m2b-herdr`` command.
 
 ``neighbours`` is the session-start hook: it always exits 0, so it never blocks a session (B7), and
-prints nothing while the herdr part is off.
+prints nothing while the herdr add-on is off.
 ``check`` is for the setup skill: it says whether herdr answers and installs nothing into herdr.
 """
 
@@ -19,7 +19,7 @@ EXIT_PROBLEM = 1
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="m2b-herdr", description="The herdr part of m2b.")
+    parser = argparse.ArgumentParser(prog="m2b-herdr", description="The herdr add-on of m2b.")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("neighbours", help="the session-start hook: the other agent sessions in herdr")
     commands.add_parser("check", help="whether herdr answers; changes nothing")
@@ -30,7 +30,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def _neighbours() -> int:
-    if not os.environ.get(neighbours.PANE_VARIABLE) or not neighbours.part_on(os.environ):
+    if not os.environ.get(neighbours.PANE_VARIABLE) or not neighbours.addon_on(os.environ):
         return EXIT_OK
     try:
         print(neighbours.hook_output(os.environ), end="")

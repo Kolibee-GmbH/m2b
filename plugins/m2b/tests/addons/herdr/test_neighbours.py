@@ -211,18 +211,18 @@ class BudgetTest(unittest.TestCase):
         self.assertNotIn("more", neighbours.render(found))
 
 
-class PartTest(unittest.TestCase):
-    def test_the_part_is_on_only_when_m2b_parts_list_says_so(self) -> None:
+class AddonTest(unittest.TestCase):
+    def test_the_addon_is_on_only_when_m2b_addons_list_says_so(self) -> None:
         rows = [{"name": "band", "on": True}, {"name": "herdr", "on": True}]
-        self.assertTrue(neighbours.part_on({}, FakeRun(stdout=json.dumps(rows))))
+        self.assertTrue(neighbours.addon_on({}, FakeRun(stdout=json.dumps(rows))))
         rows[1]["on"] = False
-        self.assertFalse(neighbours.part_on({}, FakeRun(stdout=json.dumps(rows))))
-        self.assertFalse(neighbours.part_on({}, FakeRun(stdout="not json")))
-        self.assertFalse(neighbours.part_on({}, FakeRun(returncode=2, stdout="")))
-        self.assertFalse(neighbours.part_on({}, FakeRun(error=subprocess.TimeoutExpired(["m2b"], 10))))
+        self.assertFalse(neighbours.addon_on({}, FakeRun(stdout=json.dumps(rows))))
+        self.assertFalse(neighbours.addon_on({}, FakeRun(stdout="not json")))
+        self.assertFalse(neighbours.addon_on({}, FakeRun(returncode=2, stdout="")))
+        self.assertFalse(neighbours.addon_on({}, FakeRun(error=subprocess.TimeoutExpired(["m2b"], 10))))
         run = FakeRun(stdout="[]")
-        neighbours.part_on({"M2B_HOME": "/sb-test-home"}, run)
-        self.assertEqual(run.calls[0][1:], ["parts", "list", "--json"])
+        neighbours.addon_on({"M2B_HOME": "/sb-test-home"}, run)
+        self.assertEqual(run.calls[0][1:], ["addons", "list", "--json"])
 
 
 class CommandTest(unittest.TestCase):
@@ -239,7 +239,7 @@ class CommandTest(unittest.TestCase):
         self.herdr.chmod(0o755)
         home = base / "home"
         self.config = home / ".config" / "m2b" / "config.json"
-        self.part("on")
+        self.addon("on")
         self.environ = {
             "PATH": os.environ.get("PATH", ""),
             "M2B_HOME": str(home),
@@ -249,11 +249,11 @@ class CommandTest(unittest.TestCase):
             "FAKE_HERDR_CALLS": str(self.calls),
         }
 
-    def part(self, state: str) -> None:
-        """This machine's config with the herdr part on or off, written as ``m2b parts`` reads it."""
+    def addon(self, state: str) -> None:
+        """This machine's config with the herdr add-on on or off, written as ``m2b addons`` reads it."""
         self.config.parent.mkdir(parents=True, exist_ok=True)
         raw = {"version": 1, "machine_id": "sb-test-m1", "store": {"backend": "folder", "path": "/sb-test-store"}}
-        raw["parts"] = {"herdr": {"on": state == "on"}}
+        raw["addons"] = {"herdr": {"on": state == "on"}}
         self.config.write_text(json.dumps(raw), encoding="utf-8")
 
     def _run(self, *arguments: str, **environ: str) -> subprocess.CompletedProcess[str]:
@@ -271,10 +271,10 @@ class CommandTest(unittest.TestCase):
         self.assertEqual(result.stderr, "")
         self.assertIn("- acme-invoices · Fix the invoice export · idle · work/acme-invoices\n", result.stdout)
 
-    def test_with_the_part_off_or_m2b_not_set_up_the_hook_prints_nothing_and_asks_herdr_nothing(self) -> None:
+    def test_with_the_addon_off_or_m2b_not_set_up_the_hook_prints_nothing_and_asks_herdr_nothing(self) -> None:
         """Covers: B64"""
         self.reply.write_text(reply(THREE_AGENTS), encoding="utf-8")
-        self.part("off")
+        self.addon("off")
         off = self._run("neighbours", HERDR_PANE_ID="p3")
         self.config.unlink()
         not_set_up = self._run("neighbours", HERDR_PANE_ID="p3")

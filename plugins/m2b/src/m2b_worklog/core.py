@@ -1,5 +1,5 @@
 """What the worklog asks of the core, always through its launcher, as an integration
-would: a part talks to the core only through ``m2b`` and the store format.
+would: an add-on talks to the core only through ``m2b`` and the store format.
 
 The store's folder and the profile, the fenced model step, and a memory candidate. ``Core`` is
 what the daily worklog needs; ``LauncherCore`` is the real one, tests hand in their own.
