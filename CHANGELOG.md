@@ -7,6 +7,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The workflows use action versions that run on Node 24
+  ([#3](https://github.com/b33eep/m2b/pull/3)).
+
+### Fixed
+
+- `m2b config set store.path` refuses a store path the curation fence cannot name on the curating
+  machine, and `m2b setup inspect` names such a path before the setup interview starts
+  ([#3](https://github.com/b33eep/m2b/pull/3)).
+
 ## [0.1.1] - 2026-11-09
 
 ### Changed
