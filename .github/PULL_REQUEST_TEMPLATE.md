@@ -4,6 +4,6 @@
 
 - [ ] `scripts/check` ends with `check: passed`
 - [ ] No personal data in code, tests, fixtures or the commit messages
-- [ ] Docs and the newest section of `CHANGELOG.md` (Unreleased, or 0.1.0 before the first
-      release) updated where behavior changed; the version is
-      raised only in a release commit (see CONTRIBUTING.md, Releasing)
+- [ ] Docs and `## [Unreleased]` in `CHANGELOG.md` (under Added, Changed or Fixed) updated where
+      behavior changed; the version is raised only in a release commit (see CONTRIBUTING.md,
+      Releasing)

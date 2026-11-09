@@ -78,8 +78,11 @@ match, however many commits came since. A change reaches users only with a relea
 
 1. Pick the new version by [semantic versioning](https://semver.org/) and write it into
    `version` in `plugins/m2b/.claude-plugin/plugin.json`.
-2. In `CHANGELOG.md`, turn the entries under "Unreleased" into a section `## X.Y.Z - YYYY-MM-DD`
-   with the day of the release, and leave an empty "Unreleased" above it.
+2. In `CHANGELOG.md`, turn the entries under `## [Unreleased]` into a section
+   `## [X.Y.Z] - YYYY-MM-DD` with the day of the release, and leave an empty `## [Unreleased]`
+   above it. Entries sit under `### Added`, `### Changed` or `### Fixed`, one sentence or two each
+   on what changes for the user, ending in the pull request that made it, as
+   `([#12](https://github.com/b33eep/m2b/pull/12))`.
 3. Run `scripts/check`; it must end with `check: passed`.
 4. Commit both files as `chore(release): m2b X.Y.Z`, open a pull request to `main` and merge it;
    a squash merge is fine. The marketplace reads `plugins/m2b` from `main`, not from a tag, so
