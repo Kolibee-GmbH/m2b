@@ -738,13 +738,15 @@ class _Run:
             return
         self.fact_changes += [report.Finding(step, report.ACTION, change) for change in changes]
         filed = self._filed(inbox)
-        captures = f" (captures filed in this step: {', '.join(filed)})" if filed else ""
+        captures = f"; captures filed in this step: {', '.join(filed)}" if filed else ""
         saved = self.memory_copy
+        # The path comes first: the review cuts a finding at ``report.MAX_TEXT_CHARACTERS``, and a
+        # long list of captures may lose its end, not the path the owner needs.
         self.fact_changes.append(
             report.Finding(
                 step,
                 report.ACTION,
-                f"check the changes above{captures}; memory/ as it was before this run is in {saved}",
+                f"memory/ as it was before this run is in {saved}; check the changes above{captures}",
             )
         )
 
@@ -874,7 +876,7 @@ def _interrupted_changes(copy: Path, store: Store) -> list[report.Finding]:
         changes.insert(0, f"{run}: {problem}")
     if not changes:
         return []
-    check = f"check the changes above; memory/ as it was before that run is in {copy}"
+    check = f"memory/ as it was before that run is in {copy}; check the changes above"
     return [report.Finding(RUN, report.ACTION, text) for text in (*changes, check)]
 
 

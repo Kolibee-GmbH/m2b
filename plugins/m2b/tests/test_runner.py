@@ -1037,6 +1037,29 @@ class GuardedModelStepTest(RunnerTest):
         self.assertIn("20261107T070000Z-cli-a1b2.md", review.notes)
         self.assertEqual((saved / "MEMORY.md").read_text(encoding="utf-8"), GUARDED)
 
+    def test_the_review_names_the_copy_of_memory_however_many_captures_the_step_filed(self) -> None:
+        """Covers: B55"""
+        self.write("memory/sam.md", "# Sam\n\n- Brings plywood.\n")
+        self.capture()
+        self.model(
+            {"m2b:ingest": [self.edit_index("- Sam brings plywood (sam.md)\n", ""), *INGEST_FILES_THE_CAPTURE[1:]]}
+        )
+        twenty = [f"20261107T07{minute:02d}00Z-cli-a1b2.md" for minute in range(20)]
+
+        with mock.patch.object(runner._Run, "_filed", return_value=twenty):
+            outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        (review,) = self.review_tasks()
+        (saved,) = (self.machine.state_dir / "memory-before-run").iterdir()
+        self.assertIn(f"memory/ as it was before this run is in {saved}", review.notes)
+        # The next run renders the review again from the carried findings, cut the same way.
+        self.clock = START + datetime.timedelta(hours=2)
+        outcome = self.run_curate()
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        (review,) = self.review_tasks()
+        self.assertIn(f"memory/ as it was before this run is in {saved}", review.notes)
+
     def test_an_ingest_step_that_only_adds_facts_lines_leaves_the_review_alone(self) -> None:
         """Covers: B55"""
         self.write("memory/sam.md", "# Sam\n\n- Brings plywood.\n")

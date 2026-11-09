@@ -33,6 +33,10 @@ creates. How a release is made is in [CONTRIBUTING.md](CONTRIBUTING.md#releasing
   start; it now waits in the inbox for the next run and the run record names it. On a machine where
   iCloud had evicted `store.json`, `m2b capture` refused at once; it now fetches the file first and,
   when that fails, says which command downloads it.
+- **Fixed: the review names the copy of `memory/` however many captures a step filed.** The line
+  that says where `memory/` as it was before the run is kept listed the captures first and the
+  path last, so from about eleven captures the path was cut off the review task. The path now
+  comes first.
 
 ## 0.1.0 - not released yet
 
