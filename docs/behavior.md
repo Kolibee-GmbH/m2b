@@ -82,6 +82,7 @@ the reason. The examples use invented data. A test that covers a rule says so in
 | B72 | `m2b doctor` and `m2b status` give the store's format against this m2b: `current`, `newer` with "update m2b on this machine" (a problem for doctor's exit code), or `migrates` naming the curating machine whose next run migrates it | after an update the owner sees which machine is behind, and why the next run takes longer |
 | B73 | This m2b knows store format 2; its one migration, to format 2, changes nothing in `memory/` and fails if anything changed, so a store of format 1 only gets its new number | format 2 adds earlier values, which an m2b that knows format 1 would drop while curating |
 | B74 | Lint reports a line under a fact file's `## Earlier` that is not `- <statement> (until YYYY-MM-DD)` with a real day, as an action | an earlier value without the day it ended says nothing about when it held |
+| B75 | A capture whose file cannot be written (no write permission, a full or read-only disk) exits 4 with one line saying "the capture was not saved" and the folder, writes no note and removes the follow-up task it created for it; a task it cannot remove is named in that line, and the capture skill decides by that line, not by the exit code | otherwise the skill tells the owner the note is kept, and a task points to a note that does not exist |
 
 ## Defects m2b does not have
 

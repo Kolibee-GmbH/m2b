@@ -5,6 +5,16 @@ All notable changes are listed here, per part of the one plugin `m2b`. The forma
 [semantic versioning](https://semver.org/) with tags `m2b--vX.Y.Z`, the form `claude plugin tag`
 creates. How a release is made is in [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## Unreleased
+
+### m2b
+
+- **Fixed: a capture that cannot be written says so.** When the inbox has no write permission or
+  the disk is full or read-only, `m2b capture` exits 4 with one line saying the capture was not
+  saved, instead of a traceback, and removes the follow-up task it had already created for it.
+  The capture skill tells the user from that line that nothing was kept; before, it reported the
+  note as saved and left a task pointing to no note.
+
 ## 0.1.0 - not released yet
 
 The first release. It gets its date on the day it is published.

@@ -53,13 +53,21 @@ failing exit code by itself.
   command creates a task due that day that points back to the capture. If it says the task waits
   for the next curation run, tell the user the note is saved and the task follows.
 - **Not to be brought up again** ("just keep it, don't remind me"): add `--quiet`.
-- Exit 2 means nothing was written (for example empty text, a date that is no day, no second
-  brain set up, or settings this m2b cannot read, which may need an update); say what the
-  command printed and stop. Exit 3 means the store could not be
-  reached; nothing was written either.
-- Exit 1 after a capture with `--follow-up` means the note was saved but its task could not be
-  confirmed and may already exist. Do not run the command again; tell the user to look at the
-  task list.
+
+Whether the note was kept, read from what the command printed, not from its exit code:
+
+- **Saved:** it printed the new note's path, `inbox/` and a file name, on a line of its own.
+- **Saved, task unsure:** after a capture with `--follow-up`, it says the note was captured but
+  its follow-up task could not be confirmed and may already exist. Do not run the command again;
+  tell the user to look at the task list.
+- **Not saved:** it says "the capture was not saved", with the reason and the folder. Nothing
+  was kept: tell the user so in one line with that reason, never that the note is saved. If the
+  line names a follow-up task that could not be removed, ask the user to delete it. Run the
+  command again only once the user has fixed the cause.
+- **Nothing written either:** any other error. Exit 2 is a request this setup cannot take (empty
+  text, a date that is no day, no second brain set up, or settings this m2b cannot read, which
+  may need an update); exit 3 means the store could not be reached. Say what the command printed
+  and stop.
 
 ## Calendar entries
 
