@@ -12,8 +12,10 @@ from typing import Any
 from unittest import mock
 
 import test_commands
-from m2b import cli, launcher
+from m2b import cli, launcher, setup
+from m2b.config import store_path
 from m2b.config.machine import load_machine_config
+from m2b.curate import model
 from m2b.store.guard import DatalessGuard
 from store_contract import FakeEviction
 
@@ -84,6 +86,47 @@ class SetupTest(test_commands.CommandTest):
         target = self.store_root / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8")
+
+
+class StorePathTest(SetupTest):
+    def test_a_store_path_the_curation_run_cannot_fence_is_refused_with_the_reason(self) -> None:
+        """Covers: B81"""
+        target = self.store_root.parent / "Notes (2026)"
+
+        code, _, err = self.apply(self.answers(store={"backend": "folder", "path": str(target), "create": True}))
+
+        self.assertEqual(code, cli.EXIT_USAGE, err)
+        self.assertEqual(len(err.splitlines()), 1, err)
+        self.assertIn("(", err)
+        self.assertIn("curation", err)
+        self.assertFalse(target.exists())
+        self.assertFalse(self.machine.config_file.exists())
+
+    def test_a_machine_that_only_captures_may_keep_its_store_in_such_a_folder(self) -> None:
+        """Covers: B81"""
+        path = "/sb-test/Dropbox (Personal)/m2b"
+
+        answers = setup.parse_answers({"store": {"backend": "folder", "path": path}, "curates": False}, self.home)
+
+        self.assertEqual(str(answers.store.path), path)
+
+    def test_the_reason_stays_one_line_and_names_every_character_for_a_path_with_a_line_break(self) -> None:
+        """Covers: B81"""
+        reason = store_path.problem("/sb-test/Notes\n2026")
+
+        assert reason is not None
+        self.assertNotIn("\n", reason)
+        self.assertIn("a line break", reason)
+
+    def test_every_character_the_fence_refuses_is_refused_by_setup_too(self) -> None:
+        """Covers: B81"""
+        for character in store_path.UNSAFE_CHARACTERS:
+            with self.subTest(character=character):
+                path = f"/sb-test/Notes{character}2026"
+                with self.assertRaises(setup.SetupError):
+                    setup.parse_answers({"store": {"backend": "folder", "path": path}, "curates": True}, self.home)
+                with self.assertRaises(model.FenceError):
+                    model.store_rules(["Read(<store>/memory/**)"], Path(path))
 
 
 class NewStoreTest(SetupTest):

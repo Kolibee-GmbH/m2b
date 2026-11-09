@@ -481,6 +481,39 @@ class DoctorTest(CommandTest):
         self.environ["M2B_CORE_ROOT"] = "/sb-test-checkout/plugins/m2b"
         self.assertIn("claude-code: found (the launcher runs m2b from /sb-test-checkout", self.run_command("doctor")[1])
 
+    def test_a_store_path_the_curation_run_cannot_fence_is_a_problem(self) -> None:
+        """Covers: B81"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        linked = self.store_root.parent / "Notes (2026)"
+        linked.symlink_to(self.store_root)
+        config = json.loads(self.machine.config_file.read_text(encoding="utf-8"))
+        config["store"]["path"] = str(linked)
+        self.machine.config_file.write_text(json.dumps(config), encoding="utf-8")
+
+        code, out, _ = self.run_command("doctor")
+
+        self.assertEqual(code, cli.EXIT_PROBLEM, out)
+        (line,) = [line for line in out.splitlines() if line.startswith("store-path: ")]
+        self.assertIn("(", line)
+        self.assertIn("store: reachable", out)
+
+    def test_a_store_path_with_such_a_character_is_fine_on_a_machine_that_does_not_curate(self) -> None:
+        """Covers: B81"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        settings = json.loads((self.store_root / "store.json").read_text(encoding="utf-8"))
+        settings["curating_machine"] = "sb-test-m2"
+        (self.store_root / "store.json").write_text(json.dumps(settings), encoding="utf-8")
+        linked = self.store_root.parent / "Dropbox (Personal)"
+        linked.symlink_to(self.store_root)
+        config = json.loads(self.machine.config_file.read_text(encoding="utf-8"))
+        config["store"]["path"] = str(linked)
+        self.machine.config_file.write_text(json.dumps(config), encoding="utf-8")
+
+        code, out, _ = self.run_command("doctor")
+
+        self.assertEqual(code, cli.EXIT_OK, out)
+        self.assertNotIn("store-path: ", out)
+
     def test_a_healthy_machine_gets_one_line_per_backend_and_exit_0(self) -> None:
         self.set_up(tasks={"backend": "apple-reminders", "list": "sb-test-inbox"})
 

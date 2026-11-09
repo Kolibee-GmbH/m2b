@@ -24,6 +24,7 @@ from m2b.calendar.base import CalendarError, CalendarNotConfigured
 from m2b.commands import Context
 from m2b.commands.backends import configured_calendar, configured_store, configured_tasks
 from m2b.commands.output import print_json
+from m2b.config import store_path
 from m2b.config.errors import ConfigError, StoreUnreachableError
 from m2b.config.machine import MachineConfig, load_machine_config
 from m2b.config.store_settings import NEWER, describe_format, format_state, load_store_settings
@@ -33,8 +34,9 @@ from m2b.tasks.base import TasksError
 REACHABLE, NOT_CONFIGURED, NOT_REACHABLE = "reachable", "not configured", "not reachable"
 FOUND, MISSING, UNKNOWN, NOT_INSTALLED = "found", "missing", "version unknown", "not installed"
 NOT_RECORDED = "not recorded"
+UNUSABLE = "not usable for curation"
 APPLE_REMINDERS = "apple-reminders"
-PROBLEMS = (NOT_REACHABLE, MISSING, NEWER)
+PROBLEMS = (NOT_REACHABLE, MISSING, NEWER, UNUSABLE)
 _HOMEBREW_VERSION = re.compile(r"/reminders-cli/([^/]+)/")
 _FAILURES = (ConfigError, StoreUnreachableError, StoreError, TasksError, CalendarError, OSError)
 
@@ -50,6 +52,7 @@ def doctor(arguments: argparse.Namespace, context: Context) -> int:
     config = load_machine_config(context.machine)
     checks = [
         probe("store", lambda: _check_store(config, context)),
+        *_store_path_check(config, context),
         *_store_format_check(config, context),
         probe("tasks", lambda: configured_tasks(config, context.machine).check_reachable()),
         calendar_check(config),
@@ -91,6 +94,19 @@ def _store_format_check(config: MachineConfig, context: Context) -> list[Check]:
     except _FAILURES:
         return []
     return [Check("store-format", format_state(settings), describe_format(settings))]
+
+
+def _store_path_check(config: MachineConfig, context: Context) -> list[Check]:
+    """A line only on the curating machine, for a store path no curation run can work in; a machine
+    that only captures never fences with its path."""
+    unusable = store_path.problem(config.store.path)
+    if unusable is None:
+        return []
+    try:
+        curates = load_store_settings(configured_store(config, context.machine)).curating_machine == config.machine_id
+    except _FAILURES:
+        return []
+    return [Check("store-path", UNUSABLE, unusable)] if curates else []
 
 
 def _check_store(config: MachineConfig, context: Context) -> None:

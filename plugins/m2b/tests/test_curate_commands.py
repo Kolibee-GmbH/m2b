@@ -222,6 +222,22 @@ class TakeOverTest(test_runner.RunnerTest):
         self.assertIn("/m2b:backup-setup", out)
         self.assertEqual(self.run_command("curate", "--force")[0], cli.EXIT_OK)
 
+    def test_take_over_refuses_a_store_path_no_curation_run_can_work_in(self) -> None:
+        """Covers: B81"""
+        self.curating()
+        self.set_store("sb-test-m2")
+        linked = self.store_root.parent / "Dropbox (Personal)"
+        linked.symlink_to(self.store_root)
+        config = json.loads(self.machine.config_file.read_text(encoding="utf-8"))
+        config["store"]["path"] = str(linked)
+        self.machine.config_file.write_text(json.dumps(config), encoding="utf-8")
+
+        code, _, err = self.run_command("curate", "take-over")
+
+        self.assertEqual(code, cli.EXIT_USAGE, err)
+        self.assertIn("(", err)
+        self.assertEqual(load_store_settings(self.store).curating_machine, "sb-test-m2")
+
     def test_the_old_machine_stops_at_its_next_preflight(self) -> None:
         self.curating()
         self.run_command("curate", "take-over")

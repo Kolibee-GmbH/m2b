@@ -40,6 +40,11 @@ creates. How a release is made is in [CONTRIBUTING.md](CONTRIBUTING.md#releasing
 - **Fixed: `m2b todos` no longer says "No open tasks." while a task file cannot be read.** A
   Markdown task file that held no readable task was left out silently. It is now named with its
   path and the reason, the command exits 1, and the todos skill says it could not look at it.
+- **Fixed: setup refuses a store path that curation cannot use.** A folder such as `Notes (2026)`
+  was accepted, and then every curation run refused it, because the rules that fence its model
+  steps cannot name a path with `, ( ) [ ] * ?` or a backslash. Setup and `m2b curate take-over`
+  now refuse such a path on a machine that is to curate, with the reason, and `m2b doctor` names
+  one already configured there. A machine that only captures may keep its store in such a folder.
 
 ## 0.1.0 - not released yet
 
