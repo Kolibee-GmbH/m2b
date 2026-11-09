@@ -7,29 +7,37 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-09
+
 ### Added
 
-- [Add-ons](docs/addons.md) describes each add-on: what it does and needs, how to set it up and
-  turn it off, what it reads and writes on the machine and in the store, its commands, and how
-  you see that it runs.
+- [Add-ons](https://github.com/b33eep/m2b/blob/main/docs/addons.md) describes each add-on: what it
+  does and needs, how to set it up and turn it off, what it reads and writes on the machine and in
+  the store, its commands, and how you see that it runs.
 
 ### Changed
 
 - The herdr and worklog add-ons are no longer marked experimental.
 - A program outside the marketplace that writes into the store is now called an integration;
-  the former `docs/addons.md` is now [Integrations](docs/integrations.md), `docs/addons.md` now
-  describes the add-ons, and `STORE.md` gives an integration its state folder under
+  the former `docs/addons.md` is now
+  [Integrations](https://github.com/b33eep/m2b/blob/main/docs/integrations.md), `docs/addons.md`
+  now describes the add-ons, and `STORE.md` gives an integration its state folder under
   `state/integrations/<name>/` instead of `state/addons/`.
 - The optional parts of m2b (band, backup, herdr, worklog) are now called add-ons: `m2b parts` is
   `m2b addons`, the key `parts` in `config.json` is `addons`, and their state in the store moves
-  from `state/parts/<name>/` to `state/addons/<name>/`. `m2b parts` now ends with a usage error,
-  and a `config.json` that still has `parts` is refused until the key is renamed.
+  from `state/parts/<name>/` to `state/addons/<name>/`. `m2b status --json`,
+  `m2b setup apply --json` and the run record `state/core/last-run.json` name them under `addons`
+  instead of `parts`; a run record from 0.1.1 reads as no add-ons until the next curation run
+  rewrites it. `m2b parts` now ends with a usage error, and a `config.json` that still has `parts`
+  is refused until the key is renamed.
 - The workflows use action versions that run on Node 24
   ([#3](https://github.com/b33eep/m2b/pull/3)).
 
 ### Fixed
 
-- The README lists what each optional part needs, links herdr, and says what the worklog's time
+- The README now says that the worklog also reads the end of each session's last answer from the
+  transcripts and that its model step may search the archive; it did so in 0.1.1 already.
+- The README lists what each add-on needs, links herdr, and says what the worklog's time
   spans measure; the worklog setup points out a sphere that nothing can match
   ([#3](https://github.com/b33eep/m2b/pull/3)).
 - `m2b config set store.path` refuses a store path the curation fence cannot name on the curating
