@@ -11,7 +11,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from m2b.store.base import ConflictCopy, FetchError, Store
+from m2b.store.base import ConflictCopy, DownloadTimeoutError, Store
 
 MATERIALIZE_SCRIPT = Path(__file__).with_name("materialize.py")
 
@@ -22,7 +22,7 @@ class FolderStore(Store):
         try:
             subprocess.run(command, capture_output=True, timeout=timeout_seconds, check=False)
         except subprocess.TimeoutExpired as error:
-            raise FetchError(f"{relative} did not download within {timeout_seconds:g} seconds") from error
+            raise DownloadTimeoutError(f"{relative} did not download within {timeout_seconds:g} seconds") from error
 
     def conflict_copies(self, folder: str = "") -> list[ConflictCopy]:
         return []

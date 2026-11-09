@@ -14,8 +14,8 @@ from __future__ import annotations
 import datetime
 from dataclasses import dataclass
 
-from m2b.curate.machine_state import load_backoff, load_stuck_inbox, lock_is_held
-from m2b.notes.layout import INBOX
+from m2b.curate.machine_state import load_backoff, load_evicted_inbox, load_stuck_inbox, lock_is_held
+from m2b.notes.layout import INBOX, waiting_on_evicted
 from m2b.paths import MachinePaths
 from m2b.run_record import RunRecordError, load_run_record
 from m2b.store.base import Store, StoreError
@@ -40,7 +40,12 @@ def check_due(store: Store, machine: MachinePaths, now: datetime.datetime) -> Du
     except StoreError as error:
         return Due(True, f"the inbox could not be listed: {error}")
     stuck = load_stuck_inbox(machine)
-    waiting = len([path for path in inbox.files if not _unchanged(store, path, stuck)]) + len(inbox.evicted)
+    seen_evicted = load_evicted_inbox(machine)
+    # A file of a bundle with an entry not downloaded waits with that entry, which is counted alone.
+    bundled = waiting_on_evicted(inbox.files, inbox.evicted)
+    waiting = len([path for path in inbox.files if path not in bundled and not _unchanged(store, path, stuck)]) + len(
+        [path for path in inbox.evicted if not _unchanged(store, path, seen_evicted)]
+    )
     if waiting:
         return Due(True, f"{waiting} capture{'' if waiting == 1 else 's'} in the inbox")
     try:
@@ -57,7 +62,7 @@ def check_due(store: Store, machine: MachinePaths, now: datetime.datetime) -> Du
 
 
 def _unchanged(store: Store, path: str, stuck: dict[str, int]) -> bool:
-    """A file the last run could not file, with the same modification time as then."""
+    """A file the last run could not file or found not downloaded, with the same modification time as then."""
     if path not in stuck:
         return False
     try:

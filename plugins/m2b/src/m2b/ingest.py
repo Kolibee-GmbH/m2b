@@ -34,7 +34,7 @@ from pathlib import Path, PurePosixPath
 from m2b.capture import FOLLOW_UP_KEY, task_title
 from m2b.notes import frontmatter as keys
 from m2b.notes.frontmatter import Note, NoteFormatError, read_created, set_created
-from m2b.notes.layout import CORPUS, INBOX
+from m2b.notes.layout import CORPUS, INBOX, waiting_on_evicted
 from m2b.notes.names import NoteName
 from m2b.notes.trailer import MARKER_LINE, find_trailer
 from m2b.store.base import Store, StoreError
@@ -109,7 +109,10 @@ def pending(store: Store) -> PendingReport:
     evicted_names = {PurePosixPath(relative).name for relative in scan.evicted}
     for relative in scan.files:
         stems.setdefault(PurePosixPath(relative).name.rsplit(".", 1)[0], []).append(PurePosixPath(relative).name)
+    waiting = waiting_on_evicted(scan.files, scan.evicted)
     for relative in sorted(scan.files):
+        if relative in waiting:
+            continue
         problem = _pending_problem(store, relative, stems, evicted_names, report)
         if problem is not None:
             report.problems.append(problem)

@@ -6,6 +6,7 @@ not content: readers skip them, so a hidden temp file is never taken for a note.
 
 from __future__ import annotations
 
+import contextlib
 import errno
 import shlex
 import time
@@ -41,6 +42,10 @@ class StoreReadError(StoreError):
 
 class FetchError(StoreError):
     """Evicted files could not be downloaded in time."""
+
+
+class DownloadTimeoutError(FetchError):
+    """One file did not download within its share of the time; ``fetch`` goes on with the others."""
 
 
 class UnsupportedStoreError(StoreError):
@@ -255,10 +260,14 @@ class Store(ABC):
                 return
             if self._clock() >= deadline:
                 raise FetchError(f"not downloaded after {timeout_seconds:g} seconds: {', '.join(pending)}")
-            for relative in pending:
-                if relative not in requested:
-                    requested.add(relative)
-                    self._start_download(relative, max(deadline - self._clock(), 0.0))
+            # Each new request gets an equal share of the time left: a download that waits for its
+            # file (a folder store) must not use up the time of the paths after it.
+            new = [relative for relative in pending if relative not in requested]
+            for index, relative in enumerate(new):
+                requested.add(relative)
+                share = max(deadline - self._clock(), 0.0) / (len(new) - index)
+                with contextlib.suppress(DownloadTimeoutError):
+                    self._start_download(relative, share)
             self._sleep(FETCH_POLL_SECONDS)
 
     @abstractmethod

@@ -27,6 +27,9 @@ the store, because the store syncs to other machines.
 - **The stuck inbox files** ``inbox-stuck.json``: files ingest could not file after the last run,
   with their modification time. Until one changes it makes no run due, so one export the codec
   cannot read does not start a model run at every session start.
+- **The evicted inbox entries** ``inbox-evicted.json``: captures the last run found not
+  downloaded, with their modification time. Until one changes it makes no run due, so a capture
+  iCloud keeps in the cloud does not start a run at every session start.
 - **Leftovers:** temp files older than an hour, and findings files of runs that were killed.
   Anything younger may belong to a command running right now in another session.
 """
@@ -55,6 +58,7 @@ MEMORY_BEFORE_RUN = "memory-before-run"
 MEMORY_CHANGES = "memory-changes.json"
 MEMORY_UNCHECKED = "memory-unchecked.json"
 STUCK_INBOX = "inbox-stuck.json"
+EVICTED_INBOX = "inbox-evicted.json"
 MAX_LOG_BYTES = 1024 * 1024
 LAST_EVENT_BYTES = 16 * 1024
 BACKOFF_HOURS = (1, 4, 20)
@@ -146,19 +150,41 @@ def save_memory_changes(machine: MachinePaths, findings: list[Finding]) -> None:
 
 def load_stuck_inbox(machine: MachinePaths) -> dict[str, int]:
     """Inbox files ingest could not file, by store path, with their modification time in nanoseconds."""
+    return _load_times(machine, STUCK_INBOX)
+
+
+def save_stuck_inbox(machine: MachinePaths, stuck: dict[str, int]) -> None:
+    _save_times(machine, STUCK_INBOX, stuck)
+
+
+def load_evicted_inbox(machine: MachinePaths) -> dict[str, int]:
+    """Inbox entries the last run found not downloaded, by store path, with their modification time.
+
+    Kept apart from the stuck files: a capture that downloads later keeps its modification time,
+    and as a stuck file it would never be filed.
+    """
+    return _load_times(machine, EVICTED_INBOX)
+
+
+def save_evicted_inbox(machine: MachinePaths, evicted: dict[str, int]) -> None:
+    _save_times(machine, EVICTED_INBOX, evicted)
+
+
+def _load_times(machine: MachinePaths, name: str) -> dict[str, int]:
     try:
-        raw = json.loads((machine.state_dir / STUCK_INBOX).read_text(encoding="utf-8"))
+        raw = json.loads((machine.state_dir / name).read_text(encoding="utf-8"))
         return {str(path): int(mtime) for path, mtime in raw.items()}
     except (OSError, ValueError, TypeError, AttributeError):
         return {}
 
 
-def save_stuck_inbox(machine: MachinePaths, stuck: dict[str, int]) -> None:
-    path = machine.state_dir / STUCK_INBOX
-    if not stuck:
+def _save_times(machine: MachinePaths, name: str, times: dict[str, int]) -> None:
+    path = machine.state_dir / name
+    if not times:
         path.unlink(missing_ok=True)
         return
-    replace_atomically(path, (json.dumps(stuck, ensure_ascii=False) + "\n").encode("utf-8"), machine.temp_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    replace_atomically(path, (json.dumps(times, ensure_ascii=False) + "\n").encode("utf-8"), machine.temp_dir)
 
 
 def prune_memory_copies(machine: MachinePaths, keep: set[Path]) -> None:

@@ -8,6 +8,7 @@ written; a capture from Claude Code carries the source ``claude``, one typed on 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import sys
 
 from m2b.capture import capture
@@ -16,10 +17,15 @@ from m2b.commands.backends import configured_store
 from m2b.commands.output import print_json
 from m2b.commands.times import parse_day
 from m2b.config.machine import load_machine_config
-from m2b.config.store_settings import load_store_settings, require_inbox_writable
+from m2b.config.store_settings import STORE_SETTINGS_FILE_NAME, load_store_settings, require_inbox_writable
+from m2b.store.base import FetchError
 from m2b.tasks.factory import open_tasks
 
 DEFAULT_SOURCE = "cli"
+# How long a capture waits for an evicted ``store.json`` to download. A capture is interactive and
+# the skill cannot fetch on its own, so it asks once for a while; past it the refusal names the
+# command that downloads the file.
+STORE_SETTINGS_FETCH_SECONDS = 20.0
 
 
 def capture_command(arguments: argparse.Namespace, context: Context) -> int:
@@ -29,6 +35,8 @@ def capture_command(arguments: argparse.Namespace, context: Context) -> int:
         raise UsageError("there is nothing to capture: the text is empty")
     config = load_machine_config(context.machine)
     store = configured_store(config, context.machine)
+    with contextlib.suppress(FetchError):
+        store.fetch([STORE_SETTINGS_FILE_NAME], STORE_SETTINGS_FETCH_SECONDS)
     require_inbox_writable(store)
     tasks = open_tasks(load_store_settings(store).tasks, store, config.executables) if follow_up else None
     try:

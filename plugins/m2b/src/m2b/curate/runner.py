@@ -58,7 +58,17 @@ from m2b.harvest import harvest
 from m2b.journal import write_journal
 from m2b.locale import Locale, load_locale
 from m2b.notes.characters import strip_unsafe
-from m2b.notes.layout import CORPUS, INBOX, MEMORY, MEMORY_INDEX, STATE, STORE_CONTRACT, TASKS, journal_name
+from m2b.notes.layout import (
+    CORPUS,
+    INBOX,
+    MEMORY,
+    MEMORY_INDEX,
+    STATE,
+    STORE_CONTRACT,
+    TASKS,
+    journal_name,
+    waiting_on_evicted,
+)
 from m2b.parts import CURATION_SLOTS, Part, names_on, steps_in
 from m2b.paths import MachinePaths
 from m2b.review import StepFailure, review_is_open, update_review
@@ -76,7 +86,7 @@ from m2b.run_record import (
 )
 from m2b.setup import write_store_contract
 from m2b.sort_facts import sorting_problem
-from m2b.store.base import DEFAULT_FETCH_TIMEOUT_SECONDS, Store, StoreError, fetch_command
+from m2b.store.base import DEFAULT_FETCH_TIMEOUT_SECONDS, FetchError, Store, StoreError, fetch_command
 from m2b.store.factory import open_store
 from m2b.tasks.base import Tasks
 from m2b.tasks.factory import open_tasks
@@ -278,7 +288,14 @@ class _Run:
     def _preflight(self, started: datetime.datetime) -> tuple[Tasks, Locale]:
         machine_state.clear_leftovers(self.machine, started)
         self.last_success = self._previous_success()
-        self.store.fetch(_preflight_paths(started), self.fetch_timeout_seconds)
+        paths = _preflight_paths(started)
+        try:
+            self.store.fetch(paths, self.fetch_timeout_seconds)
+        except FetchError:
+            # A capture that will not download waits in the inbox: ingest leaves it for the next run
+            # and names it. Anything else the run reads or writes must be here.
+            if self.store.check_local([path for path in paths if path != INBOX]):
+                raise
         if self.last_success is None:
             self.last_success = self._previous_success()
         locale = load_locale(require_profile(self.store).language)
@@ -482,19 +499,35 @@ class _Run:
         """The model only when something in the inbox can be filed: a file the last run could not file
         and that has not changed since is reported again, in code, and starts nothing."""
         inbox = self.store.scan(INBOX)
+        # A capture that is not downloaded waits for a run that is due anyway: noted as it is now,
+        # it makes no run due by itself (``due``), and no model step starts for it alone.
+        machine_state.save_evicted_inbox(
+            self.machine, {path: mtime for path in inbox.evicted if (mtime := self._mtime(path)) is not None}
+        )
         if not inbox.files and not inbox.evicted:
             machine_state.save_stuck_inbox(self.machine, {})
             return Skipped("the inbox is empty")
         stuck = machine_state.load_stuck_inbox(self.machine)
-        if not inbox.evicted and inbox.files and all(self._mtime(path) == stuck.get(path) for path in inbox.files):
+        bundled = waiting_on_evicted(inbox.files, inbox.evicted)
+        local = [path for path in inbox.files if path not in bundled]
+        if all(self._mtime(path) == stuck.get(path) for path in local):
+            # The ingest skill names evicted captures itself when it runs; here no model step does.
+            self._name_evicted(inbox.evicted)
             self.findings += [
                 report.Finding(INGEST, report.ACTION, text) for text in ingest.pending(self.store).problems
             ]
+            if not local:
+                return Skipped("only captures that are not downloaded wait in the inbox")
             return Skipped("only files the last run could not file wait in the inbox")
         # Only a step that ran to its end had normalize try every file; a failed one leaves them due.
         self._guarded(INGEST, INGEST_SKILL, INGEST_RULES, token)
         self._record_stuck(set(inbox.files))
         return None
+
+    def _name_evicted(self, evicted: Sequence[str]) -> None:
+        if evicted:
+            text = f"not downloaded, left for the next run: {', '.join(evicted)}"
+            self.findings.append(report.Finding(INGEST, report.INFO, text))
 
     def _record_stuck(self, seen: set[str]) -> None:
         """Notes the inbox files ingest saw and left because it cannot file them, so they make no run due.
@@ -858,8 +891,10 @@ def _preflight_paths(started: datetime.datetime) -> list[str]:
         PROFILE_FILE_NAME,
         f"{STATE}/core",
         f"{STATE}/parts",
-        INBOX,
         MEMORY,
         TASKS,
         *journals,
+        # Last: on a folder store a download is synchronous, so a capture that never downloads
+        # must not use up the time before everything the run needs was asked for.
+        INBOX,
     ]

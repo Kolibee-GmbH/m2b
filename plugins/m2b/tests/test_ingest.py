@@ -688,16 +688,18 @@ class PendingTest(IngestFixture):
         self.assertEqual(report.evicted, [f"inbox/{stem}.md"])
 
     def test_an_evicted_member_is_never_handed_to_the_model_to_read(self) -> None:
-        """Covers: B6 (an evicted file is listed apart and never read)"""
+        """Covers: B6 (an evicted file is listed apart and never read), B79"""
         stem = "20261107T091600Z-cli-c3d4"
         self.write(
             f"inbox/{stem}.md", "---\ncreated: 2026-11-07T10:16:00+01:00\nsource: cli\nkind: sidecar\n---\nphoto\n"
         )
         scan = mock.Mock(files=[f"inbox/{stem}.HEIC", f"inbox/{stem}.md"], evicted=[f"inbox/{stem}.jpg"])
         with mock.patch.object(self.store, "scan", return_value=scan):
-            (capture,) = ingest.pending(self.store).captures
+            report = ingest.pending(self.store)
 
-        self.assertEqual(capture.members, (f"{stem}.HEIC",))
+        # The whole bundle waits: finishing it would read the member that is not downloaded.
+        self.assertEqual((report.captures, report.problems, report.stuck), ([], [], []))
+        self.assertEqual(report.evicted, [f"inbox/{stem}.jpg"])
 
     def test_an_evicted_capture_is_named_and_left_for_the_next_run(self) -> None:
         self.write(f"inbox/{CAPTURE}", CAPTURED)

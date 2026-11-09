@@ -119,6 +119,28 @@ class FetchTest(_StoreFixture):
 
         self.assertEqual(calls, [str(folder), str(inner)])
 
+    def test_a_file_that_never_downloads_leaves_time_for_the_ones_after_it(self) -> None:
+        """Covers: B79"""
+        self._write("inbox/a.md", b"x")
+        self._write("inbox/b.md", b"x")
+        self.eviction.evicted.update({self.root / "inbox" / "a.md", self.root / "inbox" / "b.md"})
+        store = self._store(FolderStore)
+        given: dict[str, float] = {}
+
+        def fake_run(command: list[str], timeout: float, **_: Any) -> subprocess.CompletedProcess[bytes]:
+            given[Path(command[-1]).name] = timeout
+            if command[-1].endswith("a.md"):
+                raise subprocess.TimeoutExpired(command, timeout)
+            self.eviction.evicted.discard(Path(command[-1]))
+            return subprocess.CompletedProcess(command, 0)
+
+        with mock.patch("m2b.store.folder.subprocess.run", fake_run), self.assertRaises(FetchError):
+            store.fetch(["inbox"], timeout_seconds=10)
+
+        self.assertEqual(sorted(given), ["a.md", "b.md"], "b.md is asked for although a.md never came")
+        self.assertLessEqual(given["a.md"], 5.0)
+        self.assertNotIn(self.root / "inbox" / "b.md", self.eviction.evicted)
+
     def test_nothing_to_fetch_runs_nothing(self) -> None:
         self._write("inbox/near.md", b"x")
         store = self._store(ICloudStore)

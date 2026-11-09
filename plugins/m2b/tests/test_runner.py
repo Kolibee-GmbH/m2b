@@ -732,10 +732,10 @@ class PreflightTest(RunnerTest):
         self.assertEqual(self.calls(), [])
         self.assertIsNotNone(machine_state.load_backoff(self.machine))
 
-    def test_a_file_that_stays_evicted_stops_the_run_at_preflight(self) -> None:
+    def test_a_memory_file_that_stays_evicted_stops_the_run_at_preflight(self) -> None:
         self.curating()
-        self.capture()
-        self.eviction.evicted.add(self.store_root / "inbox" / "20261107T070000Z-cli-a1b2.md")
+        self.write("memory/dana.md", "# Dana\n\n- Likes old maps.\n")
+        self.eviction.evicted.add(self.store_root / "memory" / "dana.md")
 
         with self.assertRaises(runner.StoreError):
             self.run_curate(fetch_timeout=0.3)
@@ -743,7 +743,53 @@ class PreflightTest(RunnerTest):
         record = load_run_record(self.store)
         assert record is not None
         self.assertEqual(record.state, FAILED)
-        self.assertIn("inbox/20261107T070000Z-cli-a1b2.md", record.message)
+        self.assertIn("memory/dana.md", record.message)
+        self.assertEqual(self.calls(), [])
+
+    def test_a_capture_that_stays_evicted_waits_for_the_next_run_and_is_named(self) -> None:
+        """Covers: B79"""
+        self.curating()
+        self.capture()
+        self.eviction.evicted.add(self.store_root / "inbox" / "20261107T070000Z-cli-a1b2.md")
+
+        outcome = self.run_curate(fetch_timeout=0.3)
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        self.assertEqual(self.calls(), [], "no model step for a capture it cannot read")
+        record = load_run_record(self.store)
+        assert record is not None
+        (finding,) = [finding for finding in record.findings if finding.step == "ingest"]
+        self.assertIn("inbox/20261107T070000Z-cli-a1b2.md", finding.text)
+        self.assertTrue((self.store_root / "inbox" / "20261107T070000Z-cli-a1b2.md").exists())
+        self.assertIn("inbox/20261107T070000Z-cli-a1b2.md", machine_state.load_evicted_inbox(self.machine))
+
+    def test_a_sidecar_whose_member_stays_evicted_starts_no_model_step(self) -> None:
+        """Covers: B79"""
+        self.curating()
+        stem = "20261107T070000Z-cli-c3d4"
+        self.write(
+            f"inbox/{stem}.md", "---\ncreated: 2026-11-07T08:00:00+01:00\nsource: cli\nkind: sidecar\n---\nphoto\n"
+        )
+        self.write(f"inbox/{stem}.jpg", "jpeg")
+        self.eviction.evicted.add(self.store_root / "inbox" / f"{stem}.jpg")
+
+        outcome = self.run_curate(fetch_timeout=0.3)
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        self.assertEqual(self.calls(), [])
+
+    def test_a_stuck_file_beside_an_evicted_capture_starts_no_model_step(self) -> None:
+        """Covers: B79"""
+        self.curating()
+        self.write("inbox/note.md", "---\ncreated: 2026-01-01\nsource: cli\n---\nexported\n")
+        stuck = self.store_root / "inbox" / "note.md"
+        machine_state.save_stuck_inbox(self.machine, {"inbox/note.md": stuck.stat().st_mtime_ns})
+        self.capture()
+        self.eviction.evicted.add(self.store_root / "inbox" / "20261107T070000Z-cli-a1b2.md")
+
+        outcome = self.run_curate(fetch_timeout=0.3)
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
         self.assertEqual(self.calls(), [])
 
     def test_a_run_record_that_cannot_be_written_leaves_the_cause_in_the_local_log(self) -> None:

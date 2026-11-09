@@ -16,6 +16,7 @@ from unittest import mock
 
 from m2b import cli, paths
 from m2b.capture import FOLLOW_UP_KEY, NOT_SAVED, NotSavedError, capture
+from m2b.commands import capture as capture_commands
 from m2b.config import machine
 from m2b.config.store_settings import save_store_settings
 from m2b.notes.frontmatter import Note
@@ -26,6 +27,7 @@ from m2b.store.guard import DatalessGuard
 from m2b.tasks import markers
 from m2b.tasks.base import Due, TasksUnreachableError, UnconfirmedTaskError
 from m2b.tasks.markdown import MarkdownTasks
+from store_contract import FakeEviction
 from tasks_contract import local_date
 
 FAKES = Path(__file__).resolve().parent / "fakes"
@@ -529,6 +531,49 @@ class CaptureCommandTest(unittest.TestCase):
 
                 self.assert_not_saved(*result)
                 self.assertIn(error.strerror, result[2])
+
+    def evicted_store_json(self, downloads: bool) -> tuple[FakeEviction, list[str]]:
+        eviction = FakeEviction()
+        eviction.evicted.add(self.store_root / "store.json")
+        requested: list[str] = []
+
+        def start_download(store: FolderStore, relative: str, timeout_seconds: float) -> None:
+            requested.append(relative)
+            if downloads:
+                eviction.evicted.clear()
+
+        for patcher in (
+            mock.patch("m2b.store.factory.guard_for_platform", return_value=DatalessGuard(True, lstat=eviction.lstat)),
+            mock.patch.object(FolderStore, "_start_download", autospec=True, side_effect=start_download),
+            mock.patch.object(capture_commands, "STORE_SETTINGS_FETCH_SECONDS", 0.3),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        return eviction, requested
+
+    def test_an_evicted_store_json_is_fetched_before_the_capture(self) -> None:
+        """Covers: B79"""
+        self.set_up()
+        _, requested = self.evicted_store_json(downloads=True)
+
+        code, _, err = self.run_command("capture", "Alex prefers green tea")
+
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertEqual(requested, ["store.json"])
+        self.assertEqual(len(self.inbox_files()), 1)
+
+    def test_a_store_json_that_stays_evicted_refuses_the_capture_saying_what_to_do(self) -> None:
+        """Covers: B79"""
+        self.set_up()
+        _, requested = self.evicted_store_json(downloads=False)
+
+        code, _, err = self.run_command("capture", "Alex prefers green tea")
+
+        self.assertEqual(code, cli.EXIT_UNREACHABLE, err)
+        self.assertEqual(requested, ["store.json"])
+        self.assertIn("m2b store fetch store.json", err)
+        self.assertEqual(len(err.splitlines()), 1, err)
+        self.assertEqual(self.inbox_files(), [])
 
     def test_a_loose_follow_up_date_is_a_usage_error(self) -> None:
         self.set_up()

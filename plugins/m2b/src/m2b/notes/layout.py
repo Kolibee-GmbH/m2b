@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 
 INBOX = "inbox"
 CORPUS = "corpus"
@@ -23,3 +24,14 @@ def journal_name(year: int, month: int) -> str:
 
 def is_journal_name(name: str) -> bool:
     return _JOURNAL_NAME.match(name) is not None
+
+
+def waiting_on_evicted(files: Iterable[str], evicted: Iterable[str]) -> set[str]:
+    """The local inbox files of a bundle (a sidecar and its members share a stem) with an entry
+    that is not downloaded: they wait for it, since filing the bundle reads every file in it."""
+    stems = {_stem(path) for path in evicted}
+    return {path for path in files if _stem(path) in stems}
+
+
+def _stem(path: str) -> str:
+    return path.rsplit("/", 1)[-1].rsplit(".", 1)[0]

@@ -28,6 +28,11 @@ creates. How a release is made is in [CONTRIBUTING.md](CONTRIBUTING.md#releasing
   failed the run each time. The journal now fetches such files first; one that stays in the cloud
   is left for the next run and named in the review with `m2b store fetch`, and the other months
   are written.
+- **Fixed: a capture iCloud will not download no longer stops curation, and capture fetches
+  `store.json`.** One inbox file that did not download in time stopped every curation run at its
+  start; it now waits in the inbox for the next run and the run record names it. On a machine where
+  iCloud had evicted `store.json`, `m2b capture` refused at once; it now fetches the file first and,
+  when that fails, says which command downloads it.
 
 ## 0.1.0 - not released yet
 
