@@ -232,12 +232,12 @@ and `m2b addons list` shows which are on.
 |---|---|---|---|
 | `band` | A band above the prompt with memory candidates and "Still current?" questions to keep or drop in place and the review task with its findings, and a status line such as `brain: 3 in inbox · curated 18:02` | mods turned on in Claude Code | `/m2b:band-setup` |
 | `backup` | After each run, a local snapshot: a mirror of the store, a dated attic of replaced files, a dump of the task list | a folder for the snapshot, outside the store; the curating machine | `/m2b:backup-setup` |
-| `herdr` (experimental) | At session start, the other agent sessions open in [herdr](https://herdr.dev), the terminal workspace manager for agents, so overlapping work is noticed before it starts | herdr 0.9 or later, sessions started in a herdr pane | `/m2b:herdr-setup` |
-| `worklog` (experimental) | A daily worklog of your sessions in herdr: topics, time spans per sphere of work, booking proposals for billable spheres, a ledger with CSV and XLSX exports | herdr 0.9 or later; the curating machine, which alone records; your spheres of work and customers, which its setup asks for | `/m2b:worklog-setup` |
+| `herdr` | At session start, the other agent sessions open in [herdr](https://herdr.dev), the terminal workspace manager for agents, so overlapping work is noticed before it starts | herdr 0.9 or later, sessions started in a herdr pane | `/m2b:herdr-setup` |
+| `worklog` | A daily worklog of your sessions in herdr: topics, time spans per sphere of work, booking proposals for billable spheres, a ledger with CSV and XLSX exports | herdr 0.9 or later; the curating machine, which alone records; your spheres of work and customers, which its setup asks for | `/m2b:worklog-setup` |
 
-Experimental means it works for its author and may change without notice: herdr is a terminal
-workspace manager most Claude Code users do not run, and the worklog is a timesheet tool inside a
-notes product. To turn an add-on off again, keeping its settings:
+[Add-ons](docs/addons.md) describes each one: what it reads and writes on the machine and in the
+store, its commands, and how you see that it runs. To turn an add-on off again, keeping its
+settings:
 
 ```bash
 m2b addons off band
@@ -257,14 +257,15 @@ and is billed like your sessions.
 and lint read the captures and memory files; refresh reads the distillate, the fact files that are
 due and any archive file; sorting reads memory. Ingest, lint, `--refresh-all` and the worklog step
 also get `m2b search` results over inbox, archive and memory. With the worklog add-on, its step sees
-the period's prompts, commits and session folders, the inbox, memory and your task list (below). In every session:
+the period's prompts and last answers, commits and session folders, the inbox, memory and your task list (below). In every session:
 the distillate, the routing rule and the notices at session start; before a prompt that names a
 topic, that topic's facts; with the herdr add-on, the titles and folders of your other agent
 sessions.
 
 **What the worklog reads** (only while on, only on the curating machine): the herdr events its
-recorder writes to `~/.local/state/m2b/worklog/`, the prompts of your Claude Code transcripts for
-the period (with credentials and long tokens redacted), your own git commits, and the inbox. Its
+recorder writes to `~/.local/state/m2b/worklog/`, the prompts and the end of each session's last
+answer from your Claude Code transcripts for the period (with credentials and long tokens
+redacted), your own git commits, and the inbox; its model step may also search the archive. Its
 ledger with time spans and booking proposals lands in the store under `state/addons/worklog/`.
 A time span is when a workspace was in use: an agent at work, the workspace in focus (herdr cannot
 tell typing from looking, so focus counts for a limited time after each event), or messages in its

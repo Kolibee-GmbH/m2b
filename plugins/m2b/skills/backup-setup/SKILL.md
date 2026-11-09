@@ -76,5 +76,5 @@ curation; a second backup set up on the curating machine covers the store meanwh
 m2b addons off backup
 ```
 
-The settings stay in `config.json`, so turning the add-on on again with this skill keeps the folder.
-The snapshot in the folder stays too; it is the owner's to delete.
+The settings stay in `config.json`, so turning the add-on on again with this skill keeps the
+folder. The snapshot in the folder stays too; it is the owner's to delete.

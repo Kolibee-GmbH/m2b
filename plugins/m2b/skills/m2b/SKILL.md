@@ -41,7 +41,7 @@ m2b addons list --json
 For each add-on, say in one line what it does (its `summary`) and whether it is on. For each
 add-on that is off, ask whether to turn it on, one at a time; on a yes, run that add-on's setup
 skill, `m2b:<add-on>-setup`, with the Skill tool. herdr and the
-worklog are experimental and need herdr; say so before asking. Turning an add-on off is
+worklog need herdr; say so before asking. Turning an add-on off is
 `m2b addons off <add-on>`; its settings stay.
 
 ## `status`

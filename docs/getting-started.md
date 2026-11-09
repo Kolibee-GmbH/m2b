@@ -71,7 +71,7 @@ nor a model. Both end with a first capture, a curation run and a first search.
    ```
 
 The add-ons (band, herdr neighbours, worklog, backup) are off until their own setup skill
-turns them on; see the [README](../README.md#add-ons).
+turns them on; [Add-ons](addons.md) describes each one.
 
 ## From the command line, without Claude Code
 

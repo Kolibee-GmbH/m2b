@@ -1,6 +1,6 @@
 ---
 name: herdr-setup
-description: Turns on the experimental m2b herdr add-on, which lists the other agent sessions open in herdr at session start, after checking that herdr answers and whether this session runs inside it; installs nothing into herdr; "remove" turns it off. Use when the user says "set up the herdr add-on", "set up neighbour sessions", "the neighbours line says herdr could not be read", "Nachbar-Sessions einrichten", "turn the neighbours off", or when the owner turns on the herdr add-on.
+description: Turns on the m2b herdr add-on, which lists the other agent sessions open in herdr at session start, after checking that herdr answers and whether this session runs inside it; installs nothing into herdr; "remove" turns it off. Use when the user says "set up the herdr add-on", "set up neighbour sessions", "the neighbours line says herdr could not be read", "Nachbar-Sessions einrichten", "turn the neighbours off", or when the owner turns on the herdr add-on.
 allowed-tools: Bash(m2b-herdr check), Bash(m2b addons on herdr), Bash(m2b addons off herdr)
 ---
 

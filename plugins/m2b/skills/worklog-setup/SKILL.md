@@ -1,13 +1,13 @@
 ---
 name: worklog-setup
-description: Sets up the experimental m2b worklog on the curating machine - the owner's spheres of work, how each is recognized and which are billable, the customer list, the activity recorder in herdr, and turns the worklog add-on on - or turns it off with "remove". Use when the user says "set up the worklog", "worklog einrichten", "record my work in herdr", "add a customer to the worklog", "remove the worklog", "Worklog entfernen", or when the owner turns on the worklog add-on. Running it again with the same answers changes nothing.
+description: Sets up the m2b worklog on the curating machine - the owner's spheres of work, how each is recognized and which are billable, the customer list, the activity recorder in herdr, and turns the worklog add-on on - or turns it off with "remove". Use when the user says "set up the worklog", "worklog einrichten", "record my work in herdr", "add a customer to the worklog", "remove the worklog", "Worklog entfernen", or when the owner turns on the worklog add-on. Running it again with the same answers changes nothing.
 allowed-tools: Bash(m2b-worklog machine *), Bash(m2b-worklog recorder *), Bash(m2b-worklog hook *), Bash(m2b-worklog recordings *), Bash(m2b profile *), Bash(m2b addons on worklog), Bash(m2b addons off worklog)
 ---
 
 # Worklog setup
 
-The worklog is the only add-on of m2b that records what the owner does. Once a day it writes a note
-about the sessions of the last period, with time spans per sphere of work and booking proposals
+The worklog is the only add-on of m2b that records what the owner does. Once a day it writes a
+note about the sessions of the last period, with time spans per sphere of work and booking proposals
 for billable spheres; the owner books by hand. You ask, and the commands below write everything.
 
 Run each `m2b` command in a Bash call of its own, as shown: nothing chained before or after it,

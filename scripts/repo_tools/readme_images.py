@@ -172,7 +172,7 @@ def demo_environment(environ: Mapping[str, str]) -> dict[str, str]:
 def build_demo(environ: Mapping[str, str]) -> None:
     """A fresh demo machine: setup, the band on, filed notes and memory, tasks, two captures waiting,
     and one curation run without a model, which asks whether the Porto trip, untouched since September,
-    is still current: the band's question comes from the core, not from the experimental worklog."""
+    is still current: the band's question comes from the core, not from the worklog."""
     if DEMO.exists():
         shutil.rmtree(DEMO)
     store = DEMO / "notes"
