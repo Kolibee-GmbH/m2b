@@ -2,12 +2,55 @@
 
 All notable changes are listed here, per part of the one plugin `m2b`. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the plugin uses
-[semantic versioning](https://semver.org/) with tags `m2b--vX.Y.Z`, the form `claude plugin tag`
-creates. How a release is made is in [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
+[semantic versioning](https://semver.org/) with tags `vX.Y.Z`. How a release is made is in
+[CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
-## 0.1.0 - not released yet
+## Unreleased
 
-The first release. It gets its date on the day it is published.
+## 0.1.1 - 2026-11-09
+
+### m2b
+
+- **Fixed: a capture that cannot be written says so.** When the inbox has no write permission or
+  the disk is full or read-only, `m2b capture` exits 4 with one line saying the capture was not
+  saved, instead of a traceback, and removes the follow-up task it had already created for it.
+  The capture skill tells the user from that line that nothing was kept; before, it reported the
+  note as saved and left a task pointing to no note.
+- **Fixed: a curation run stopped during a model step still checks `memory/`.** A runner stopped
+  with SIGTERM while ingest, refresh, lint or sorting ran skipped the check that puts `memory/`
+  back when a line hides text. It now checks before it exits, and the next run compares `memory/`
+  with the copy a run that never finished saved, lists what it left in the review and keeps that
+  copy instead of pruning it.
+- **Changed: a new key in `store.json` raises the store format.** An m2b refuses a key it does not
+  know in a format it knows, so a key added without a new format would have stopped capture on
+  every machine with an older m2b. A test now holds the keys of each format, and `CONTRIBUTING.md`
+  states the rule.
+- **Fixed: an old journal month in the cloud no longer fails every curation run.** The journal of
+  completed tasks reads every month since `journal_since`, and a month file iCloud had evicted
+  failed the run each time. The journal now fetches such files first; one that stays in the cloud
+  is left for the next run and named in the review with `m2b store fetch`, and the other months
+  are written.
+- **Fixed: a capture iCloud will not download no longer stops curation, and capture fetches
+  `store.json`.** One inbox file that did not download in time stopped every curation run at its
+  start; it now waits in the inbox for the next run and the run record names it. On a machine where
+  iCloud had evicted `store.json`, `m2b capture` refused at once; it now fetches the file first and,
+  when that fails, says which command downloads it.
+- **Fixed: the review names the copy of `memory/` however many captures a step filed.** The line
+  that says where `memory/` as it was before the run is kept listed the captures first and the
+  path last, so from about eleven captures the path was cut off the review task. The path now
+  comes first.
+- **Fixed: `m2b todos` no longer says "No open tasks." while a task file cannot be read.** A
+  Markdown task file that held no readable task was left out silently. It is now named with its
+  path and the reason, the command exits 1, and the todos skill says it could not look at it.
+- **Fixed: setup refuses a store path that curation cannot use.** A folder such as `Notes (2026)`
+  was accepted, and then every curation run refused it, because the rules that fence its model
+  steps cannot name a path with `, ( ) [ ] * ?` or a backslash. Setup and `m2b curate take-over`
+  now refuse such a path on a machine that is to curate, with the reason, and `m2b doctor` names
+  one already configured there. A machine that only captures may keep its store in such a folder.
+
+## 0.1.0 - 2026-11-09
+
+The first release.
 
 ### m2b
 

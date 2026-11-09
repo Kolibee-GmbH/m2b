@@ -115,9 +115,6 @@ class MarkdownTasks(Tasks):
         """The task files left out of every list, by store path, with the reason."""
         return [(path, problem) for path, _, problem in self._each() if problem is not None]
 
-    def lists_every_task(self) -> bool:
-        return not self.unreadable()
-
     def _all(self) -> list[tuple[Task, str]]:
         return [parsed for _, parsed, _ in self._each() if parsed is not None]
 

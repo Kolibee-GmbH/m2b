@@ -1,0 +1,34 @@
+name: release
+
+# A tag vX.Y.Z on main publishes that release: the tag must name the version in the plugin's
+# manifest and sit on main, and the release notes are that version's section of the changelog.
+# Adapted from the release workflow of prismantis (MIT, Nahum Litvin).
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Tag matches the manifest
+        run: test "${GITHUB_REF_NAME#v}" = "$(jq -r .version plugins/m2b/.claude-plugin/plugin.json)"
+      - name: Tag is on main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - name: Notes from the changelog
+        run: |
+          awk -v v="${GITHUB_REF_NAME#v}" 'index($0, "## " v " - ") == 1 {f=1; next} /^## / {f=0} f' CHANGELOG.md > notes.md
+          test -s notes.md
+      - run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}

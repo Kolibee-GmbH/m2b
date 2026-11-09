@@ -27,7 +27,8 @@ more than headings and order changed (B51).
 Ingest, refresh and lint are checked the same way, each against a snapshot of ``memory/`` taken
 just before its model step (``memory_guard``): refresh is held to its due facts, ingest and lint
 have their removed and rewritten facts lines listed in the review, and a line holding characters
-that hide text undoes any of them.
+that hide text undoes any of them. A runner stopped by SIGTERM still checks; a run that never
+finished is checked by the next one, against the copy of ``memory/`` it saved.
 """
 
 from __future__ import annotations
@@ -56,7 +57,18 @@ from m2b.curate.due import check_due
 from m2b.harvest import harvest
 from m2b.journal import write_journal
 from m2b.locale import Locale, load_locale
-from m2b.notes.layout import CORPUS, INBOX, MEMORY, MEMORY_INDEX, STATE, STORE_CONTRACT, TASKS, journal_name
+from m2b.notes.characters import strip_unsafe
+from m2b.notes.layout import (
+    CORPUS,
+    INBOX,
+    MEMORY,
+    MEMORY_INDEX,
+    STATE,
+    STORE_CONTRACT,
+    TASKS,
+    journal_name,
+    waiting_on_evicted,
+)
 from m2b.parts import CURATION_SLOTS, Part, names_on, steps_in
 from m2b.paths import MachinePaths
 from m2b.review import StepFailure, review_is_open, update_review
@@ -74,7 +86,7 @@ from m2b.run_record import (
 )
 from m2b.setup import write_store_contract
 from m2b.sort_facts import sorting_problem
-from m2b.store.base import DEFAULT_FETCH_TIMEOUT_SECONDS, Store, StoreError, fetch_command
+from m2b.store.base import DEFAULT_FETCH_TIMEOUT_SECONDS, FetchError, Store, StoreError, fetch_command
 from m2b.store.factory import open_store
 from m2b.tasks.base import Tasks
 from m2b.tasks.factory import open_tasks
@@ -134,7 +146,8 @@ LINT_RULES = (
     "Edit(<store>/memory/**)",
 )
 MODEL_STEPS = 3
-# Harvest, journal and review have no timeout of their own; they get this much in the deadline.
+# Harvest, journal and review have no timeout of their own; they get this much in the deadline. The
+# journal's fetch of evicted month files is counted with the preflight fetch.
 CODE_STEPS_MARGIN = datetime.timedelta(minutes=10)
 
 NOT_CURATING = "not-curating"
@@ -265,6 +278,7 @@ class _Run:
             self._stop_at_preflight(started, error)
             raise
         self.carried_changes = self._carried_changes(tasks)
+        self._check_interrupted()
         self.started = started
         findings = self._run_steps(tasks, locale)
         self._keep_changes()
@@ -274,7 +288,14 @@ class _Run:
     def _preflight(self, started: datetime.datetime) -> tuple[Tasks, Locale]:
         machine_state.clear_leftovers(self.machine, started)
         self.last_success = self._previous_success()
-        self.store.fetch(_preflight_paths(started), self.fetch_timeout_seconds)
+        paths = _preflight_paths(started)
+        try:
+            self.store.fetch(paths, self.fetch_timeout_seconds)
+        except FetchError:
+            # A capture that will not download waits in the inbox: ingest leaves it for the next run
+            # and names it. Anything else the run reads or writes must be here.
+            if self.store.check_local([path for path in paths if path != INBOX]):
+                raise
         if self.last_success is None:
             self.last_success = self._previous_success()
         locale = load_locale(require_profile(self.store).language)
@@ -286,6 +307,26 @@ class _Run:
                 self.undated = expiry.undated(self.store)
         self._write(self._record(RUNNING, started, deadline_at=started + self._step_timeouts()))
         return tasks, locale
+
+    def _check_interrupted(self) -> None:
+        """Compares what a run that never stored its changes left in ``memory/`` with its copy.
+
+        A run stopped hard (SIGKILL, a machine that lost power, a second signal during its check)
+        never compared ``memory/`` after its step; this run does: a line that hides text and every
+        facts line removed or rewritten go to the review. The copy stays marked until this run
+        stores the findings that name it, so a run stopped in between, at preflight or later,
+        leaves the check to the next one, which compares the oldest marked copy and so loses
+        nothing. ``memory/`` is not put back, since the owner may have edited it since.
+        """
+        # On this machine any run past preflight clears the marks, so a copy from before the last
+        # successful run means another machine curated since; its edits are no interruption.
+        copies = [
+            copy
+            for copy in machine_state.unchecked_copies(self.machine)
+            if self.last_success is None or (_copy_started(copy) or self.last_success) >= self.last_success
+        ]
+        if copies:
+            self.fact_changes += _interrupted_changes(copies[0], self.store)
 
     def _previous_success(self) -> datetime.datetime | None:
         try:
@@ -319,6 +360,7 @@ class _Run:
         keep = {self.memory_copy} if self.memory_copy is not None else set()
         try:
             machine_state.save_memory_changes(self.machine, pending)
+            machine_state.clear_unchecked(self.machine)
             copies = machine_state.memory_copies(self.machine)
             named = copies.iterdir() if copies.is_dir() else iter(())
             keep |= {copy for copy in named if any(str(copy) in finding.text for finding in pending)}
@@ -365,7 +407,7 @@ class _Run:
         if self.sort_facts:
             self._step(SORT, lambda: self._sort(token))
         self._step(LINT, lambda: self._lint(tasks, token))
-        self._step(JOURNAL, lambda: write_journal(self.store, tasks, self.settings.journal_since, self.clock()))
+        self._step(JOURNAL, lambda: self._journal(tasks))
         self._parts("after_journal", token)
 
     def _step(self, name: str, action: Callable[[], object], reported: bool = True) -> None:
@@ -392,6 +434,7 @@ class _Run:
         if self.memory_copy is None:
             copy = machine_state.memory_copy(self.machine, self.started or self.clock())
             before.save(copy)
+            machine_state.mark_unchecked(self.machine, copy)
             self.memory_copy = copy
 
     def _update_store_contract(self, store_format: int) -> None:
@@ -439,6 +482,16 @@ class _Run:
         self.findings += [report.Finding(HARVEST, report.ACTION, problem) for problem in result.problems]
         current_check.settle(self.store, tasks, self.clock().date(), task_list=self._task_list())
 
+    def _journal(self, tasks: Tasks) -> None:
+        result = write_journal(
+            self.store,
+            tasks,
+            self.settings.journal_since,
+            self.clock(),
+            fetch_timeout_seconds=self.fetch_timeout_seconds,
+        )
+        self.findings += [report.Finding(JOURNAL, report.ACTION, problem) for problem in result.problems]
+
     def _task_list(self) -> str:
         return current_check.task_list_of(self.settings.tasks.backend, self.settings.tasks.list_name)
 
@@ -446,19 +499,35 @@ class _Run:
         """The model only when something in the inbox can be filed: a file the last run could not file
         and that has not changed since is reported again, in code, and starts nothing."""
         inbox = self.store.scan(INBOX)
+        # A capture that is not downloaded waits for a run that is due anyway: noted as it is now,
+        # it makes no run due by itself (``due``), and no model step starts for it alone.
+        machine_state.save_evicted_inbox(
+            self.machine, {path: mtime for path in inbox.evicted if (mtime := self._mtime(path)) is not None}
+        )
         if not inbox.files and not inbox.evicted:
             machine_state.save_stuck_inbox(self.machine, {})
             return Skipped("the inbox is empty")
         stuck = machine_state.load_stuck_inbox(self.machine)
-        if not inbox.evicted and inbox.files and all(self._mtime(path) == stuck.get(path) for path in inbox.files):
+        bundled = waiting_on_evicted(inbox.files, inbox.evicted)
+        local = [path for path in inbox.files if path not in bundled]
+        if all(self._mtime(path) == stuck.get(path) for path in local):
+            # The ingest skill names evicted captures itself when it runs; here no model step does.
+            self._name_evicted(inbox.evicted)
             self.findings += [
                 report.Finding(INGEST, report.ACTION, text) for text in ingest.pending(self.store).problems
             ]
+            if not local:
+                return Skipped("only captures that are not downloaded wait in the inbox")
             return Skipped("only files the last run could not file wait in the inbox")
         # Only a step that ran to its end had normalize try every file; a failed one leaves them due.
         self._guarded(INGEST, INGEST_SKILL, INGEST_RULES, token)
         self._record_stuck(set(inbox.files))
         return None
+
+    def _name_evicted(self, evicted: Sequence[str]) -> None:
+        if evicted:
+            text = f"not downloaded, left for the next run: {', '.join(evicted)}"
+            self.findings.append(report.Finding(INGEST, report.INFO, text))
 
     def _record_stuck(self, seen: set[str]) -> None:
         """Notes the inbox files ingest saw and left because it cannot file them, so they make no run due.
@@ -533,10 +602,16 @@ class _Run:
             before = self.store.read_bytes(path)
         except FileNotFoundError:
             return Skipped(f"there is no {path} to sort")
+        self._save_memory_copy(memory_guard.Snapshot.take(self.store))
         try:
             self._model(SORT_SKILL, SORT_RULES, token)
-        except Exception as error:
-            # A step that failed after a bad edit still puts the file back, and says so.
+        # A step that failed after a bad edit still puts the file back, and says so; one stopped
+        # by SIGTERM puts it back and lets the exit go on, also when that check fails.
+        except BaseException as error:
+            if not isinstance(error, Exception):
+                with contextlib.suppress(Exception):
+                    self._sorting_problem(path, before)
+                raise
             problem = self._sorting_problem(path, before)
             if problem is None:
                 raise
@@ -592,7 +667,14 @@ class _Run:
         self._save_memory_copy(before)
         try:
             self._model(skill, rules, token, environ)
-        except Exception as error:
+        # SIGTERM reaches here as ``SystemExit`` once the model is stopped: memory/ is checked and
+        # put back before the runner goes, and the exit goes on.
+        except BaseException as error:
+            if not isinstance(error, Exception):
+                # A check that fails must not keep the runner from stopping; the next run compares.
+                with contextlib.suppress(Exception):
+                    self._memory_problem(step, before, scope, inbox)
+                raise
             problem = self._memory_problem(step, before, scope, inbox)
             if problem is None:
                 raise
@@ -656,13 +738,15 @@ class _Run:
             return
         self.fact_changes += [report.Finding(step, report.ACTION, change) for change in changes]
         filed = self._filed(inbox)
-        captures = f" (captures filed in this step: {', '.join(filed)})" if filed else ""
+        captures = f"; captures filed in this step: {', '.join(filed)}" if filed else ""
         saved = self.memory_copy
+        # The path comes first: the review cuts a finding at ``report.MAX_TEXT_CHARACTERS``, and a
+        # long list of captures may lose its end, not the path the owner needs.
         self.fact_changes.append(
             report.Finding(
                 step,
                 report.ACTION,
-                f"check the changes above{captures}; memory/ as it was before this run is in {saved}",
+                f"memory/ as it was before this run is in {saved}; check the changes above{captures}",
             )
         )
 
@@ -753,7 +837,8 @@ class _Run:
         step = datetime.timedelta(
             minutes=self.config.curation.model_timeout_minutes, seconds=model.DEFAULT_GRACE_SECONDS
         )
-        fetch = datetime.timedelta(seconds=self.fetch_timeout_seconds)
+        # Preflight fetches once, the journal once more for older month files.
+        fetch = 2 * datetime.timedelta(seconds=self.fetch_timeout_seconds)
         backfill = len(expiry.batches(self.undated, BACKFILL_BATCH)) - 1 if self.undated is not None else 0
         model_steps = MODEL_STEPS + max(backfill, 0) + part_steps + (1 if self.sort_facts else 0)
         return fetch + step * model_steps + CODE_STEPS_MARGIN
@@ -765,6 +850,34 @@ def refresh_rules(due_files: Sequence[str], fixed: Sequence[str] = REFRESH_RULES
     for relative in due_files:
         rules += [f"Read(<store>/{relative})", f"Edit(<store>/{relative})"]
     return rules
+
+
+def _copy_started(copy: Path) -> datetime.datetime | None:
+    """When the run that saved this copy started, from the copy's name (``machine_state.memory_copy``)."""
+    try:
+        return datetime.datetime.strptime(copy.name, "%Y%m%dT%H%M%SZ").replace(tzinfo=datetime.timezone.utc)
+    except ValueError:
+        return None
+
+
+def _interrupted_changes(copy: Path, store: Store) -> list[report.Finding]:
+    """The review findings for what ``memory/`` holds now against the copy a stopped run saved."""
+    started = _copy_started(copy)
+    run = f"the interrupted run of {started.astimezone():%Y-%m-%d %H:%M}" if started else "an interrupted run"
+    try:
+        before, after = memory_guard.Snapshot.load(copy), memory_guard.Snapshot.take(store)
+    except (OSError, StoreError) as error:
+        text = f"{run} could not be checked: memory/ could not be compared with its copy {copy}: {error}"
+        return [report.Finding(RUN, report.ACTION, text)]
+    # The lines are shown as the owner reads them: a character that hides text stays out of the review.
+    changes = [f"{run}: {strip_unsafe(change)}" for change in memory_guard.fact_changes(before, after)]
+    problem = memory_guard.unsafe_line(before, after)
+    if problem is not None:
+        changes.insert(0, f"{run}: {problem}")
+    if not changes:
+        return []
+    check = f"memory/ as it was before that run is in {copy}; check the changes above"
+    return [report.Finding(RUN, report.ACTION, text) for text in (*changes, check)]
 
 
 def _preflight_paths(started: datetime.datetime) -> list[str]:
@@ -780,8 +893,10 @@ def _preflight_paths(started: datetime.datetime) -> list[str]:
         PROFILE_FILE_NAME,
         f"{STATE}/core",
         f"{STATE}/parts",
-        INBOX,
         MEMORY,
         TASKS,
         *journals,
+        # Last: on a folder store a download is synchronous, so a capture that never downloads
+        # must not use up the time before everything the run needs was asked for.
+        INBOX,
     ]

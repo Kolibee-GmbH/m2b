@@ -95,6 +95,45 @@ class DueTest(unittest.TestCase):
 
         self.assertTrue(check_due(self.store, self.machine, NOW).due)
 
+    def test_an_evicted_capture_a_run_has_seen_makes_no_run_due_until_it_changes(self) -> None:
+        """Covers: B79"""
+        self.succeeded(1)
+        evicted = self.store.root / "inbox" / "20261107T080000Z-phone-a1b2.md"
+        evicted.write_bytes(b"")
+        self.eviction.evicted.add(evicted)
+        machine_state.save_evicted_inbox(
+            self.machine, {"inbox/20261107T080000Z-phone-a1b2.md": evicted.stat().st_mtime_ns}
+        )
+
+        self.assertFalse(check_due(self.store, self.machine, NOW).due)
+
+        later = evicted.stat().st_mtime_ns + 2_000_000_000
+        os.utime(evicted, ns=(later, later))
+        self.assertTrue(check_due(self.store, self.machine, NOW).due)
+
+    def test_an_evicted_capture_that_downloads_makes_a_run_due(self) -> None:
+        """Covers: B79"""
+        self.succeeded(1)
+        capture = self.store.root / "inbox" / "20261107T080000Z-phone-a1b2.md"
+        capture.write_bytes(b"")
+        machine_state.save_evicted_inbox(
+            self.machine, {"inbox/20261107T080000Z-phone-a1b2.md": capture.stat().st_mtime_ns}
+        )
+
+        self.assertTrue(check_due(self.store, self.machine, NOW).due)
+
+    def test_a_sidecar_whose_member_a_run_saw_evicted_makes_no_run_due(self) -> None:
+        """Covers: B79"""
+        self.succeeded(1)
+        stem = "20261107T080000Z-phone-a1b2"
+        (self.store.root / "inbox" / f"{stem}.md").write_text("x", encoding="utf-8")
+        member = self.store.root / "inbox" / f"{stem}.jpg"
+        member.write_bytes(b"")
+        self.eviction.evicted.add(member)
+        machine_state.save_evicted_inbox(self.machine, {f"inbox/{stem}.jpg": member.stat().st_mtime_ns})
+
+        self.assertFalse(check_due(self.store, self.machine, NOW).due)
+
     def test_without_any_successful_run_it_is_due(self) -> None:
         self.assertTrue(check_due(self.store, self.machine, NOW).due)
         start = NOW - datetime.timedelta(hours=1)

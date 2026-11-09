@@ -90,8 +90,9 @@ example): report each one with what to do.
 m2b doctor
 ```
 
-Report each line whose state is `not reachable`, `missing`, `not installed` or `newer` (the store format: update m2b
-on this machine), with what to do; `not recorded` only on
+Report each line whose state is `not reachable`, `missing`, `not installed`, `newer` (the store format: update m2b
+on this machine) or `not usable for curation` (the store path: move the store to a folder the line
+allows and set `store.path` to it), with what to do; `not recorded` only on
 the curating machine, where the model steps need that program.
 
 ## 5. What the owner does by hand

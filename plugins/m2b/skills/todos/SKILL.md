@@ -40,6 +40,9 @@ in the groups; they are handled elsewhere.
 - Empty groups and no events: say there is nothing open and nothing in the calendar today. If the
   calendar is not configured, say that instead of "no events"; if it could not be read, say so
   with the reason from `message`.
+- `unreadable` lists task files that could not be read (exit 1): say first that you could not
+  look at those, with each `path` and its `reason`, then the rest; never say that nothing is open
+  while it has an entry.
 - The command fails: say that you could not look, never that nothing is open. Exit 2 means no
   second brain is set up on this machine; exit 3 means the task list or the store could not be
   reached, and the message on standard error says which and how to fix it.

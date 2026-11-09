@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from m2b import hooks, launcher
+from m2b.config import store_path
 from m2b.config.errors import ConfigError, InvalidConfigError
 from m2b.config.json_file import read_json_object, read_store_json_object
 from m2b.config.machine import (
@@ -112,6 +113,9 @@ def parse_answers(raw: object, home: Path) -> Answers:
         raise SetupError("store.create is true or false, and only a folder store is created")
     if not isinstance(raw.get("curates"), bool):
         raise SetupError("curates must be true or false: does this machine curate the store?")
+    unusable = store_path.problem(path) if raw["curates"] else None
+    if unusable is not None:
+        raise SetupError(unusable)
     calendar = raw.get("calendar")
     if calendar is not None and calendar not in CALENDAR_BACKENDS:
         raise SetupError(f"calendar must be one of {', '.join(CALENDAR_BACKENDS)}")

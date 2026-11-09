@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import contextlib
 import datetime
+import errno
 import io
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,20 +15,30 @@ from typing import Any
 from unittest import mock
 
 from m2b import cli, paths
-from m2b.capture import FOLLOW_UP_KEY, capture
+from m2b.capture import FOLLOW_UP_KEY, NOT_SAVED, NotSavedError, capture
+from m2b.commands import capture as capture_commands
 from m2b.config import machine
 from m2b.config.store_settings import save_store_settings
 from m2b.notes.frontmatter import Note
 from m2b.notes.names import NoteName
+from m2b.store import base as store_base
 from m2b.store.folder import FolderStore
 from m2b.store.guard import DatalessGuard
 from m2b.tasks import markers
 from m2b.tasks.base import Due, TasksUnreachableError, UnconfirmedTaskError
 from m2b.tasks.markdown import MarkdownTasks
+from store_contract import FakeEviction
 from tasks_contract import local_date
 
 FAKES = Path(__file__).resolve().parent / "fakes"
 NOW = datetime.datetime(2026, 11, 7, 10, 15, 0).astimezone()
+# What the file system answers when a capture cannot be written: a folder without write
+# permission, a full disk, a volume mounted read-only.
+WRITE_ERRORS = (
+    PermissionError(errno.EACCES, os.strerror(errno.EACCES)),
+    OSError(errno.ENOSPC, os.strerror(errno.ENOSPC)),
+    OSError(errno.EROFS, os.strerror(errno.EROFS)),
+)
 
 
 class StoreTestCase(unittest.TestCase):
@@ -258,6 +270,88 @@ class FollowUpTest(StoreTestCase):
         self.assertEqual(note.body, "Call Dana\n")
 
 
+class NotSavedTest(StoreTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.tasks = MarkdownTasks(self.store)
+
+    def capture_failing_with(self, error: OSError, tasks: MarkdownTasks | None = None) -> NotSavedError:
+        tasks = tasks or self.tasks
+        create_exclusive = self.store.create_exclusive
+
+        def refuse_the_inbox(relative: str, data: bytes) -> None:
+            if relative.startswith("inbox/"):
+                raise error
+            create_exclusive(relative, data)
+
+        with (
+            mock.patch.object(self.store, "create_exclusive", side_effect=refuse_the_inbox),
+            self.assertRaises(NotSavedError) as raised,
+        ):
+            capture(self.store, "Call Dana", source="cli", follow_up=datetime.date(2026, 11, 20), tasks=tasks, now=NOW)
+        return raised.exception
+
+    def test_a_write_error_keeps_no_note_and_removes_the_follow_up_task(self) -> None:
+        """Covers: B75"""
+        for error in WRITE_ERRORS:
+            with self.subTest(errno=errno.errorcode[error.errno]):
+                raised = self.capture_failing_with(error)
+
+                self.assertEqual(self.inbox(), {})
+                self.assertEqual(self.tasks.items(), [], "a task pointing to no capture is removed")
+                self.assertIn(NOT_SAVED, str(raised))
+                self.assertIn(error.strerror, str(raised))
+                self.assertNotIn("\n", str(raised))
+
+    def test_a_write_error_without_a_file_name_names_the_inbox_folder(self) -> None:
+        """Covers: B75"""
+        raised = self.capture_failing_with(OSError(errno.ENOSPC, os.strerror(errno.ENOSPC)))
+
+        self.assertIn(f"in {self.store.path('inbox')}", str(raised))
+
+    def test_a_follow_up_task_that_cannot_be_removed_is_named(self) -> None:
+        """Covers: B75"""
+        tasks = StuckTasks(self.store)
+
+        raised = self.capture_failing_with(WRITE_ERRORS[1], tasks)
+
+        (task,) = tasks.items()
+        self.assertEqual(self.inbox(), {})
+        self.assertIn(NOT_SAVED, str(raised))
+        self.assertIn(task.id, str(raised))
+
+    def test_a_follow_up_task_that_was_not_confirmed_is_mentioned(self) -> None:
+        """The task may exist; the owner is told to look, since nothing here can find it."""
+        raised = self.capture_failing_with(WRITE_ERRORS[1], UnconfirmedTasks(self.store))
+
+        self.assertIn(NOT_SAVED, str(raised))
+        self.assertIn("task list", str(raised))
+
+    @unittest.skipIf(os.geteuid() == 0, "root writes into a folder without write permission")
+    def test_a_task_folder_that_cannot_be_written_still_saves_the_capture_with_its_follow_up_date(self) -> None:
+        """Covers: B32"""
+        folder = self.store_root / "tasks"
+        folder.mkdir()
+        folder.chmod(0o555)
+        self.addCleanup(folder.chmod, 0o755)
+
+        result = capture(
+            self.store, "Call Dana", source="cli", follow_up=datetime.date(2026, 11, 20), tasks=self.tasks, now=NOW
+        )
+
+        (content,) = self.inbox().values()
+        self.assertIn("\nfollow_up: 2026-11-20\n", content)
+        self.assertIsNone(result.task_id)
+        self.assertIn("next curation run", result.notice or "")
+
+    def test_running_out_of_free_names_is_not_saved_either(self) -> None:
+        with (
+            mock.patch.object(self.store, "create_exclusive", side_effect=FileExistsError("taken")),
+            self.assertRaises(NotSavedError),
+        ):
+            capture(self.store, "Call Dana", source="cli", now=NOW)
+
+
 class CaptureCommandTest(unittest.TestCase):
     def setUp(self) -> None:
         self._temp = tempfile.TemporaryDirectory()
@@ -400,6 +494,87 @@ class CaptureCommandTest(unittest.TestCase):
         self.assertEqual(code, cli.EXIT_USAGE, err)
         self.assertFalse((self.store_root / "inbox").exists())
 
+    def assert_not_saved(self, code: int, out: str, err: str) -> None:
+        self.assertEqual(code, cli.EXIT_NOT_SAVED, err)
+        self.assertEqual(out, "")
+        self.assertEqual(len(err.splitlines()), 1, err)
+        self.assertTrue(err.startswith(f"m2b: {NOT_SAVED}"), err)
+        self.assertEqual(self.inbox_files(), [])
+        tasks = self.store_root / "tasks"
+        self.assertEqual(sorted(tasks.iterdir()) if tasks.is_dir() else [], [], "no task pointing to no capture")
+
+    @unittest.skipIf(os.geteuid() == 0, "root writes into a folder without write permission")
+    def test_a_read_only_inbox_exits_4_with_one_line_and_leaves_no_task(self) -> None:
+        """Covers: B75"""
+        self.set_up()
+        inbox = self.store_root / "inbox"
+        inbox.mkdir()
+        inbox.chmod(0o555)
+        self.addCleanup(inbox.chmod, 0o755)
+
+        self.assert_not_saved(*self.run_command("capture", "Call Dana", "--follow-up", "2026-11-20"))
+
+    def test_a_full_or_read_only_disk_exits_4_with_one_line_and_leaves_no_task(self) -> None:
+        """Covers: B75"""
+        self.set_up()
+        create_exclusively = store_base.create_exclusively
+        for error in WRITE_ERRORS[1:]:
+
+            def refuse_the_inbox(target: Path, data: bytes, temp_dir: Path, error: OSError = error) -> None:
+                if target.parent.name == "inbox":
+                    raise error
+                create_exclusively(target, data, temp_dir)
+
+            with self.subTest(errno=errno.errorcode[error.errno]):
+                with mock.patch.object(store_base, "create_exclusively", side_effect=refuse_the_inbox):
+                    result = self.run_command("capture", "Call Dana", "--follow-up", "2026-11-20", "--json")
+
+                self.assert_not_saved(*result)
+                self.assertIn(error.strerror, result[2])
+
+    def evicted_store_json(self, downloads: bool) -> tuple[FakeEviction, list[str]]:
+        eviction = FakeEviction()
+        eviction.evicted.add(self.store_root / "store.json")
+        requested: list[str] = []
+
+        def start_download(store: FolderStore, relative: str, timeout_seconds: float) -> None:
+            requested.append(relative)
+            if downloads:
+                eviction.evicted.clear()
+
+        for patcher in (
+            mock.patch("m2b.store.factory.guard_for_platform", return_value=DatalessGuard(True, lstat=eviction.lstat)),
+            mock.patch.object(FolderStore, "_start_download", autospec=True, side_effect=start_download),
+            mock.patch.object(capture_commands, "STORE_SETTINGS_FETCH_SECONDS", 0.3),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        return eviction, requested
+
+    def test_an_evicted_store_json_is_fetched_before_the_capture(self) -> None:
+        """Covers: B79"""
+        self.set_up()
+        _, requested = self.evicted_store_json(downloads=True)
+
+        code, _, err = self.run_command("capture", "Alex prefers green tea")
+
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertEqual(requested, ["store.json"])
+        self.assertEqual(len(self.inbox_files()), 1)
+
+    def test_a_store_json_that_stays_evicted_refuses_the_capture_saying_what_to_do(self) -> None:
+        """Covers: B79"""
+        self.set_up()
+        _, requested = self.evicted_store_json(downloads=False)
+
+        code, _, err = self.run_command("capture", "Alex prefers green tea")
+
+        self.assertEqual(code, cli.EXIT_UNREACHABLE, err)
+        self.assertEqual(requested, ["store.json"])
+        self.assertIn("m2b store fetch store.json", err)
+        self.assertEqual(len(err.splitlines()), 1, err)
+        self.assertEqual(self.inbox_files(), [])
+
     def test_a_loose_follow_up_date_is_a_usage_error(self) -> None:
         self.set_up()
 
@@ -435,6 +610,10 @@ class CaptureSkillTest(unittest.TestCase):
         self.assertIn("<<'CAPTURE'\nI prefer window seats on long train rides.\nCAPTURE", body)
         self.assertIn("m2b calendar add --calendar", body)
         self.assertIn("m2b calendar list --writable", body)
+
+    def test_the_skill_knows_the_words_the_command_uses_when_nothing_was_saved(self) -> None:
+        """The skill keys a failed capture on this message, not on an exit code."""
+        self.assertIn(NOT_SAVED, self.skill.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

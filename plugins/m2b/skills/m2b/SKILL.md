@@ -61,8 +61,9 @@ update, `migrates` that the curating machine's next run brings the store up to d
 m2b doctor
 ```
 
-Report each line whose state is `not reachable`, `missing`, `not installed` or `newer` (the store format: update
-m2b on this machine), with what to do. Report `not recorded`
+Report each line whose state is `not reachable`, `missing`, `not installed`, `newer` (the store format: update
+m2b on this machine) or `not usable for curation` (the store path: move the store to a folder the line
+allows and set `store.path` to it), with what to do. Report `not recorded`
 too, and say that it matters only on the machine that curates, where the model steps need that program. When all are fine, say so in one line.
 
 ## Any other argument

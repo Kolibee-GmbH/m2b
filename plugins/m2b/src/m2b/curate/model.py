@@ -34,6 +34,7 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from m2b.config import store_path
 from m2b.config.machine import MachineConfig
 from m2b.curate import report
 from m2b.paths import MachinePaths
@@ -52,8 +53,6 @@ DENIAL_DETAIL_CHARACTERS = 200
 
 _RULE = re.compile(r"([A-Z][A-Za-z0-9_]*)(?:\(([^()]+)\))?")
 _NAME = re.compile(r"[a-z][a-z0-9-]*")
-# Characters a permission rule reads as syntax or as a pattern; a store path with one cannot be named.
-_UNSAFE_IN_RULE = re.compile(r"[,()\[\]*?\\\n]")
 
 
 class FenceError(Exception):
@@ -100,8 +99,9 @@ def _store_rule(rule: str, store: Path) -> str:
         raise FenceError(f"{STORE_PLACEHOLDER} may only start the path of a Read or Edit rule: {rule}")
     if not store.is_absolute():
         raise FenceError(f"the store path {store} is not absolute")
-    if _UNSAFE_IN_RULE.search(str(store)):
-        raise FenceError(f"the store path {store} holds a character a permission rule cannot name")
+    unusable = store_path.problem(store)
+    if unusable is not None:
+        raise FenceError(unusable)
     # A permission rule reads //path as an absolute path; /path would be relative to the project.
     return f"{tool}(/{store}{specifier[len(STORE_PLACEHOLDER) :]})"
 

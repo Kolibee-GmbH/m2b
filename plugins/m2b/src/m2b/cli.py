@@ -1,8 +1,9 @@
 """The ``m2b`` command: argument parsing and exit codes, nothing else.
 
 Exit codes: 0 success, including "nothing to do"; 1 the command ran and found a problem the
-user must act on; 2 usage or configuration error; 3 a backend could not be reached. Hook
-commands always exit 0. The handlers live in ``m2b.commands``.
+user must act on; 2 usage or configuration error; 3 a backend could not be reached; 4 a capture
+could not be written, so nothing was saved. Hook commands always exit 0. The handlers live in
+``m2b.commands``.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from m2b.calendar.base import (
     CalendarUnreachableError,
     EventMismatchError,
 )
+from m2b.capture import NotSavedError
 from m2b.commands import Context, ProblemError, UsageError, settings, store, tasks
 from m2b.commands import calendar as calendar_commands
 from m2b.commands import candidates as candidate_commands
@@ -58,6 +60,7 @@ EXIT_OK = 0
 EXIT_PROBLEM = 1
 EXIT_USAGE = 2
 EXIT_UNREACHABLE = 3
+EXIT_NOT_SAVED = 4
 
 Hook = Callable[[MachineConfig, MachinePaths, Mapping[str, str], HookInput], None]
 Handler = Callable[[argparse.Namespace, Context], int]
@@ -70,6 +73,7 @@ CURATION_RUN_VARIABLE = model.CURATION_RUN_VARIABLE
 
 # Most specific first: the first matching class decides the exit code.
 _EXIT_CODES: tuple[tuple[type[BaseException], int], ...] = (
+    (NotSavedError, EXIT_NOT_SAVED),
     (UsageError, EXIT_USAGE),
     (ConfigError, EXIT_USAGE),
     (UnsupportedStoreError, EXIT_USAGE),

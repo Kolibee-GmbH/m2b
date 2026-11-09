@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import json
 import os
+import signal
 import sys
 from pathlib import Path
 from typing import Any
@@ -21,7 +22,7 @@ from m2b.run_record import FAILED, RUN_RECORD, RUNNING, SUCCEEDED, load_run_reco
 from m2b.store.base import StoreReadError
 from m2b.store.guard import DatalessGuard
 from m2b.tasks import markers
-from m2b.tasks.base import TasksUnreachableError
+from m2b.tasks.base import Task, TasksUnreachableError
 from m2b.tasks.factory import open_tasks
 from store_contract import FakeEviction
 
@@ -731,10 +732,10 @@ class PreflightTest(RunnerTest):
         self.assertEqual(self.calls(), [])
         self.assertIsNotNone(machine_state.load_backoff(self.machine))
 
-    def test_a_file_that_stays_evicted_stops_the_run_at_preflight(self) -> None:
+    def test_a_memory_file_that_stays_evicted_stops_the_run_at_preflight(self) -> None:
         self.curating()
-        self.capture()
-        self.eviction.evicted.add(self.store_root / "inbox" / "20261107T070000Z-cli-a1b2.md")
+        self.write("memory/dana.md", "# Dana\n\n- Likes old maps.\n")
+        self.eviction.evicted.add(self.store_root / "memory" / "dana.md")
 
         with self.assertRaises(runner.StoreError):
             self.run_curate(fetch_timeout=0.3)
@@ -742,7 +743,53 @@ class PreflightTest(RunnerTest):
         record = load_run_record(self.store)
         assert record is not None
         self.assertEqual(record.state, FAILED)
-        self.assertIn("inbox/20261107T070000Z-cli-a1b2.md", record.message)
+        self.assertIn("memory/dana.md", record.message)
+        self.assertEqual(self.calls(), [])
+
+    def test_a_capture_that_stays_evicted_waits_for_the_next_run_and_is_named(self) -> None:
+        """Covers: B79"""
+        self.curating()
+        self.capture()
+        self.eviction.evicted.add(self.store_root / "inbox" / "20261107T070000Z-cli-a1b2.md")
+
+        outcome = self.run_curate(fetch_timeout=0.3)
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        self.assertEqual(self.calls(), [], "no model step for a capture it cannot read")
+        record = load_run_record(self.store)
+        assert record is not None
+        (finding,) = [finding for finding in record.findings if finding.step == "ingest"]
+        self.assertIn("inbox/20261107T070000Z-cli-a1b2.md", finding.text)
+        self.assertTrue((self.store_root / "inbox" / "20261107T070000Z-cli-a1b2.md").exists())
+        self.assertIn("inbox/20261107T070000Z-cli-a1b2.md", machine_state.load_evicted_inbox(self.machine))
+
+    def test_a_sidecar_whose_member_stays_evicted_starts_no_model_step(self) -> None:
+        """Covers: B79"""
+        self.curating()
+        stem = "20261107T070000Z-cli-c3d4"
+        self.write(
+            f"inbox/{stem}.md", "---\ncreated: 2026-11-07T08:00:00+01:00\nsource: cli\nkind: sidecar\n---\nphoto\n"
+        )
+        self.write(f"inbox/{stem}.jpg", "jpeg")
+        self.eviction.evicted.add(self.store_root / "inbox" / f"{stem}.jpg")
+
+        outcome = self.run_curate(fetch_timeout=0.3)
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        self.assertEqual(self.calls(), [])
+
+    def test_a_stuck_file_beside_an_evicted_capture_starts_no_model_step(self) -> None:
+        """Covers: B79"""
+        self.curating()
+        self.write("inbox/note.md", "---\ncreated: 2026-01-01\nsource: cli\n---\nexported\n")
+        stuck = self.store_root / "inbox" / "note.md"
+        machine_state.save_stuck_inbox(self.machine, {"inbox/note.md": stuck.stat().st_mtime_ns})
+        self.capture()
+        self.eviction.evicted.add(self.store_root / "inbox" / "20261107T070000Z-cli-a1b2.md")
+
+        outcome = self.run_curate(fetch_timeout=0.3)
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
         self.assertEqual(self.calls(), [])
 
     def test_a_run_record_that_cannot_be_written_leaves_the_cause_in_the_local_log(self) -> None:
@@ -793,7 +840,8 @@ class PartStepTest(RunnerTest):
         self.assertEqual(seen["record"]["state"], RUNNING)
         deadline = datetime.datetime.fromisoformat(seen["record"]["deadline_at"])
         supervised = 5 * (datetime.timedelta(minutes=15) + datetime.timedelta(seconds=model.DEFAULT_GRACE_SECONDS))
-        fetch = datetime.timedelta(seconds=5)
+        # The run's fetch timeout (5 s here) twice: preflight, and the journal for older month files.
+        fetch = 2 * datetime.timedelta(seconds=5)
         self.assertEqual(deadline - START, fetch + supervised + runner.CODE_STEPS_MARGIN)
         self.assertTrue(after.exists())
         self.assertEqual(record.parts, ("worklog", "backup"))
@@ -834,6 +882,28 @@ class PartStepTest(RunnerTest):
         for step in steps.values():
             assert step is not None
             self.assertTrue((launcher.PLUGIN_ROOT / step.command[0]).is_file(), step.command)
+
+
+class JournalStepTest(RunnerTest):
+    def test_a_month_file_the_journal_leaves_alone_is_named_in_the_review_and_the_run_succeeds(self) -> None:
+        """Covers: B78"""
+        self.curating()
+        (self.store_root / "corpus" / "2026" / "09").mkdir(parents=True)
+        september = self.store_root / "corpus" / "2026" / "09" / "202609-done.md"
+        september.write_text("old\n", encoding="utf-8")
+        self.eviction.evicted.add(september)
+        done = Task("aaaa00000001", "Call the plumber", completed=True, completed_at=START.replace(month=9))
+        settings = json.loads((self.store_root / "store.json").read_text(encoding="utf-8"))
+        settings["journal_since"] = "2026-09-01"
+        self.write("store.json", json.dumps(settings))
+
+        with mock.patch("m2b.tasks.markdown.MarkdownTasks.completed_items", return_value=[done]):
+            outcome = self.run_curate(fetch_timeout=0)
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        (review,) = self.review_tasks()
+        self.assertIn("journal: corpus/2026/09/202609-done.md is not downloaded", review.notes)
+        self.assertEqual(september.read_text(encoding="utf-8"), "old\n")
 
 
 class HarvestStepTest(RunnerTest):
@@ -966,6 +1036,29 @@ class GuardedModelStepTest(RunnerTest):
         self.assertIn(f"memory/ as it was before this run is in {saved}", review.notes)
         self.assertIn("20261107T070000Z-cli-a1b2.md", review.notes)
         self.assertEqual((saved / "MEMORY.md").read_text(encoding="utf-8"), GUARDED)
+
+    def test_the_review_names_the_copy_of_memory_however_many_captures_the_step_filed(self) -> None:
+        """Covers: B55"""
+        self.write("memory/sam.md", "# Sam\n\n- Brings plywood.\n")
+        self.capture()
+        self.model(
+            {"m2b:ingest": [self.edit_index("- Sam brings plywood (sam.md)\n", ""), *INGEST_FILES_THE_CAPTURE[1:]]}
+        )
+        twenty = [f"20261107T07{minute:02d}00Z-cli-a1b2.md" for minute in range(20)]
+
+        with mock.patch.object(runner._Run, "_filed", return_value=twenty):
+            outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        (review,) = self.review_tasks()
+        (saved,) = (self.machine.state_dir / "memory-before-run").iterdir()
+        self.assertIn(f"memory/ as it was before this run is in {saved}", review.notes)
+        # The next run renders the review again from the carried findings, cut the same way.
+        self.clock = START + datetime.timedelta(hours=2)
+        outcome = self.run_curate()
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        (review,) = self.review_tasks()
+        self.assertIn(f"memory/ as it was before this run is in {saved}", review.notes)
 
     def test_an_ingest_step_that_only_adds_facts_lines_leaves_the_review_alone(self) -> None:
         """Covers: B55"""
@@ -1129,6 +1222,191 @@ class GuardedModelStepTest(RunnerTest):
         self.assertEqual(outcome.state, FAILED)
         self.assertIn("ingest: memory/dana.md could not be read", outcome.message)
         self.assertEqual(self.calls(), [])
+
+
+# What a model step writes into MEMORY.md before the runner is stopped: a zero-width space that
+# reads one way to the owner and another to the model.
+HIDDEN_LINE = "- Dana​ likes old maps (dana.md)\n"
+SIGTERM_EXIT = SystemExit(128 + signal.SIGTERM)
+
+
+class StoppedStepTest(RunnerTest):
+    """A runner stopped during a model step, by SIGTERM, still checks ``memory/``, or the next run does."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.curating()
+        self.write("memory/MEMORY.md", GUARDED)
+        self.write("memory/dana.md", "# Dana\n\n- Likes old maps.\n")
+        self.write("memory/sam.md", SAM_DUE)
+
+    def memory_file(self, name: str) -> str:
+        return (self.store_root / "memory" / name).read_text(encoding="utf-8")
+
+    def plant_and_stop(self, run: Any, *arguments: Any, **options: Any) -> None:
+        self.write("memory/MEMORY.md", GUARDED + HIDDEN_LINE)
+        raise SIGTERM_EXIT
+
+    def remove_a_line_and_stop(self, run: Any, *arguments: Any, **options: Any) -> None:
+        self.write("memory/MEMORY.md", self.memory_file("MEMORY.md").replace("- Sam brings plywood (sam.md)\n", ""))
+        raise SIGTERM_EXIT
+
+    def stopped_run(self, model_step: Any, sort_facts: bool = False) -> None:
+        with (
+            mock.patch.object(runner._Run, "_model", autospec=True, side_effect=model_step),
+            self.assertRaises(SystemExit),
+        ):
+            self.run_curate(sort_facts=sort_facts)
+
+    def test_a_guarded_step_stopped_by_sigterm_still_puts_a_hidden_line_back(self) -> None:
+        """Covers: B76"""
+        self.stopped_run(self.plant_and_stop)
+
+        self.assertEqual(self.memory_file("MEMORY.md"), GUARDED)
+
+    def test_the_sorting_step_stopped_by_sigterm_still_puts_a_hidden_line_back(self) -> None:
+        """Covers: B76"""
+        self.write("memory/sam.md", "# Sam\n\n- Brings plywood.\n")
+
+        self.stopped_run(self.plant_and_stop, sort_facts=True)
+
+        self.assertEqual(self.memory_file("MEMORY.md"), GUARDED)
+
+    def test_a_check_that_fails_after_sigterm_still_lets_the_runner_stop(self) -> None:
+        """Covers: B76"""
+        unreadable = StoreReadError("memory/dana.md could not be read: permission denied")
+
+        with mock.patch.object(runner._Run, "_memory_problem", autospec=True, side_effect=unreadable):
+            self.stopped_run(self.plant_and_stop)
+
+        self.assertEqual(self.calls(), [], "no later model step started")
+
+    def test_a_sorting_check_that_fails_after_sigterm_still_lets_the_runner_stop(self) -> None:
+        """Covers: B76"""
+        self.write("memory/sam.md", "# Sam\n\n- Brings plywood.\n")
+        unreadable = StoreReadError("memory/MEMORY.md could not be read: permission denied")
+
+        with mock.patch.object(runner._Run, "_sorting_problem", autospec=True, side_effect=unreadable):
+            self.stopped_run(self.plant_and_stop, sort_facts=True)
+
+    def killed_run(self, model_step: Any, sort_facts: bool = False) -> None:
+        """A run whose check never ran either, as after SIGKILL or a second signal during the check."""
+        with (
+            mock.patch.object(runner._Run, "_memory_problem", autospec=True, side_effect=SIGTERM_EXIT),
+            mock.patch.object(runner._Run, "_sorting_problem", autospec=True, side_effect=SIGTERM_EXIT),
+        ):
+            self.stopped_run(model_step, sort_facts=sort_facts)
+        record = load_run_record(self.store)
+        assert record is not None
+        self.assertEqual(record.state, RUNNING)
+
+    def next_run(self) -> Any:
+        self.clock = START + datetime.timedelta(hours=2)
+        with mock.patch.object(runner._Run, "_model", autospec=True):
+            self.run_curate()
+        (review,) = self.review_tasks()
+        return review
+
+    def test_the_next_run_names_a_hidden_line_an_interrupted_run_left_and_keeps_its_copy(self) -> None:
+        """Covers: B76"""
+        self.killed_run(self.plant_and_stop)
+        (copy,) = machine_state.memory_copies(self.machine).iterdir()
+
+        review = self.next_run()
+
+        self.assertIn("interrupted", review.notes)
+        self.assertIn("Dana likes old maps", review.notes)
+        self.assertIn("U+200B", review.notes)
+        self.assertIn(str(copy), review.notes)
+        self.assertEqual((copy / "MEMORY.md").read_text(encoding="utf-8"), GUARDED)
+
+    def test_the_next_run_lists_the_facts_lines_an_interrupted_run_removed(self) -> None:
+        """Covers: B76"""
+        self.killed_run(self.remove_a_line_and_stop)
+        (copy,) = machine_state.memory_copies(self.machine).iterdir()
+
+        review = self.next_run()
+
+        self.assertIn('removed the facts line "- Sam brings plywood (sam.md)"', review.notes)
+        self.assertIn(str(copy), review.notes)
+        self.assertTrue(copy.is_dir())
+
+    def test_a_sorting_run_killed_hard_is_checked_by_the_next_run(self) -> None:
+        """Covers: B76"""
+        self.write("memory/sam.md", "# Sam\n\n- Brings plywood.\n")
+
+        self.killed_run(self.plant_and_stop, sort_facts=True)
+
+        self.assertIn("U+200B", self.next_run().notes)
+
+    def test_a_run_that_fails_at_preflight_in_between_keeps_the_check_for_the_next(self) -> None:
+        """Covers: B76"""
+        self.killed_run(self.plant_and_stop)
+        (copy,) = machine_state.memory_copies(self.machine).iterdir()
+        self.clock = START + datetime.timedelta(hours=1)
+        unreachable = TasksUnreachableError("the task list is not reachable yet")
+        with (
+            mock.patch("m2b.tasks.markdown.MarkdownTasks.check_reachable", side_effect=unreachable),
+            self.assertRaises(TasksUnreachableError),
+        ):
+            self.run_curate()
+
+        review = self.next_run()
+
+        self.assertIn("U+200B", review.notes)
+        self.assertIn(str(copy), review.notes)
+
+    def test_two_stopped_runs_in_a_row_still_name_what_the_first_left(self) -> None:
+        """Covers: B76"""
+        self.killed_run(self.plant_and_stop)
+        (first,) = machine_state.memory_copies(self.machine).iterdir()
+        self.clock = START + datetime.timedelta(hours=1)
+        self.killed_run(self.remove_a_line_and_stop)
+
+        review = self.next_run()
+
+        self.assertIn("U+200B", review.notes)
+        self.assertIn(str(first), review.notes)
+        self.assertTrue(first.is_dir())
+
+    def test_a_rewritten_facts_line_is_named_without_the_characters_that_hide_text(self) -> None:
+        """Covers: B76"""
+
+        def rewrite_with_a_hidden_character(run: Any, *arguments: Any, **options: Any) -> None:
+            self.write("memory/MEMORY.md", GUARDED.replace("Dana likes old maps", "Dana\u200b likes old maps a lot"))
+            raise SIGTERM_EXIT
+
+        self.killed_run(rewrite_with_a_hidden_character)
+
+        review = self.next_run()
+
+        self.assertIn("Dana likes old maps a lot", review.notes)
+        self.assertNotIn("\u200b", review.notes)
+
+    def test_a_copy_from_before_another_machines_runs_is_not_compared(self) -> None:
+        """Curation moved to another machine and back: its runs and the owner's edits since are no interruption."""
+        self.killed_run(self.remove_a_line_and_stop)
+        record = json.loads((self.store_root / RUN_RECORD).read_text(encoding="utf-8"))
+        later = (START + datetime.timedelta(hours=1)).isoformat()
+        record.update(state=SUCCEEDED, machine_id="sb-test-other", started_at=later, finished_at=later)
+        self.write(RUN_RECORD, json.dumps(record))
+
+        self.clock = START + datetime.timedelta(hours=2)
+        with mock.patch.object(runner._Run, "_model", autospec=True):
+            self.run_curate()
+
+        self.assertNotIn("interrupted", " ".join(task.notes for task in self.review_tasks()))
+        self.assertEqual(machine_state.unchecked_copies(self.machine), [])
+
+    def test_an_interrupted_run_that_changed_nothing_adds_nothing_to_the_review(self) -> None:
+        self.killed_run(lambda run, *arguments, **options: (_ for _ in ()).throw(SIGTERM_EXIT))
+
+        self.clock = START + datetime.timedelta(hours=2)
+        with mock.patch.object(runner._Run, "_model", autospec=True):
+            outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        self.assertEqual(self.review_tasks(), [])
 
 
 if __name__ == "__main__":

@@ -2,7 +2,8 @@
 
 Curator tasks (the review task and memory candidates) are left out; a follow-up task from a
 capture is the owner's and stays. Tasks that cannot be reached raise, so "could not look" never
-reads as "nothing open". The calendar is optional: without a backend its events are "not
+reads as "nothing open"; a task file that can be read but holds no task is named in ``unreadable``
+for the same reason. The calendar is optional: without a backend its events are "not
 configured", and a calendar that cannot be read leaves the tasks standing and says so.
 """
 
@@ -39,6 +40,8 @@ class TodoReport:
     later: list[Task]
     without_date: list[Task]
     events: TodayEvents
+    # Task files left out because they hold no task: path and reason.
+    unreadable: list[tuple[str, str]] = dataclasses.field(default_factory=list)
 
 
 def todos(tasks: Tasks, calendar: Calendar, now: datetime.datetime) -> TodoReport:
@@ -74,6 +77,7 @@ def todos(tasks: Tasks, calendar: Calendar, now: datetime.datetime) -> TodoRepor
         later=_by_due(later),
         without_date=sorted(without_date, key=lambda task: task.title.casefold()),
         events=_events_on(calendar, today),
+        unreadable=tasks.unreadable(),
     )
 
 

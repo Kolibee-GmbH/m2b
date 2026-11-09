@@ -75,9 +75,12 @@ class RegistryTest(test_runner.RunnerTest):
 
 class MigrationFixture(test_runner.RunnerTest):
     def knowing(self, *known: migrations.Migration) -> None:
+        # Each test format has the keys of the first, as an additive change adds none.
+        first = store_settings.KEYS_BY_FORMAT[1]
         for patcher in (
             mock.patch.object(migrations, "MIGRATIONS", known),
             mock.patch.object(store_settings, "KNOWN_STORE_FORMAT", 1 + len(known)),
+            mock.patch.dict(store_settings.KEYS_BY_FORMAT, {number: first for number in range(1, 2 + len(known))}),
         ):
             patcher.start()
             self.addCleanup(patcher.stop)

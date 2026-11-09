@@ -15,6 +15,8 @@ from __future__ import annotations
 import datetime
 from dataclasses import dataclass
 
+from m2b.config import store_path
+from m2b.config.errors import InvalidConfigError
 from m2b.config.json_file import read_store_json_object
 from m2b.config.machine import load_machine_config
 from m2b.config.store_settings import STORE_SETTINGS_FILE_NAME, load_store_settings, save_store_settings
@@ -42,6 +44,9 @@ def take_over(
 ) -> TakeOver:
     """``previous`` is None when this machine curated already; then nothing is written."""
     config = load_machine_config(machine)
+    unusable = store_path.problem(config.store.path)
+    if unusable is not None:
+        raise InvalidConfigError(unusable)
     store = open_store(config.store, machine.temp_dir)
     store.fetch([STORE_SETTINGS_FILE_NAME, RUN_RECORD], fetch_timeout_seconds)
     settings = load_store_settings(store, for_writing=True)

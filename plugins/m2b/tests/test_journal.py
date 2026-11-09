@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import json
 import os
 import tempfile
 import unittest
@@ -12,6 +13,7 @@ from unittest import mock
 
 import test_commands
 from m2b import cli, journal
+from m2b.store.base import DEFAULT_FETCH_TIMEOUT_SECONDS
 from m2b.store.folder import FolderStore
 from m2b.store.guard import SF_DATALESS, DatalessGuard
 from m2b.tasks import markers
@@ -58,7 +60,8 @@ class JournalTest(unittest.TestCase):
         return mock.Mock(st_flags=SF_DATALESS if relative in self.evicted else 0, st_mode=result.st_mode)
 
     def run_journal(self, items: list[Task]) -> journal.JournalReport:
-        return journal.write_journal(self.store, FakeTasks(items), SINCE, NOW)
+        # No wait for a download that a folder store never gets.
+        return journal.write_journal(self.store, FakeTasks(items), SINCE, NOW, fetch_timeout_seconds=0)
 
     def read(self, relative: str) -> str:
         return (self.root / relative).read_text(encoding="utf-8")
@@ -151,7 +154,7 @@ class JournalTest(unittest.TestCase):
     def test_nothing_before_journal_since_is_asked_for_or_written(self) -> None:
         tasks = FakeTasks([done("aaaa00000001", "Old one", local(2026, 10, 31, 23))])
 
-        journal.write_journal(self.store, tasks, SINCE, NOW)
+        journal.write_journal(self.store, tasks, SINCE, NOW, fetch_timeout_seconds=0)
 
         assert tasks.since is not None
         self.assertEqual(tasks.since, datetime.datetime(2026, 11, 1).astimezone())
@@ -163,21 +166,49 @@ class JournalTest(unittest.TestCase):
         line = self.read("corpus/2026/11/202611-done.md").splitlines()[-1]
         self.assertEqual(line, "- 2026-11-13 Fix &lt;!-- the header <!-- m2b:done aaaa00000001 2026-11-13 -->")
 
-    def test_an_evicted_month_file_fails_the_step_before_anything_is_written(self) -> None:
-        """Covers: X3"""
+    def evicted_december(self) -> None:
         (self.root / "corpus" / "2026" / "12").mkdir(parents=True)
-        (self.root / "corpus" / "2026" / "12" / "202612-done.md").write_text("old", encoding="utf-8")
+        (self.root / "corpus" / "2026" / "12" / "202612-done.md").write_text("old\n", encoding="utf-8")
         self.evicted.add("corpus/2026/12/202612-done.md")
 
-        with self.assertRaises(journal.StoreError):
-            self.run_journal(
-                [
-                    done("aaaa00000001", "Call the plumber", local(2026, 11, 13)),
-                    done("bbbb00000002", "Renew passport", local(2026, 12, 1)),
-                ]
+    def test_a_month_file_that_stays_evicted_is_left_for_the_next_run_and_named(self) -> None:
+        """Covers: B78"""
+        self.evicted_december()
+
+        report = self.run_journal(
+            [
+                done("aaaa00000001", "Call the plumber", local(2026, 11, 13)),
+                done("bbbb00000002", "Renew passport", local(2026, 12, 1)),
+            ]
+        )
+
+        self.assertIn("Call the plumber", self.read("corpus/2026/11/202611-done.md"))
+        self.assertEqual(self.read("corpus/2026/12/202612-done.md"), "old\n")
+        (problem,) = report.problems
+        self.assertIn("corpus/2026/12/202612-done.md", problem)
+        self.assertIn("m2b store fetch", problem)
+
+    def test_an_evicted_month_file_is_fetched_first_and_then_appended(self) -> None:
+        """Covers: B78"""
+        self.evicted_december()
+        fetched: list[tuple[list[str], float]] = []
+
+        def download(relatives: Any, timeout_seconds: float) -> None:
+            fetched.append((list(relatives), timeout_seconds))
+            self.evicted.clear()
+
+        with mock.patch.object(self.store, "fetch", side_effect=download):
+            report = journal.write_journal(
+                self.store,
+                FakeTasks([done("bbbb00000002", "Renew passport", local(2026, 12, 1))]),
+                SINCE,
+                NOW,
+                fetch_timeout_seconds=7,
             )
 
-        self.assertFalse((self.root / "corpus" / "2026" / "11").exists())
+        self.assertEqual(fetched, [(["corpus/2026/12/202612-done.md"], 7)])
+        self.assertEqual(report.problems, [])
+        self.assertTrue(self.read("corpus/2026/12/202612-done.md").startswith("old\n- 2026-12-01 Renew passport"))
 
     def test_unreachable_tasks_fail_the_step_and_write_nothing(self) -> None:
         """Covers: X3"""
@@ -185,7 +216,7 @@ class JournalTest(unittest.TestCase):
         tasks.completed_items.side_effect = TasksUnreachableError("Reminders did not answer")
 
         with self.assertRaises(TasksUnreachableError):
-            journal.write_journal(self.store, tasks, SINCE, NOW)
+            journal.write_journal(self.store, tasks, SINCE, NOW, fetch_timeout_seconds=0)
         self.assertFalse((self.root / "corpus").exists())
 
     def test_an_empty_answer_without_access_is_could_not_look_not_nothing_completed(self) -> None:
@@ -195,7 +226,7 @@ class JournalTest(unittest.TestCase):
         tasks.completed_items.return_value = []
 
         with self.assertRaises(TasksUnreachableError):
-            journal.write_journal(self.store, tasks, SINCE, NOW)
+            journal.write_journal(self.store, tasks, SINCE, NOW, fetch_timeout_seconds=0)
         tasks.completed_items.assert_not_called()
 
     def test_a_month_file_that_is_not_utf8_is_a_problem_for_the_owner(self) -> None:
@@ -223,6 +254,22 @@ class JournalCommandTest(test_commands.CommandTest):
         self.assertTrue(path.startswith("corpus/") and path.endswith("-done.md"))
         self.assertIn("Call the plumber", (self.store_root / path).read_text(encoding="utf-8"))
         self.assertEqual(self.run_command("journal")[0], cli.EXIT_OK)
+
+    def test_a_month_left_alone_is_a_problem_the_command_says_and_exits_1_for(self) -> None:
+        """Covers: B78"""
+        self.set_up(calendar="none")
+        problem = "corpus/2026/09/202609-done.md is not downloaded to this machine, so this run added nothing to it"
+        left_alone = journal.JournalReport(problems=[problem])
+
+        with mock.patch.object(journal, "write_journal", return_value=left_alone) as write:
+            code, _, err = self.run_command("journal")
+            _, out, _ = self.run_command("journal", "--json")
+        answer = json.loads(out)
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        self.assertEqual(err.strip(), f"m2b: {problem}")
+        self.assertEqual(answer["problems"], [problem])
+        self.assertEqual(write.call_args.kwargs["fetch_timeout_seconds"], DEFAULT_FETCH_TIMEOUT_SECONDS)
 
 
 if __name__ == "__main__":

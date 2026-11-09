@@ -37,6 +37,18 @@ def test_a_name_collision_draws_a_new_suffix(self) -> None:
 
 `scripts/check` lists every behavior that no test names yet.
 
+## Store format
+
+A change that content already in a store must follow, or a new key in `store.json`, raises
+`KNOWN_STORE_FORMAT` and ships a migration (`plugins/m2b/src/m2b/curate/migrations.py`); an
+additive change gets one that changes nothing. A key added without it would make every machine on
+the m2b before refuse the store, capture included. The keys of each format are in `KEYS_BY_FORMAT`
+(`plugins/m2b/src/m2b/config/store_settings.py`), and a store is checked against its own format's
+keys, so a new key can only be written once the store is at the new format.
+`plugins/m2b/tests/test_store_settings.py` holds a copy of each released entry: a released entry
+never changes, a new format gets its own. [Store format](docs/store-format.md#formats) lists what
+each number added.
+
 ## End-to-end scenarios
 
 A scenario is a folder in `tests/e2e/` with `given/` (the store before), `steps.json`
@@ -67,22 +79,21 @@ match, however many commits came since. A change reaches users only with a relea
 1. Pick the new version by [semantic versioning](https://semver.org/) and write it into
    `version` in `plugins/m2b/.claude-plugin/plugin.json`.
 2. In `CHANGELOG.md`, turn the entries under "Unreleased" into a section `## X.Y.Z - YYYY-MM-DD`
-   with the day of the release, and leave an empty "Unreleased" above it. Until the first release
-   there is no "Unreleased": changes go into the section of 0.1.0, which gets its date on the day
-   it is published.
+   with the day of the release, and leave an empty "Unreleased" above it.
 3. Run `scripts/check`; it must end with `check: passed`.
-4. Commit both files as `chore(release): m2b X.Y.Z` and get that commit onto `main` without
-   rewriting it (a fast-forward or a merge commit, no squash). The marketplace reads
-   `plugins/m2b` from `main`, not from a tag, so until the commit is there `/plugin update` keeps
-   reporting the old version.
-5. On `main`, at the release commit, tag and push the tag:
+4. Commit both files as `chore(release): m2b X.Y.Z`, open a pull request to `main` and merge it;
+   a squash merge is fine. The marketplace reads `plugins/m2b` from `main`, not from a tag, so
+   until the merge `/plugin update` keeps reporting the old version.
+5. On `main`, at the merged release, tag and push the tag:
 
    ```bash
-   claude plugin tag plugins/m2b --dry-run   # shows the tag, m2b--vX.Y.Z
-   claude plugin tag plugins/m2b --push
+   git switch main && git pull --ff-only
+   git tag vX.Y.Z && git push origin vX.Y.Z
    ```
 
-   `claude plugin tag` refuses a dirty working tree and a tag that exists already.
+   The tag starts `.github/workflows/release.yml`. It checks that the tag names the version in
+   `plugin.json` and sits on `main`, and publishes a GitHub release with that version's section
+   of the changelog as its notes.
 
 ## README images
 
