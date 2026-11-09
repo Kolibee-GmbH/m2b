@@ -8,7 +8,8 @@ the session-start line needs the state, not every step.
 
 ``last_succeeded_at`` carries the end of the last successful run across failed ones, because the
 due check counts from it (B13). ``deadline_at`` is the latest a run can end: its start plus the
-fetch timeout, each supervised step's timeout and grace, and a margin for the code steps. A
+fetch timeout twice (preflight, and the journal for older month files), each supervised step's
+timeout and grace, and a margin for the code steps. A
 ``running`` record past it is an interrupted run.
 """
 

@@ -15,7 +15,7 @@ from m2b.config.machine import load_machine_config
 from m2b.config.profile import language_for_clients, load_profile
 from m2b.config.store_settings import load_store_settings, require_store_writable
 from m2b.locale import load_locale
-from m2b.store.base import Store
+from m2b.store.base import DEFAULT_FETCH_TIMEOUT_SECONDS, Store
 
 __all__ = ["PREFIX_KEY", "candidate_prefix", "harvest_command", "journal_command"]
 
@@ -46,10 +46,19 @@ def journal_command(arguments: argparse.Namespace, context: Context) -> int:
     store = configured_store(config, context.machine)
     require_store_writable(store)
     since = load_store_settings(store).journal_since
-    report = journal.write_journal(store, configured_tasks(config, context.machine), since, datetime.datetime.now())
+    report = journal.write_journal(
+        store,
+        configured_tasks(config, context.machine),
+        since,
+        datetime.datetime.now(),
+        fetch_timeout_seconds=DEFAULT_FETCH_TIMEOUT_SECONDS,
+    )
     if arguments.json:
-        print_json({"appended": report.appended})
+        print_json({"appended": report.appended, "problems": report.problems})
     else:
         for path, count in report.appended.items():
             print(f"{path}: {count} completed tasks added")
-    return 0
+        for problem in report.problems:
+            print(f"m2b: {problem}", file=sys.stderr)
+    # A month left alone is could not look, not nothing to add.
+    return 1 if report.problems else 0

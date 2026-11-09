@@ -22,7 +22,7 @@ from m2b.run_record import FAILED, RUN_RECORD, RUNNING, SUCCEEDED, load_run_reco
 from m2b.store.base import StoreReadError
 from m2b.store.guard import DatalessGuard
 from m2b.tasks import markers
-from m2b.tasks.base import TasksUnreachableError
+from m2b.tasks.base import Task, TasksUnreachableError
 from m2b.tasks.factory import open_tasks
 from store_contract import FakeEviction
 
@@ -794,7 +794,8 @@ class PartStepTest(RunnerTest):
         self.assertEqual(seen["record"]["state"], RUNNING)
         deadline = datetime.datetime.fromisoformat(seen["record"]["deadline_at"])
         supervised = 5 * (datetime.timedelta(minutes=15) + datetime.timedelta(seconds=model.DEFAULT_GRACE_SECONDS))
-        fetch = datetime.timedelta(seconds=5)
+        # The run's fetch timeout (5 s here) twice: preflight, and the journal for older month files.
+        fetch = 2 * datetime.timedelta(seconds=5)
         self.assertEqual(deadline - START, fetch + supervised + runner.CODE_STEPS_MARGIN)
         self.assertTrue(after.exists())
         self.assertEqual(record.parts, ("worklog", "backup"))
@@ -835,6 +836,28 @@ class PartStepTest(RunnerTest):
         for step in steps.values():
             assert step is not None
             self.assertTrue((launcher.PLUGIN_ROOT / step.command[0]).is_file(), step.command)
+
+
+class JournalStepTest(RunnerTest):
+    def test_a_month_file_the_journal_leaves_alone_is_named_in_the_review_and_the_run_succeeds(self) -> None:
+        """Covers: B78"""
+        self.curating()
+        (self.store_root / "corpus" / "2026" / "09").mkdir(parents=True)
+        september = self.store_root / "corpus" / "2026" / "09" / "202609-done.md"
+        september.write_text("old\n", encoding="utf-8")
+        self.eviction.evicted.add(september)
+        done = Task("aaaa00000001", "Call the plumber", completed=True, completed_at=START.replace(month=9))
+        settings = json.loads((self.store_root / "store.json").read_text(encoding="utf-8"))
+        settings["journal_since"] = "2026-09-01"
+        self.write("store.json", json.dumps(settings))
+
+        with mock.patch("m2b.tasks.markdown.MarkdownTasks.completed_items", return_value=[done]):
+            outcome = self.run_curate(fetch_timeout=0)
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        (review,) = self.review_tasks()
+        self.assertIn("journal: corpus/2026/09/202609-done.md is not downloaded", review.notes)
+        self.assertEqual(september.read_text(encoding="utf-8"), "old\n")
 
 
 class HarvestStepTest(RunnerTest):

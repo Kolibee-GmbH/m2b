@@ -7,12 +7,18 @@ included, so the key is read back up to the date; whitespace in an id is written
 a ``-->`` in it is escaped, so the comment always ends where the key does. Existing bytes are
 kept, lines the owner wrote included. Curator tasks (review, candidate) are left out; tasks ingest
 made from captures are the owner's and stay in. Nothing completed before ``journal_since`` is asked
-for. Every month file is read before any is written, so
-an evicted one fails the step with nothing written (X3).
+for. Every month file is read before any is written.
+
+Completed tasks reach back to ``journal_since``, so an old month file may be evicted from iCloud
+while preflight fetched only the last two months. Evicted month files are fetched once, together;
+one still evicted after that is left alone for this run and named as a problem with the command
+that downloads it, and the other months are written. The key in each line makes the next run add
+only what that month still lacks.
 """
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import re
 from dataclasses import dataclass, field
@@ -20,7 +26,7 @@ from dataclasses import dataclass, field
 from m2b.notes import frontmatter as keys
 from m2b.notes.frontmatter import NoteFormatError
 from m2b.notes.layout import CORPUS, journal_name
-from m2b.store.base import Store, StoreError
+from m2b.store.base import EvictedFileError, FetchError, Store, StoreError, fetch_command
 from m2b.tasks import markers
 from m2b.tasks.base import Task, Tasks
 
@@ -34,9 +40,14 @@ _DONE = re.compile(r"<!-- m2b:done (\S.*?) (\d{4}-\d{2}-\d{2}) -->")
 @dataclass
 class JournalReport:
     appended: dict[str, int] = field(default_factory=dict)
+    # One line per month file left alone because it is not downloaded, for the review.
+    problems: list[str] = field(default_factory=list)
 
 
-def write_journal(store: Store, tasks: Tasks, since: datetime.date, now: datetime.datetime) -> JournalReport:
+def write_journal(
+    store: Store, tasks: Tasks, since: datetime.date, now: datetime.datetime, fetch_timeout_seconds: float
+) -> JournalReport:
+    """``fetch_timeout_seconds`` has no default: with none, a fetch gives up before it asks for the file."""
     # Without the privacy grant Reminders answers an empty list: that is could not look, not nothing done (X3).
     tasks.check_reachable()
     start = datetime.datetime.combine(since, datetime.time()).astimezone()
@@ -48,9 +59,21 @@ def write_journal(store: Store, tasks: Tasks, since: datetime.date, now: datetim
         if day < since:
             continue
         months.setdefault(_month_file(day), []).append((day, task))
-    texts = {path: _read(store, path) for path in months}
+    evicted = [path for path in sorted(months) if store.exists(path) and store.is_evicted(path)]
+    if evicted:
+        with contextlib.suppress(FetchError):
+            store.fetch(evicted, fetch_timeout_seconds)
     report = JournalReport()
+    texts: dict[str, str | None] = {}
     for path in sorted(months):
+        try:
+            texts[path] = _read(store, path)
+        except EvictedFileError:
+            report.problems.append(
+                f"{path} is not downloaded to this machine, so this run added nothing to it; "
+                f"run: {fetch_command(path)}, and the next run adds what it lacks"
+            )
+    for path in sorted(texts):
         text = texts[path] or _header(now)
         known = set(_DONE.findall(text))
         lines = []

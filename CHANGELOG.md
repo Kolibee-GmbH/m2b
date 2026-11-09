@@ -23,6 +23,11 @@ creates. How a release is made is in [CONTRIBUTING.md](CONTRIBUTING.md#releasing
   know in a format it knows, so a key added without a new format would have stopped capture on
   every machine with an older m2b. A test now holds the keys of each format, and `CONTRIBUTING.md`
   states the rule.
+- **Fixed: an old journal month in the cloud no longer fails every curation run.** The journal of
+  completed tasks reads every month since `journal_since`, and a month file iCloud had evicted
+  failed the run each time. The journal now fetches such files first; one that stays in the cloud
+  is left for the next run and named in the review with `m2b store fetch`, and the other months
+  are written.
 
 ## 0.1.0 - not released yet
 

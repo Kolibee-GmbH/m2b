@@ -136,7 +136,8 @@ LINT_RULES = (
     "Edit(<store>/memory/**)",
 )
 MODEL_STEPS = 3
-# Harvest, journal and review have no timeout of their own; they get this much in the deadline.
+# Harvest, journal and review have no timeout of their own; they get this much in the deadline. The
+# journal's fetch of evicted month files is counted with the preflight fetch.
 CODE_STEPS_MARGIN = datetime.timedelta(minutes=10)
 
 NOT_CURATING = "not-curating"
@@ -389,7 +390,7 @@ class _Run:
         if self.sort_facts:
             self._step(SORT, lambda: self._sort(token))
         self._step(LINT, lambda: self._lint(tasks, token))
-        self._step(JOURNAL, lambda: write_journal(self.store, tasks, self.settings.journal_since, self.clock()))
+        self._step(JOURNAL, lambda: self._journal(tasks))
         self._parts("after_journal", token)
 
     def _step(self, name: str, action: Callable[[], object], reported: bool = True) -> None:
@@ -463,6 +464,16 @@ class _Run:
         result = harvest(self.store, tasks, locale.text(PREFIX_KEY), self.clock())
         self.findings += [report.Finding(HARVEST, report.ACTION, problem) for problem in result.problems]
         current_check.settle(self.store, tasks, self.clock().date(), task_list=self._task_list())
+
+    def _journal(self, tasks: Tasks) -> None:
+        result = write_journal(
+            self.store,
+            tasks,
+            self.settings.journal_since,
+            self.clock(),
+            fetch_timeout_seconds=self.fetch_timeout_seconds,
+        )
+        self.findings += [report.Finding(JOURNAL, report.ACTION, problem) for problem in result.problems]
 
     def _task_list(self) -> str:
         return current_check.task_list_of(self.settings.tasks.backend, self.settings.tasks.list_name)
@@ -791,7 +802,8 @@ class _Run:
         step = datetime.timedelta(
             minutes=self.config.curation.model_timeout_minutes, seconds=model.DEFAULT_GRACE_SECONDS
         )
-        fetch = datetime.timedelta(seconds=self.fetch_timeout_seconds)
+        # Preflight fetches once, the journal once more for older month files.
+        fetch = 2 * datetime.timedelta(seconds=self.fetch_timeout_seconds)
         backfill = len(expiry.batches(self.undated, BACKFILL_BATCH)) - 1 if self.undated is not None else 0
         model_steps = MODEL_STEPS + max(backfill, 0) + part_steps + (1 if self.sort_facts else 0)
         return fetch + step * model_steps + CODE_STEPS_MARGIN
