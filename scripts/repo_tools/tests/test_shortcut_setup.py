@@ -95,11 +95,11 @@ class ShortcutSetupTest(unittest.TestCase):
             shortcut_setup.set_up(self.user_home, self.core, {"PATH": "/opt/bin"}, run=self.fake_run)
 
     def test_off_macos_or_without_m2b_it_main_refuses_and_creates_nothing(self) -> None:
-        for platform, it in (("linux", "1"), ("darwin", "0")):
+        for system, it in (("Linux", "1"), ("Darwin", "0")):
             environ = {"M2B_IT": it, "HOME": str(self.user_home)}
             with (
-                self.subTest(platform=platform, it=it),
-                mock.patch("repo_tools.shortcut_setup.sys.platform", platform),
+                self.subTest(system=system, it=it),
+                mock.patch("repo_tools.shortcut_setup.platform.system", return_value=system),
                 mock.patch.dict("os.environ", environ, clear=True),
                 contextlib.redirect_stderr(io.StringIO()),
             ):

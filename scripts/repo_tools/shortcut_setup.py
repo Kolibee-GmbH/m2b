@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import shlex
 import shutil
 import subprocess
@@ -136,7 +137,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="e2e-shortcut-setup", description="A test setup for the Shortcuts check.")
     parser.add_argument("--remove", action="store_true", help="delete the review task, the test home and the store")
     arguments = parser.parse_args(argv)
-    if sys.platform != "darwin" or os.environ.get("M2B_IT") != "1":
+    # Asked at run time: mypy works sys.platform out and would call the rest unreachable on Linux.
+    if platform.system() != "Darwin" or os.environ.get("M2B_IT") != "1":
         print("e2e-shortcut-setup: runs on macOS only and only with M2B_IT=1", file=sys.stderr)
         return 2
     user_home = Path.home()

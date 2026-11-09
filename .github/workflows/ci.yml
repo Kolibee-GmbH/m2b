@@ -16,7 +16,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
+        # Pinned: ubuntu-latest moved to 26.04, which has no Python 3.9 for setup-python.
+        os: [macos-latest, ubuntu-24.04]
         python: ["3.9", "3.x"]
     runs-on: ${{ matrix.os }}
     steps:

@@ -26,12 +26,13 @@ LIST_VARIABLE = "M2B_IT_REMINDERS_LIST"
 
 def integration_list(environ: Mapping[str, str]) -> str | None:
     """The test list to use, None when the run was not asked for; refuses any other list name."""
-    if environ.get("M2B_IT") != "1" or sys.platform != "darwin" or not environ.get(LIST_VARIABLE):
+    if environ.get("M2B_IT") != "1" or not environ.get(LIST_VARIABLE):
         return None
+    # The name is checked on every platform, so a wrong list is refused before anything asks for one.
     name = environ[LIST_VARIABLE]
     if not name.startswith(TEST_LIST_PREFIX):
         raise RuntimeError(f"{LIST_VARIABLE} must name a list starting with {TEST_LIST_PREFIX}, got {name!r}")
-    return name
+    return name if sys.platform == "darwin" else None
 
 
 class IntegrationListTest(unittest.TestCase):
