@@ -1,58 +1,53 @@
 # Changelog
 
-All notable changes are listed here, per part of the one plugin `m2b`. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the plugin uses
-[semantic versioning](https://semver.org/) with tags `vX.Y.Z`. How a release is made is in
+All notable changes to this project are documented here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
+[Semantic Versioning](https://semver.org/), with tags `vX.Y.Z`. How a release is made is in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
-## Unreleased
+## [Unreleased]
 
-## 0.1.1 - 2026-11-09
+## [0.1.1] - 2026-11-09
 
-### m2b
+### Changed
 
-- **Fixed: a capture that cannot be written says so.** When the inbox has no write permission or
-  the disk is full or read-only, `m2b capture` exits 4 with one line saying the capture was not
-  saved, instead of a traceback, and removes the follow-up task it had already created for it.
-  The capture skill tells the user from that line that nothing was kept; before, it reported the
-  note as saved and left a task pointing to no note.
-- **Fixed: a curation run stopped during a model step still checks `memory/`.** A runner stopped
-  with SIGTERM while ingest, refresh, lint or sorting ran skipped the check that puts `memory/`
-  back when a line hides text. It now checks before it exits, and the next run compares `memory/`
-  with the copy a run that never finished saved, lists what it left in the review and keeps that
-  copy instead of pruning it.
-- **Changed: a new key in `store.json` raises the store format.** An m2b refuses a key it does not
-  know in a format it knows, so a key added without a new format would have stopped capture on
-  every machine with an older m2b. A test now holds the keys of each format, and `CONTRIBUTING.md`
-  states the rule.
-- **Fixed: an old journal month in the cloud no longer fails every curation run.** The journal of
-  completed tasks reads every month since `journal_since`, and a month file iCloud had evicted
-  failed the run each time. The journal now fetches such files first; one that stays in the cloud
-  is left for the next run and named in the review with `m2b store fetch`, and the other months
-  are written.
-- **Fixed: a capture iCloud will not download no longer stops curation, and capture fetches
-  `store.json`.** One inbox file that did not download in time stopped every curation run at its
-  start; it now waits in the inbox for the next run and the run record names it. On a machine where
-  iCloud had evicted `store.json`, `m2b capture` refused at once; it now fetches the file first and,
-  when that fails, says which command downloads it.
-- **Fixed: the review names the copy of `memory/` however many captures a step filed.** The line
-  that says where `memory/` as it was before the run is kept listed the captures first and the
-  path last, so from about eleven captures the path was cut off the review task. The path now
-  comes first.
-- **Fixed: `m2b todos` no longer says "No open tasks." while a task file cannot be read.** A
-  Markdown task file that held no readable task was left out silently. It is now named with its
-  path and the reason, the command exits 1, and the todos skill says it could not look at it.
-- **Fixed: setup refuses a store path that curation cannot use.** A folder such as `Notes (2026)`
-  was accepted, and then every curation run refused it, because the rules that fence its model
-  steps cannot name a path with `, ( ) [ ] * ?` or a backslash. Setup and `m2b curate take-over`
-  now refuse such a path on a machine that is to curate, with the reason, and `m2b doctor` names
-  one already configured there. A machine that only captures may keep its store in such a folder.
+- A new key in `store.json` raises the store format, and a store is checked against the keys of its
+  own format, so a key added later no longer stops capture on machines with an older m2b
+  ([#1](https://github.com/b33eep/m2b/pull/1)).
+- Releases are tagged `vX.Y.Z` on `main`, and the tag publishes the GitHub release with the
+  changelog section as its notes ([#1](https://github.com/b33eep/m2b/pull/1)).
 
-## 0.1.0 - 2026-11-09
+### Fixed
+
+- A capture that cannot be written (no write permission, a full or read-only disk) exits 4 with one
+  line saying it was not saved, instead of a traceback, and removes the follow-up task it had
+  already created; the capture skill no longer reports such a note as saved
+  ([#1](https://github.com/b33eep/m2b/pull/1)).
+- A curation run stopped during a model step still checks `memory/` before it exits, and the next
+  run compares `memory/` with the copy a run that never finished saved, names what it left in the
+  review and keeps that copy ([#1](https://github.com/b33eep/m2b/pull/1)).
+- An old journal month that iCloud keeps in the cloud no longer fails every curation run: it is
+  fetched first, or left for the next run and named in the review with `m2b store fetch`
+  ([#1](https://github.com/b33eep/m2b/pull/1)).
+- A capture iCloud will not download no longer stops curation: it waits in the inbox, the run record
+  names it, and it does not start a run at every session. `m2b capture` fetches an evicted
+  `store.json` first and, when that fails, names the command that downloads it
+  ([#1](https://github.com/b33eep/m2b/pull/1)).
+- The review names the copy of `memory/` however many captures a step filed; from about eleven, the
+  path used to be cut off ([#1](https://github.com/b33eep/m2b/pull/1)).
+- `m2b todos` names a task file it cannot read, with its path, instead of saying "No open tasks.",
+  and exits 1; the todos skill says it could not look at it
+  ([#1](https://github.com/b33eep/m2b/pull/1)).
+- Setup and `m2b curate take-over` refuse a store path such as `Notes (2026)` on a machine that is
+  to curate, because the rules that fence curation cannot name it, and `m2b doctor` reports one
+  already configured there; a machine that only captures may keep its store in such a folder
+  ([#1](https://github.com/b33eep/m2b/pull/1)).
+
+## [0.1.0] - 2026-11-09
 
 The first release.
 
-### m2b
+### Added
 
 - **Setup.** `/m2b:m2b` explains what m2b does; `/m2b:m2b setup` sets up the core and then
   offers each optional part. The quick start creates a folder store at `~/m2b` with tasks as
@@ -119,28 +114,18 @@ The first release.
   run files it, drop it and it does not come back for 90 days.
 - **Optional parts** are off until their setup skill turns them on; `m2b parts list`, `on` and
   `off`. A part that is off prints nothing, draws nothing and runs no curation step.
-
-### band part
-
-- A band above the prompt with open memory candidates and "Still current? ..." questions, each
-  with keep and drop in place, the open review task with its findings, and a status line such as
-  `brain: 3 in inbox · curated 18:02`. Open sessions share one refresh about once a minute.
-
-### herdr part (experimental)
-
-- At session start inside herdr, one line per other agent session with workspace, task, state
-  and place, so overlapping work is noticed before it starts. Nothing outside herdr.
-
-### worklog part (experimental)
-
-- A recorder in herdr writes agent status changes, focus and workspace events on the curating
-  machine; `m2b-worklog recorder install` and `remove` link and unlink it.
-- Once a day a fenced model step judges the sessions of the period (topic, state, sphere,
-  booking) from the recorder, Claude Code transcripts with prompts redacted, the owner's git
-  commits and the inbox; a day without sessions costs no model run. The result is a worklog
+- **Band part.** A band above the prompt with open memory candidates and "Still current? ..."
+  questions, each with keep and drop in place, the open review task with its findings, and a
+  status line such as `brain: 3 in inbox · curated 18:02`. Open sessions share one refresh about
+  once a minute.
+- **Herdr part (experimental).** At session start inside herdr, one line per other agent session
+  with workspace, task, state and place, so overlapping work is noticed before it starts.
+  Nothing outside herdr.
+- **Worklog part (experimental).** A recorder in herdr writes agent status changes, focus and
+  workspace events on the curating machine; `m2b-worklog recorder install` and `remove` link and
+  unlink it. Once a day a fenced model step judges the sessions of the period (topic, state,
+  sphere, booking) from the recorder, Claude Code transcripts with prompts redacted, the owner's
+  git commits and the inbox; a day without sessions costs no model run. The result is a worklog
   note, a ledger with booking proposals and CSV and XLSX exports, and memory candidates.
-
-### backup part
-
-- After each curation run, a local snapshot: a mirror of the store, a dated attic of replaced
-  files and a dump of the task list.
+- **Backup part.** After each curation run, a local snapshot: a mirror of the store, a dated
+  attic of replaced files and a dump of the task list.
