@@ -27,7 +27,8 @@ more than headings and order changed (B51).
 Ingest, refresh and lint are checked the same way, each against a snapshot of ``memory/`` taken
 just before its model step (``memory_guard``): refresh is held to its due facts, ingest and lint
 have their removed and rewritten facts lines listed in the review, and a line holding characters
-that hide text undoes any of them.
+that hide text undoes any of them. A runner stopped by SIGTERM still checks; a run that never
+finished is checked by the next one, against the copy of ``memory/`` it saved.
 """
 
 from __future__ import annotations
@@ -56,6 +57,7 @@ from m2b.curate.due import check_due
 from m2b.harvest import harvest
 from m2b.journal import write_journal
 from m2b.locale import Locale, load_locale
+from m2b.notes.characters import strip_unsafe
 from m2b.notes.layout import CORPUS, INBOX, MEMORY, MEMORY_INDEX, STATE, STORE_CONTRACT, TASKS, journal_name
 from m2b.parts import CURATION_SLOTS, Part, names_on, steps_in
 from m2b.paths import MachinePaths
@@ -265,6 +267,7 @@ class _Run:
             self._stop_at_preflight(started, error)
             raise
         self.carried_changes = self._carried_changes(tasks)
+        self._check_interrupted()
         self.started = started
         findings = self._run_steps(tasks, locale)
         self._keep_changes()
@@ -286,6 +289,26 @@ class _Run:
                 self.undated = expiry.undated(self.store)
         self._write(self._record(RUNNING, started, deadline_at=started + self._step_timeouts()))
         return tasks, locale
+
+    def _check_interrupted(self) -> None:
+        """Compares what a run that never stored its changes left in ``memory/`` with its copy.
+
+        A run stopped hard (SIGKILL, a machine that lost power, a second signal during its check)
+        never compared ``memory/`` after its step; this run does: a line that hides text and every
+        facts line removed or rewritten go to the review. The copy stays marked until this run
+        stores the findings that name it, so a run stopped in between, at preflight or later,
+        leaves the check to the next one, which compares the oldest marked copy and so loses
+        nothing. ``memory/`` is not put back, since the owner may have edited it since.
+        """
+        # On this machine any run past preflight clears the marks, so a copy from before the last
+        # successful run means another machine curated since; its edits are no interruption.
+        copies = [
+            copy
+            for copy in machine_state.unchecked_copies(self.machine)
+            if self.last_success is None or (_copy_started(copy) or self.last_success) >= self.last_success
+        ]
+        if copies:
+            self.fact_changes += _interrupted_changes(copies[0], self.store)
 
     def _previous_success(self) -> datetime.datetime | None:
         try:
@@ -319,6 +342,7 @@ class _Run:
         keep = {self.memory_copy} if self.memory_copy is not None else set()
         try:
             machine_state.save_memory_changes(self.machine, pending)
+            machine_state.clear_unchecked(self.machine)
             copies = machine_state.memory_copies(self.machine)
             named = copies.iterdir() if copies.is_dir() else iter(())
             keep |= {copy for copy in named if any(str(copy) in finding.text for finding in pending)}
@@ -392,6 +416,7 @@ class _Run:
         if self.memory_copy is None:
             copy = machine_state.memory_copy(self.machine, self.started or self.clock())
             before.save(copy)
+            machine_state.mark_unchecked(self.machine, copy)
             self.memory_copy = copy
 
     def _update_store_contract(self, store_format: int) -> None:
@@ -533,10 +558,16 @@ class _Run:
             before = self.store.read_bytes(path)
         except FileNotFoundError:
             return Skipped(f"there is no {path} to sort")
+        self._save_memory_copy(memory_guard.Snapshot.take(self.store))
         try:
             self._model(SORT_SKILL, SORT_RULES, token)
-        except Exception as error:
-            # A step that failed after a bad edit still puts the file back, and says so.
+        # A step that failed after a bad edit still puts the file back, and says so; one stopped
+        # by SIGTERM puts it back and lets the exit go on, also when that check fails.
+        except BaseException as error:
+            if not isinstance(error, Exception):
+                with contextlib.suppress(Exception):
+                    self._sorting_problem(path, before)
+                raise
             problem = self._sorting_problem(path, before)
             if problem is None:
                 raise
@@ -592,7 +623,14 @@ class _Run:
         self._save_memory_copy(before)
         try:
             self._model(skill, rules, token, environ)
-        except Exception as error:
+        # SIGTERM reaches here as ``SystemExit`` once the model is stopped: memory/ is checked and
+        # put back before the runner goes, and the exit goes on.
+        except BaseException as error:
+            if not isinstance(error, Exception):
+                # A check that fails must not keep the runner from stopping; the next run compares.
+                with contextlib.suppress(Exception):
+                    self._memory_problem(step, before, scope, inbox)
+                raise
             problem = self._memory_problem(step, before, scope, inbox)
             if problem is None:
                 raise
@@ -765,6 +803,34 @@ def refresh_rules(due_files: Sequence[str], fixed: Sequence[str] = REFRESH_RULES
     for relative in due_files:
         rules += [f"Read(<store>/{relative})", f"Edit(<store>/{relative})"]
     return rules
+
+
+def _copy_started(copy: Path) -> datetime.datetime | None:
+    """When the run that saved this copy started, from the copy's name (``machine_state.memory_copy``)."""
+    try:
+        return datetime.datetime.strptime(copy.name, "%Y%m%dT%H%M%SZ").replace(tzinfo=datetime.timezone.utc)
+    except ValueError:
+        return None
+
+
+def _interrupted_changes(copy: Path, store: Store) -> list[report.Finding]:
+    """The review findings for what ``memory/`` holds now against the copy a stopped run saved."""
+    started = _copy_started(copy)
+    run = f"the interrupted run of {started.astimezone():%Y-%m-%d %H:%M}" if started else "an interrupted run"
+    try:
+        before, after = memory_guard.Snapshot.load(copy), memory_guard.Snapshot.take(store)
+    except (OSError, StoreError) as error:
+        text = f"{run} could not be checked: memory/ could not be compared with its copy {copy}: {error}"
+        return [report.Finding(RUN, report.ACTION, text)]
+    # The lines are shown as the owner reads them: a character that hides text stays out of the review.
+    changes = [f"{run}: {strip_unsafe(change)}" for change in memory_guard.fact_changes(before, after)]
+    problem = memory_guard.unsafe_line(before, after)
+    if problem is not None:
+        changes.insert(0, f"{run}: {problem}")
+    if not changes:
+        return []
+    check = f"check the changes above; memory/ as it was before that run is in {copy}"
+    return [report.Finding(RUN, report.ACTION, text) for text in (*changes, check)]
 
 
 def _preflight_paths(started: datetime.datetime) -> list[str]:

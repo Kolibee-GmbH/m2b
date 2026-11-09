@@ -14,6 +14,11 @@ creates. How a release is made is in [CONTRIBUTING.md](CONTRIBUTING.md#releasing
   saved, instead of a traceback, and removes the follow-up task it had already created for it.
   The capture skill tells the user from that line that nothing was kept; before, it reported the
   note as saved and left a task pointing to no note.
+- **Fixed: a curation run stopped during a model step still checks `memory/`.** A runner stopped
+  with SIGTERM while ingest, refresh, lint or sorting ran skipped the check that puts `memory/`
+  back when a line hides text. It now checks before it exits, and the next run compares `memory/`
+  with the copy a run that never finished saved, lists what it left in the review and keeps that
+  copy instead of pruning it.
 
 ## 0.1.0 - not released yet
 

@@ -16,7 +16,11 @@ the store, because the store syncs to other machines.
   start; a successful run removes it.
 - **The copies of memory** ``memory-before-run/<start>/``: ``memory/`` as it was before a run's
   first model step, so the owner can take back a line the run removed or rewrote. A copy stays
-  while a finding about a changed facts line names it, and the run's own copy until the next run.
+  while a finding about a changed facts line names it, while it is marked unchecked, and the
+  run's own copy until the next run.
+- **The unchecked copies** ``memory-unchecked.json``: the copies whose run has not stored its
+  changed facts lines yet. A run stopped hard leaves its copy here, and the next run past
+  preflight compares it with ``memory/`` and reports what that run left.
 - **The changed facts lines** ``memory-changes.json``: what ingest and lint removed or rewrote,
   repeated in every review until the owner completes the review task, because the review task
   holds only the findings of the last run and these are never found again.
@@ -49,6 +53,7 @@ BACKOFF_FILE = "backoff.json"
 ATTEMPT_FILE = "last-attempt.json"
 MEMORY_BEFORE_RUN = "memory-before-run"
 MEMORY_CHANGES = "memory-changes.json"
+MEMORY_UNCHECKED = "memory-unchecked.json"
 STUCK_INBOX = "inbox-stuck.json"
 MAX_LOG_BYTES = 1024 * 1024
 LAST_EVENT_BYTES = 16 * 1024
@@ -86,6 +91,39 @@ def memory_copies(machine: MachinePaths) -> Path:
 def memory_copy(machine: MachinePaths, started: datetime.datetime) -> Path:
     """The copy of ``memory/`` for the run that started then, named by that time in UTC."""
     return memory_copies(machine) / f"{started.astimezone(datetime.timezone.utc):%Y%m%dT%H%M%SZ}"
+
+
+def mark_unchecked(machine: MachinePaths, copy: Path) -> None:
+    """Names a copy of ``memory/`` whose run has not stored its changed facts lines yet.
+
+    A run that ends without storing them, stopped hard or past its check, leaves the name here for
+    the next run, which compares that copy with ``memory/``.
+    """
+    names = [path.name for path in unchecked_copies(machine)]
+    if copy.name not in names:
+        names.append(copy.name)
+    _write_names(machine, names)
+
+
+def unchecked_copies(machine: MachinePaths) -> list[Path]:
+    """The copies named by ``mark_unchecked`` that are still there, oldest first."""
+    try:
+        raw = json.loads((machine.state_dir / MEMORY_UNCHECKED).read_text(encoding="utf-8"))
+        names = [str(name) for name in raw]
+    except (OSError, ValueError, TypeError):
+        return []
+    copies = [memory_copies(machine) / name for name in sorted(set(names)) if name and "/" not in name]
+    return [copy for copy in copies if copy.is_dir()]
+
+
+def clear_unchecked(machine: MachinePaths) -> None:
+    (machine.state_dir / MEMORY_UNCHECKED).unlink(missing_ok=True)
+
+
+def _write_names(machine: MachinePaths, names: list[str]) -> None:
+    path = machine.state_dir / MEMORY_UNCHECKED
+    path.parent.mkdir(parents=True, exist_ok=True)
+    replace_atomically(path, (json.dumps(names) + "\n").encode("utf-8"), machine.temp_dir)
 
 
 def load_memory_changes(machine: MachinePaths) -> list[Finding]:

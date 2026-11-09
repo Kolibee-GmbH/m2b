@@ -60,6 +60,14 @@ class Snapshot:
         """Raises ``StoreError`` when a file cannot be read; then there is nothing to compare with."""
         return cls({path: store.read_bytes(path) for path in store.list_files(MEMORY, recursive=True)})
 
+    @classmethod
+    def load(cls, folder: Path) -> Snapshot:
+        """A snapshot ``save`` wrote; raises ``OSError`` when it cannot be read."""
+        files = sorted(path for path in folder.rglob("*") if path.is_file())
+        return cls(
+            {PurePosixPath(MEMORY, *path.relative_to(folder).parts).as_posix(): path.read_bytes() for path in files}
+        )
+
     def restore(self, store: Store) -> None:
         """Puts ``memory/`` back: changed and removed files as they were, new ones removed."""
         for path in store.list_files(MEMORY, recursive=True):

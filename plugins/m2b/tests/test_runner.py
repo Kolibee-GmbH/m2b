@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import json
 import os
+import signal
 import sys
 from pathlib import Path
 from typing import Any
@@ -1129,6 +1130,191 @@ class GuardedModelStepTest(RunnerTest):
         self.assertEqual(outcome.state, FAILED)
         self.assertIn("ingest: memory/dana.md could not be read", outcome.message)
         self.assertEqual(self.calls(), [])
+
+
+# What a model step writes into MEMORY.md before the runner is stopped: a zero-width space that
+# reads one way to the owner and another to the model.
+HIDDEN_LINE = "- Dana​ likes old maps (dana.md)\n"
+SIGTERM_EXIT = SystemExit(128 + signal.SIGTERM)
+
+
+class StoppedStepTest(RunnerTest):
+    """A runner stopped during a model step, by SIGTERM, still checks ``memory/``, or the next run does."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.curating()
+        self.write("memory/MEMORY.md", GUARDED)
+        self.write("memory/dana.md", "# Dana\n\n- Likes old maps.\n")
+        self.write("memory/sam.md", SAM_DUE)
+
+    def memory_file(self, name: str) -> str:
+        return (self.store_root / "memory" / name).read_text(encoding="utf-8")
+
+    def plant_and_stop(self, run: Any, *arguments: Any, **options: Any) -> None:
+        self.write("memory/MEMORY.md", GUARDED + HIDDEN_LINE)
+        raise SIGTERM_EXIT
+
+    def remove_a_line_and_stop(self, run: Any, *arguments: Any, **options: Any) -> None:
+        self.write("memory/MEMORY.md", self.memory_file("MEMORY.md").replace("- Sam brings plywood (sam.md)\n", ""))
+        raise SIGTERM_EXIT
+
+    def stopped_run(self, model_step: Any, sort_facts: bool = False) -> None:
+        with (
+            mock.patch.object(runner._Run, "_model", autospec=True, side_effect=model_step),
+            self.assertRaises(SystemExit),
+        ):
+            self.run_curate(sort_facts=sort_facts)
+
+    def test_a_guarded_step_stopped_by_sigterm_still_puts_a_hidden_line_back(self) -> None:
+        """Covers: B76"""
+        self.stopped_run(self.plant_and_stop)
+
+        self.assertEqual(self.memory_file("MEMORY.md"), GUARDED)
+
+    def test_the_sorting_step_stopped_by_sigterm_still_puts_a_hidden_line_back(self) -> None:
+        """Covers: B76"""
+        self.write("memory/sam.md", "# Sam\n\n- Brings plywood.\n")
+
+        self.stopped_run(self.plant_and_stop, sort_facts=True)
+
+        self.assertEqual(self.memory_file("MEMORY.md"), GUARDED)
+
+    def test_a_check_that_fails_after_sigterm_still_lets_the_runner_stop(self) -> None:
+        """Covers: B76"""
+        unreadable = StoreReadError("memory/dana.md could not be read: permission denied")
+
+        with mock.patch.object(runner._Run, "_memory_problem", autospec=True, side_effect=unreadable):
+            self.stopped_run(self.plant_and_stop)
+
+        self.assertEqual(self.calls(), [], "no later model step started")
+
+    def test_a_sorting_check_that_fails_after_sigterm_still_lets_the_runner_stop(self) -> None:
+        """Covers: B76"""
+        self.write("memory/sam.md", "# Sam\n\n- Brings plywood.\n")
+        unreadable = StoreReadError("memory/MEMORY.md could not be read: permission denied")
+
+        with mock.patch.object(runner._Run, "_sorting_problem", autospec=True, side_effect=unreadable):
+            self.stopped_run(self.plant_and_stop, sort_facts=True)
+
+    def killed_run(self, model_step: Any, sort_facts: bool = False) -> None:
+        """A run whose check never ran either, as after SIGKILL or a second signal during the check."""
+        with (
+            mock.patch.object(runner._Run, "_memory_problem", autospec=True, side_effect=SIGTERM_EXIT),
+            mock.patch.object(runner._Run, "_sorting_problem", autospec=True, side_effect=SIGTERM_EXIT),
+        ):
+            self.stopped_run(model_step, sort_facts=sort_facts)
+        record = load_run_record(self.store)
+        assert record is not None
+        self.assertEqual(record.state, RUNNING)
+
+    def next_run(self) -> Any:
+        self.clock = START + datetime.timedelta(hours=2)
+        with mock.patch.object(runner._Run, "_model", autospec=True):
+            self.run_curate()
+        (review,) = self.review_tasks()
+        return review
+
+    def test_the_next_run_names_a_hidden_line_an_interrupted_run_left_and_keeps_its_copy(self) -> None:
+        """Covers: B76"""
+        self.killed_run(self.plant_and_stop)
+        (copy,) = machine_state.memory_copies(self.machine).iterdir()
+
+        review = self.next_run()
+
+        self.assertIn("interrupted", review.notes)
+        self.assertIn("Dana likes old maps", review.notes)
+        self.assertIn("U+200B", review.notes)
+        self.assertIn(str(copy), review.notes)
+        self.assertEqual((copy / "MEMORY.md").read_text(encoding="utf-8"), GUARDED)
+
+    def test_the_next_run_lists_the_facts_lines_an_interrupted_run_removed(self) -> None:
+        """Covers: B76"""
+        self.killed_run(self.remove_a_line_and_stop)
+        (copy,) = machine_state.memory_copies(self.machine).iterdir()
+
+        review = self.next_run()
+
+        self.assertIn('removed the facts line "- Sam brings plywood (sam.md)"', review.notes)
+        self.assertIn(str(copy), review.notes)
+        self.assertTrue(copy.is_dir())
+
+    def test_a_sorting_run_killed_hard_is_checked_by_the_next_run(self) -> None:
+        """Covers: B76"""
+        self.write("memory/sam.md", "# Sam\n\n- Brings plywood.\n")
+
+        self.killed_run(self.plant_and_stop, sort_facts=True)
+
+        self.assertIn("U+200B", self.next_run().notes)
+
+    def test_a_run_that_fails_at_preflight_in_between_keeps_the_check_for_the_next(self) -> None:
+        """Covers: B76"""
+        self.killed_run(self.plant_and_stop)
+        (copy,) = machine_state.memory_copies(self.machine).iterdir()
+        self.clock = START + datetime.timedelta(hours=1)
+        unreachable = TasksUnreachableError("the task list is not reachable yet")
+        with (
+            mock.patch("m2b.tasks.markdown.MarkdownTasks.check_reachable", side_effect=unreachable),
+            self.assertRaises(TasksUnreachableError),
+        ):
+            self.run_curate()
+
+        review = self.next_run()
+
+        self.assertIn("U+200B", review.notes)
+        self.assertIn(str(copy), review.notes)
+
+    def test_two_stopped_runs_in_a_row_still_name_what_the_first_left(self) -> None:
+        """Covers: B76"""
+        self.killed_run(self.plant_and_stop)
+        (first,) = machine_state.memory_copies(self.machine).iterdir()
+        self.clock = START + datetime.timedelta(hours=1)
+        self.killed_run(self.remove_a_line_and_stop)
+
+        review = self.next_run()
+
+        self.assertIn("U+200B", review.notes)
+        self.assertIn(str(first), review.notes)
+        self.assertTrue(first.is_dir())
+
+    def test_a_rewritten_facts_line_is_named_without_the_characters_that_hide_text(self) -> None:
+        """Covers: B76"""
+
+        def rewrite_with_a_hidden_character(run: Any, *arguments: Any, **options: Any) -> None:
+            self.write("memory/MEMORY.md", GUARDED.replace("Dana likes old maps", "Dana\u200b likes old maps a lot"))
+            raise SIGTERM_EXIT
+
+        self.killed_run(rewrite_with_a_hidden_character)
+
+        review = self.next_run()
+
+        self.assertIn("Dana likes old maps a lot", review.notes)
+        self.assertNotIn("\u200b", review.notes)
+
+    def test_a_copy_from_before_another_machines_runs_is_not_compared(self) -> None:
+        """Curation moved to another machine and back: its runs and the owner's edits since are no interruption."""
+        self.killed_run(self.remove_a_line_and_stop)
+        record = json.loads((self.store_root / RUN_RECORD).read_text(encoding="utf-8"))
+        later = (START + datetime.timedelta(hours=1)).isoformat()
+        record.update(state=SUCCEEDED, machine_id="sb-test-other", started_at=later, finished_at=later)
+        self.write(RUN_RECORD, json.dumps(record))
+
+        self.clock = START + datetime.timedelta(hours=2)
+        with mock.patch.object(runner._Run, "_model", autospec=True):
+            self.run_curate()
+
+        self.assertNotIn("interrupted", " ".join(task.notes for task in self.review_tasks()))
+        self.assertEqual(machine_state.unchecked_copies(self.machine), [])
+
+    def test_an_interrupted_run_that_changed_nothing_adds_nothing_to_the_review(self) -> None:
+        self.killed_run(lambda run, *arguments, **options: (_ for _ in ()).throw(SIGTERM_EXIT))
+
+        self.clock = START + datetime.timedelta(hours=2)
+        with mock.patch.object(runner._Run, "_model", autospec=True):
+            outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        self.assertEqual(self.review_tasks(), [])
 
 
 if __name__ == "__main__":
