@@ -1,11 +1,18 @@
 name: ci
 
+# On main and on pull requests only: a branch is checked through its pull request, and a tag
+# points at a commit main has checked already. A newer run for the same ref cancels the older one.
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   # The version the README names as the minimum; the manifest and band checks run against it.
