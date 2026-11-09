@@ -13,30 +13,34 @@ All notable changes to this project are documented here. The format follows
 
 - [Add-ons](https://github.com/b33eep/m2b/blob/main/docs/addons.md) describes each add-on: what it
   does and needs, how to set it up and turn it off, what it reads and writes on the machine and in
-  the store, its commands, and how you see that it runs.
+  the store, its commands, and how you see that it runs
+  ([#5](https://github.com/b33eep/m2b/pull/5)).
 
 ### Changed
 
-- The herdr and worklog add-ons are no longer marked experimental.
+- The herdr and worklog add-ons are no longer marked experimental
+  ([#5](https://github.com/b33eep/m2b/pull/5)).
 - A program outside the marketplace that writes into the store is now called an integration;
   the former `docs/addons.md` is now
   [Integrations](https://github.com/b33eep/m2b/blob/main/docs/integrations.md), `docs/addons.md`
   now describes the add-ons, and `STORE.md` gives an integration its state folder under
-  `state/integrations/<name>/` instead of `state/addons/`.
+  `state/integrations/<name>/` instead of `state/addons/`
+  ([#5](https://github.com/b33eep/m2b/pull/5)).
 - The optional parts of m2b (band, backup, herdr, worklog) are now called add-ons: `m2b parts` is
   `m2b addons`, the key `parts` in `config.json` is `addons`, and their state in the store moves
   from `state/parts/<name>/` to `state/addons/<name>/`. `m2b status --json`,
   `m2b setup apply --json` and the run record `state/core/last-run.json` name them under `addons`
   instead of `parts`; a run record from 0.1.1 reads as no add-ons until the next curation run
   rewrites it. `m2b parts` now ends with a usage error, and a `config.json` that still has `parts`
-  is refused until the key is renamed.
+  is refused until the key is renamed ([#5](https://github.com/b33eep/m2b/pull/5)).
 - The workflows use action versions that run on Node 24
   ([#3](https://github.com/b33eep/m2b/pull/3)).
 
 ### Fixed
 
 - The README now says that the worklog also reads the end of each session's last answer from the
-  transcripts and that its model step may search the archive; it did so in 0.1.1 already.
+  transcripts and that its model step may search the archive; it did so in 0.1.1 already
+  ([#5](https://github.com/b33eep/m2b/pull/5)).
 - The README lists what each add-on needs, links herdr, and says what the worklog's time
   spans measure; the worklog setup points out a sphere that nothing can match
   ([#3](https://github.com/b33eep/m2b/pull/3)).
