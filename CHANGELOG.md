@@ -19,6 +19,10 @@ creates. How a release is made is in [CONTRIBUTING.md](CONTRIBUTING.md#releasing
   back when a line hides text. It now checks before it exits, and the next run compares `memory/`
   with the copy a run that never finished saved, lists what it left in the review and keeps that
   copy instead of pruning it.
+- **Changed: a new key in `store.json` raises the store format.** An m2b refuses a key it does not
+  know in a format it knows, so a key added without a new format would have stopped capture on
+  every machine with an older m2b. A test now holds the keys of each format, and `CONTRIBUTING.md`
+  states the rule.
 
 ## 0.1.0 - not released yet
 

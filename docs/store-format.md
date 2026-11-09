@@ -144,8 +144,12 @@ Nothing captured is ever deleted by m2b.
 
 ## Formats
 
-`format` in `store.json` counts the rules for curated content. It goes up when a new m2b changes
-a rule that content already in a store has to follow, or that an older m2b must not curate under.
+`format` in `store.json` counts the rules for curated content and the keys of `store.json`. It
+goes up when a new m2b changes a rule that content already in a store has to follow, or that an
+older m2b must not curate under, and when `store.json` gets a new key: an m2b refuses a key it does
+not know in a format it knows, so that a typo is caught, checks a store against the keys of the
+store's own format, so that a new key is written only once the store is at the new format, and
+reads a newer format leniently.
 The curating machine then migrates the store at the start of its next run
 ([Curation](curation.md#after-an-update)). The inbox is not part of the format: its file names and
 the frontmatter `created` and `source` stay the same, so a machine on an older m2b keeps

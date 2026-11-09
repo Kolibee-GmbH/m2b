@@ -14,6 +14,19 @@ from m2b.store.base import Store
 STORE_SETTINGS_FILE_NAME = "store.json"
 KNOWN_STORE_FORMAT = 2
 
+_FORMAT_ONE_KEYS = frozenset({"format", "tasks", "curating_machine", "journal_since"})
+_FORMAT_ONE_TASKS_KEYS = frozenset({"backend", "list", "timeout_seconds"})
+# The keys of ``store.json`` and of its ``tasks`` section, per format. A store is checked against
+# its own format's keys and refused with any other, so a typo is caught rather than ignored, and a
+# newer m2b cannot write its new key into a store the curating machine has not migrated yet. A new
+# key therefore raises ``KNOWN_STORE_FORMAT`` with an additive migration and gets a new entry here;
+# a released entry never changes. A machine on an older m2b then reads the store as a newer format,
+# leniently, and keeps capturing into it.
+KEYS_BY_FORMAT: dict[int, tuple[frozenset[str], frozenset[str]]] = {
+    1: (_FORMAT_ONE_KEYS, _FORMAT_ONE_TASKS_KEYS),
+    2: (_FORMAT_ONE_KEYS, _FORMAT_ONE_TASKS_KEYS),
+}
+
 TASKS_BACKENDS = ("apple-reminders", "markdown")
 DEFAULT_TASKS_TIMEOUT_SECONDS = 20
 
@@ -43,11 +56,17 @@ def parse_store_settings(raw: object) -> StoreSettings:
     store_format = fields.integer("format")
     known_format = store_format <= KNOWN_STORE_FORMAT
     try:
+        keys, tasks_keys = None, None
         if known_format:
-            fields.reject_unknown(("format", "tasks", "curating_machine", "journal_since"))
+            if store_format < 1:
+                raise fields.error("format", f"must be 1 or more, got {store_format}")
+            if store_format not in KEYS_BY_FORMAT:
+                raise fields.error("format", f"{store_format} has no list of keys in this m2b")
+            keys, tasks_keys = KEYS_BY_FORMAT[store_format]
+            fields.reject_unknown(tuple(sorted(keys)))
         return StoreSettings(
             format=store_format,
-            tasks=_tasks(fields.section("tasks"), strict=known_format),
+            tasks=_tasks(fields.section("tasks"), tasks_keys),
             curating_machine=fields.string("curating_machine"),
             journal_since=_date(fields, "journal_since"),
         )
@@ -57,9 +76,10 @@ def parse_store_settings(raw: object) -> StoreSettings:
         raise FormatTooNewError(f"the store ({STORE_SETTINGS_FILE_NAME})", store_format, KNOWN_STORE_FORMAT) from error
 
 
-def _tasks(fields: Fields, strict: bool) -> TasksSettings:
-    if strict:
-        fields.reject_unknown(("backend", "list", "timeout_seconds"))
+def _tasks(fields: Fields, known_keys: frozenset[str] | None) -> TasksSettings:
+    """``known_keys`` None: a newer format, read leniently."""
+    if known_keys is not None:
+        fields.reject_unknown(tuple(sorted(known_keys)))
     backend = fields.choice("backend", TASKS_BACKENDS)
     return TasksSettings(
         backend=backend,
@@ -121,8 +141,9 @@ def require_store_writable(store: Store) -> None:
 def require_inbox_writable(store: Store) -> None:
     """Refuses a capture only into a store whose settings cannot be read at all.
 
-    ``format`` counts the rules for curated content; the inbox contract (file names, ``created``,
-    ``source``) is not among them, so a capture also goes into a store of a newer format.
+    ``format`` counts the rules for curated content and the keys of ``store.json``; the inbox
+    contract (file names, ``created``, ``source``) is not among them, so a capture also goes into a
+    store of a newer format.
     """
     existing = read_store_json_object(store, STORE_SETTINGS_FILE_NAME)
     if existing is not None:

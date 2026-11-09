@@ -1,10 +1,12 @@
 """Migrations: what brings a store's content up to the rules of this m2b, one format at a time.
 
-``format`` in ``store.json`` counts the rules for curated content (``memory/``). When a rule change
-needs content already in a store to change, or an older m2b must not curate content written under
-the new rule, the change raises ``KNOWN_STORE_FORMAT`` by one and adds a migration here whose
-``target`` is the new number. The curating machine runs the due ones at the start of a curation
-run, before any other step, each as a step of its own (``migrate-<target>``):
+``format`` in ``store.json`` counts the rules for curated content (``memory/``) and the keys of
+``store.json`` (``config.store_settings.KEYS_BY_FORMAT``). When a rule change needs content already
+in a store to change, or an older m2b must not curate content written under the new rule, or
+``store.json`` gets a new key, the change raises ``KNOWN_STORE_FORMAT`` by one and adds a migration
+here whose ``target`` is the new number; for a new key it changes nothing in ``memory/``. The
+curating machine runs the due ones at the start of a curation run, before any other step, each as
+a step of its own (``migrate-<target>``):
 
 - ``apply`` changes ``memory/`` and nothing else. It is code; a change that needs judgment would run
   as a fenced model step with exact rules, like the other model steps.

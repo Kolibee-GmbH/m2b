@@ -37,6 +37,18 @@ def test_a_name_collision_draws_a_new_suffix(self) -> None:
 
 `scripts/check` lists every behavior that no test names yet.
 
+## Store format
+
+A change that content already in a store must follow, or a new key in `store.json`, raises
+`KNOWN_STORE_FORMAT` and ships a migration (`plugins/m2b/src/m2b/curate/migrations.py`); an
+additive change gets one that changes nothing. A key added without it would make every machine on
+the m2b before refuse the store, capture included. The keys of each format are in `KEYS_BY_FORMAT`
+(`plugins/m2b/src/m2b/config/store_settings.py`), and a store is checked against its own format's
+keys, so a new key can only be written once the store is at the new format.
+`plugins/m2b/tests/test_store_settings.py` holds a copy of each released entry: a released entry
+never changes, a new format gets its own. [Store format](docs/store-format.md#formats) lists what
+each number added.
+
 ## End-to-end scenarios
 
 A scenario is a folder in `tests/e2e/` with `given/` (the store before), `steps.json`
