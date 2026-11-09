@@ -7,6 +7,8 @@ creates. How a release is made is in [CONTRIBUTING.md](CONTRIBUTING.md#releasing
 
 ## Unreleased
 
+## 0.1.1 - 2026-11-09
+
 ### m2b
 
 - **Fixed: a capture that cannot be written says so.** When the inbox has no write permission or
@@ -46,9 +48,9 @@ creates. How a release is made is in [CONTRIBUTING.md](CONTRIBUTING.md#releasing
   now refuse such a path on a machine that is to curate, with the reason, and `m2b doctor` names
   one already configured there. A machine that only captures may keep its store in such a folder.
 
-## 0.1.0 - not released yet
+## 0.1.0 - 2026-11-09
 
-The first release. It gets its date on the day it is published.
+The first release.
 
 ### m2b
 

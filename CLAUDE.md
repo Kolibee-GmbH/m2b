@@ -15,9 +15,9 @@ Calendar via JavaScript for Automation); Linux with the folder store and Markdow
 
 ## Current Status
 
-Pre-release: 0.1.0 is written up in [CHANGELOG.md](CHANGELOG.md) without a date, the repository
-is not published yet. Changes until the first release go into the 0.1.0 section as what ships; how
-a release is made is in [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
+0.1.1 is the current release, written up in [CHANGELOG.md](CHANGELOG.md); the repository is not
+published yet. New changes go under "Unreleased"; how a release is made is in
+[CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## Project Instructions
 
