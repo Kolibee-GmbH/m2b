@@ -342,10 +342,6 @@ class OpenTasksTest(unittest.TestCase):
         self.assertEqual((apple._list, apple._command, apple._timeout), (TEST_LIST, ["/opt/x/reminders"], 7))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class RemindersFileTest(unittest.TestCase):
     def test_apple_reminders_keeps_no_task_files_and_lists_every_task(self) -> None:
         """Covers: B59
@@ -357,3 +353,7 @@ class RemindersFileTest(unittest.TestCase):
 
         self.assertEqual(reminders.unreadable(), [])
         self.assertTrue(reminders.lists_every_task())
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -454,6 +454,18 @@ class SettingsCommandTest(CommandTest):
         self.assertEqual(code, cli.EXIT_USAGE, err)
         self.assertEqual(self.machine.config_file.read_text(encoding="utf-8"), before)
 
+    def test_config_set_lets_such_a_path_through_when_the_store_there_is_curated_elsewhere(self) -> None:
+        """Covers: B81"""
+        self.set_up(calendar="none")
+        other = self.store_root.parent / "Dropbox (Personal)"
+        other.mkdir()
+        settings = json.loads((self.store_root / "store.json").read_text(encoding="utf-8"))
+        (other / "store.json").write_text(json.dumps({**settings, "curating_machine": "sb-test-m2"}), encoding="utf-8")
+
+        code, _, err = self.run_command("config", "set", "store.path", str(other))
+
+        self.assertEqual(code, cli.EXIT_OK, err)
+
     def test_config_set_checks_a_whole_store_section_too(self) -> None:
         """Covers: B81"""
         self.set_up(calendar="none")
