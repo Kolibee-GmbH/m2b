@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import datetime
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import test_commands
 from m2b import cli
@@ -27,6 +29,7 @@ from m2b.tasks import markers
 from m2b.tasks.base import Task, TasksUnreachableError
 from m2b.tasks.markdown import MarkdownTasks
 from m2b.todos import EVENTS_NOT_CONFIGURED, EVENTS_OK, EVENTS_UNREACHABLE, todos
+from store_contract import FakeEviction
 
 NOW = datetime.datetime(2026, 11, 7, 12, 0).astimezone()
 TODAY = NOW.date()
@@ -174,6 +177,16 @@ class TodosTest(unittest.TestCase):
         with self.assertRaises(TasksUnreachableError):
             todos(UnreachableTasks(self.store), self.no_calendar, NOW)
 
+    def test_a_task_file_that_is_no_task_is_named_instead_of_left_out(self) -> None:
+        """Covers: B80"""
+        task_id = self.tasks.add("Call Dana")
+        (self.store.root / "tasks" / f"{task_id}.md").write_bytes(b"\xff\xfe not text")
+
+        report = todos(self.tasks, self.no_calendar, NOW)
+
+        (path,) = [path for path, _ in report.unreadable]
+        self.assertEqual(path, f"tasks/{task_id}.md")
+
 
 class TodosCommandTest(test_commands.CommandTest):
     def add_event_today(self, title: str, hour: int) -> None:
@@ -237,6 +250,62 @@ class TodosCommandTest(test_commands.CommandTest):
         self.assertEqual(code, cli.EXIT_OK)
         self.assertIn("No open tasks.", out)
         self.assertIn("not configured", out)
+
+    def broken_task_file(self) -> str:
+        self.set_up(calendar="none")
+        _, out, _ = self.run_command("tasks", "add", "Call Dana")
+        path = f"tasks/{out.strip()}.md"
+        (self.store_root / path).write_bytes(b"\xff\xfe not text")
+        return path
+
+    def test_a_task_file_that_cannot_be_read_is_could_not_look_not_nothing_open(self) -> None:
+        """Covers: B80"""
+        path = self.broken_task_file()
+
+        code, out, err = self.run_command("todos")
+
+        self.assertEqual(code, cli.EXIT_PROBLEM, err)
+        self.assertNotIn("No open tasks.", out)
+        self.assertEqual(out.count(path), 1, out)
+
+    def test_json_lists_the_task_files_that_cannot_be_read(self) -> None:
+        """Covers: B80"""
+        path = self.broken_task_file()
+
+        code, out, _ = self.run_command("todos", "--json")
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        (entry,) = json.loads(out)["unreadable"]
+        self.assertEqual(entry["path"], path)
+        self.assertTrue(entry["reason"])
+
+    @unittest.skipIf(os.geteuid() == 0, "root reads a file without read permission")
+    def test_a_task_file_without_read_permission_exits_3_naming_it(self) -> None:
+        """Covers: B80"""
+        self.set_up(calendar="none")
+        _, out, _ = self.run_command("tasks", "add", "Call Dana")
+        path = self.store_root / "tasks" / f"{out.strip()}.md"
+        path.chmod(0o000)
+        self.addCleanup(path.chmod, 0o644)
+
+        code, _, err = self.run_command("todos")
+
+        self.assertEqual(code, cli.EXIT_UNREACHABLE)
+        self.assertIn(f"tasks/{path.name}", err)
+
+    def test_an_evicted_task_file_exits_3_naming_it(self) -> None:
+        """Covers: B80"""
+        self.set_up(calendar="none")
+        _, out, _ = self.run_command("tasks", "add", "Call Dana")
+        eviction = FakeEviction()
+        eviction.evicted.add(self.store_root / "tasks" / f"{out.strip()}.md")
+
+        guard = DatalessGuard(True, lstat=eviction.lstat)
+        with mock.patch("m2b.store.factory.guard_for_platform", return_value=guard):
+            code, _, err = self.run_command("todos")
+
+        self.assertEqual(code, cli.EXIT_UNREACHABLE)
+        self.assertIn(f"tasks/{out.strip()}.md", err)
 
     def test_without_a_calendar_backend_json_says_not_configured(self) -> None:
         self.set_up(calendar="none")
@@ -310,6 +379,9 @@ class TodosSkillTest(unittest.TestCase):
 
     def test_the_skill_reads_the_json(self) -> None:
         self.assertIn("m2b todos --json", self.skill.read_text(encoding="utf-8"))
+
+    def test_the_skill_knows_the_task_files_that_cannot_be_read(self) -> None:
+        self.assertIn("`unreadable`", self.skill.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

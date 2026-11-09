@@ -37,6 +37,9 @@ creates. How a release is made is in [CONTRIBUTING.md](CONTRIBUTING.md#releasing
   that says where `memory/` as it was before the run is kept listed the captures first and the
   path last, so from about eleven captures the path was cut off the review task. The path now
   comes first.
+- **Fixed: `m2b todos` no longer says "No open tasks." while a task file cannot be read.** A
+  Markdown task file that held no readable task was left out silently. It is now named with its
+  path and the reason, the command exits 1, and the todos skill says it could not look at it.
 
 ## 0.1.0 - not released yet
 

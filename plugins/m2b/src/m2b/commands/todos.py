@@ -1,7 +1,9 @@
 """``todos``: open tasks by due date and today's events; ``--json`` for the skill.
 
 Nothing open and no events are said in words. The calendar part reports "not configured" and
-"could not be read" as answers of their own, never as an empty list.
+"could not be read" as answers of their own, never as an empty list. A task file that holds no task
+is named with its path and ends the command with exit 1, so a list without it never reads as all
+that is open.
 """
 
 from __future__ import annotations
@@ -40,7 +42,7 @@ def todos_command(arguments: argparse.Namespace, context: Context) -> int:
         print_json(_as_json(report))
     else:
         _print_text(report)
-    return 0
+    return 1 if report.unreadable else 0
 
 
 def _groups(report: TodoReport) -> dict[str, list[Task]]:
@@ -54,7 +56,13 @@ def _groups(report: TodoReport) -> dict[str, list[Task]]:
 
 def _as_json(report: TodoReport) -> dict[str, Any]:
     groups = {key: [_task_json(task) for task in found] for key, found in _groups(report).items()}
-    return {"today": report.today.isoformat(), **groups, "events": _events_json(report.events)}
+    unreadable = [{"path": path, "reason": problem} for path, problem in report.unreadable]
+    return {
+        "today": report.today.isoformat(),
+        **groups,
+        "unreadable": unreadable,
+        "events": _events_json(report.events),
+    }
 
 
 def _task_json(task: Task) -> dict[str, Any]:
@@ -71,7 +79,10 @@ def _events_json(answer: TodayEvents) -> dict[str, Any]:
 
 def _print_text(report: TodoReport) -> None:
     groups = _groups(report)
-    if not any(groups.values()):
+    # The problem starts with the file's path already.
+    for _, problem in report.unreadable:
+        print(f"Could not read {problem}; this task is not listed until the file is fixed.")
+    if not any(groups.values()) and not report.unreadable:
         print("No open tasks.")
     for key, heading in GROUPS:
         if groups[key]:

@@ -66,7 +66,14 @@ class Tasks(ABC):
         A backend that leaves out a task it cannot read says no; then a task missing from the
         answer may still be there, and no caller may take it for one the owner deleted.
         """
-        return True
+        return not self.unreadable()
+
+    def unreadable(self) -> list[tuple[str, str]]:
+        """The tasks ``items`` leaves out because they cannot be read, by where they are, with the reason.
+
+        Only a backend that keeps tasks as files has any.
+        """
+        return []
 
     @abstractmethod
     def items(self, marker: str | None = None, include_completed: bool = False) -> list[Task]:
