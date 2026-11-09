@@ -442,6 +442,27 @@ class SettingsCommandTest(CommandTest):
         self.assertIn("(", err)
         self.assertEqual(self.machine.config_file.read_text(encoding="utf-8"), before)
 
+    def test_config_set_refuses_such_a_path_after_the_store_was_moved_there(self) -> None:
+        """Covers: B81"""
+        self.set_up(calendar="none")
+        moved = self.store_root.parent / "Notes (2026)"
+        self.store_root.rename(moved)
+        before = self.machine.config_file.read_text(encoding="utf-8")
+
+        code, _, err = self.run_command("config", "set", "store.path", str(moved))
+
+        self.assertEqual(code, cli.EXIT_USAGE, err)
+        self.assertEqual(self.machine.config_file.read_text(encoding="utf-8"), before)
+
+    def test_config_set_checks_a_whole_store_section_too(self) -> None:
+        """Covers: B81"""
+        self.set_up(calendar="none")
+        section = json.dumps({"backend": "folder", "path": str(self.store_root.parent / "Notes (2026)")})
+
+        code, _, err = self.run_command("config", "set", "store", section)
+
+        self.assertEqual(code, cli.EXIT_USAGE, err)
+
     def test_config_set_keeps_such_a_store_path_on_a_machine_that_only_captures(self) -> None:
         """Covers: B81"""
         self.set_up(calendar="none")
