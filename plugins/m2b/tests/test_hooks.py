@@ -90,6 +90,12 @@ class DistillateHookTest(HookFixture):
         self.assertIn("~/.claude/CLAUDE.md for all of them", ROUTING_RULE)
         self.assertIn("not to Claude Code's own memory", ROUTING_RULE)
 
+    def test_the_routing_rule_leaves_how_claude_works_to_claude_code(self) -> None:
+        """A rule for how Claude works that may go only to CLAUDE.md was kept nowhere in a real session."""
+        self.assertIn(
+            "is not for the second brain: it belongs to Claude Code, in its own memory or in a CLAUDE.md", ROUTING_RULE
+        )
+
     def test_characters_that_hide_or_reorder_text_never_reach_the_session(self) -> None:
         """Covers: B56"""
         self.set_up()

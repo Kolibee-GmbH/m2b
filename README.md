@@ -81,7 +81,8 @@ belong in its repository and its `CLAUDE.md`; m2b is for what has no repository.
 Claude Code keeps its own memory: short notes it writes for itself during a session, in files
 under `~/.claude` for each project. It stays on beside m2b, and a first "remember this" may land
 in either. The rule every session gets with the distillate keeps them apart: how Claude should
-work goes to `CLAUDE.md`, what concerns your life and world across projects goes to m2b.
+work stays with Claude Code, in its memory or in a `CLAUDE.md`; what concerns your life and world
+across projects goes to m2b.
 
 What m2b has that Claude Code's memory does not:
 

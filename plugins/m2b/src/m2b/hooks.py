@@ -66,8 +66,9 @@ ROUTING_RULE = (
     "Routing: personal things without a home in a repository (facts to keep, private tasks, ideas) "
     "go to the second brain with m2b:capture; a project's own things go to that project's "
     "repository; when something touches both, the repository gets the content and the second brain "
-    "a pointer. How Claude should work (corrections, conventions) belongs in CLAUDE.md: the repository's "
-    "for one project, ~/.claude/CLAUDE.md for all of them; what concerns the owner's life and world "
+    "a pointer. How Claude should work (corrections, conventions) is not for the second brain: it "
+    "belongs to Claude Code, in its own memory or in a CLAUDE.md where the owner keeps such rules (the "
+    "repository's for one project, ~/.claude/CLAUDE.md for all of them); what concerns the owner's life and world "
     "across projects (people, agreements, facts, tasks) goes to the second brain, not to Claude Code's "
     "own memory."
 )

@@ -33,7 +33,8 @@ The first release. It gets its date on the day it is published.
   that has not run for three days, a store that cannot be found). It stays under Claude Code's
   10,000 character cap for a hook. `m2b distillate off` keeps it out of a project and its
   subfolders. A routing rule printed with it keeps Claude Code's own memory apart: how Claude
-  should work goes to `CLAUDE.md`, what concerns the owner's life goes to m2b.
+  should work stays with Claude Code, in its memory or in a `CLAUDE.md`; what concerns the
+  owner's life goes to m2b.
 - **Topics.** Facts that matter for one subject (a customer, a club, a project) sit under a
   topic in the distillate; a session sees the topic's name, and its facts come in when the
   project folder's path or a prompt names one of its words.
