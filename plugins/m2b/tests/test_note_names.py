@@ -56,25 +56,25 @@ class CaptureNameTest(unittest.TestCase):
     def test_every_name_made_for_a_capture_parses_back(self) -> None:
         created = datetime.datetime(2026, 3, 29, 1, 30, tzinfo=ZURICH)
         for extension in ("md", "HEIC", "jpg"):
-            name = NoteName.for_capture(created, "my-addon", extension=extension)
+            name = NoteName.for_capture(created, "my-app", extension=extension)
             with self.subTest(extension=extension):
                 self.assertEqual(NoteName.parse(str(name)), name)
 
     def test_a_source_that_is_not_a_lowercase_token_is_refused(self) -> None:
         created = datetime.datetime(2026, 3, 29, 1, 30, tzinfo=ZURICH)
-        for source in ("Claude", "2phone", "my addon", "", "phone_app"):
+        for source in ("Claude", "2phone", "my app", "", "phone_app"):
             with self.subTest(source=source), self.assertRaises(ValueError):
                 NoteName.for_capture(created, source)
 
 
 class ParseNameTest(unittest.TestCase):
     def test_a_conforming_name_parses_into_its_parts(self) -> None:
-        name = NoteName.parse("20260329T003000Z-my-addon-3f9a.heic")
+        name = NoteName.parse("20260329T003000Z-my-app-3f9a.heic")
 
         assert name is not None
         self.assertEqual(name.time, datetime.datetime(2026, 3, 29, 0, 30, tzinfo=datetime.timezone.utc))
-        self.assertEqual((name.source, name.suffix, name.extension), ("my-addon", "3f9a", "heic"))
-        self.assertEqual(str(name), "20260329T003000Z-my-addon-3f9a.heic")
+        self.assertEqual((name.source, name.suffix, name.extension), ("my-app", "3f9a", "heic"))
+        self.assertEqual(str(name), "20260329T003000Z-my-app-3f9a.heic")
 
     def test_the_old_device_source_mac_stays_valid(self) -> None:
         self.assertIsNotNone(NoteName.parse("20260329T003000Z-mac-3f9a.md"))

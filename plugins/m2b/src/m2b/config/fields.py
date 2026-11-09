@@ -91,7 +91,7 @@ class Fields:
         return [Fields(item, self._file_name, f"{self.path_of(key)}[{index}]") for index, item in enumerate(value)]
 
     def mapping(self, key: str) -> Mapping[str, Any]:
-        """An object whose content is not validated here, such as a part's own settings."""
+        """An object whose content is not validated here, such as an add-on's own settings."""
         if key not in self._data:
             return {}
         return Fields(self.raw(key), self._file_name, self.path_of(key))._data

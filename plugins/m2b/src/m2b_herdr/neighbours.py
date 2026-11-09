@@ -1,6 +1,6 @@
 """Neighbour sessions: the other agent sessions herdr has open, one line each (B10).
 
-The hook runs only while the herdr part is on, only inside herdr (``HERDR_PANE_ID`` set) and never
+The hook runs only while the herdr add-on is on, only inside herdr (``HERDR_PANE_ID`` set) and never
 inside a curation run: hooks fire in ``claude -p`` too, and a model step has no use for neighbours.
 It reads ``herdr api snapshot`` with a 2 second limit; when that fails, it says so in one line
 instead of printing nothing, so "herdr could not be read" never looks like "no other sessions".
@@ -24,9 +24,9 @@ TIMEOUT_SECONDS = 2.0
 MAX_BLOCK_BYTES = 3072
 # The core of the same plugin, so its answer matches this version; the launcher is for outside callers.
 CORE_COMMAND = Path(__file__).resolve().parents[2] / "bin" / "m2b"
-PART = "herdr"
+ADDON = "herdr"
 # With the 2 second snapshot after it, this stays inside the hook's 10 seconds in hooks.json.
-PART_TIMEOUT_SECONDS = 5.0
+ADDON_TIMEOUT_SECONDS = 5.0
 
 HEADER = (
     "m2b neighbours (other agent sessions open in herdr right now; each: workspace · task · state · "
@@ -170,14 +170,14 @@ def hook_output(environ: Mapping[str, str], run: Runner = subprocess.run) -> str
     return render(neighbours(snapshot, own_pane))
 
 
-def part_on(environ: Mapping[str, str], run: Runner = subprocess.run) -> bool:
-    """Whether ``m2b parts list`` says the herdr part is on; m2b not set up, or no answer, is off."""
+def addon_on(environ: Mapping[str, str], run: Runner = subprocess.run) -> bool:
+    """Whether ``m2b addons list`` says the herdr add-on is on; m2b not set up, or no answer, is off."""
     try:
         result = run(
-            [str(CORE_COMMAND), "parts", "list", "--json"],
+            [str(CORE_COMMAND), "addons", "list", "--json"],
             capture_output=True,
             text=True,
-            timeout=PART_TIMEOUT_SECONDS,
+            timeout=ADDON_TIMEOUT_SECONDS,
             stdin=subprocess.DEVNULL,
             env=dict(environ),
         )
@@ -185,7 +185,7 @@ def part_on(environ: Mapping[str, str], run: Runner = subprocess.run) -> bool:
     except (OSError, subprocess.SubprocessError, ValueError):
         return False
     return isinstance(rows, list) and any(
-        isinstance(row, dict) and row.get("name") == PART and row.get("on") is True for row in rows
+        isinstance(row, dict) and row.get("name") == ADDON and row.get("on") is True for row in rows
     )
 
 

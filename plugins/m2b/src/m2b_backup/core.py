@@ -1,6 +1,6 @@
 """What the backup asks of the core, always through its launcher: settings, the task list, a finding.
 
-A part talks to the core only through ``m2b`` and the store format, as an add-on does.
+An add-on talks to the core only through ``m2b`` and the store format, as an integration does.
 """
 
 from __future__ import annotations
@@ -34,9 +34,9 @@ class Core:
         return Path(str(self._json(["config", "get", "store.path", "--json"])))
 
     def settings(self) -> Any:
-        """This machine's ``parts.backup``, ``on`` included, or None when it has none."""
-        parts = self._json(["config", "get", "parts", "--json"])
-        return parts.get("backup") if isinstance(parts, dict) else None
+        """This machine's ``addons.backup``, ``on`` included, or None when it has none."""
+        addons = self._json(["config", "get", "addons", "--json"])
+        return addons.get("backup") if isinstance(addons, dict) else None
 
     def tasks(self) -> str:
         """The task list with completed tasks, as JSON text."""

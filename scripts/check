@@ -3,14 +3,14 @@
 #
 #   scripts/check --quick <suite>    one suite with python3 on PATH: m2b (the core), worklog, backup,
 #                                    herdr, or band (the mod's tests)
-#   scripts/check                    everything; exits 1 when any part fails
+#   scripts/check                    everything; exits 1 when any stage fails
 #
-# The full run covers the unit tests of the core, of each part and of the repository tools (with
+# The full run covers the unit tests of the core, of each add-on and of the repository tools (with
 # python3, and on macOS also with /usr/bin/python3 when that is Python 3.9), ruff, mypy,
 # the shell linter, the plugin manifest, the tests of the band mod, the B/X coverage report and
 # the end-to-end scenarios at the stub level.
 #
-# The parts' tests sit in plugins/m2b/tests/parts/<part>/ under a folder without __init__.py, so
+# The add-ons' tests sit in plugins/m2b/tests/addons/<add-on>/ under a folder without __init__.py, so
 # the core's discovery does not descend into them and each runs as its own suite.
 set -eu
 
@@ -22,7 +22,7 @@ readonly LEGACY_PYTHON=/usr/bin/python3
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$repo_root"
 
-failed_parts=""
+failed_stages=""
 
 # POSIX sh has no local variables, so the functions below read their arguments as $1..$n
 # and give every variable they set a name no other function uses.
@@ -49,29 +49,29 @@ run_unit_tests() {
 
 readonly PLUGIN=plugins/m2b
 
-# Arguments: python, suite (m2b for the core, else a part's name).
+# Arguments: python, suite (m2b for the core, else an add-on's name).
 run_suite() {
     if [ "$2" = m2b ]; then
         run_unit_tests "$1" "$PLUGIN/tests" m2b "$PLUGIN/src"
     else
-        run_unit_tests "$1" "$PLUGIN/tests/parts/$2" "$2" "$PLUGIN/src"
+        run_unit_tests "$1" "$PLUGIN/tests/addons/$2" "$2" "$PLUGIN/src"
     fi
 }
 
 suites() {
     echo m2b
-    for suite_folder in "$PLUGIN"/tests/parts/*/; do
+    for suite_folder in "$PLUGIN"/tests/addons/*/; do
         basename "$suite_folder"
     done
 }
 
-# Arguments: part name, command. Runs one part and records its name when it fails.
-part() {
-    part_name=$1
+# Arguments: stage name, command. Runs one stage and records its name when it fails.
+stage() {
+    stage_name=$1
     shift
-    echo "== $part_name"
+    echo "== $stage_name"
     if ! "$@"; then
-        failed_parts="$failed_parts $part_name"
+        failed_stages="$failed_stages $stage_name"
     fi
 }
 
@@ -167,7 +167,7 @@ if [ "$#" -gt 0 ]; then
         claude plugin test "$PLUGIN" || quick_status=1
         exit "$quick_status"
     fi
-    if [ "$2" != m2b ] && [ ! -d "$PLUGIN/tests/parts/$2" ]; then
+    if [ "$2" != m2b ] && [ ! -d "$PLUGIN/tests/addons/$2" ]; then
         echo "no such suite: $2" >&2
         usage
     fi
@@ -184,17 +184,17 @@ if [ "${CI:-}" = true ] && ! command -v claude >/dev/null 2>&1; then
     exit 1
 fi
 
-part unit-tests all_unit_tests
-part ruff ruff_checks
-part mypy mypy_checks
-part shellcheck shell_checks
-part manifests manifest_checks
-part band band_tests
-part coverage coverage_report
-part e2e scripts/e2e --level stub
+stage unit-tests all_unit_tests
+stage ruff ruff_checks
+stage mypy mypy_checks
+stage shellcheck shell_checks
+stage manifests manifest_checks
+stage band band_tests
+stage coverage coverage_report
+stage e2e scripts/e2e --level stub
 
-if [ -n "$failed_parts" ]; then
-    echo "check: FAILED:$failed_parts"
+if [ -n "$failed_stages" ]; then
+    echo "check: FAILED:$failed_stages"
     exit 1
 fi
 echo "check: passed"

@@ -1,6 +1,6 @@
 """The ``markdown`` backend: one file per task in ``tasks/`` of the store.
 
-Creating a task is creating a file, so several machines and add-ons never write the same file.
+Creating a task is creating a file, so several machines and integrations never write the same file.
 A task file has the frontmatter keys ``status`` (open, done, dropped), ``due``, ``created`` and
 ``done``, the title as its first line and the notes below. A dropped task counts as
 completed but is no completion for ``completed_items``. A file the owner adds by hand,

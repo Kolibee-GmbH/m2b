@@ -1,5 +1,5 @@
 {
-  "description": "E12 backup (stub level): with the backup part turned on, its step running after the journal, a curation run leaves a mirror of the store and a task dump in the target folder; the backup command run directly while the task list cannot be read keeps the old dump and the mirror's copy of the folder it could not list, and says so; only the run record the curation run finished after its backup step goes into the attic. An evicted file keeping its old copy needs iCloud Drive and is covered by the part's unit tests.",
+  "description": "E12 backup (stub level): with the backup add-on turned on, its step running after the journal, a curation run leaves a mirror of the store and a task dump in the target folder; the backup command run directly while the task list cannot be read keeps the old dump and the mirror's copy of the folder it could not list, and says so; only the run record the curation run finished after its backup step goes into the attic. An evicted file keeping its old copy needs iCloud Drive and is covered by the add-on's unit tests.",
   "steps": [
     {
       "run": [
@@ -20,14 +20,14 @@
         "m2b",
         "config",
         "set",
-        "parts.backup",
+        "addons.backup",
         "{\"target\": \"~/backup\", \"attic_days\": 30}"
       ]
     },
     {
       "run": [
         "m2b",
-        "parts",
+        "addons",
         "on",
         "backup"
       ]

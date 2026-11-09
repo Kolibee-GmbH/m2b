@@ -1,5 +1,5 @@
 #!/bin/sh
-# The worklog part's command: runs this plugin's m2b_worklog package.
+# The worklog add-on's command: runs this plugin's m2b_worklog package.
 set -eu
 plugin_root=$(cd "$(dirname "$0")/.." && pwd)
 # -I keeps the working directory (the user's project in Claude Code) and PYTHONPATH off sys.path,

@@ -2,11 +2,11 @@
 
 The store is a plain folder. Everything in it is a text file you can read and back up with any
 tool; m2b has no database and no hidden index. `STORE.md` in the store repeats the rules an
-add-on needs, generated from `store.json`.
+integration needs, generated from `store.json`.
 
 ```
 <store>/
-├── STORE.md        the rules for add-ons, generated
+├── STORE.md        the rules for integrations, generated
 ├── store.json      settings every machine shares
 ├── profile.json    the owner's profile
 ├── inbox/          new captures; every client only adds files here
@@ -15,15 +15,15 @@ add-on needs, generated from `store.json`.
 ├── tasks/          only with the markdown task backend: one file per task
 └── state/
     ├── core/       the run record, the memory candidates, the open "Still current?" questions
-    ├── parts/<part>/
-    └── addons/<add-on>/
+    ├── addons/<add-on>/
+    └── integrations/<integration>/
 ```
 
 ## File names
 
 `YYYYMMDDTHHMMSSZ-<source>-<4 hex>.<ext>`, for example `20261107T091500Z-cli-a1b2.md`. The time is
 UTC, so names sort in capture order across time zones and daylight saving. `source` is a lowercase
-token that says who captured: `claude`, `cli`, `candidate`, `worklog`, or an add-on's own name.
+token that says who captured: `claude`, `cli`, `candidate`, `worklog`, or an integration's own name.
 The name never changes after capture, because links point to it.
 
 A file with any other name may be dropped into `inbox/`; the next run gives it a name of this
@@ -133,12 +133,12 @@ UTF-8) is left out of every list and named by lint until it is fixed.
 
 | What | Created by | Changed by | Removed by |
 |---|---|---|---|
-| `inbox/` | clients, add-ons, harvest, the worklog | the curating machine (name, frontmatter, trailer; never the text) | ingest moves files into the archive; normalize removes conflict copies identical to their original |
+| `inbox/` | clients, integrations, harvest, the worklog | the curating machine (name, frontmatter, trailer; never the text) | ingest moves files into the archive; normalize removes conflict copies identical to their original |
 | `corpus/` | ingest, the journal | the journal (appends to the month's file) | lint, only conflict copies identical to their original |
 | `memory/` | ingest | ingest, refresh, the sorting step, a migration after an update, harvest (only `## Current`, from "Still current?" answers), lint (a broken link it repairs) | nobody |
 | `state/core/` | the curation run | the curating machine | harvest prunes settled candidates |
-| tasks (`tasks/` with the `markdown` backend, or the Reminders list) | you, add-ons, capture (a follow-up), ingest, the curation run (review, candidates, "Still current?" questions) | you; the band ticks or drops a curator task; the curation run completes its review task when nothing needs you | harvest and the refresh step, once a curator task is settled or its item is gone; you |
-| `state/parts/<p>/`, `state/addons/<a>/` | that part or add-on | the same | the same |
+| tasks (`tasks/` with the `markdown` backend, or the Reminders list) | you, integrations, capture (a follow-up), ingest, the curation run (review, candidates, "Still current?" questions) | you; the band ticks or drops a curator task; the curation run completes its review task when nothing needs you | harvest and the refresh step, once a curator task is settled or its item is gone; you |
+| `state/addons/<a>/`, `state/integrations/<i>/` | that add-on or integration | the same | the same |
 
 Nothing captured is ever deleted by m2b.
 

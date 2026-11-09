@@ -73,14 +73,14 @@ class CleanStoreTest(LintFixture):
 
     def test_an_excel_lock_file_beside_the_worklog_export_is_no_finding_and_stays(self) -> None:
         """Excel writes ~$<name> while the owner has the worklog's export open."""
-        self.write("state/parts/worklog/ledger.xlsx", b"xlsx")
-        self.write("state/parts/worklog/~$ledger.xlsx", b"lock")
+        self.write("state/addons/worklog/ledger.xlsx", b"xlsx")
+        self.write("state/addons/worklog/~$ledger.xlsx", b"lock")
         old = (NOW - datetime.timedelta(days=2)).timestamp()
-        os.utime(self.root / "state/parts/worklog/~$ledger.xlsx", (old, old))
+        os.utime(self.root / "state/addons/worklog/~$ledger.xlsx", (old, old))
 
         self.assertEqual(self.findings(), [])
         self.assertEqual(lint.fix(self.store, now=NOW), [])
-        self.assertTrue((self.root / "state/parts/worklog/~$ledger.xlsx").exists())
+        self.assertTrue((self.root / "state/addons/worklog/~$ledger.xlsx").exists())
 
 
 class CorpusSchemaTest(LintFixture):

@@ -1,7 +1,7 @@
 {
   "name": "m2b",
-  "description": "A second brain for Claude Code: capture notes, search them, see your tasks, and get a small curated distillate in every session. Optional parts, off until set up: the band above the prompt, herdr neighbours, a worklog and a local backup.",
-  "version": "0.1.1",
+  "description": "A second brain for Claude Code: capture notes, search them, see your tasks, and get a small curated distillate in every session. Add-ons, off until set up: the band above the prompt, herdr neighbours, a worklog and a local backup.",
+  "version": "0.2.0",
   "author": {
     "name": "m2b contributors"
   },

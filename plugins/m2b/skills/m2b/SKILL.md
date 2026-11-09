@@ -1,8 +1,8 @@
 ---
 name: m2b
-description: The entry point of m2b, the owner's second brain - says what it is and what to type, and with an argument guides through setup, shows the status or checks the machine. Use when the user types /m2b:m2b, asks "what is m2b", "how do I use my second brain", "what can m2b do", "is my second brain working", or wants the optional parts (band, herdr, worklog, backup) explained or turned on.
-argument-hint: "[setup | status | doctor | parts]"
-allowed-tools: Bash(m2b status), Bash(m2b status *), Bash(m2b doctor), Bash(m2b doctor *), Bash(m2b parts *)
+description: The entry point of m2b, the owner's second brain - says what it is and what to type, and with an argument guides through setup, shows the status or checks the machine. Use when the user types /m2b:m2b, asks "what is m2b", "how do I use my second brain", "what can m2b do", "is my second brain working", or wants the add-ons (band, herdr, worklog, backup) explained or turned on.
+argument-hint: "[setup | status | doctor | addons]"
+allowed-tools: Bash(m2b status), Bash(m2b status *), Bash(m2b doctor), Bash(m2b doctor *), Bash(m2b addons *)
 ---
 
 # m2b
@@ -23,26 +23,26 @@ type, one line each:
 - `/m2b:m2b setup` sets this machine up, step by step
 - `/m2b:m2b status` shows the inbox, the last curation run and the backends
 - `/m2b:m2b doctor` checks everything m2b needs on this machine
-- `/m2b:m2b parts` lists the optional parts and what each does
+- `/m2b:m2b addons` lists the add-ons and what each does
 
 If a command below answers that m2b is not set up, say so and offer `/m2b:m2b setup`.
 
 ## `setup`
 
 Run the skill `m2b:setup` with the Skill tool. It sets up the core, says before each step what it
-does, and then offers each optional part, one at a time.
+does, and then offers each add-on, one at a time.
 
-## `parts`
+## `addons`
 
 ```bash
-m2b parts list --json
+m2b addons list --json
 ```
 
-For each part, say in one line what it does (its `summary`) and whether it is on. For each part
-that is off, ask whether to turn it on, one at a time; on a yes, run that part's setup skill,
-`m2b:<part>-setup`, with the Skill tool. herdr and the
-worklog are experimental and need herdr; say so before asking. Turning a part off is
-`m2b parts off <part>`; its settings stay.
+For each add-on, say in one line what it does (its `summary`) and whether it is on. For each
+add-on that is off, ask whether to turn it on, one at a time; on a yes, run that add-on's setup
+skill, `m2b:<add-on>-setup`, with the Skill tool. herdr and the
+worklog need herdr; say so before asking. Turning an add-on off is
+`m2b addons off <add-on>`; its settings stay.
 
 ## `status`
 
@@ -51,7 +51,7 @@ m2b status
 ```
 
 Say what it printed in a few lines: how many captures wait in the inbox, when the last curation
-ran and how it ended, which parts are on, and any backend that could not be reached, with what to
+ran and how it ended, which add-ons are on, and any backend that could not be reached, with what to
 do. Name the store format when it is not `current`: `newer` means this machine needs an m2b
 update, `migrates` that the curating machine's next run brings the store up to date. "Could not look" is not "nothing there"; say which one it is.
 

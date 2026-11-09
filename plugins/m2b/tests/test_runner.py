@@ -7,17 +7,19 @@ import json
 import os
 import signal
 import sys
-from pathlib import Path
+import unittest
+from pathlib import Path, PurePosixPath
 from typing import Any
 from unittest import mock
 
 import test_commands
-from m2b import candidates, expiry, launcher, parts
+from m2b import addons, candidates, expiry, launcher
 from m2b.atomic_file import HIDDEN_TEMP_PREFIX
 from m2b.config import machine
 from m2b.config.profile import save_profile
 from m2b.config.store_settings import load_store_settings
 from m2b.curate import machine_state, memory_guard, model, runner
+from m2b.notes.layout import STATE
 from m2b.run_record import FAILED, RUN_RECORD, RUNNING, SUCCEEDED, load_run_record
 from m2b.store.base import StoreReadError
 from m2b.store.guard import DatalessGuard
@@ -47,7 +49,7 @@ INGEST_FILES_THE_CAPTURE = [
 
 # A module step: writes what it saw (working folder, variables, the run record) next to itself.
 LINKED_NOTE = "20261103T081200Z-cli-c3d4.md"
-PART_STEP = """#!{python}
+ADDON_STEP = """#!{python}
 import json, os, sys
 from pathlib import Path
 record = Path(os.environ["SB_TEST_STORE"], "state/core/last-run.json")
@@ -61,7 +63,7 @@ seen = {{
 }}
 with open(Path(__file__).with_suffix(".seen"), "a") as out:
     out.write(json.dumps(seen) + "\\n")
-sys.exit(int(os.environ.get("SB_TEST_PART_EXIT", "0")))
+sys.exit(int(os.environ.get("SB_TEST_ADDON_EXIT", "0")))
 """
 
 
@@ -141,17 +143,19 @@ class RunnerTest(test_commands.CommandTest):
         )
         self.write("memory/dana.md", f"# Dana\n\n- Birthday on 3 March.\n\n## Evidence\n\n- [[{LINKED_NOTE[:-3]}]]\n")
 
-    def part(self, name: str, slot: str) -> Path:
-        """Turns a part on with a fake step script in ``slot`` and returns the file it reports into."""
-        script = self.bin.parent / "parts" / f"{name}-step"
+    def addon(self, name: str, slot: str) -> Path:
+        """Turns an add-on on with a fake step script in ``slot`` and returns the file it reports into."""
+        script = self.bin.parent / "addons" / f"{name}-step"
         script.parent.mkdir(parents=True, exist_ok=True)
-        script.write_text(PART_STEP.format(python=sys.executable), encoding="utf-8")
+        script.write_text(ADDON_STEP.format(python=sys.executable), encoding="utf-8")
         script.chmod(0o755)
-        fake = parts.Part(name, "a fake part", parts.PartStep(slot, (str(script), "run")))
-        patcher = mock.patch.object(parts, "PARTS", tuple(fake if part.name == name else part for part in parts.PARTS))
+        fake = addons.Addon(name, "a fake add-on", addons.AddonStep(slot, (str(script), "run")))
+        patcher = mock.patch.object(
+            addons, "ADDONS", tuple(fake if addon.name == name else addon for addon in addons.ADDONS)
+        )
         patcher.start()
         self.addCleanup(patcher.stop)
-        machine.set_part_on(self.machine, name, True)
+        machine.set_addon_on(self.machine, name, True)
         return script.with_suffix(".seen")
 
 
@@ -817,13 +821,27 @@ class PreflightTest(RunnerTest):
         self.assertEqual(record.state, FAILED)
 
 
-class PartStepTest(RunnerTest):
-    def test_part_steps_run_in_their_slots_from_this_plugin_inside_the_run(self) -> None:
+class IntegrationStateTest(unittest.TestCase):
+    def test_the_run_never_asks_for_the_state_of_an_integration(self) -> None:
+        """Covers: B82"""
+        folder = PurePosixPath(STATE, "integrations")
+
+        reaching = [
+            path
+            for path in runner._preflight_paths(START)
+            if folder.is_relative_to(path) or PurePosixPath(path).is_relative_to(folder)
+        ]
+
+        self.assertEqual(reaching, [])
+
+
+class AddonStepTest(RunnerTest):
+    def test_addon_steps_run_in_their_slots_from_this_plugin_inside_the_run(self) -> None:
         self.curating()
         self.capture()
         self.model({"m2b:ingest": INGEST_FILES_THE_CAPTURE})
-        before = self.part("worklog", "before_ingest")
-        after = self.part("backup", "after_journal")
+        before = self.addon("worklog", "before_ingest")
+        after = self.addon("backup", "after_journal")
 
         outcome = self.run_curate()
 
@@ -844,12 +862,12 @@ class PartStepTest(RunnerTest):
         fetch = 2 * datetime.timedelta(seconds=5)
         self.assertEqual(deadline - START, fetch + supervised + runner.CODE_STEPS_MARGIN)
         self.assertTrue(after.exists())
-        self.assertEqual(record.parts, ("worklog", "backup"))
+        self.assertEqual(record.addons, ("worklog", "backup"))
 
-    def test_a_failing_part_step_is_reported_and_the_run_goes_on(self) -> None:
+    def test_a_failing_addon_step_is_reported_and_the_run_goes_on(self) -> None:
         self.curating()
-        self.part("worklog", "before_ingest")
-        self.environ["SB_TEST_PART_EXIT"] = "4"
+        self.addon("worklog", "before_ingest")
+        self.environ["SB_TEST_ADDON_EXIT"] = "4"
 
         outcome = self.run_curate()
 
@@ -860,11 +878,11 @@ class PartStepTest(RunnerTest):
         self.assertEqual(record.steps[-1].name, "review")
         self.assertIn("exit 4", record.steps[1].detail)
 
-    def test_a_part_turned_off_has_no_step_and_leaves_nothing_to_clear(self) -> None:
+    def test_an_addon_turned_off_has_no_step_and_leaves_nothing_to_clear(self) -> None:
         """Covers: B64"""
         self.curating()
-        seen = self.part("worklog", "before_ingest")
-        machine.set_part_on(self.machine, "worklog", False)
+        seen = self.addon("worklog", "before_ingest")
+        machine.set_addon_on(self.machine, "worklog", False)
 
         outcome = self.run_curate()
 
@@ -873,11 +891,11 @@ class PartStepTest(RunnerTest):
         record = load_run_record(self.store)
         assert record is not None
         self.assertNotIn("worklog", [step.name for step in record.steps])
-        self.assertEqual((record.findings, record.parts), ((), ()))
+        self.assertEqual((record.findings, record.addons), ((), ()))
         self.assertEqual(self.review_tasks(), [])
 
-    def test_the_real_part_steps_are_this_plugins_own_commands(self) -> None:
-        steps = {part.name: part.step for part in parts.PARTS if part.step}
+    def test_the_real_addon_steps_are_this_plugins_own_commands(self) -> None:
+        steps = {addon.name: addon.step for addon in addons.ADDONS if addon.step}
         self.assertEqual(set(steps), {"worklog", "backup"})
         for step in steps.values():
             assert step is not None

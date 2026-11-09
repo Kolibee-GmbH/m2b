@@ -12,7 +12,7 @@
 <p align="center">
   <a href="#install"><strong>Install</strong></a> ·
   <a href="#features">Features</a> ·
-  <a href="#optional-parts">Optional parts</a> ·
+  <a href="#add-ons">Add-ons</a> ·
   <a href="#configure">Configure</a> ·
   <a href="docs/getting-started.md">Getting started</a> ·
   <a href="CHANGELOG.md">Changelog</a>
@@ -34,7 +34,7 @@
 ![A Claude Code session in an unrelated project answers when Sam brings the plywood and where the shed key is, straight from the distillate, without a tool call; above the prompt the band asks whether planning the trip to Porto is still current, with keep and drop, below it the status line reads "brain: 2 in inbox · curated 21:36"](docs/images/session-start.png)
 
 <sub>A new session in an unrelated repository already knows. The band above the prompt and the
-status line below it are the optional `band` part; Claude Code draws the ⚠ in front of every
+status line below it are the optional `band` add-on; Claude Code draws the ⚠ in front of every
 plugin's status line, it is not a warning. All names and notes are invented.</sub>
 
 **Platform.** macOS 14 or newer, or Linux. Not Windows. Apple Reminders, Calendar and iCloud Drive
@@ -56,7 +56,7 @@ expiring, no memory link to repair) uses no model.
 | curation run | the background run that files the inbox, on one machine per store, the curating machine |
 | distillate | `memory/MEMORY.md`: lasting facts, each pointing to its fact file in `memory/`, and under "Current" what is going on now |
 | topic | a heading in the distillate for one subject, such as a customer or a club, whose facts come in only when a session is about it |
-| part | an optional piece of m2b, off until its own setup: `band`, `backup`, `herdr`, `worklog` |
+| add-on | an optional piece of m2b, off until its own setup: `band`, `backup`, `herdr`, `worklog` |
 
 ## Who it is for
 
@@ -106,7 +106,7 @@ Code finds it. Then, in a Claude Code session:
 /m2b:m2b setup
 ```
 
-`setup` walks through the core and then offers each optional part, saying before each step what
+`setup` walks through the core and then offers each add-on, saying before each step what
 it does. The quickest way is the first one it offers: a new folder `~/m2b` with tasks as Markdown
 files, nothing else to install. It never overwrites a store that exists: pointed at a folder
 another machine already uses, it joins it. [Getting started](docs/getting-started.md) walks
@@ -143,7 +143,7 @@ holds, the curating machine's next run migrates the store by itself; update that
 
 ### Uninstalling
 
-1. Turn the parts off that left something outside Claude Code: with the worklog on, run
+1. Turn the add-ons off that left something outside Claude Code: with the worklog on, run
    `/m2b:worklog-setup remove` in a session, which turns it off and unlinks its herdr recorder;
    and delete any schedule you set up for `m2b curate` (a Shortcuts automation or a cron line).
 2. Uninstall the plugin in `/plugin`. That stops every hook, the band and the recorder.
@@ -220,34 +220,34 @@ steps, the one-off runs for a distillate moved over from another tool, and the s
 
 A line under Current that no capture has touched for a month comes back as a task "Still
 current? ...": tick it and it stays; drop it in the band, or delete the task, and it leaves the
-distillate. The worklog part may propose a fact the same way, as "Remember? ...": tick it and the
+distillate. The worklog add-on may propose a fact the same way, as "Remember? ...": tick it and the
 next run files it; drop it in the band, or delete the task, and it does not come back for 90 days.
 
-## Optional parts
+## Add-ons
 
-m2b is one plugin. Four parts of it are off until you set them up; each has its own setup skill,
-and `m2b parts list` shows which are on.
+m2b is one plugin. Four add-ons in it are off until you set them up; each has its own setup skill,
+and `m2b addons list` shows which are on.
 
-| Part | What it adds | Needs | Setup |
+| Add-on | What it adds | Needs | Setup |
 |---|---|---|---|
 | `band` | A band above the prompt with memory candidates and "Still current?" questions to keep or drop in place and the review task with its findings, and a status line such as `brain: 3 in inbox · curated 18:02` | mods turned on in Claude Code | `/m2b:band-setup` |
 | `backup` | After each run, a local snapshot: a mirror of the store, a dated attic of replaced files, a dump of the task list | a folder for the snapshot, outside the store; the curating machine | `/m2b:backup-setup` |
-| `herdr` (experimental) | At session start, the other agent sessions open in [herdr](https://herdr.dev), the terminal workspace manager for agents, so overlapping work is noticed before it starts | herdr 0.9 or later, sessions started in a herdr pane | `/m2b:herdr-setup` |
-| `worklog` (experimental) | A daily worklog of your sessions in herdr: topics, time spans per sphere of work, booking proposals for billable spheres, a ledger with CSV and XLSX exports | herdr 0.9 or later; the curating machine, which alone records; your spheres of work and customers, which its setup asks for | `/m2b:worklog-setup` |
+| `herdr` | At session start, the other agent sessions open in [herdr](https://herdr.dev), the terminal workspace manager for agents, so overlapping work is noticed before it starts | herdr 0.9 or later, sessions started in a herdr pane | `/m2b:herdr-setup` |
+| `worklog` | A daily worklog of your sessions in herdr: topics, time spans per sphere of work, booking proposals for billable spheres, a ledger with CSV and XLSX exports | herdr 0.9 or later; the curating machine, which alone records; your spheres of work and customers, which its setup asks for | `/m2b:worklog-setup` |
 
-Experimental means it works for its author and may change without notice: herdr is a terminal
-workspace manager most Claude Code users do not run, and the worklog is a timesheet tool inside a
-notes product. To turn a part off again, keeping its settings:
+[Add-ons](docs/addons.md) describes each one: what it reads and writes on the machine and in the
+store, its commands, and how you see that it runs. To turn an add-on off again, keeping its
+settings:
 
 ```bash
-m2b parts off band
+m2b addons off band
 ```
 
 ## Cost and privacy
 
 **The model.** Only a curation run calls a model, and only for a step with something to read:
 ingest for new captures, refresh for a fact past its day, lint for a broken link in memory with
-exactly one candidate, and the worklog's verdict once a day while that part is on, unless the day
+exactly one candidate, and the worklog's verdict once a day while that add-on is on, unless the day
 had no sessions. Each step runs with `curation.model` (`haiku` by default; setup offers `sonnet`
 for more careful filing at a higher cost) and stops after `curation.max_turns` turns;
 `curation.max_budget_usd`, unset by default, caps its spending. It runs on your Claude Code login
@@ -256,16 +256,17 @@ and is billed like your sessions.
 **What reaches the model.** In a curation step: what the step's rules allow, nothing else. Ingest
 and lint read the captures and memory files; refresh reads the distillate, the fact files that are
 due and any archive file; sorting reads memory. Ingest, lint, `--refresh-all` and the worklog step
-also get `m2b search` results over inbox, archive and memory. With the worklog part, its step sees
-the period's prompts, commits and session folders, the inbox, memory and your task list (below). In every session:
+also get `m2b search` results over inbox, archive and memory. With the worklog add-on, its step sees
+the period's prompts and last answers, commits and session folders, the inbox, memory and your task list (below). In every session:
 the distillate, the routing rule and the notices at session start; before a prompt that names a
-topic, that topic's facts; with the herdr part, the titles and folders of your other agent
+topic, that topic's facts; with the herdr add-on, the titles and folders of your other agent
 sessions.
 
 **What the worklog reads** (only while on, only on the curating machine): the herdr events its
-recorder writes to `~/.local/state/m2b/worklog/`, the prompts of your Claude Code transcripts for
-the period (with credentials and long tokens redacted), your own git commits, and the inbox. Its
-ledger with time spans and booking proposals lands in the store under `state/parts/worklog/`.
+recorder writes to `~/.local/state/m2b/worklog/`, the prompts and the end of each session's last
+answer from your Claude Code transcripts for the period (with credentials and long tokens
+redacted), your own git commits, and the inbox; its model step may also search the archive. Its
+ledger with time spans and booking proposals lands in the store under `state/addons/worklog/`.
 A time span is when a workspace was in use: an agent at work, the workspace in focus (herdr cannot
 tell typing from looking, so focus counts for a limited time after each event), or messages in its
 transcript at most 15 minutes apart, merged across gaps of up to 15 minutes; waiting for an
@@ -278,7 +279,7 @@ Three files, each with one owner:
 
 | File | Where | Holds |
 |---|---|---|
-| `config.json` | `~/.config/m2b/` on each machine | the store's folder and backend, the calendar, absolute paths of `python3`, `claude`, `reminders` and `osascript`, which parts are on and their settings |
+| `config.json` | `~/.config/m2b/` on each machine | the store's folder and backend, the calendar, absolute paths of `python3`, `claude`, `reminders` and `osascript`, which add-ons are on and their settings |
 | `store.json` | the store | the store format, the task backend, which machine curates |
 | `profile.json` | the store | your name and language (`en` or `de`, for the task titles and notes m2b writes), and for the worklog your spheres and customers |
 
@@ -351,7 +352,7 @@ scripts/e2e --level stub    # end-to-end scenarios without a model
 ```
 
 [Architecture](docs/architecture.md) is the short tour of the code; [CONTRIBUTING.md](CONTRIBUTING.md)
-has the ground rules. To write your own client, read [Add-ons](docs/addons.md); to add a store,
+has the ground rules. To write your own client, read [Integrations](docs/integrations.md); to add a store,
 task or calendar backend, [Writing a backend](docs/writing-a-backend.md). What m2b promises to do,
 and which defects it must not have, is listed in [Behavior](docs/behavior.md).
 

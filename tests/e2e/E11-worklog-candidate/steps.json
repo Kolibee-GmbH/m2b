@@ -1,5 +1,5 @@
 {
-  "description": "E11 candidate loop from a worklog run (stub level): with the worklog part turned on, a curation run writes the day's worklog: the scripted verdict skill reads the facts and hands in a verdict with one memory candidate, the writer files the note into the inbox, the ledger and its two exports, proposes the candidate and moves the watermark, and the ingest of the same run moves the note into the corpus. The owner ticks the candidate, harvest turns it into an inbox capture, and a second run the same day writes no second worklog.",
+  "description": "E11 candidate loop from a worklog run (stub level): with the worklog add-on turned on, a curation run writes the day's worklog: the scripted verdict skill reads the facts and hands in a verdict with one memory candidate, the writer files the note into the inbox, the ledger and its two exports, proposes the candidate and moves the watermark, and the ingest of the same run moves the note into the corpus. The owner ticks the candidate, harvest turns it into an inbox capture, and a second run the same day writes no second worklog.",
   "model": {
     "skills": {
       "/m2b:worklog-verdict": {
@@ -52,7 +52,7 @@
     {
       "run": [
         "m2b",
-        "parts",
+        "addons",
         "on",
         "worklog"
       ]

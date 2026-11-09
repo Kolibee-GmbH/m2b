@@ -41,7 +41,7 @@ class FakeM2b {
   status: unknown = STATUS
   failure: string | null = null
   statusFails = false
-  /** What `m2b parts list` says of the band part: on, off, or m2b not set up on this machine. */
+  /** What `m2b addons list` says of the band add-on: on, off, or m2b not set up on this machine. */
   band: 'on' | 'off' | 'not set up' | 'broken config' = 'on'
   /** The launcher the core writes at its first session start after setup. */
   hasLauncher = true
@@ -70,12 +70,12 @@ class FakeM2b {
     expect(argv[0]).toBe(LAUNCHER)
     const args = argv.slice(1)
     this.calls.push(args)
-    if (args[0] === 'parts') {
+    if (args[0] === 'addons') {
       if (this.band === 'not set up') {
         return fail('not set up: no machine config at /home/alex/.config/m2b/config.json')
       }
       if (this.band === 'broken config') {
-        return fail('config.json: parts.band.on must be true or false, got a string')
+        return fail('config.json: addons.band.on must be true or false, got a string')
       }
       return ok(JSON.stringify([{ name: 'band', on: this.band === 'on', summary: 'the band' }]))
     }
@@ -204,7 +204,7 @@ test('nothing to show draws nothing of its own', async ($, on) => {
   await ui.unmount()
 })
 
-test('with the band part off it draws nothing and asks nothing else', async ($, on) => {
+test('with the band add-on off it draws nothing and asks nothing else', async ($, on) => {
   const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
   fake.band = 'off'
   const { clock, statuses } = await start($, on, fake)
@@ -212,7 +212,7 @@ test('with the band part off it draws nothing and asks nothing else', async ($, 
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await texts(ui)).toEqual(['engine'])
   await ui.unmount()
-  expect(fake.calls.every(call => call[0] === 'parts')).toBe(true)
+  expect(fake.calls.every(call => call[0] === 'addons')).toBe(true)
   expect(statuses.every(text => text === undefined)).toBe(true)
 })
 
@@ -224,7 +224,7 @@ test('before m2b is set up the band draws nothing and asks nothing else', async 
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await texts(ui)).toEqual(['engine'])
   await ui.unmount()
-  expect(fake.calls.every(call => call[0] === 'parts')).toBe(true)
+  expect(fake.calls.every(call => call[0] === 'addons')).toBe(true)
   expect(statuses.every(text => text === undefined)).toBe(true)
 })
 
@@ -265,7 +265,7 @@ test('inside a fenced curation step the band asks m2b nothing', async ($, on) =>
 test('an answer another session stored within 55 seconds is used without starting m2b', async ($, on) => {
   const cache = '/home/alex/.local/state/m2b'
   const files: Files = new Map([
-    [`${cache}/band-parts.json`, JSON.stringify({ writtenAtMs: NOW - 10_000, value: { ok: true, stdout: JSON.stringify([{ name: 'band', on: true }]) } })],
+    [`${cache}/band-addons.json`, JSON.stringify({ writtenAtMs: NOW - 10_000, value: { ok: true, stdout: JSON.stringify([{ name: 'band', on: true }]) } })],
     [`${cache}/band-snapshot.json`, JSON.stringify({ writtenAtMs: NOW - 10_000, value: { candidates: [{ id: 'c9', title: 'Remember? From the other session' }], review: null, error: null } })],
     [`${cache}/band-status.json`, JSON.stringify({ writtenAtMs: NOW - 10_000, value: 'brain: 7 in inbox' })],
   ])
@@ -279,7 +279,7 @@ test('an answer another session stored within 55 seconds is used without startin
   fake.candidate('c1', 'Remember? Acme moved')
   await clock.advance(60_000)
   expect(await texts(ui)).toContain('Remember? Acme moved')
-  expect(fake.calls.map(call => call[0])).toContain('parts')
+  expect(fake.calls.map(call => call[0])).toContain('addons')
   expect(JSON.parse(files.get(`${cache}/band-snapshot.json`) ?? '{}').value.candidates[0].id).toBe('c1')
   await ui.unmount()
 })
@@ -311,7 +311,7 @@ test('a slow load never replaces an answer another session started later', async
   expect(JSON.parse(files.get(cache) ?? '{}')).toEqual(newer)
 })
 
-test('turning the band part off clears what it showed', async ($, on) => {
+test('turning the band add-on off clears what it showed', async ($, on) => {
   const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
   const { clock, statuses } = await start($, on, fake)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })

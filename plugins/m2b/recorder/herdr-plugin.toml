@@ -4,7 +4,7 @@
 #
 # Every event runs record.py, which writes one line per event only while the m2b plugin is
 # installed and on in Claude Code and the local switch file says recording is on; the worklog
-# part's session-start hook writes that switch.
+# add-on's session-start hook writes that switch.
 
 id = "m2b.worklog-recorder"
 name = "m2b worklog recorder"

@@ -1,4 +1,4 @@
-"""The daily worklog, the part's ``before_ingest`` step: once a day, in a fixed order, restart-safe.
+"""The daily worklog, the add-on's ``before_ingest`` step: once a day, in a fixed order, restart-safe.
 
 Running it at every curation run would cut sessions into pieces, and an unordered write would
 double bookings after a crash.
@@ -9,7 +9,7 @@ the facts since the watermark, has the model judge them through ``m2b curate mod
 ``m2b:worklog-verdict`` reads the facts with ``m2b-worklog facts`` and hands its verdict to
 ``m2b-worklog verdict``), checks the verdict and plans what to write. Then, in this order:
 
-1. the plan is recorded as the intent in ``state/parts/worklog/intent.json``;
+1. the plan is recorded as the intent in ``state/addons/worklog/intent.json``;
 2. the note goes into the inbox, unless the inbox or the corpus holds it already (ingest files it
    later in the same run, so the distillate's current section sees the day);
 3. the ledger gets the period's spans, unless it holds the period;
@@ -19,7 +19,7 @@ the facts since the watermark, has the model judge them through ``m2b curate mod
 7. the intent is removed.
 
 A rerun that finds an intent carries out that plan, not a new one, so each missing piece is written
-once and nothing twice (B28). Nothing is written outside the inbox, ``state/parts/worklog/`` and
+once and nothing twice (B28). Nothing is written outside the inbox, ``state/addons/worklog/`` and
 the task list: bookings are proposals, because a wrong one ends up on an invoice.
 """
 
@@ -41,7 +41,7 @@ from m2b_worklog.sources import READ as SOURCE_READ
 from m2b_worklog.sources import SourceState
 from m2b_worklog.sources.inbox import is_evicted
 
-STATE_DIR = "state/parts/worklog"
+STATE_DIR = "state/addons/worklog"
 INTENT = "intent.json"
 INTENT_VERSION = 1
 WATERMARK_VERSION = 1

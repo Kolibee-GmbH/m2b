@@ -1,5 +1,5 @@
 {
-  "description": "Session start: the distillate with the routing rule and one line per notice, the nudge that starts a due curation run in the background, the launcher check, the herdr neighbours and the worklog's recording switch; the last two print nothing while their part is off. Before every prompt, the facts of each topic of the distillate the prompt names, once per session, silent on any error. All always exit 0. The band above the prompt is the mod in register.tsx and draws nothing while its part is off.",
+  "description": "Session start: the distillate with the routing rule and one line per notice, the nudge that starts a due curation run in the background, the launcher check, the herdr neighbours and the worklog's recording switch; the last two print nothing while their add-on is off. Before every prompt, the facts of each topic of the distillate the prompt names, once per session, silent on any error. All always exit 0. The band above the prompt is the mod in register.tsx and draws nothing while its add-on is off.",
   "modules": ["./register.tsx"],
   "hooks": {
     "SessionStart": [

@@ -12,7 +12,7 @@ downloaded (evicted) is never read, because reading would download it or hang: t
 the copy it has, and the backup counts it (B27). The same holds for a folder that is evicted or
 cannot be listed (under a curation run, listing an evicted folder fails, because the run turns
 downloading off): its files are unknown, not gone, so their mirror copies stay where they are.
-An attic folder older than ``attic_days`` is removed, the only thing the part deletes besides
+An attic folder older than ``attic_days`` is removed, the only thing the add-on deletes besides
 what it moves into the attic.
 """
 
@@ -160,7 +160,7 @@ def _mirrored_files(mirrored: Path) -> list[Path]:
 
 
 def _remove_leftover_temp_files(mirrored: Path) -> None:
-    """A copy a crash cut off: only this part's own temporary files, never a hidden file of the owner's."""
+    """A copy a crash cut off: only this add-on's own temporary files, never a hidden file of the owner's."""
     if mirrored.is_dir():
         for leftover in mirrored.rglob(f"{TEMP_PREFIX}*"):
             with contextlib.suppress(OSError):

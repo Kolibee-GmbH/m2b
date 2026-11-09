@@ -43,6 +43,7 @@ class StatusTest(test_runner.RunnerTest):
         self.assertEqual(status["backends"]["store"]["state"], "reachable")
         self.assertEqual(status["backends"]["tasks"]["state"], "reachable")
         self.assertEqual(status["backends"]["calendar"]["state"], "not configured")
+        self.assertEqual(status["addons"], {"band": False, "herdr": False, "worklog": False, "backup": False})
 
     def test_a_run_holding_the_lock_is_running(self) -> None:
         self.curating()
@@ -158,6 +159,7 @@ class StatusTest(test_runner.RunnerTest):
         self.assertEqual(code, cli.EXIT_OK)
         self.assertIn("inbox: 1", out)
         self.assertIn("tasks: reachable", out)
+        self.assertIn("add-ons on: none", out)
 
     def set_curating(self, machine_id: str) -> None:
         path = self.store_root / "store.json"

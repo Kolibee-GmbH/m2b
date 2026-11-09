@@ -1,9 +1,9 @@
 """The worklog's session-start hook: the recording switch and the installed recorder copy.
 
-Only the curating machine records, only while the worklog part is on, and only after
+Only the curating machine records, only while the worklog add-on is on, and only after
 ``/m2b:worklog-setup`` installed the recorder. The hook asks the core through its launcher
-(``m2b status --json``, fields ``this_machine_curates`` and ``parts``) and writes the switch ``on``
-while all three hold, else ``off``, so a take-over or ``m2b parts off worklog`` turns recording off
+(``m2b status --json``, fields ``this_machine_curates`` and ``addons``) and writes the switch ``on``
+while all three hold, else ``off``, so a take-over or ``m2b addons off worklog`` turns recording off
 at the next session, and installing m2b alone never turns recording on. When the
 core cannot answer, the switch stays as it was and one line says so (B7). An installed recorder
 copy is brought to this plugin version's files, so an update needs no step.
@@ -27,25 +27,25 @@ EXIT_USAGE = 2
 NOT_SET_UP = "m2b: not set up:"
 
 
-PARTS_TIMEOUT_SECONDS = 10.0
+ADDONS_TIMEOUT_SECONDS = 10.0
 
 
 class StatusError(Exception):
     """The core did not say whether this machine curates."""
 
 
-def worklog_part_on(paths: WorklogPaths, run: recorder.Runner = subprocess.run) -> bool | None:
-    """Whether the worklog part is on; False before setup, None when the core gave no usable answer.
+def worklog_addon_on(paths: WorklogPaths, run: recorder.Runner = subprocess.run) -> bool | None:
+    """Whether the worklog add-on is on; False before setup, None when the core gave no usable answer.
 
     It only reads the machine config, so it is asked first: a user who never turned the worklog on
     gets no status probe and no line at session start, whatever state the store is in.
     """
     try:
         result = run(
-            [str(paths.launcher), "parts", "list", "--json"],
+            [str(paths.launcher), "addons", "list", "--json"],
             capture_output=True,
             text=True,
-            timeout=PARTS_TIMEOUT_SECONDS,
+            timeout=ADDONS_TIMEOUT_SECONDS,
             stdin=subprocess.DEVNULL,
         )
     except FileNotFoundError:
@@ -76,7 +76,7 @@ class CoreStatus:
 
 
 def core_status(paths: WorklogPaths, run: recorder.Runner = subprocess.run) -> CoreStatus | None:
-    """Which machine curates and whether the worklog part is on; None when m2b is not set up here."""
+    """Which machine curates and whether the worklog add-on is on; None when m2b is not set up here."""
     try:
         result = run(
             [str(paths.launcher), "status", "--json"],
@@ -104,8 +104,8 @@ def core_status(paths: WorklogPaths, run: recorder.Runner = subprocess.run) -> C
     curates = answer.get("this_machine_curates") if isinstance(answer, dict) else None
     if not isinstance(curates, bool):
         raise StatusError(f"m2b status answered without saying which machine curates (exit {result.returncode})")
-    parts = answer.get("parts") if isinstance(answer, dict) else None
-    return CoreStatus(curates, isinstance(parts, dict) and parts.get("worklog") is True)
+    addons = answer.get("addons") if isinstance(answer, dict) else None
+    return CoreStatus(curates, isinstance(addons, dict) and addons.get("worklog") is True)
 
 
 def set_switch(paths: WorklogPaths, on: bool) -> bool:
@@ -123,11 +123,11 @@ def session_start(paths: WorklogPaths, environ: Mapping[str, str], run: recorder
     """What the hook prints: nothing unless something needs the owner."""
     if environ.get("M2B_CURATION_RUN") == "1":
         return ""
-    part_on = worklog_part_on(paths, run)
-    if part_on is None:
+    addon_on = worklog_addon_on(paths, run)
+    if addon_on is None:
         # The core's own session-start hooks report a config they cannot read; nothing changes here.
         return ""
-    if not part_on:
+    if not addon_on:
         with contextlib.suppress(OSError):
             if paths.switch.exists():
                 set_switch(paths, False)

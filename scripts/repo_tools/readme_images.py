@@ -44,7 +44,7 @@ XTERM = "@xterm/xterm@6.0.0"
 COLUMNS = 100
 BACKGROUND = "#1e1e2e"
 # Variables of the session that runs this script; inherited, they mark the recorded Claude Code as
-# a child session (no transcript, a warning line) and point m2b's herdr part at the real herdr.
+# a child session (no transcript, a warning line) and point m2b's herdr add-on at the real herdr.
 INHERITED_PREFIXES = ("CLAUDE", "HERDR_", "M2B_")
 # Where the user keeps Claude Code's config and login, when not in ~/.claude; the recording needs it.
 KEPT = frozenset({"CLAUDE_CONFIG_DIR"})
@@ -172,7 +172,7 @@ def demo_environment(environ: Mapping[str, str]) -> dict[str, str]:
 def build_demo(environ: Mapping[str, str]) -> None:
     """A fresh demo machine: setup, the band on, filed notes and memory, tasks, two captures waiting,
     and one curation run without a model, which asks whether the Porto trip, untouched since September,
-    is still current: the band's question comes from the core, not from the experimental worklog."""
+    is still current: the band's question comes from the core, not from the worklog."""
     if DEMO.exists():
         shutil.rmtree(DEMO)
     store = DEMO / "notes"
@@ -189,7 +189,7 @@ def build_demo(environ: Mapping[str, str]) -> None:
         "machine_id": MACHINE_ID,
     }
     _m2b(environ, "setup", "apply", "--answers", json.dumps(answers))
-    _m2b(environ, "parts", "on", "band")
+    _m2b(environ, "addons", "on", "band")
     for relative, (created, source, text) in CORPUS.items():
         _write(store / "corpus" / relative, f"---\ncreated: {created}\nsource: {source}\n---\n{text}\n")
     # Recent on any day the pictures are taken, so only the Porto trip is quiet enough to be asked about.

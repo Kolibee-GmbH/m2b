@@ -63,8 +63,8 @@ class RunRecord:
     last_succeeded_at: datetime.datetime | None = None
     steps: tuple[StepResult, ...] = ()
     findings: tuple[Finding, ...] = ()
-    # The parts that were on when this machine ran; ``curate take-over`` lists them.
-    parts: tuple[str, ...] = ()
+    # The add-ons that were on when this machine ran; ``curate take-over`` lists them.
+    addons: tuple[str, ...] = ()
 
     @property
     def last_activity(self) -> datetime.datetime:
@@ -106,7 +106,7 @@ def load_run_record(store: Store) -> RunRecord | None:
             last_succeeded_at=_optional_time(raw, "last_succeeded_at"),
             steps=_entries(raw.get("steps"), _step),
             findings=_entries(raw.get("findings"), _finding),
-            parts=_names(raw.get("parts")),
+            addons=_names(raw.get("addons")),
         )
     except ValueError as error:
         raise RunRecordError(f"the run record {RUN_RECORD} cannot be read: {error}") from error
@@ -136,7 +136,7 @@ def _raw(record: RunRecord) -> dict[str, Any]:
         for step in record.steps
     ]
     raw["findings"] = [{"step": item.step, "kind": item.kind, "text": item.text} for item in record.findings]
-    raw["parts"] = list(record.parts)
+    raw["addons"] = list(record.addons)
     return raw
 
 

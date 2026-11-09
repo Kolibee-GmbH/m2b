@@ -1,6 +1,6 @@
 """The facts for one period: what the verdict reads, typed, and written as ``worklog-facts.schema.json`` says.
 
-The period starts at the watermark in ``state/parts/worklog/watermark.json`` and ends now; it
+The period starts at the watermark in ``state/addons/worklog/watermark.json`` and ends now; it
 reaches at most three days back, so a long pause costs one catch-up of three days, not more. A
 watermark that cannot be read is an error rather than a fresh start, which would count again what
 an earlier worklog counted.
@@ -24,7 +24,7 @@ from m2b_worklog.sources.inbox import is_evicted, read_inbox
 from m2b_worklog.sources.transcripts import read_transcripts
 
 FACTS_VERSION = 1
-WATERMARK = "state/parts/worklog/watermark.json"
+WATERMARK = "state/addons/worklog/watermark.json"
 MAX_REACH = datetime.timedelta(days=3)
 WATERMARK_ORIGIN = "watermark"
 FIRST_RUN_ORIGIN = "first run"

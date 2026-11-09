@@ -1,4 +1,4 @@
-"""``m2b curate`` with ``--force`` and ``--detach``, ``curate take-over``, ``parts list / on / off``."""
+"""``m2b curate`` with ``--force`` and ``--detach``, ``curate take-over``, ``addons list / on / off``."""
 
 from __future__ import annotations
 
@@ -197,7 +197,7 @@ class DetachTest(test_runner.RunnerTest):
 
 
 class TakeOverTest(test_runner.RunnerTest):
-    def test_take_over_names_this_machine_and_lists_the_parts_that_were_on_there(self) -> None:
+    def test_take_over_names_this_machine_and_lists_the_addons_that_were_on_there(self) -> None:
         self.curating()
         self.set_store("sb-test-m2")
         self.write(
@@ -208,7 +208,7 @@ class TakeOverTest(test_runner.RunnerTest):
                     "machine_id": "sb-test-m2",
                     "started_at": _ago(5),
                     "finished_at": _ago(5),
-                    "parts": ["worklog", "backup"],
+                    "addons": ["worklog", "backup"],
                 }
             ),
         )
@@ -259,7 +259,7 @@ class TakeOverTest(test_runner.RunnerTest):
         self.assertEqual(code, cli.EXIT_OK, err)
         self.assertEqual(load_store_settings(self.store).curating_machine, "sb-test-m1")
         self.assertIn("cannot be read", out)
-        self.assertIn("parts that were on", out)
+        self.assertIn("add-ons that were on", out)
 
     def test_take_over_on_the_curating_machine_changes_nothing(self) -> None:
         self.curating()
@@ -300,35 +300,42 @@ class TakeOverTest(test_runner.RunnerTest):
         path.write_text(json.dumps(raw), encoding="utf-8")
 
 
-class PartsCommandTest(test_runner.RunnerTest):
-    def test_a_part_is_off_until_turned_on_and_off_keeps_its_settings(self) -> None:
+class AddonsCommandTest(test_runner.RunnerTest):
+    def test_an_addon_is_off_until_turned_on_and_off_keeps_its_settings(self) -> None:
         self.curating()
-        code, out, _ = self.run_command("parts", "list", "--json")
+        code, out, _ = self.run_command("addons", "list", "--json")
         self.assertEqual(code, cli.EXIT_OK)
         self.assertEqual([(row["name"], row["on"]) for row in json.loads(out)], [
             ("band", False), ("herdr", False), ("worklog", False), ("backup", False),
         ])  # fmt: skip
 
-        self.run_command("config", "set", "parts.backup", '{"target": "~/sb-test-backup"}')
-        self.assertEqual(self.run_command("parts", "on", "backup"), (cli.EXIT_OK, "backup is on\n", ""))
-        self.assertEqual(self.run_command("parts", "on", "backup")[1], "backup was on already\n")
-        self.assertEqual(self.run_command("parts", "off", "backup")[1], "backup is off\n")
-        self.assertEqual(load_machine_config(self.machine).parts["backup"], {"target": "~/sb-test-backup", "on": False})
+        self.run_command("config", "set", "addons.backup", '{"target": "~/sb-test-backup"}')
+        self.assertEqual(self.run_command("addons", "on", "backup"), (cli.EXIT_OK, "backup is on\n", ""))
+        self.assertEqual(self.run_command("addons", "on", "backup")[1], "backup was on already\n")
+        self.assertEqual(self.run_command("addons", "off", "backup")[1], "backup is off\n")
+        self.assertEqual(
+            load_machine_config(self.machine).addons["backup"], {"target": "~/sb-test-backup", "on": False}
+        )
 
-        code, out, _ = self.run_command("parts", "list")
+        code, out, _ = self.run_command("addons", "list")
         self.assertEqual(code, cli.EXIT_OK)
         self.assertIn("backup   off  after each curation run", out)
 
-    def test_an_unknown_part_is_a_usage_error_that_names_the_parts(self) -> None:
+    def test_an_unknown_addon_is_a_usage_error_that_names_the_addons(self) -> None:
         self.curating()
-        code, _, err = self.run_command("parts", "on", "bakcup")
+        code, _, err = self.run_command("addons", "on", "bakcup")
         self.assertEqual(code, cli.EXIT_USAGE)
         self.assertIn("band, herdr, worklog, backup", err)
 
-    def test_before_setup_the_parts_cannot_be_listed(self) -> None:
-        code, _, err = self.run_command("parts", "list", "--json")
+    def test_before_setup_the_addons_cannot_be_listed(self) -> None:
+        code, _, err = self.run_command("addons", "list", "--json")
         self.assertEqual(code, cli.EXIT_USAGE)
         self.assertIn("not set up", err)
+
+    def test_the_old_parts_command_is_a_usage_error(self) -> None:
+        self.curating()
+        code, _, _ = self.run_command("parts", "list", "--json")
+        self.assertEqual(code, cli.EXIT_USAGE)
 
 
 class _Started:

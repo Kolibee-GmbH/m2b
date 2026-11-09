@@ -1,4 +1,4 @@
-"""Printing answers: plain text for people, ``--json`` for skills, the band and add-ons."""
+"""Printing answers: plain text for people, ``--json`` for skills, the band and integrations."""
 
 from __future__ import annotations
 

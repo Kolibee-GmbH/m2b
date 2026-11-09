@@ -4,7 +4,7 @@ Start with [Architecture](docs/architecture.md): where the code is and the three
 
 ## Ground rules
 
-- Python 3.9 or newer, standard library only, in the core and every part. Every file starts with
+- Python 3.9 or newer, standard library only, in the core and every add-on. Every file starts with
   `from __future__ import annotations`; no `match` statements.
 - Tests use `unittest`. Fixtures are invented and built in temporary folders.
 - Code, docs and commit messages are in English. Commit messages follow

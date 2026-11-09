@@ -2,9 +2,9 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { BandCandidate, BandReview, BandSnapshot } from '../types'
+import { isAddonOn } from './addons'
 import { launcherPath, runM2b } from './m2b'
 import type { M2bOutcome } from './m2b'
-import { isPartOn } from './parts'
 import { shared } from './shared-cache'
 import { COULD_NOT_LOOK, statusLine } from './status-line'
 import { parseCandidates, parseReview } from './tasks'
@@ -18,9 +18,9 @@ const REFRESH_EVERY_MS = 60_000
 const TASKS_TIMEOUT_MS = 60_000
 // `m2b status` probes store, tasks and calendar one after another, 20 seconds each at most.
 const STATUS_TIMEOUT_MS = 90_000
-// `m2b parts list` reads the machine config only.
-const PARTS_TIMEOUT_MS = 10_000
-const PART = 'band'
+// `m2b addons list` reads the machine config only.
+const ADDONS_TIMEOUT_MS = 10_000
+const ADDON = 'band'
 // How the core begins its answer before setup has run, after `runM2b` dropped the `m2b: ` prefix.
 const NOT_SET_UP = 'not set up'
 const CANDIDATES_SHOWN = 3
@@ -172,7 +172,7 @@ async function clearBand($: EngineInterface): Promise<void> {
 
 /**
  * Reloads band and status line, each on its own (the status probes can take far longer), while the
- * band part is on. Off, or m2b not set up, it clears both and calls nothing else; when m2b cannot
+ * band add-on is on. Off, or m2b not set up, it clears both and calls nothing else; when m2b cannot
  * say, the status line says it could not look and the band keeps what it showed. The minute's
  * refresh takes another session's fresh answers; `isForced`, after this session's own turn, does not.
  */
@@ -185,8 +185,8 @@ async function refresh($: EngineInterface, isForced = false): Promise<void> {
   }
   const outcome = await shared(
     $,
-    'parts',
-    () => runM2b($, ['parts', 'list', '--json'], PARTS_TIMEOUT_MS),
+    'addons',
+    () => runM2b($, ['addons', 'list', '--json'], ADDONS_TIMEOUT_MS),
     isOutcome,
     isForced,
   )
@@ -198,7 +198,7 @@ async function refresh($: EngineInterface, isForced = false): Promise<void> {
     }
     return
   }
-  if (!isPartOn(outcome.stdout, PART)) {
+  if (!isAddonOn(outcome.stdout, ADDON)) {
     await clearBand($)
     return
   }

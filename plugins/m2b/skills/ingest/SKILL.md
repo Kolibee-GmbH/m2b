@@ -170,7 +170,7 @@ read its members too (the `.jpg` reading copy where there is one). Then, in this
 A capture with `source: candidate` is a fact the owner already confirmed: file its text as a
 fact as it stands, without weighing it again.
 
-A capture with `kind: worklog` is the day's worklog, written by the worklog part from the
+A capture with `kind: worklog` is the day's worklog, written by the worklog add-on from the
 owner's sessions. It holds no facts and no tasks to file: its proposals for memory are candidates
 already. Use its topics only for `## Current` (what the owner is working on now; replace a line
 about the same work instead of adding one), then note and move it like any capture.

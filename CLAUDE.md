@@ -3,7 +3,7 @@
 ## About
 
 An open-source second brain for Claude Code: capture notes, curate them into an archive and a
-small distillate every session sees, tasks in Apple Reminders or Markdown files, optional parts
+small distillate every session sees, tasks in Apple Reminders or Markdown files, add-ons
 (band mod, herdr neighbours, worklog, backup), all in one plugin. [Architecture](docs/architecture.md)
 is the tour of the code; [Behavior](docs/behavior.md) lists the rules the tests cover.
 
@@ -15,7 +15,7 @@ Calendar via JavaScript for Automation); Linux with the folder store and Markdow
 
 ## Current Status
 
-0.1.1 is the current release, written up in [CHANGELOG.md](CHANGELOG.md); the repository is not
+0.2.0 is the current release, written up in [CHANGELOG.md](CHANGELOG.md); the repository is not
 published yet. New changes go under `## [Unreleased]`; how a release is made is in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 

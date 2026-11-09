@@ -269,10 +269,10 @@ class NewStoreTest(SetupTest):
         self.assertFalse((self.store_root / "typo").exists())
         self.assertFalse(self.machine.config_file.exists())
 
-    def test_each_part_is_listed_with_whether_it_is_on(self) -> None:
+    def test_each_addon_is_listed_with_whether_it_is_on(self) -> None:
         _, result, _ = self.apply(self.answers())
 
-        self.assertEqual([(part["name"], part["on"]) for part in result["parts"]], [
+        self.assertEqual([(addon["name"], addon["on"]) for addon in result["addons"]], [
             ("band", False), ("herdr", False), ("worklog", False), ("backup", False),
         ])  # fmt: skip
 
@@ -393,13 +393,13 @@ class JoinTest(SetupTest):
         self.assertEqual(code, cli.EXIT_USAGE)
         self.assertFalse(self.machine.config_file.exists())
 
-    def test_an_existing_machine_config_keeps_its_id_and_parts(self) -> None:
+    def test_an_existing_machine_config_keeps_its_id_and_addons(self) -> None:
         self.existing_store(curating="sb-test-m1")
         self.machine.config_file.parent.mkdir(parents=True)
         self.machine.config_file.write_text(json.dumps({
             "version": 1, "machine_id": "sb-test-m1", "store": {"backend": "folder", "path": "/elsewhere"},
             "curation": {"model_timeout_minutes": 20},
-            "parts": {"backup": {"on": True, "target": "~/sb-test-backup"}},
+            "addons": {"backup": {"on": True, "target": "~/sb-test-backup"}},
         }), encoding="utf-8")  # fmt: skip
 
         code, result, err = self.apply(
@@ -411,8 +411,8 @@ class JoinTest(SetupTest):
         self.assertEqual(raw["machine_id"], "sb-test-m1")
         self.assertEqual(raw["store"]["path"], str(self.store_root))
         self.assertEqual(raw["curation"], {"model_timeout_minutes": 20})
-        self.assertEqual(raw["parts"], {"backup": {"on": True, "target": "~/sb-test-backup"}})
-        self.assertEqual([part["name"] for part in result["parts"] if part["on"]], ["backup"])
+        self.assertEqual(raw["addons"], {"backup": {"on": True, "target": "~/sb-test-backup"}})
+        self.assertEqual([addon["name"] for addon in result["addons"] if addon["on"]], ["backup"])
 
 
 class InspectTest(SetupTest):
@@ -516,6 +516,15 @@ class FirstRunInspectTest(SetupTest):
         self.assertEqual((code, err), (cli.EXIT_OK, ""))
         self.assertIn("machine config: missing", out)
         self.assertIn("store: none named", out)
+
+
+class StoreContractTest(unittest.TestCase):
+    def test_the_contract_gives_an_integration_its_own_state_folder(self) -> None:
+        """Covers: B82"""
+        contract = setup.store_contract(2, "markdown", None)
+
+        self.assertIn("- `state/integrations/<your name>/`: your own state.", contract)
+        self.assertNotIn("add-on", contract.lower())
 
 
 class SetupSkillTest(unittest.TestCase):

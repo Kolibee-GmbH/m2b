@@ -7,10 +7,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from m2b.addons import ADDON_NAMES, ON
 from m2b.config.errors import FormatTooNewError, InvalidConfigError, NotSetUpError
 from m2b.config.fields import Fields
 from m2b.config.json_file import read_json_object, with_value, write_json_object
-from m2b.parts import ON, PART_NAMES
 from m2b.paths import MachinePaths, expand
 
 CONFIG_FILE_NAME = "config.json"
@@ -74,8 +74,8 @@ class MachineConfig:
     executables: Mapping[str, str]
     curation: CurationSettings
     distillate: DistillateSettings = field(default_factory=DistillateSettings)
-    # Each part's settings as written, ``on`` included; ``m2b.parts.is_on`` reads them.
-    parts: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    # Each add-on's settings as written, ``on`` included; ``m2b.addons.is_on`` reads them.
+    addons: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
 
 
 def parse_machine_config(raw: object, home: Path) -> MachineConfig:
@@ -85,7 +85,7 @@ def parse_machine_config(raw: object, home: Path) -> MachineConfig:
     if version > KNOWN_CONFIG_VERSION:
         raise FormatTooNewError(CONFIG_FILE_NAME, version, KNOWN_CONFIG_VERSION)
     fields.reject_unknown(
-        ("version", "machine_id", "store", "calendar", "executables", "curation", "distillate", "parts")
+        ("version", "machine_id", "store", "calendar", "executables", "curation", "distillate", "addons")
     )
     return MachineConfig(
         version=version,
@@ -95,7 +95,7 @@ def parse_machine_config(raw: object, home: Path) -> MachineConfig:
         executables=_executables(fields.section("executables", required=False)),
         curation=_curation(fields.section("curation", required=False)),
         distillate=_distillate(fields.section("distillate", required=False), home),
-        parts=_parts(fields.section("parts", required=False)),
+        addons=_addons(fields.section("addons", required=False)),
     )
 
 
@@ -151,15 +151,15 @@ def _distillate(fields: Fields, home: Path) -> DistillateSettings:
     return DistillateSettings(skip_under=tuple(folders))
 
 
-def _parts(fields: Fields) -> Mapping[str, Mapping[str, Any]]:
-    """Each known part's object; ``on`` must be a boolean, everything else is the part's own."""
-    fields.reject_unknown(PART_NAMES)
-    parts = {}
+def _addons(fields: Fields) -> Mapping[str, Mapping[str, Any]]:
+    """Each known add-on's object; ``on`` must be a boolean, everything else is the add-on's own."""
+    fields.reject_unknown(ADDON_NAMES)
+    addons = {}
     for name in fields.names():
-        part = fields.section(name)
-        part.boolean(ON, default=False)
-        parts[name] = fields.mapping(name)
-    return parts
+        addon = fields.section(name)
+        addon.boolean(ON, default=False)
+        addons[name] = fields.mapping(name)
+    return addons
 
 
 def load_machine_config(machine: MachinePaths) -> MachineConfig:
@@ -182,18 +182,18 @@ def set_machine_config_value(machine: MachinePaths, dotted_key: str, value: obje
     save_machine_config(machine, with_value(raw, dotted_key, value))
 
 
-def set_part_on(machine: MachinePaths, name: str, on: bool) -> bool:
-    """Turns a part on or off and keeps its settings; False when it was so already."""
+def set_addon_on(machine: MachinePaths, name: str, on: bool) -> bool:
+    """Turns an add-on on or off and keeps its settings; False when it was so already."""
     raw = _raw_config(machine)
-    parts = raw.setdefault("parts", {})
-    if not isinstance(parts, dict):
-        raise InvalidConfigError(f"{CONFIG_FILE_NAME}: parts is not an object")
-    part = parts.setdefault(name, {})
-    if not isinstance(part, dict):
-        raise InvalidConfigError(f"{CONFIG_FILE_NAME}: parts.{name} is not an object")
-    if part.get(ON, False) is on:
+    addons = raw.setdefault("addons", {})
+    if not isinstance(addons, dict):
+        raise InvalidConfigError(f"{CONFIG_FILE_NAME}: addons is not an object")
+    addon = addons.setdefault(name, {})
+    if not isinstance(addon, dict):
+        raise InvalidConfigError(f"{CONFIG_FILE_NAME}: addons.{name} is not an object")
+    if addon.get(ON, False) is on:
         return False
-    part[ON] = on
+    addon[ON] = on
     save_machine_config(machine, raw)
     return True
 

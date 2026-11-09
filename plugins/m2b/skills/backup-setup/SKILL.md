@@ -1,15 +1,15 @@
 ---
 name: backup-setup
-description: Sets up the m2b backup on this machine - the folder that holds the snapshot and how many days replaced files are kept - and turns the backup part on so it runs after each curation run, or turns it off with "remove". Use when the user says "set up the backup", "back up my second brain", "Backup einrichten", "change the backup folder", "remove the backup", "Backup entfernen", or when the owner turns on the backup part. Running it again with the same answers changes nothing.
-allowed-tools: Bash(m2b config get *), Bash(m2b config set parts.backup.target *), Bash(m2b config set parts.backup.attic_days *), Bash(m2b parts on backup), Bash(m2b parts off backup), Bash(m2b-backup run), Bash(m2b-backup run *), Bash(m2b status), Bash(m2b status *)
+description: Sets up the m2b backup on this machine - the folder that holds the snapshot and how many days replaced files are kept - and turns the backup add-on on so it runs after each curation run, or turns it off with "remove". Use when the user says "set up the backup", "back up my second brain", "Backup einrichten", "change the backup folder", "remove the backup", "Backup entfernen", or when the owner turns on the backup add-on. Running it again with the same answers changes nothing.
+allowed-tools: Bash(m2b config get *), Bash(m2b config set addons.backup.target *), Bash(m2b config set addons.backup.attic_days *), Bash(m2b addons on backup), Bash(m2b addons off backup), Bash(m2b-backup run), Bash(m2b-backup run *), Bash(m2b status), Bash(m2b status *)
 ---
 
 # Backup setup
 
 iCloud Drive and other synced folders copy a mistake to every machine within minutes, so they are
-no backup. This part of m2b keeps a local snapshot of the store after each curation run: a mirror of
-its files, the older versions of what changed in an attic folder per day, and a dump of the task
-list. You ask, and the commands below write everything.
+no backup. This add-on of m2b keeps a local snapshot of the store after each curation run: a
+mirror of its files, the older versions of what changed in an attic folder per day, and a dump of
+the task list. You ask, and the commands below write everything.
 
 Run each `m2b` command in a Bash call of its own, as shown: nothing chained before or after it,
 no `echo $?`. This skill may run the command alone without asking, and Claude Code reports a
@@ -20,7 +20,7 @@ If the owner asked to remove the backup, go to section 4.
 ## 1. What is set already
 
 ```bash
-m2b config get parts --json
+m2b config get addons --json
 ```
 
 If it holds `backup` with a `target`, show the owner its `target`, its `attic_days` and whether
@@ -40,15 +40,15 @@ If it holds `backup` with a `target`, show the owner its `target`, its `attic_da
 One command after the other:
 
 ```bash
-m2b config set parts.backup.target '<folder>'
+m2b config set addons.backup.target '<folder>'
 ```
 
 ```bash
-m2b config set parts.backup.attic_days 30
+m2b config set addons.backup.attic_days 30
 ```
 
 ```bash
-m2b parts on backup
+m2b addons on backup
 ```
 
 ```bash
@@ -73,8 +73,8 @@ curation; a second backup set up on the curating machine covers the store meanwh
 ## 4. Remove
 
 ```bash
-m2b parts off backup
+m2b addons off backup
 ```
 
-The settings stay in `config.json`, so turning the part on again with this skill keeps the folder.
-The snapshot in the folder stays too; it is the owner's to delete.
+The settings stay in `config.json`, so turning the add-on on again with this skill keeps the
+folder. The snapshot in the folder stays too; it is the owner's to delete.

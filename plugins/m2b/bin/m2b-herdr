@@ -1,5 +1,5 @@
 #!/bin/sh
-# The herdr part's command: runs this plugin's m2b_herdr package.
+# The herdr add-on's command: runs this plugin's m2b_herdr package.
 set -eu
 plugin_root=$(cd "$(dirname "$0")/.." && pwd)
 # -I keeps the working directory (the user's project in Claude Code) and PYTHONPATH off sys.path,

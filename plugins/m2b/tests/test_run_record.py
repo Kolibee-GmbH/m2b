@@ -49,7 +49,7 @@ class RunRecordTest(unittest.TestCase):
                 Finding("lint", ACTION, "memory/dana.md links a missing note"),
                 Finding("lint", INFO, "3 evicted"),
             ),
-            parts=("worklog", "backup"),
+            addons=("worklog", "backup"),
         )
 
         write_run_record(self.store, record)
@@ -59,7 +59,7 @@ class RunRecordTest(unittest.TestCase):
         self.assertEqual(
             raw["steps"][1], {"name": "ingest", "result": "failed", "detail": "timed out after 15 minutes"}
         )
-        self.assertEqual(raw["parts"], ["worklog", "backup"])
+        self.assertEqual(raw["addons"], ["worklog", "backup"])
 
     def test_times_are_written_in_whole_seconds_so_they_read_back(self) -> None:
         precise = START.replace(microsecond=279691)
@@ -80,7 +80,7 @@ class RunRecordTest(unittest.TestCase):
         record = load_run_record(self.store)
 
         assert record is not None
-        self.assertEqual((record.steps, record.findings, record.parts), ((), (), ()))
+        self.assertEqual((record.steps, record.findings, record.addons), ((), (), ()))
         self.assertIsNone(record.deadline_at)
 
     def test_malformed_list_entries_are_left_out_instead_of_failing_the_record(self) -> None:
@@ -90,7 +90,7 @@ class RunRecordTest(unittest.TestCase):
             "started_at": START.isoformat(),
             "steps": [{"name": "lint", "result": "succeeded"}, "junk", {"result": "failed"}],
             "findings": [{"step": "lint", "kind": "info", "text": "fine"}, 3],
-            "parts": "not a list",
+            "addons": "not a list",
         }
         self.store.replace(RUN_RECORD, json.dumps(raw).encode())
 
@@ -99,7 +99,7 @@ class RunRecordTest(unittest.TestCase):
         assert record is not None
         self.assertEqual(record.steps, (StepResult("lint", "succeeded"),))
         self.assertEqual(record.findings, (Finding("lint", INFO, "fine"),))
-        self.assertEqual(record.parts, ())
+        self.assertEqual(record.addons, ())
 
     def test_a_deadline_that_is_no_time_fails_the_record(self) -> None:
         raw = {"state": "running", "machine_id": "sb-test-m1", "started_at": START.isoformat(), "deadline_at": "soon"}

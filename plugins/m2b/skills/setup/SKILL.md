@@ -81,7 +81,7 @@ m2b setup apply --json --answers '{"store": {"backend": "icloud", "path": "<fold
 ```
 
 The answer lists the files it `written` (empty when nothing changed), `take_over`, the
-`missing_executables`, `problems` and `parts`. When `take_over` is set, tell the
+`missing_executables`, `problems` and `addons`. When `take_over` is set, tell the
 owner exactly that: another machine curates, and `m2b curate take-over` on this machine moves
 curation here. Setup did not change it. Exit 1 means everything else was written and each entry of
 `problems` needs the owner (a file at `~/.local/bin/m2b` that is not this product's launcher, for
@@ -108,13 +108,13 @@ List only the steps that apply, as a numbered list, each with where to click or 
    Claude.
 3. A missing executable from `missing_executables`: the line `m2b config set executables.<name> <path>`.
 
-## 6. Optional parts
+## 6. Add-ons
 
-Each entry in `parts` is an optional part of m2b with a `summary` of what it does; all are off
+Each entry in `addons` is an add-on of m2b with a `summary` of what it does; all are off
 until their own setup turns them on. For each one that is `on: false`, one at a time: say in one
-line what it does, and ask whether to turn it on. herdr and the worklog are experimental and need
+line what it does, and ask whether to turn it on. herdr and the worklog need
 herdr, and the worklog runs only on the curating machine; say so before asking. On a yes, run that
-part's setup skill with the Skill tool: `m2b:band-setup`, `m2b:herdr-setup`, `m2b:worklog-setup`
+add-on's setup skill with the Skill tool: `m2b:band-setup`, `m2b:herdr-setup`, `m2b:worklog-setup`
 or `m2b:backup-setup`. Never run one unasked.
 
 ## Answer

@@ -28,7 +28,7 @@ EXIT_PROBLEM = 1
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="m2b-worklog", description="The worklog part of m2b.")
+    parser = argparse.ArgumentParser(prog="m2b-worklog", description="The worklog add-on of m2b.")
     commands = parser.add_subparsers(dest="group", required=True)
     recorder_group = commands.add_parser("recorder", help="the activity recorder in herdr")
     recorder_commands = recorder_group.add_subparsers(dest="command", required=True)

@@ -23,6 +23,7 @@ from m2b.calendar.base import (
 )
 from m2b.capture import NotSavedError
 from m2b.commands import Context, ProblemError, UsageError, settings, store, tasks
+from m2b.commands import addons as addons_commands
 from m2b.commands import calendar as calendar_commands
 from m2b.commands import candidates as candidate_commands
 from m2b.commands import capture as capture_commands
@@ -32,7 +33,6 @@ from m2b.commands import doctor as doctor_command
 from m2b.commands import ingest as ingest_commands
 from m2b.commands import launcher as launcher_commands
 from m2b.commands import lint as lint_commands
-from m2b.commands import parts as parts_commands
 from m2b.commands import rediscover as rediscover_commands
 from m2b.commands import refresh as refresh_commands
 from m2b.commands import search as search_commands
@@ -209,13 +209,13 @@ def _parser() -> argparse.ArgumentParser:
             "folder", nargs="?", help="the project folder; the current folder without it"
         )
 
-    parts_group = _group(commands, "parts", "the optional parts of m2b on this machine")
-    _command(parts_group, "list", parts_commands.parts_list, "each part and whether it is on", json_flag=True)
+    addons_group = _group(commands, "addons", "the add-ons of m2b on this machine")
+    _command(addons_group, "list", addons_commands.addons_list, "each add-on and whether it is on", json_flag=True)
     for name, handler, help_text in (
-        ("on", parts_commands.parts_on, "turn a part on; its setup skill does this once the part is set up"),
-        ("off", parts_commands.parts_off, "turn a part off; its settings stay"),
+        ("on", addons_commands.addons_on, "turn an add-on on; its setup skill does this once the add-on is set up"),
+        ("off", addons_commands.addons_off, "turn an add-on off; its settings stay"),
     ):
-        _command(parts_group, name, handler, help_text).add_argument("part")
+        _command(addons_group, name, handler, help_text).add_argument("addon")
 
     profile = _group(commands, "profile", "the owner's profile")
     _command(profile, "get", settings.profile_get, "print the profile or one key of it", json_flag=True).add_argument(

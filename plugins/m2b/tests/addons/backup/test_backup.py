@@ -1,4 +1,4 @@
-"""The backup part: mirror, attic, task dump, pruning, and the checks before any of it."""
+"""The backup add-on: mirror, attic, task dump, pruning, and the checks before any of it."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ class FakeCore:
         return self._store
 
     def settings(self) -> Any:
-        """``parts.backup`` as the core gives it: the part is on, the settings beside ``on``."""
+        """``addons.backup`` as the core gives it: the add-on is on, the settings beside ``on``."""
         return {"on": True, **self._settings} if isinstance(self._settings, dict) else self._settings
 
     def tasks(self) -> str:
@@ -82,8 +82,8 @@ class MirrorTest(BackupFixture):
     def test_a_backup_has_a_mirror_without_hidden_files_an_attic_and_a_task_dump(self) -> None:
         """Covers: B27"""
         self.write(".sb-tmp-memory.md.x1", "half a write")
-        self.write("state/parts/worklog/ledger.xlsx", "xlsx")
-        self.write("state/parts/worklog/~$ledger.xlsx", "lock")
+        self.write("state/addons/worklog/ledger.xlsx", "xlsx")
+        self.write("state/addons/worklog/~$ledger.xlsx", "lock")
         self.write("corpus/.hidden/note.md", "hidden folder")
         self.backup()
         self.write("memory/MEMORY.md", "# Memory\n\n## Facts\n")
@@ -95,7 +95,7 @@ class MirrorTest(BackupFixture):
             [
                 "inbox/20260314T090000Z-cli-a1b2.md",
                 "memory/MEMORY.md",
-                "state/parts/worklog/ledger.xlsx",
+                "state/addons/worklog/ledger.xlsx",
                 "store.json",
             ],
         )
@@ -295,7 +295,7 @@ class CommandTest(BackupFixture):
         launcher = self.home / ".local" / "bin" / "m2b"
         launcher.parent.mkdir(parents=True)
         calls = self.base / "launcher-calls.txt"
-        parts = {"backup": {"on": True, **settings}} if settings is not None else {}
+        addons = {"backup": {"on": True, **settings}} if settings is not None else {}
         script = f"""#!{sys.executable}
 import json, sys
 arguments = sys.argv[1:]
@@ -303,8 +303,8 @@ with open({str(calls)!r}, "a", encoding="utf-8") as handle:
     handle.write(json.dumps(arguments) + "\\n")
 if arguments == ["config", "get", "store.path", "--json"]:
     print(json.dumps({str(self.store)!r}))
-elif arguments == ["config", "get", "parts", "--json"]:
-    print({json.dumps(parts)!r})
+elif arguments == ["config", "get", "addons", "--json"]:
+    print({json.dumps(addons)!r})
 elif arguments == ["tasks", "list", "--include-completed", "--json"]:
     if {tasks_exit}:
         sys.exit(print("m2b: the task list could not be reached", file=sys.stderr) or {tasks_exit})

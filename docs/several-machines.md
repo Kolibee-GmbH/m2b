@@ -9,7 +9,7 @@ folder in iCloud Drive. Every machine captures, searches and lists tasks. **One 
 | capture, search, todos, rediscover | yes | |
 | the distillate at session start | yes | |
 | curation runs (at session start or scheduled) | | yes |
-| part steps: worklog, backup | | yes |
+| add-on steps: worklog, backup | | yes |
 | worklog recording in herdr | | yes |
 
 ## Joining a store
@@ -37,9 +37,9 @@ m2b curate take-over
 It writes this machine into `store.json`. It refuses while the run record says the other machine
 is running a curation and that run is not past its time limit, so two machines never curate at
 once. Every run checks `store.json` first, so the other machine's next run stops before it
-changes anything; its worklog recording turns off at its next session start. Parts are turned
-on per machine: run their setups (`/m2b:worklog-setup`, `/m2b:backup-setup`) again on the new
-curating machine; `take-over` lists the parts that were on in the last run.
+changes anything; its worklog recording turns off at its next session start. Add-ons are
+turned on per machine: run their setups (`/m2b:worklog-setup`, `/m2b:backup-setup`) again on the new
+curating machine; `take-over` lists the add-ons that were on in the last run.
 
 ## When the curating machine is away
 
