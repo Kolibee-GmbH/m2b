@@ -10,7 +10,7 @@ All notable changes to this project are documented here. The format follows
 ### Changed
 
 - Each add-on has its own page under `docs/addons/`, and `docs/addons.md` is the overview that
-  links them.
+  links them ([#6](https://github.com/b33eep/m2b/pull/6)).
 
 ## [0.2.0] - 2026-11-09
 
