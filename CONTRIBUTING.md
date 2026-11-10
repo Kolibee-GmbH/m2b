@@ -82,7 +82,7 @@ match, however many commits came since. A change reaches users only with a relea
    `## [X.Y.Z] - YYYY-MM-DD` with the day of the release, and leave an empty `## [Unreleased]`
    above it. Entries sit under `### Added`, `### Changed` or `### Fixed`, one sentence or two each
    on what changes for the user, ending in the pull request that made it, as
-   `([#12](https://github.com/b33eep/m2b/pull/12))`.
+   `([#12](https://github.com/Kolibee-GmbH/m2b/pull/12))`.
 3. Run `scripts/check`; it must end with `check: passed`.
 4. Commit both files as `chore(release): m2b X.Y.Z`, open a pull request to `main` and merge it;
    a squash merge is fine. The marketplace reads `plugins/m2b` from `main`, not from a tag, so
