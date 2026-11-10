@@ -47,8 +47,9 @@ ago.
 
 ## What it needs
 
-herdr 0.9 or later; the curating machine, the only one that records, so a day is never counted on
-two machines; your spheres and customers, which its setup asks for.
+herdr 0.9 or later, on the `PATH` Claude Code sees or named in the environment variable `M2B_HERDR`;
+the curating machine, the only one that records, so a day is never counted on two machines; your
+spheres and customers, which its setup asks for.
 
 ## Set up and turn off
 
@@ -68,11 +69,12 @@ The recordings stay until `m2b-worklog recordings delete` removes them.
 ## What it reads
 
 Only while it is on and only on the curating machine: the herdr events its recorder wrote; from your
-Claude Code transcripts for the period under `~/.claude/projects/`, the prompts and the last 500
-characters of each session's last answer, with credentials and long tokens redacted; your own git
-commits and the `origin` remote in the session folders; and the names of the period's captures in
-the inbox. Its model step, once a day, reads these facts, memory, the inbox notes and your task
-list, and may search the archive with `m2b search` to place a session.
+Claude Code transcripts for the period, the prompts and the last 500 characters of each session's
+last answer, with credentials and long tokens redacted; your own git commits and the `origin` remote
+in the session folders; and the names of the period's captures in the inbox. The transcripts are
+read where Claude Code keeps them: `projects/` in `~/.claude`, or in the folder `CLAUDE_CONFIG_DIR`
+names when that is set. Its model step, once a day, reads these facts, memory, the inbox notes and
+your task list, and may search the archive with `m2b search` to place a session.
 
 ## What it writes
 
