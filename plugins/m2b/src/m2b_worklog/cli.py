@@ -43,6 +43,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     facts_command.add_argument("--json", action="store_true", help="accepted for symmetry; the output is JSON")
     verdict_command = commands.add_parser("verdict", help="hand in the verdict: checked, then stored")
     verdict_command.add_argument("verdict", help="the verdict as one JSON object")
+    state_command = commands.add_parser(
+        "state", help="the watermark, an unfinished worklog and the last period in the ledger"
+    )
+    state_command.add_argument("--json", action="store_true", help="answer as JSON")
     machine = commands.add_parser("machine", help="whether this machine curates, so it may record")
     machine.add_argument("--json", action="store_true", help="answer as JSON")
     collect = commands.add_parser("collect", help="the facts of the period since the watermark, as JSON")
@@ -70,6 +74,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _verdict(paths, arguments.verdict)
     if arguments.group == "machine":
         return _machine(paths, arguments.json)
+    if arguments.group == "state":
+        return _state(paths, arguments.json)
     if arguments.group == "recordings":
         shutil.rmtree(paths.state_dir, ignore_errors=True)
         shutil.rmtree(paths.run_dir, ignore_errors=True)
@@ -141,6 +147,37 @@ def _verdict(paths: WorklogPaths, raw: str) -> int:
             print(f"- {problem}", file=sys.stderr)
         return EXIT_PROBLEM
     print("verdict accepted")
+    return EXIT_OK
+
+
+def _state(paths: WorklogPaths, as_json: bool) -> int:
+    try:
+        store = Path(core.ask(paths, ["config", "get", "store.path"]))
+    except core.CoreError as error:
+        print(f"m2b-worklog: {error}", file=sys.stderr)
+        return EXIT_PROBLEM
+    shown = daily.state(store)
+    if as_json:
+        print(json.dumps(shown, indent=1))
+        return EXIT_OK
+    last = shown["ledger"]["last"] if isinstance(shown["ledger"], dict) else None
+    unfinished = shown["unfinished"]
+    if shown["watermark"]:
+        print(f"watermark: {shown['watermark']}")
+    elif last:
+        print(f"watermark: missing; it belongs at {last['end']}, the end of the last period in the ledger")
+    else:
+        print("watermark: none yet, the first worklog reaches three days back")
+    if isinstance(unfinished, dict):
+        print(f"unfinished worklog: {unfinished['start']} to {unfinished['end']}; the next run finishes it")
+    else:
+        print(f"unfinished worklog: {unfinished or 'none'}")
+    if isinstance(shown["ledger"], dict):
+        count = shown["ledger"]["periods"]
+        held = f"{count} period{'' if count == 1 else 's'}"
+        print(f"ledger: {held}" + (f", the last from {last['start']} to {last['end']}" if last else ""))
+    else:
+        print(f"ledger: {shown['ledger']}")
     return EXIT_OK
 
 

@@ -258,6 +258,7 @@
                 "start",
                 "end",
                 "minutes",
+                "minutes_present",
                 "prompts"
               ],
               "properties": {
@@ -277,6 +278,11 @@
                   "type": "integer",
                   "minimum": 0,
                   "description": "The work inside the block, without its gaps; what the ledger books"
+                },
+                "minutes_present": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "The minutes inside the block with the workspace in focus, the owner there"
                 },
                 "prompts": {
                   "type": "array",

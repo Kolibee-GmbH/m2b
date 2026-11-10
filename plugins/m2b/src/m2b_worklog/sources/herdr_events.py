@@ -7,7 +7,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from m2b_worklog.periods import Event, load_events
+from m2b_worklog.periods import FOCUS_EVENT, WORKSPACE_CLOSED, Event, load_events
 from m2b_worklog.sources import SourceState
 
 CACHE_FILE = "workspaces.json"
@@ -31,15 +31,32 @@ class Recordings:
     state: SourceState
 
 
-def read_recordings(folder: Path) -> Recordings:
+def read_recordings(folder: Path, since: datetime.datetime | None = None) -> Recordings:
+    """The recorder's events, from ``since`` on when given, and its workspace cache.
+
+    From before ``since`` it keeps what still holds: the last focus event, and the workspace closes
+    after it, so a workspace left in focus for days keeps its focus. A piece of focus starting there
+    lasts at most minutes and ends long before the period, so it adds no time.
+    """
     if not folder.is_dir():
         return Recordings([], [], SourceState.failed(f"no recordings in {folder}; is the recorder installed?"))
     try:
-        events = load_events(folder)
+        events = _from(load_events(folder, written_since=since), since)
         workspaces = _workspaces(folder / CACHE_FILE)
     except OSError as error:
         return Recordings([], [], SourceState.failed(str(error)))
     return Recordings(events, workspaces, SourceState.read())
+
+
+def _from(events: list[Event], since: datetime.datetime | None) -> list[Event]:
+    if since is None:
+        return events
+    earlier = [event for event in events if event.time < since]
+    focus = [index for index, event in enumerate(earlier) if event.kind == FOCUS_EVENT]
+    still_holding = (
+        [earlier[focus[-1]], *(e for e in earlier[focus[-1] + 1 :] if e.kind == WORKSPACE_CLOSED)] if focus else []
+    )
+    return [*still_holding, *(event for event in events if event.time >= since)]
 
 
 def workspace_at(workspaces: list[Workspace], workspace_id: str, moment: datetime.datetime) -> Workspace | None:

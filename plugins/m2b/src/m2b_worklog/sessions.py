@@ -51,10 +51,16 @@ class SessionBlock:
     prompts: list[str]
     worked: float = 0.0
     """Seconds of work inside the block, without its gaps."""
+    present: float = 0.0
+    """Seconds inside the block with the workspace in focus: the owner was there."""
 
     @property
     def minutes(self) -> int:
         return round(self.worked / 60)
+
+    @property
+    def minutes_present(self) -> int:
+        return round(self.present / 60)
 
 
 @dataclass
@@ -151,12 +157,14 @@ def blocks_of(draft: SessionDraft) -> list[SessionBlock]:
     prompts = draft.prompts()
     found: list[SessionBlock] = []
     work = draft.work()
+    focused = merge(draft.series.get(FOCUS, []))
     for start, end in merge(work, gap=BLOCK_GAP):
         worked = length([piece for piece in work if start <= piece[0] and piece[1] <= end])
         if worked < MINIMUM_BLOCK.total_seconds():
             continue
+        present = length([piece for piece in focused if start <= piece[0] and piece[1] <= end])
         inside = [p.text for p in prompts if start - BLOCK_GAP <= p.time <= end][-PROMPTS_PER_BLOCK:]
-        found.append(SessionBlock(f"b{len(found) + 1}", start, end, inside, worked))
+        found.append(SessionBlock(f"b{len(found) + 1}", start, end, inside, worked, present))
     return found
 
 
@@ -300,8 +308,9 @@ def _agent_states(drafts: dict[str, SessionDraft], derived: Sequence[Period], en
     Working when an agent period of its workspace runs to the end. Blocked when one does, or when
     a pane's last agent event is a block the workspace did not close after: an agent waiting for
     an approval sends nothing more, so its period ends early, but it still waits at the period's
-    end, however long ago it asked. Else idle when the workspace had an agent at all. A closed
-    workspace and an agent herdr never stopped have no period running to the end.
+    end, however long ago it asked within the events read (three days before the period): a block
+    older than that, often left by a crash, is no longer reported. Else idle when the workspace had an
+    agent at all. A closed workspace and an agent herdr never stopped have no period running to the end.
     """
     for draft in drafts.values():
         if draft.workspace is None:

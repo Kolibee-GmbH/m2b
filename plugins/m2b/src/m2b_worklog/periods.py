@@ -94,10 +94,18 @@ def parse_event(line: str) -> Event | None:
     )
 
 
-def load_events(folder: Path) -> list[Event]:
-    """Every event of every workspace file in the recorder's folder, oldest first."""
+def load_events(folder: Path, written_since: datetime.datetime | None = None) -> list[Event]:
+    """Every event of every workspace file in the recorder's folder, oldest first.
+
+    With ``written_since``, a file last written before it is left unread: the recorder only appends,
+    so it holds nothing newer.
+    """
     events: list[Event] = []
     for path in sorted(folder.glob("*.jsonl")):
+        if written_since is not None:
+            changed = datetime.datetime.fromtimestamp(path.stat().st_mtime, datetime.timezone.utc)
+            if changed < written_since:
+                continue
         with path.open(encoding="utf-8", errors="replace") as handle:
             events.extend(event for event in map(parse_event, handle) if event is not None)
     return sorted(events, key=lambda event: event.time)

@@ -130,6 +130,7 @@ class _Session:
                     "start": block["start"],
                     "end": block["end"],
                     "minutes": block["minutes"],
+                    "minutes_present": block["minutes_present"],
                     "sphere": self.sphere,
                     "billable": billable,
                     "topic": self.verdict["topic"],

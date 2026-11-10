@@ -85,6 +85,9 @@ def run(paths: WorklogPaths, core: Core, now: datetime.datetime, sources: Source
     profile = core.profile()
     inputs = facts.Inputs(store, paths.state_dir, sources.transcripts, paths.home, profile, now, herdr=sources.herdr)
     collected = facts.collect(inputs)
+    # Before the model and before anything is written: a period the ledger holds already is not judged again.
+    period = collected["period"]
+    ledger.refuse_overlap(ledger.read(folder), period["start"], period["end"], _blocks_as_spans(collected))
     if _nothing_to_judge(collected):
         start, end = collected["period"]["start"], collected["period"]["end"]
         _write_watermark(folder, end, writeup.period_id(start, end))
@@ -126,6 +129,45 @@ def carry_out(store: Path, intent: dict[str, Any], core: Core) -> str:
     return ", ".join(parts)
 
 
+def state(store: Path) -> dict[str, Any]:
+    """What ``m2b-worklog state`` shows: the watermark, an unfinished worklog and the ledger's last period.
+
+    It reads each file on its own and names what it cannot read, so it helps exactly when one of
+    them is broken.
+    """
+    folder = store / STATE_DIR
+    shown: dict[str, Any] = {}
+    try:
+        watermark = facts.read_watermark(store)
+        shown["watermark"] = watermark.isoformat() if watermark else None
+    except facts.FactsError as error:
+        shown["watermark"] = f"cannot be read: {error}"
+    try:
+        intent = read_intent(folder)
+        plan = writeup.Plan.from_json(intent["plan"]) if intent else None
+        shown["unfinished"] = {"id": plan.period_id, "start": plan.start, "end": plan.end} if plan else None
+    except DailyError as error:
+        shown["unfinished"] = f"cannot be read: {error}"
+    try:
+        held = ledger.read(folder)["periods"]
+        last = max(held.items(), key=lambda item: str(item[1]["end"]), default=None)
+        shown["ledger"] = {
+            "periods": len(held),
+            "last": {"id": last[0], "start": last[1]["start"], "end": last[1]["end"]} if last else None,
+        }
+    except ledger.LedgerError as error:
+        shown["ledger"] = f"cannot be read: {error}"
+    return shown
+
+
+def _blocks_as_spans(collected: Mapping[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {"session": session["key"], "start": block["start"], "end": block["end"]}
+        for session in collected["sessions"]
+        for block in session["blocks"]
+    ]
+
+
 def read_intent(folder: Path) -> dict[str, Any] | None:
     path = folder / INTENT
     if not path.exists():
@@ -139,7 +181,8 @@ def read_intent(folder: Path) -> dict[str, Any] | None:
             raise TypeError("proposed is not a list")
     except (OSError, ValueError, KeyError, TypeError) as error:
         raise DailyError(
-            f"the unfinished worklog {STATE_DIR}/{INTENT} cannot be read ({error}); fix or remove it by hand"
+            f"the unfinished worklog {STATE_DIR}/{INTENT} cannot be read ({error}); repair it by hand: "
+            "m2b-worklog state shows the last period the ledger holds, which tells what of it was written"
         ) from error
     return dict(intent)
 

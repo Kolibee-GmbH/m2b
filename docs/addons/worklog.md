@@ -56,6 +56,30 @@ A booking proposal comes only from a span of a billable sphere with a customer f
 worklog never books: you enter the proposal in your timesheet, because a wrong booking ends up on an
 invoice.
 
+## The ledger
+
+Each span of a session is one row in the ledger, with two numbers of minutes:
+
+- `minutes`: the work inside the span, without its gaps. An agent working on its own counts here.
+- `minutes_present`: the part of it with the workspace in focus, so you were there. Without herdr's
+  focus events this is 0.
+
+The worklog reads the recorder's files written in the last three days before its period; older
+files hold nothing it counts. A workspace left in focus for longer keeps its focus. An agent that
+asked for an approval more than three days before the period is no longer reported as waiting, which
+is mostly a crash's leftover.
+
+An afternoon where you set an agent going at 14:00, look at its result at 16:20 and stop at 16:30
+gives a span from 14:00 to 16:30 with `minutes` 150 and `minutes_present` about 20. Whether the
+agent's time is billable depends on your agreement with the customer; the ledger shows both, and
+you decide. Rows written before m2b 0.3.0 have no `minutes_present`; the exports leave that cell
+empty.
+
+The ledger never holds the same minutes twice. A worklog whose period overlaps one the ledger holds
+is refused before anything is written, and the step fails with a message that names the period it
+overlaps (and the span, when one of the same session overlaps too). That happens when
+`watermark.json` was reset or lost, so the worklog reaches back over time it wrote before.
+
 ## The period
 
 A period starts where the last one ended and reaches at most three days back, so a long pause costs
@@ -113,8 +137,20 @@ addons off worklog` turns recording off at the next session start.
 
 `m2b-worklog machine` says whether this machine curates, so it may record. `m2b-worklog recorder
 install` and `remove` link and unlink the recorder, `m2b-worklog recordings delete` deletes what it
-recorded, and `m2b-worklog run` is the curation step. The others (`facts`, `verdict`, `collect`,
-`hook`) are for the curation run and the plugin's hooks.
+recorded, and `m2b-worklog run` is the curation step. `m2b-worklog state` shows where the worklog
+stands, and names a file it cannot read:
+
+```text
+watermark: 2026-03-14T18:00:00+01:00
+unfinished worklog: none
+ledger: 12 periods, the last from 2026-03-13T18:00:00+01:00 to 2026-03-14T18:00:00+01:00
+```
+
+The watermark belongs at the end of the last period. When a message says `watermark.json` or
+`intent.json` cannot be read, repair the file by hand with what `state` shows; do not delete it,
+because the next worklog then reaches back over time the ledger holds already and is refused. The
+other commands (`facts`, `verdict`, `collect`, `hook`) are for the curation run and the plugin's
+hooks.
 
 ## How you see it runs
 

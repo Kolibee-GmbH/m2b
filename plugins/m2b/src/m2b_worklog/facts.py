@@ -25,6 +25,8 @@ from m2b_worklog.sources.transcripts import read_transcripts
 
 FACTS_VERSION = 1
 WATERMARK = "state/addons/worklog/watermark.json"
+# How far before the period the recorder's events are read; everything older is left unread.
+EVENT_REACH = datetime.timedelta(days=3)
 MAX_REACH = datetime.timedelta(days=3)
 WATERMARK_ORIGIN = "watermark"
 FIRST_RUN_ORIGIN = "first run"
@@ -67,7 +69,10 @@ def read_watermark(store: Path) -> datetime.datetime | None:
     try:
         moment = datetime.datetime.fromisoformat(json.loads(path.read_text(encoding="utf-8"))["end"])
     except (OSError, ValueError, KeyError, TypeError) as error:
-        raise FactsError(f"the watermark {WATERMARK} cannot be read ({error}); fix or remove it by hand") from error
+        raise FactsError(
+            f"the watermark {WATERMARK} cannot be read ({error}); write the end of the last worklog into its "
+            '"end" by hand: m2b-worklog state shows it as the end of the last period in the ledger'
+        ) from error
     if moment.tzinfo is None:
         raise FactsError(f"the watermark {WATERMARK} has a time without an offset")
     return moment
@@ -86,7 +91,8 @@ def period_for(watermark: datetime.datetime | None, now: datetime.datetime) -> P
 
 def collect(inputs: Inputs, run: Runner = subprocess.run) -> dict[str, Any]:
     period = period_for(read_watermark(inputs.store), inputs.now)
-    recordings = read_recordings(inputs.recordings)
+    # Older events add no time: an agent counts at most 30 minutes past its last sign of life (B87).
+    recordings = read_recordings(inputs.recordings, since=period.start - EVENT_REACH)
     # Stamps just before the period keep an agent that was at work across the last cut counting (B84).
     signs_from = period.start - periods.RULES.agent_silence
     transcripts = read_transcripts(inputs.transcripts, period.start, period.end, signs_from)
@@ -183,6 +189,7 @@ def _session(
                 "start": _iso(b.start, zone),
                 "end": _iso(b.end, zone),
                 "minutes": b.minutes,
+                "minutes_present": b.minutes_present,
                 "prompts": b.prompts,
             }
             for b in blocks

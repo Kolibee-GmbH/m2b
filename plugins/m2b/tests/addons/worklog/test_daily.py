@@ -231,13 +231,141 @@ class WriteTest(DailyFixture):
         self.assertEqual(((folder / "ledger.csv").read_bytes(), (folder / "ledger.xlsx").read_bytes()), first)
         rows = list(csv.DictReader(io.StringIO(first[0].decode("utf-8"))))
         self.assertEqual(
-            (rows[0]["start"], rows[0]["minutes"], rows[0]["customer"]), (at(10).isoformat(), "50", "Globex")
+            (rows[0]["start"], rows[0]["minutes"], rows[0]["minutes_present"], rows[0]["customer"]),
+            (at(10).isoformat(), "50", "22", "Globex"),
         )
         with zipfile.ZipFile(io.BytesIO(first[1])) as workbook:
             self.assertIn("xl/workbook.xml", workbook.namelist())
             sheet = workbook.read("xl/worksheets/sheet1.xml").decode("utf-8")
         self.assertIn("<t>Globex</t>", sheet)
         self.assertIn('<c r="D2"><v>50</v></c>', sheet)
+        self.assertIn('<c r="E2"><v>22</v></c>', sheet)
+
+    def test_a_span_carries_its_minutes_and_the_minutes_the_owner_was_there(self) -> None:
+        """Covers: B86"""
+        self.a_due_day()
+
+        self.run_daily()
+
+        [period] = self.ledger_periods().values()
+        # b1 is 10:00 to 10:50: 50 minutes of work, 22 of them with the workspace in focus.
+        self.assertEqual([(s["minutes"], s["minutes_present"]) for s in period["spans"]], [(50, 22), (40, 20)])
+
+    def test_a_ledger_written_before_the_second_column_still_exports(self) -> None:
+        """Covers: B86"""
+        folder = self.store / STATE
+        folder.mkdir(parents=True)
+        old_span = {"period": "p0", "session": "workspace:w1:", "block": "b1", "start": at(10).isoformat()}
+        old_span.update({"end": at(11).isoformat(), "minutes": 60, "sphere": "acme", "billable": False})
+        old_span.update({"topic": "Invoices", "customer": None, "project": None, "activity": None})
+        old = {
+            "version": 1,
+            "periods": {"p0": {"start": at(9).isoformat(), "end": at(12).isoformat(), "spans": [old_span]}},
+        }
+        (folder / "ledger.json").write_text(json.dumps(old), encoding="utf-8")
+
+        ledger.export(folder)
+
+        [row] = list(csv.DictReader(io.StringIO((folder / "ledger.csv").read_text(encoding="utf-8"))))
+        self.assertEqual((row["minutes"], row["minutes_present"]), ("60", ""))
+
+
+class LedgerOverlapTest(DailyFixture):
+    def span(self, session: str, start: datetime.datetime, end: datetime.datetime) -> dict[str, Any]:
+        return {"session": session, "block": "b1", "start": start.isoformat(), "end": end.isoformat(), "minutes": 1}
+
+    def test_a_span_overlapping_one_of_the_same_session_is_refused_and_nothing_is_added(self) -> None:
+        """Covers: B87"""
+        folder = self.store / STATE
+        ledger.add(folder, "p1", at(9).isoformat(), at(12).isoformat(), [self.span("s1", at(10), at(11))])
+        before = (folder / "ledger.json").read_bytes()
+
+        with self.assertRaises(ledger.LedgerError) as caught:
+            ledger.add(folder, "p2", at(9).isoformat(), at(13).isoformat(), [self.span("s1", at(10, 30), at(12))])
+
+        self.assertIn("s1", str(caught.exception))
+        self.assertIn(at(10).isoformat(), str(caught.exception))
+        self.assertIn("m2b-worklog state", str(caught.exception))
+        self.assertEqual((folder / "ledger.json").read_bytes(), before)
+
+    def test_a_period_that_only_touches_the_last_one_is_added(self) -> None:
+        """Covers: B87"""
+        folder = self.store / STATE
+        ledger.add(folder, "p1", at(9).isoformat(), at(11).isoformat(), [self.span("s1", at(10), at(11))])
+
+        added = ledger.add(
+            folder,
+            "p2",
+            at(11).isoformat(),
+            at(13).isoformat(),
+            [self.span("s2", at(11), at(12)), self.span("s1", at(11), at(12))],
+        )
+
+        self.assertTrue(added)
+
+    def test_a_period_overlapping_a_held_one_is_refused_whatever_its_sessions_are_called(self) -> None:
+        """Covers: B87"""
+        # A workspace reopened under a new id: the same minutes come back under another session key.
+        folder = self.store / STATE
+        held = [self.span("workspace:w2:", at(10), at(11))]
+        ledger.add(folder, "p1", at(9).isoformat(), at(12).isoformat(), held)
+
+        with self.assertRaises(ledger.LedgerError) as caught:
+            again = [self.span("workspace:w1:", at(10), at(11))]
+            ledger.add(folder, "p2", at(8).isoformat(), at(13).isoformat(), again)
+
+        self.assertIn(f"the period from {at(9).isoformat()} to {at(12).isoformat()}", str(caught.exception))
+
+    def test_a_worklog_after_a_reset_watermark_writes_nothing_and_says_how_to_look(self) -> None:
+        """Covers: B87"""
+        self.a_due_day()
+        self.run_daily()
+        (self.store / STATE / "watermark.json").unlink()
+        notes_before = self.worklog_notes()
+
+        with self.assertRaises(ledger.LedgerError) as caught:
+            self.run_daily(NOW + datetime.timedelta(hours=1))
+
+        self.assertIn("m2b-worklog state", str(caught.exception))
+        self.assertEqual(self.worklog_notes(), notes_before)
+        self.assertEqual(len(self.ledger_periods()), 1)
+        self.assertFalse((self.store / STATE / "intent.json").exists())
+
+
+class StateTest(DailyFixture):
+    def test_the_state_names_the_watermark_an_unfinished_worklog_and_the_last_period(self) -> None:
+        """Covers: B87"""
+        self.a_due_day()
+        self.run_daily()
+
+        shown = daily.state(self.store)
+
+        period = writeup.period_id(DAY_BEFORE.isoformat(), NOW.isoformat())
+        self.assertEqual(shown["watermark"], NOW.isoformat())
+        self.assertIsNone(shown["unfinished"])
+        self.assertEqual(
+            shown["ledger"],
+            {"periods": 1, "last": {"id": period, "start": DAY_BEFORE.isoformat(), "end": NOW.isoformat()}},
+        )
+
+    def test_the_messages_about_broken_state_name_the_state_command_and_never_say_remove(self) -> None:
+        """Covers: B87"""
+        self.a_due_day()
+        folder = self.store / STATE
+        (folder / "watermark.json").write_text("{", encoding="utf-8")
+        (folder / "intent.json").write_text("{", encoding="utf-8")
+
+        with self.assertRaises(DailyError) as intent:
+            daily.read_intent(folder)
+        from m2b_worklog import facts
+
+        with self.assertRaises(facts.FactsError) as watermark:
+            facts.read_watermark(self.store)
+
+        for message in (str(intent.exception), str(watermark.exception)):
+            with self.subTest(message=message):
+                self.assertIn("m2b-worklog state", message)
+                self.assertNotIn("remove", message)
 
     def test_a_sphere_without_billable_gets_no_booking_proposal(self) -> None:
         """Covers: B29"""
@@ -469,7 +597,7 @@ class RerunTest(DailyFixture):
         (self.store / STATE).mkdir(parents=True)
         (self.store / STATE / "intent.json").write_text("{", encoding="utf-8")
 
-        with self.assertRaisesRegex(DailyError, "fix or remove it by hand"):
+        with self.assertRaisesRegex(DailyError, "repair it by hand: m2b-worklog state"):
             self.run_daily()
 
 
@@ -531,6 +659,25 @@ else:
         self.assertIn(["tasks", "add", "--candidate", "--", "Dana reviews the invoice export on Fridays"], made)
         [note] = self.worklog_notes()
         self.assertIn("- herdr: herdr did not answer", (self.store / note).read_text(encoding="utf-8"))
+
+    def test_state_shows_the_watermark_and_the_last_period_and_names_a_broken_file(self) -> None:
+        """Covers: B87"""
+        self.launcher()
+        self.a_due_day()
+        self.run_daily()
+        (self.store / STATE / "intent.json").write_text("{", encoding="utf-8")
+
+        shown = self.command("state")
+
+        self.assertEqual(shown.returncode, 0, shown.stderr)
+        self.assertIn(f"watermark: {NOW.isoformat()}", shown.stdout)
+        self.assertIn("unfinished worklog: cannot be read", shown.stdout)
+        self.assertIn(f"ledger: 1 period, the last from {DAY_BEFORE.isoformat()} to {NOW.isoformat()}", shown.stdout)
+
+        (self.store / STATE / "watermark.json").unlink()
+        missing = self.command("state")
+
+        self.assertIn(f"watermark: missing; it belongs at {NOW.isoformat()}", missing.stdout)
 
     def test_facts_and_verdict_are_what_the_model_step_calls(self) -> None:
         self.launcher()

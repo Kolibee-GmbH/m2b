@@ -746,6 +746,29 @@ class AgentStateTest(Fixture):
 
         self.assertEqual(session["state"]["agent"], "idle")
 
+    def test_events_older_than_three_days_before_the_period_are_not_read(self) -> None:
+        """Covers: B87"""
+        weeks_ago = at(10) - datetime.timedelta(days=8)
+        self.events("w1", (at(10), "agent_working", "p1"), (at(10, 20), "agent_stopped", "p1"))
+        without = self.collect()["sessions"][0]
+        self.events("w1", (weeks_ago, "agent_working", "p9"), (weeks_ago, "agent_blocked", "p9"))
+
+        [session] = self.collect()["sessions"]
+
+        self.assertEqual(session["minutes"], without["minutes"])
+        self.assertEqual(session["state"]["agent"], "idle")
+
+    def test_focus_set_before_the_reach_still_counts_inside_the_period(self) -> None:
+        """Covers: B87"""
+        # The owner left w1 in focus over a long weekend; only its agent sends events now.
+        self.events("w1", (at(10) - datetime.timedelta(days=4), "focus", None))
+        self.events("w1", (at(10), "agent_working", "p1"), (at(10, 20), "agent_stopped", "p1"))
+
+        [session] = self.collect()["sessions"]
+
+        self.assertEqual(session["minutes"]["focus"], 20)
+        self.assertEqual(session["blocks"][0]["minutes_present"], 20)
+
     def test_an_agent_working_at_the_end_is_working(self) -> None:
         self.events("w1", (at(17, 57), "agent_working", "p1"))
 

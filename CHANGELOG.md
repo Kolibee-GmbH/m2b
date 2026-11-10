@@ -11,9 +11,17 @@ All notable changes to this project are documented here. The format follows
 
 - m2b has a logo: the README shows it, and `docs/images/` holds the mark, an icon and the image
   for link previews ([#9](https://github.com/Kolibee-GmbH/m2b/pull/9)).
+- `m2b-worklog state` shows the watermark, an unfinished worklog and the last period in the ledger,
+  and names a file it cannot read.
 
 ### Changed
 
+- Every row of the worklog's ledger carries two numbers: `minutes`, the work in the span, and
+  `minutes_present`, the part with the workspace in focus, in `ledger.json`, the CSV and the XLSX.
+  Rows from before have the second cell empty.
+- The worklog reads only the recorder's files written in the three days before its period, instead
+  of the whole history at every run. An agent that asked for an approval longer ago is no longer
+  reported as waiting.
 - Each add-on has its own page under `docs/addons/`, and `docs/addons.md` is the overview that
   links them ([#6](https://github.com/Kolibee-GmbH/m2b/pull/6)).
 - CI runs two jobs, macOS on the current Python and Ubuntu on 3.9, instead of four
@@ -42,6 +50,10 @@ All notable changes to this project are documented here. The format follows
   its transcript, so a machine asleep with an agent left working no longer becomes a night of agent
   time; an agent still at work when the worklog is written counts up to that moment instead of
   being dropped.
+- The worklog ledger refuses a worklog whose period overlaps one it holds, before anything is
+  written, so a reset watermark no longer books days twice. Its messages about an
+  unreadable watermark or unfinished worklog point to `m2b-worklog state` instead of advising to
+  delete the file.
 - The worklog counts the same minutes once. A workspace closed and opened again on the same folder
   continues its session instead of starting a second one that held the same evening, and a
   transcript of a workspace without a folder of its own, or of a pane in another folder, goes to
