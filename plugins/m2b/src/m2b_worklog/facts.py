@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from m2b_worklog import classify, sessions
+from m2b_worklog import classify, periods, sessions
 from m2b_worklog.sources import READ, SourceState
 from m2b_worklog.sources.git import GitFacts, Runner, read_git
 from m2b_worklog.sources.herdr_events import read_recordings
@@ -87,7 +87,9 @@ def period_for(watermark: datetime.datetime | None, now: datetime.datetime) -> P
 def collect(inputs: Inputs, run: Runner = subprocess.run) -> dict[str, Any]:
     period = period_for(read_watermark(inputs.store), inputs.now)
     recordings = read_recordings(inputs.recordings)
-    transcripts = read_transcripts(inputs.transcripts, period.start, period.end)
+    # Stamps just before the period keep an agent that was at work across the last cut counting (B84).
+    signs_from = period.start - periods.RULES.agent_silence
+    transcripts = read_transcripts(inputs.transcripts, period.start, period.end, signs_from)
     inbox = read_inbox(inputs.store, period.start, period.end)
     drafts = sessions.draft_sessions(
         recordings.events, recordings.workspaces, transcripts.transcripts, period.start, period.end

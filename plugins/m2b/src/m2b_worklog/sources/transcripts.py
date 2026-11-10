@@ -12,7 +12,7 @@ import datetime
 import json
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +45,8 @@ class Transcript:
     prompts: list[Prompt]
     stamps: list[datetime.datetime]
     last_answer: str | None
+    # Stamps from just before the period: no work of the period, only a sign that an agent was alive.
+    earlier_stamps: list[datetime.datetime] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -58,16 +60,20 @@ def projects_folder(environ: Mapping[str, str], home: Path) -> Path:
     return (Path(claude_dir) if claude_dir else home / ".claude") / "projects"
 
 
-def read_transcripts(folder: Path, start: datetime.datetime, end: datetime.datetime) -> Transcripts:
+def read_transcripts(
+    folder: Path, start: datetime.datetime, end: datetime.datetime, signs_from: datetime.datetime | None = None
+) -> Transcripts:
+    """The transcripts with a message in ``[start, end)``; from ``signs_from`` on, earlier stamps too."""
+    earliest = start if signs_from is None else min(signs_from, start)
     if not folder.is_dir():
         return Transcripts([], SourceState.failed(f"no Claude Code transcripts in {folder}"))
     found = []
     try:
         paths = sorted(folder.glob("*/*.jsonl"))
         for path in paths:
-            if datetime.datetime.fromtimestamp(path.stat().st_mtime, datetime.timezone.utc) < start:
+            if datetime.datetime.fromtimestamp(path.stat().st_mtime, datetime.timezone.utc) < earliest:
                 continue
-            transcript = _read(path, start, end)
+            transcript = _read(path, start, end, earliest)
             if transcript is not None:
                 found.append(transcript)
     except OSError as error:
@@ -98,10 +104,13 @@ def redact(text: str) -> str:
     return _LONG_TOKEN.sub(REDACTED, _SECRET.sub(lambda m: f"{m.group(1)}{m.group(2)}{REDACTED}", text))
 
 
-def _read(path: Path, start: datetime.datetime, end: datetime.datetime) -> Transcript | None:
+def _read(
+    path: Path, start: datetime.datetime, end: datetime.datetime, earliest: datetime.datetime
+) -> Transcript | None:
     session_id, cwd, answer = path.stem, None, None
     prompts: list[Prompt] = []
     stamps: list[datetime.datetime] = []
+    earlier: list[datetime.datetime] = []
     with path.open(encoding="utf-8", errors="replace") as handle:
         for line in handle:
             try:
@@ -116,7 +125,12 @@ def _read(path: Path, start: datetime.datetime, end: datetime.datetime) -> Trans
             if cwd is None and isinstance(record.get("cwd"), str):
                 cwd = record["cwd"]
             moment = _time(record.get("timestamp"))
-            if moment is None or not start <= moment < end or record.get("type") not in ("user", "assistant"):
+            if moment is None or record.get("type") not in ("user", "assistant"):
+                continue
+            if earliest <= moment < start:
+                earlier.append(moment)
+                continue
+            if not start <= moment < end:
                 continue
             stamps.append(moment)
             message: dict[str, Any] = record["message"] if isinstance(record.get("message"), dict) else {}
@@ -126,9 +140,9 @@ def _read(path: Path, start: datetime.datetime, end: datetime.datetime) -> Trans
                     prompts.append(Prompt(moment, text))
             elif record["type"] == "assistant":
                 answer = prompt_text(message.get("content"), ANSWER_LENGTH) or answer
-    if cwd is None or not stamps:
+    if cwd is None or not (stamps or earlier):
         return None
-    return Transcript(session_id, cwd, prompts, stamps, answer)
+    return Transcript(session_id, cwd, prompts, stamps, answer, earlier)
 
 
 def _time(value: object) -> datetime.datetime | None:

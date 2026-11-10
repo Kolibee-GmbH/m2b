@@ -28,10 +28,27 @@ name. The worklog only reads that list; it never adds to it.
 
 ## Time spans
 
-A time span is when a workspace was in use: an agent at work, the workspace in focus (herdr cannot
-tell typing from looking, so focus counts for a limited time after each event), or messages in its
-transcript at most 15 minutes apart, merged across gaps of up to 15 minutes. Waiting for an approval
-does not count; an agent left working on its own does, so check a proposal before you enter it.
+A time span is when a workspace was in use: an agent at work, the workspace in focus, or messages
+in its transcript at most 15 minutes apart, merged across gaps of up to 15 minutes. Waiting for an
+approval does not count; an agent left working on its own does, so check a proposal before you
+enter it. Three rules keep a span from growing past the work:
+
+- **Focus counts up to 10 minutes after each event of that workspace.** herdr cannot tell typing
+  from looking, so a workspace left in focus stops counting 10 minutes after its own last event.
+  Events of other workspaces do not keep it going: an agent busy in another workspace while you are
+  away does not turn the focused one into your working time.
+- **An agent counts up to 30 minutes past its last sign of life.** A sign of life is an event of
+  its pane or a message in the session's transcript. herdr sends nothing while the machine sleeps,
+  so an agent left working when you close the lid would otherwise count the whole night; a silent
+  stretch longer than 30 minutes counts 30. An agent still writing to its transcript when the
+  worklog is written counts up to that moment, and the next worklog continues from there. A long
+  command that writes nothing for more than 30 minutes is counted short.
+- **The same minutes count once.** Workspaces on the same folder are one session, so a workspace
+  you close and open again, which herdr gives a new id, continues its session. A transcript belongs
+  to the workspace whose folder, or one of whose panes' folders, holds its working folder: first
+  one that was open while it was written, then one whose own folder holds it, then the closest
+  folder. A workspace without a folder of its own takes the folder of the transcript it holds, so
+  its sphere and commits are found. A transcript no workspace holds is a session of its own.
 
 ## Booking proposals
 

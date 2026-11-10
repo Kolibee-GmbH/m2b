@@ -269,11 +269,13 @@ recorder writes to `~/.local/state/m2b/worklog/`, the prompts and the end of eac
 answer from your Claude Code transcripts for the period (with credentials and long tokens
 redacted), your own git commits, and the inbox; its model step may also search the archive. Its
 ledger with time spans and booking proposals lands in the store under `state/addons/worklog/`.
-A time span is when a workspace was in use: an agent at work, the workspace in focus (herdr cannot
-tell typing from looking, so focus counts for a limited time after each event), or messages in its
-transcript at most 15 minutes apart, merged across gaps of up to 15 minutes; waiting for an
-approval does not count. An agent left working on its own, a loop through
-the night for one, counts as well, so check a booking proposal before you enter it.
+A time span is when a workspace was in use: an agent at work (up to 30 minutes past its last sign
+of life, so a machine asleep does not count), the workspace in focus (up to 10 minutes after each of
+its own events, because herdr cannot tell typing from looking), or messages in its transcript at most
+15 minutes apart, merged across gaps of up to 15 minutes; waiting for an approval does not count.
+The same minutes count once, also when a workspace is closed and opened again. An agent left working
+on its own, a loop through the night for one, counts as well, so check a booking proposal before you
+enter it. The [worklog page](docs/addons/worklog.md#time-spans) has the rules.
 
 ## Configure
 

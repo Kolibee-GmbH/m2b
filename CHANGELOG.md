@@ -33,6 +33,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- The worklog no longer counts time nobody worked. Focus on a workspace counts up to 10 minutes
+  after that workspace's own last event, also while agents in other workspaces keep sending events.
+  An agent counts up to 30 minutes past its last sign of life, an event of its pane or a message in
+  its transcript, so a machine asleep with an agent left working no longer becomes a night of agent
+  time; an agent still at work when the worklog is written counts up to that moment instead of
+  being dropped.
+- The worklog counts the same minutes once. A workspace closed and opened again on the same folder
+  continues its session instead of starting a second one that held the same evening, and a
+  transcript of a workspace without a folder of its own, or of a pane in another folder, goes to
+  that workspace instead of a session of its own.
 - The worklog page no longer names `~/.claude/projects/` as the fixed place of the transcripts: it
   says that `CLAUDE_CONFIG_DIR` moves it, and that `M2B_HERDR` names the `herdr` executable for the
   worklog's commands too ([#10](https://github.com/Kolibee-GmbH/m2b/pull/10)).

@@ -5,17 +5,25 @@ Four kinds: **agent** (an agent works), **blocked** (an agent waits for an appro
 closest herdr gets to typing). Agent and blocked periods belong to a pane: one opens at its first
 start and closes at the first matching stop of the same pane; blocked closes an agent period and
 working closes a blocked one, and a closed workspace stops all of its panes. A period still open
-ends at "now" while its pane's last event is recent, else at that last event, because a herdr
-that quit sends no stop. Focus and human periods are split at every event, whatever its
-workspace, and each piece ends at most a fixed time after its event, because herdr reports no
-idle keyboard. Activity blocks are the periods merged across gaps up to a limit.
+runs to "now".
+
+herdr sends nothing while a machine sleeps or after herdr quit, so a stop can arrive hours late or
+never. An agent therefore counts only up to a fixed time past its last sign of life: an event of
+its pane, or a transcript stamp of its workspace that the caller passes as evidence. A silent
+stretch longer than that counts only that long.
+
+Focus and human periods are split at every event of the focused workspace, and each piece ends at
+most a fixed time after its event, because herdr reports no idle keyboard; events of other
+workspaces say nothing about whether someone still looks at this one. Activity blocks are the
+periods merged across gaps up to a limit.
 """
 
 from __future__ import annotations
 
+import bisect
 import datetime
 import json
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -38,7 +46,7 @@ HUMAN = "human"
 class Rules:
     """The three numbers the periods depend on, in one place."""
 
-    open_period_grace: datetime.timedelta = datetime.timedelta(minutes=5)
+    agent_silence: datetime.timedelta = datetime.timedelta(minutes=30)
     piece_cap: datetime.timedelta = datetime.timedelta(minutes=10)
     block_gap: datetime.timedelta = datetime.timedelta(minutes=15)
 
@@ -52,6 +60,8 @@ class Event:
     kind: str
     workspace: str
     pane: str | None
+    # The pane's folder when the recorder could read it.
+    cwd: str | None = None
 
 
 @dataclass(frozen=True)
@@ -76,10 +86,12 @@ def parse_event(line: str) -> Event | None:
         time = datetime.datetime.fromisoformat(raw["time"])
     except (ValueError, KeyError, TypeError):
         return None
-    kind, workspace, pane = raw.get("kind"), raw.get("workspace"), raw.get("pane")
+    kind, workspace, pane, cwd = raw.get("kind"), raw.get("workspace"), raw.get("pane"), raw.get("cwd")
     if kind not in EVENT_KINDS or not isinstance(workspace, str) or time.tzinfo is None:
         return None
-    return Event(time, kind, workspace, pane if isinstance(pane, str) else None)
+    return Event(
+        time, kind, workspace, pane if isinstance(pane, str) else None, cwd if isinstance(cwd, str) and cwd else None
+    )
 
 
 def load_events(folder: Path) -> list[Event]:
@@ -91,9 +103,15 @@ def load_events(folder: Path) -> list[Event]:
     return sorted(events, key=lambda event: event.time)
 
 
-def derive_periods(events: Sequence[Event], now: datetime.datetime, rules: Rules = RULES) -> list[Period]:
+def derive_periods(
+    events: Sequence[Event],
+    now: datetime.datetime,
+    rules: Rules = RULES,
+    evidence: Mapping[str, Sequence[datetime.datetime]] | None = None,
+) -> list[Period]:
+    """``evidence`` holds, per workspace id, moments its agent was seen at work outside herdr."""
     ordered = sorted(events, key=lambda event: event.time)
-    pane_periods = _pane_periods(ordered, now, rules)
+    pane_periods = _bounded(_pane_periods(ordered, now), ordered, evidence or {}, rules)
     agents = [period for period in pane_periods if period.kind == AGENT]
     found = [*pane_periods, *_focus_periods(ordered, agents, now, rules)]
     return sorted((p for p in found if p.end > p.start), key=lambda period: (period.start, period.kind))
@@ -117,7 +135,7 @@ class _Pane:
     blocked_since: datetime.datetime | None = None
 
 
-def _pane_periods(events: Sequence[Event], now: datetime.datetime, rules: Rules) -> list[Period]:
+def _pane_periods(events: Sequence[Event], now: datetime.datetime) -> list[Period]:
     panes: dict[str, _Pane] = {}
     found: list[Period] = []
 
@@ -149,9 +167,53 @@ def _pane_periods(events: Sequence[Event], now: datetime.datetime, rules: Rules)
             close(event.pane, state, event.time, (AGENT, BLOCKED))
 
     for pane_id, state in panes.items():
-        recent = now - state.last_event < rules.open_period_grace
-        close(pane_id, state, now if recent else state.last_event, (AGENT, BLOCKED))
+        close(pane_id, state, now, (AGENT, BLOCKED))
     return found
+
+
+def _bounded(
+    found: Sequence[Period], events: Sequence[Event], evidence: Mapping[str, Sequence[datetime.datetime]], rules: Rules
+) -> list[Period]:
+    """Agent periods cut to the stretches within ``rules.agent_silence`` of a sign of life."""
+    by_pane: dict[str | None, list[datetime.datetime]] = {}
+    for event in events:
+        by_pane.setdefault(event.pane, []).append(event.time)
+    stamps = {workspace: sorted(moments) for workspace, moments in evidence.items()}
+    bounded: list[Period] = []
+    for period in found:
+        if period.kind != AGENT:
+            bounded.append(period)
+            continue
+        signs = sorted(
+            {
+                period.start,
+                *_strictly_between(by_pane.get(period.pane, []), period.start, period.end),
+                *_strictly_between(stamps.get(period.workspace, []), period.start, period.end),
+            }
+        )
+        for start, end in _alive_stretches(signs, period.end, rules.agent_silence):
+            bounded.append(Period(AGENT, period.workspace, period.pane, start, end))
+    return bounded
+
+
+def _strictly_between(
+    moments: Sequence[datetime.datetime], start: datetime.datetime, end: datetime.datetime
+) -> Sequence[datetime.datetime]:
+    """The moments after ``start`` and before ``end``; ``moments`` are in time order."""
+    return moments[bisect.bisect_right(moments, start) : bisect.bisect_left(moments, end)]
+
+
+def _alive_stretches(
+    signs: Sequence[datetime.datetime], end: datetime.datetime, silence: datetime.timedelta
+) -> list[tuple[datetime.datetime, datetime.datetime]]:
+    stretches: list[tuple[datetime.datetime, datetime.datetime]] = []
+    for sign, following in zip(signs, [*signs[1:], end]):
+        stop = min(following, sign + silence)
+        if stretches and stretches[-1][1] >= sign:
+            stretches[-1] = (stretches[-1][0], stop)
+        else:
+            stretches.append((sign, stop))
+    return stretches
 
 
 def _focus_periods(
@@ -164,18 +226,27 @@ def _focus_periods(
     """
     found: list[Period] = []
     focused: str | None = None
-    for index, event in enumerate(events):
+    piece_start: datetime.datetime | None = None
+
+    def close_piece(at: datetime.datetime) -> None:
+        if focused is None or piece_start is None:
+            return
+        end = min(at, piece_start + rules.piece_cap)
+        if end <= piece_start:
+            return
+        found.append(Period(FOCUS, focused, None, piece_start, end))
+        if not any(a.workspace == focused and a.start <= piece_start < a.end for a in agents):
+            found.append(Period(HUMAN, focused, None, piece_start, end))
+
+    for event in events:
+        moves_focus = event.kind == FOCUS_EVENT or (event.kind == WORKSPACE_CLOSED and event.workspace == focused)
+        if not moves_focus and event.workspace != focused:
+            continue
+        close_piece(event.time)
         if event.kind == FOCUS_EVENT:
             focused = event.workspace
-        elif event.kind == WORKSPACE_CLOSED and focused == event.workspace:
+        elif event.kind == WORKSPACE_CLOSED:
             focused = None
-        if focused is None:
-            continue
-        following = events[index + 1].time if index + 1 < len(events) else now
-        end = min(following, event.time + rules.piece_cap)
-        if end <= event.time:
-            continue
-        found.append(Period(FOCUS, focused, None, event.time, end))
-        if not any(a.workspace == focused and a.start <= event.time < a.end for a in agents):
-            found.append(Period(HUMAN, focused, None, event.time, end))
+        piece_start = event.time if focused is not None else None
+    close_piece(now)
     return found

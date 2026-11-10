@@ -67,10 +67,13 @@ class Fixture(unittest.TestCase):
     def commit(self, subject: str, when: datetime.datetime, email: str | None = None) -> None:
         self.git("commit", "-q", "--allow-empty", "-m", subject, when=when, email=email)
 
-    def events(self, workspace: str, *lines: tuple[datetime.datetime, str, str | None]) -> None:
+    def events(
+        self, workspace: str, *lines: tuple[datetime.datetime, str, str | None], cwd: Path | None = None
+    ) -> None:
         with (self.recordings / f"{workspace}.jsonl").open("a", encoding="utf-8") as handle:
             for moment, kind, pane in lines:
-                record = {"time": moment.isoformat(), "kind": kind, "workspace": workspace, "pane": pane, "cwd": None}
+                folder = str(cwd) if cwd is not None and pane is not None else None
+                record = {"time": moment.isoformat(), "kind": kind, "workspace": workspace, "pane": pane, "cwd": folder}
                 handle.write(json.dumps(record) + "\n")
 
     def cache(self, entries: dict[str, list[dict[str, Any]]]) -> None:
@@ -214,9 +217,17 @@ class CollectTest(Fixture):
         self.cache(
             {
                 "w1": [{"repo": "invoices", "label": "invoices", "folder": str(self.repo), "since": at(8).isoformat()}],
-                "w2": [{"repo": "invoices", "label": "review", "folder": str(self.repo), "since": at(8).isoformat()}],
+                "w2": [
+                    {
+                        "repo": "invoices",
+                        "label": "review",
+                        "folder": str(self.repo / "review"),
+                        "since": at(8).isoformat(),
+                    }
+                ],
             }
         )
+        (self.repo / "review").mkdir()
         self.events("w1", (at(10), "agent_working", "p1"), (at(10, 14), "agent_stopped", "p1"))
         self.events("w2", (at(11), "agent_working", "p2"), (at(11, 15), "agent_stopped", "p2"))
 
@@ -295,11 +306,11 @@ class PeriodTest(Fixture):
         self.cache(
             {"w1": [{"repo": "invoices", "label": "invoices", "folder": str(self.repo), "since": at(8).isoformat()}]}
         )
-        self.events("w1", (at(10), "agent_working", "p1"), (at(10, 40), "agent_stopped", "p1"))
+        self.events("w1", (at(10), "agent_working", "p1"), (at(10, 30), "agent_stopped", "p1"))
 
         [session] = self.collect()["sessions"]
 
-        self.assertEqual(session["minutes"]["agent"], 20)
+        self.assertEqual(session["minutes"]["agent"], 10)
         self.assertEqual(session["blocks"][0]["start"], at(10, 20).isoformat())
 
     def test_without_a_watermark_and_with_an_old_one_it_reaches_three_days_back(self) -> None:
@@ -502,6 +513,176 @@ class SharedRepositoryTest(Fixture):
         [session] = self.collect()["sessions"]
 
         self.assertEqual([c["subject"] for c in session["commits"]], ["fix(export): round per line"])
+
+
+class OneStretchOfWorkTest(Fixture):
+    """The same minutes never land in two sessions."""
+
+    def prompts(self, name: str, cwd: Path, *minutes_utc: tuple[int, int]) -> None:
+        self.transcript(
+            name,
+            cwd,
+            [
+                {"type": "user", "timestamp": f"2026-03-14T{h:02d}:{m:02d}:00Z", "message": {"content": "Go on"}}
+                for h, m in minutes_utc
+            ],
+        )
+
+    def test_a_workspace_closed_and_opened_again_on_its_folder_is_one_session(self) -> None:
+        """Covers: B85"""
+        self.watermark(at(9))
+        self.cache(
+            {
+                "w1": [{"repo": "invoices", "label": "invoices", "folder": str(self.repo), "since": at(8).isoformat()}],
+                "w2": [
+                    {"repo": "invoices", "label": "invoices", "folder": str(self.repo), "since": at(12).isoformat()}
+                ],
+            }
+        )
+        self.events("w1", (at(10), "focus", None), (at(10, 5), "agent_working", "p1"))
+        self.events("w1", (at(10, 50), "agent_stopped", "p1"), (at(11, 30), "workspace_closed", None))
+        self.events("w2", (at(12), "focus", None), (at(12, 5), "agent_working", "p2"))
+        self.events("w2", (at(14), "agent_stopped", "p2"))
+        # 11:05Z to 12:55Z is 12:05 to 13:55 here, while only w2 is open.
+        self.prompts("s1", self.repo, *[(11 + (m // 60), m % 60) for m in range(5, 120, 10)])
+
+        [session] = self.collect()["sessions"]
+
+        spans = [(b["start"], b["end"]) for b in session["blocks"]]
+        self.assertEqual(
+            spans, [(at(10).isoformat(), at(11).isoformat()), (at(12).isoformat(), at(14, 10).isoformat())]
+        )
+
+    def test_a_transcript_goes_to_the_workspace_whose_pane_sat_in_its_folder(self) -> None:
+        """Covers: B85"""
+        self.watermark(at(9))
+        elsewhere = self.home / "code" / "acme" / "reports"
+        elsewhere.mkdir(parents=True)
+        self.cache(
+            {
+                "w1": [{"repo": None, "label": "scratch", "folder": None, "since": at(8).isoformat()}],
+                "w2": [{"repo": "invoices", "label": "invoices", "folder": str(self.repo), "since": at(8).isoformat()}],
+            }
+        )
+        self.events("w1", (at(10), "focus", None), (at(10, 5), "agent_working", "p1"), cwd=self.repo)
+        self.events("w1", (at(11), "agent_stopped", "p1"), cwd=self.repo)
+        self.events("w2", (at(13), "focus", None), (at(13, 5), "agent_working", "p2"), cwd=elsewhere)
+        self.events("w2", (at(14), "agent_stopped", "p2"), cwd=elsewhere)
+        self.prompts("s1", self.repo / "src", (9, 5), (9, 15), (9, 25), (9, 35), (9, 45), (9, 55))
+        self.prompts("s2", elsewhere, (12, 5), (12, 15), (12, 25), (12, 35), (12, 45), (12, 55))
+
+        found = self.collect()["sessions"]
+
+        self.assertEqual(sorted(s["workspace"] for s in found), ["w1", "w2"])
+        by_workspace = {s["workspace"]: s for s in found}
+        self.assertEqual(by_workspace["w1"]["minutes"]["transcript"], 50)
+        self.assertEqual(by_workspace["w2"]["minutes"]["transcript"], 50)
+        # A workspace without a folder of its own takes the folder its transcript was written in.
+        self.assertEqual((by_workspace["w1"]["folder"], by_workspace["w1"]["sphere"]), (str(self.repo), "acme"))
+
+    def test_a_folderless_workspace_with_panes_in_two_folders_stays_one_session(self) -> None:
+        """Covers: B85"""
+        self.watermark(at(9))
+        reports = self.home / "code" / "acme" / "reports"
+        reports.mkdir(parents=True)
+        self.cache({"w1": [{"repo": None, "label": "scratch", "folder": None, "since": at(8).isoformat()}]})
+        self.events("w1", (at(10), "focus", None), (at(10, 1), "agent_working", "p1"), cwd=self.repo)
+        self.events("w1", (at(10, 2), "agent_working", "p2"), cwd=reports)
+        self.events("w1", (at(11), "agent_stopped", "p1"), (at(11), "agent_stopped", "p2"), cwd=self.repo)
+        self.prompts("s1", self.repo, (9, 5), (9, 15), (9, 25), (9, 35), (9, 45), (9, 55))
+        self.prompts("s2", reports, (9, 6), (9, 16), (9, 26), (9, 36), (9, 46), (9, 56))
+
+        [session] = self.collect()["sessions"]
+
+        self.assertEqual(session["minutes"]["transcript"], 51)
+
+    def test_a_transcript_goes_to_the_use_of_a_reused_workspace_id_it_was_written_in(self) -> None:
+        """Covers: B85"""
+        self.watermark(at(9))
+        reports = self.home / "code" / "acme" / "reports"
+        reports.mkdir(parents=True)
+        self.cache(
+            {
+                "w1": [
+                    {"repo": "invoices", "label": "invoices", "folder": str(self.repo), "since": at(8).isoformat()},
+                    {"repo": "reports", "label": "reports", "folder": str(reports), "since": at(12).isoformat()},
+                ]
+            }
+        )
+        self.events("w1", (at(10), "focus", None), (at(10, 5), "agent_working", "p1"), cwd=self.repo)
+        self.events("w1", (at(10, 50), "agent_stopped", "p1"), (at(11), "workspace_closed", None), cwd=self.repo)
+        self.events("w1", (at(13), "focus", None), (at(13, 5), "agent_working", "p2"), cwd=reports)
+        self.events("w1", (at(14), "agent_stopped", "p2"), cwd=reports)
+        self.prompts("s1", reports, (12, 5), (12, 15), (12, 25), (12, 35), (12, 45), (12, 55))
+
+        found = {s["folder"]: s for s in self.collect()["sessions"]}
+
+        self.assertEqual(found[str(reports)]["minutes"]["transcript"], 50)
+        self.assertEqual(found[str(self.repo)]["minutes"]["transcript"], 0)
+
+    def test_a_pane_that_wanders_into_another_workspaces_folder_does_not_take_its_transcript(self) -> None:
+        """Covers: B85"""
+        self.watermark(at(9))
+        main_clone = self.home / "code" / "acme" / "invoices-main"
+        main_clone.mkdir(parents=True)
+        self.cache(
+            {
+                "w1": [{"repo": "invoices", "label": "feature", "folder": str(self.repo), "since": at(8).isoformat()}],
+                "w2": [{"repo": "invoices", "label": "main", "folder": str(main_clone), "since": at(9).isoformat()}],
+            }
+        )
+        self.events("w1", (at(10), "focus", None), (at(10, 5), "agent_working", "p1"), cwd=self.repo)
+        self.events("w1", (at(11), "agent_stopped", "p1"), cwd=self.repo)
+        self.events("w2", (at(10, 30), "focus", None), (at(10, 31), "agent_working", "p2"), cwd=self.repo)
+        self.events("w2", (at(10, 33), "agent_stopped", "p2"), cwd=self.repo)
+        self.prompts("s1", self.repo, (9, 5), (9, 15), (9, 25), (9, 35), (9, 45), (9, 55))
+
+        found = {s["workspace"]: s for s in self.collect()["sessions"]}
+
+        self.assertEqual(found["w1"]["minutes"]["transcript"], 50)
+        self.assertNotIn("w2", [w for w, s in found.items() if s["minutes"]["transcript"]])
+
+    def test_a_transcript_stays_with_the_session_of_its_folder_when_a_twin_workspace_slept(self) -> None:
+        """Covers: B85"""
+        self.watermark(at(9))
+        yesterday = at(8) - datetime.timedelta(days=1)
+        self.cache(
+            {
+                "w1": [
+                    {"repo": "invoices", "label": "invoices", "folder": str(self.repo), "since": yesterday.isoformat()}
+                ],
+                "w2": [
+                    {
+                        "repo": "invoices",
+                        "label": "invoices",
+                        "folder": str(self.repo),
+                        "since": (yesterday + datetime.timedelta(hours=7)).isoformat(),
+                    }
+                ],
+            }
+        )
+        # w2 was used yesterday and left open; today only w1 is at work.
+        self.events("w2", (yesterday + datetime.timedelta(hours=8), "focus", None))
+        self.events("w1", (at(10), "focus", None), (at(10, 5), "agent_working", "p1"), (at(11), "agent_stopped", "p1"))
+        self.prompts("s1", self.repo, (9, 5), (9, 15), (9, 25), (9, 35), (9, 45), (9, 55))
+
+        [session] = self.collect()["sessions"]
+
+        self.assertEqual(session["minutes"]["transcript"], 50)
+
+    def test_stamps_just_before_the_cut_keep_the_agent_counting_after_it(self) -> None:
+        """Covers: B84"""
+        # The last worklog ended at 10:00. The agent wrote at 09:58, then ran a 25-minute command.
+        self.watermark(at(10))
+        self.cache(
+            {"w1": [{"repo": "invoices", "label": "invoices", "folder": str(self.repo), "since": at(8).isoformat()}]}
+        )
+        self.events("w1", (at(9), "agent_working", "p1"), (at(10, 40), "agent_stopped", "p1"))
+        self.prompts("s1", self.repo, (8, 0), (8, 10), (8, 20), (8, 30), (8, 40), (8, 50), (8, 58), (9, 23), (9, 33))
+
+        [session] = self.collect()["sessions"]
+
+        self.assertEqual(session["minutes"]["agent"], 40)
 
 
 class AgentStateTest(Fixture):

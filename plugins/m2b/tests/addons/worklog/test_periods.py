@@ -33,8 +33,8 @@ def of_kind(found: list[Period], kind: str) -> list[tuple[float, float, str]]:
 class RulesTest(unittest.TestCase):
     def test_the_three_numbers_live_in_one_table(self) -> None:
         self.assertEqual(
-            (RULES.open_period_grace, RULES.piece_cap, RULES.block_gap),
-            (datetime.timedelta(minutes=5), datetime.timedelta(minutes=10), datetime.timedelta(minutes=15)),
+            (RULES.agent_silence, RULES.piece_cap, RULES.block_gap),
+            (datetime.timedelta(minutes=30), datetime.timedelta(minutes=10), datetime.timedelta(minutes=15)),
         )
 
 
@@ -68,15 +68,39 @@ class AgentPeriodsTest(unittest.TestCase):
         self.assertEqual(of_kind(found, AGENT), [(0, 10, "w1"), (14, 30, "w1")])
         self.assertEqual(of_kind(found, BLOCKED), [(10, 14, "w1")])
 
-    def test_an_open_period_ends_now_while_its_last_event_is_recent(self) -> None:
-        found = periods.derive_periods([event(0, "agent_working"), event(50, "agent_working")], now=at(54))
+    def test_an_open_period_runs_to_now_while_its_last_sign_of_life_is_recent(self) -> None:
+        found = periods.derive_periods([event(0, "agent_working"), event(20, "agent_working")], now=at(44))
 
-        self.assertEqual(of_kind(found, AGENT), [(0, 54, "w1")])
+        self.assertEqual(of_kind(found, AGENT), [(0, 44, "w1")])
 
-    def test_an_open_period_ends_at_its_last_event_once_that_is_older(self) -> None:
-        found = periods.derive_periods([event(0, "agent_working"), event(50, "agent_working")], now=at(55))
+    def test_an_agent_counts_at_most_thirty_minutes_past_its_last_sign_of_life(self) -> None:
+        """Covers: B84"""
+        # Working at 17:50, the lid closed, the stop arrives at 08:00 after waking up.
+        stopped_after_sleep = periods.derive_periods(
+            [event(0, "agent_working"), event(850, "agent_stopped")], now=at(900)
+        )
+        open_at_the_cut = periods.derive_periods([event(0, "agent_working")], now=at(120))
 
-        self.assertEqual(of_kind(found, AGENT), [(0, 50, "w1")])
+        self.assertEqual(of_kind(stopped_after_sleep, AGENT), [(0, 30, "w1")])
+        self.assertEqual(of_kind(open_at_the_cut, AGENT), [(0, 30, "w1")])
+
+    def test_transcript_stamps_keep_an_agent_counting_up_to_the_cut(self) -> None:
+        """Covers: B84"""
+        stamps = [at(minutes) for minutes in range(5, 60, 10)]
+
+        found = periods.derive_periods([event(0, "agent_working")], now=at(60), evidence={"w1": stamps})
+
+        self.assertEqual(of_kind(found, AGENT), [(0, 60, "w1")])
+
+    def test_a_silent_stretch_inside_a_period_counts_only_its_first_thirty_minutes(self) -> None:
+        """Covers: B84"""
+        stamps = [at(10), at(100)]
+
+        found = periods.derive_periods(
+            [event(0, "agent_working"), event(110, "agent_stopped")], now=at(200), evidence={"w1": stamps}
+        )
+
+        self.assertEqual(of_kind(found, AGENT), [(0, 40, "w1"), (100, 110, "w1")])
 
     def test_a_closed_workspace_stops_its_panes(self) -> None:
         found = periods.derive_periods(
@@ -88,7 +112,7 @@ class AgentPeriodsTest(unittest.TestCase):
 
 
 class FocusPeriodsTest(unittest.TestCase):
-    def test_focus_is_split_at_every_event_and_each_piece_is_capped(self) -> None:
+    def test_focus_is_split_at_every_event_of_its_workspace_and_each_piece_is_capped(self) -> None:
         found = periods.derive_periods(
             [
                 event(0, "focus", pane=None),
@@ -99,7 +123,20 @@ class FocusPeriodsTest(unittest.TestCase):
             now=at(60),
         )
 
-        self.assertEqual(of_kind(found, FOCUS), [(0, 4, "w1"), (4, 14, "w1"), (30, 33, "w2"), (33, 43, "w2")])
+        self.assertEqual(of_kind(found, FOCUS), [(0, 10, "w1"), (30, 33, "w2"), (33, 43, "w2")])
+
+    def test_events_of_another_workspace_do_not_keep_focus_alive(self) -> None:
+        """Covers: B84"""
+        # Focus on w1 at 18:00, then only an agent in w2 flipping its state every four minutes until 23:00.
+        others = [
+            event(minutes, "agent_working" if minutes % 8 == 0 else "agent_stopped", "w2", "p9")
+            for minutes in range(4, 300, 4)
+        ]
+
+        found = periods.derive_periods([event(0, "focus", pane=None), *others], now=at(300))
+
+        self.assertEqual(of_kind(found, FOCUS), [(0, 10, "w1")])
+        self.assertEqual(of_kind(found, HUMAN), [(0, 10, "w1")])
 
     def test_human_is_focus_while_no_agent_in_that_workspace_works(self) -> None:
         found = periods.derive_periods(
@@ -114,17 +151,15 @@ class FocusPeriodsTest(unittest.TestCase):
         )
 
         self.assertEqual(of_kind(found, HUMAN), [(0, 2, "w1"), (8, 12, "w1"), (12, 15, "w1")])
-        self.assertEqual(
-            of_kind(found, FOCUS), [(0, 2, "w1"), (2, 6, "w1"), (6, 8, "w1"), (8, 12, "w1"), (12, 15, "w1")]
-        )
+        self.assertEqual(of_kind(found, FOCUS), [(0, 2, "w1"), (2, 8, "w1"), (8, 12, "w1"), (12, 15, "w1")])
 
     def test_an_agent_left_working_by_a_herdr_that_quit_does_not_hide_human_time_later(self) -> None:
         found = periods.derive_periods(
             [event(0, "focus", pane=None), event(1, "agent_working"), event(120, "focus", pane=None)], now=at(125)
         )
 
-        self.assertEqual(of_kind(found, AGENT), [])
-        self.assertEqual(of_kind(found, HUMAN), [(0, 1, "w1"), (1, 11, "w1"), (120, 125, "w1")])
+        self.assertEqual(of_kind(found, AGENT), [(1, 31, "w1")])
+        self.assertEqual(of_kind(found, HUMAN), [(0, 1, "w1"), (120, 125, "w1")])
 
     def test_a_blocked_agent_counts_as_not_working(self) -> None:
         found = periods.derive_periods(
