@@ -10,7 +10,7 @@ All notable changes to this project are documented here. The format follows
 ### Added
 
 - m2b has a logo: the README shows it, and `docs/images/` holds the mark, an icon and the image
-  for link previews.
+  for link previews ([#9](https://github.com/Kolibee-GmbH/m2b/pull/9)).
 
 ### Changed
 
