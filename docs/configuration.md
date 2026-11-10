@@ -131,4 +131,5 @@ The core sets `M2B_CURATION_RUN` and `M2B_RUN_TOKEN` for the steps of a curation
 `M2B_REFRESH_ALL` for the refresh step of `m2b curate --refresh-all`; do not set them yourself.
 
 Claude Code's own `CLAUDE_CONFIG_DIR` is honoured too: when it is set, m2b looks there instead of
-`~/.claude` for the installed plugins and, with the worklog, for the session transcripts.
+`~/.claude` for the installed plugins and, with the worklog, for the session transcripts and the
+`enabledPlugins` setting its recorder checks.
