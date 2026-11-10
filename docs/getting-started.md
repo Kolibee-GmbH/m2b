@@ -9,7 +9,7 @@ nor a model. Both end with a first capture, a curation run and a first search.
 1. Add the marketplace and install m2b:
 
    ```
-   /plugin marketplace add b33eep/m2b
+   /plugin marketplace add Kolibee-GmbH/m2b
    ```
 
    ```
@@ -84,7 +84,7 @@ m2b on a server, in a container, or before installing it in Claude Code.
    instead of from Claude Code's plugin folder:
 
    ```bash
-   git clone https://github.com/b33eep/m2b.git ~/src/m2b
+   git clone https://github.com/Kolibee-GmbH/m2b.git ~/src/m2b
    export PATH="$HOME/src/m2b/plugins/m2b/bin:$PATH"
    export M2B_CORE_ROOT="$HOME/src/m2b/plugins/m2b"
    ```

@@ -3,7 +3,7 @@
 <p align="center"><em>A second brain for Claude Code. Say "remember this" in any session; every new session already knows.</em></p>
 
 <p align="center">
-  <a href="https://github.com/b33eep/m2b/releases"><img src="https://img.shields.io/github/v/release/b33eep/m2b?style=flat-square" alt="Release"></a>
+  <a href="https://github.com/Kolibee-GmbH/m2b/releases"><img src="https://img.shields.io/github/v/release/Kolibee-GmbH/m2b?style=flat-square" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/Claude%20Code-2.1.319%2B-c96442?style=flat-square" alt="Claude Code 2.1.319 or later">
   <img src="https://img.shields.io/badge/Python-3.9%2B-3776ab?style=flat-square" alt="Python 3.9 or later">
@@ -92,7 +92,7 @@ What m2b has that Claude Code's memory does not:
 ## Install
 
 ```
-/plugin marketplace add b33eep/m2b
+/plugin marketplace add Kolibee-GmbH/m2b
 ```
 
 ```

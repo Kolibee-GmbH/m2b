@@ -10,50 +10,53 @@ All notable changes to this project are documented here. The format follows
 ### Changed
 
 - Each add-on has its own page under `docs/addons/`, and `docs/addons.md` is the overview that
-  links them ([#6](https://github.com/b33eep/m2b/pull/6)).
+  links them ([#6](https://github.com/Kolibee-GmbH/m2b/pull/6)).
 - CI runs two jobs, macOS on the current Python and Ubuntu on 3.9, instead of four
-  ([#7](https://github.com/b33eep/m2b/pull/7)).
+  ([#7](https://github.com/Kolibee-GmbH/m2b/pull/7)).
+- The repository moved to `Kolibee-GmbH/m2b`; new installs use
+  `/plugin marketplace add Kolibee-GmbH/m2b`. An install from the old address keeps updating,
+  because GitHub forwards it ([#8](https://github.com/Kolibee-GmbH/m2b/pull/8)).
 
 ## [0.2.0] - 2026-11-09
 
 ### Added
 
-- [Add-ons](https://github.com/b33eep/m2b/blob/main/docs/addons.md) describes each add-on: what it
-  does and needs, how to set it up and turn it off, what it reads and writes on the machine and in
-  the store, its commands, and how you see that it runs
-  ([#5](https://github.com/b33eep/m2b/pull/5)).
+- [Add-ons](https://github.com/Kolibee-GmbH/m2b/blob/main/docs/addons.md) describes each add-on:
+  what it does and needs, how to set it up and turn it off, what it reads and writes on the machine
+  and in the store, its commands, and how you see that it runs
+  ([#5](https://github.com/Kolibee-GmbH/m2b/pull/5)).
 
 ### Changed
 
 - The herdr and worklog add-ons are no longer marked experimental
-  ([#5](https://github.com/b33eep/m2b/pull/5)).
+  ([#5](https://github.com/Kolibee-GmbH/m2b/pull/5)).
 - A program outside the marketplace that writes into the store is now called an integration;
   the former `docs/addons.md` is now
-  [Integrations](https://github.com/b33eep/m2b/blob/main/docs/integrations.md), `docs/addons.md`
-  now describes the add-ons, and `STORE.md` gives an integration its state folder under
-  `state/integrations/<name>/` instead of `state/addons/`
-  ([#5](https://github.com/b33eep/m2b/pull/5)).
+  [Integrations](https://github.com/Kolibee-GmbH/m2b/blob/main/docs/integrations.md),
+  `docs/addons.md` now describes the add-ons, and `STORE.md` gives an integration its state
+  folder under `state/integrations/<name>/` instead of `state/addons/`
+  ([#5](https://github.com/Kolibee-GmbH/m2b/pull/5)).
 - The optional parts of m2b (band, backup, herdr, worklog) are now called add-ons: `m2b parts` is
   `m2b addons`, the key `parts` in `config.json` is `addons`, and their state in the store moves
   from `state/parts/<name>/` to `state/addons/<name>/`. `m2b status --json`,
   `m2b setup apply --json` and the run record `state/core/last-run.json` name them under `addons`
   instead of `parts`; a run record from 0.1.1 reads as no add-ons until the next curation run
   rewrites it. `m2b parts` now ends with a usage error, and a `config.json` that still has `parts`
-  is refused until the key is renamed ([#5](https://github.com/b33eep/m2b/pull/5)).
+  is refused until the key is renamed ([#5](https://github.com/Kolibee-GmbH/m2b/pull/5)).
 - The workflows use action versions that run on Node 24
-  ([#3](https://github.com/b33eep/m2b/pull/3)).
+  ([#3](https://github.com/Kolibee-GmbH/m2b/pull/3)).
 
 ### Fixed
 
 - The README now says that the worklog also reads the end of each session's last answer from the
   transcripts and that its model step may search the archive; it did so in 0.1.1 already
-  ([#5](https://github.com/b33eep/m2b/pull/5)).
+  ([#5](https://github.com/Kolibee-GmbH/m2b/pull/5)).
 - The README lists what each add-on needs, links herdr, and says what the worklog's time
   spans measure; the worklog setup points out a sphere that nothing can match
-  ([#3](https://github.com/b33eep/m2b/pull/3)).
+  ([#3](https://github.com/Kolibee-GmbH/m2b/pull/3)).
 - `m2b config set store.path` refuses a store path the curation fence cannot name on the curating
   machine, and `m2b setup inspect` names such a path before the setup interview starts
-  ([#3](https://github.com/b33eep/m2b/pull/3)).
+  ([#3](https://github.com/Kolibee-GmbH/m2b/pull/3)).
 
 ## [0.1.1] - 2026-11-09
 
@@ -61,35 +64,35 @@ All notable changes to this project are documented here. The format follows
 
 - A new key in `store.json` raises the store format, and a store is checked against the keys of its
   own format, so a key added later no longer stops capture on machines with an older m2b
-  ([#1](https://github.com/b33eep/m2b/pull/1)).
+  ([#1](https://github.com/Kolibee-GmbH/m2b/pull/1)).
 - Releases are tagged `vX.Y.Z` on `main`, and the tag publishes the GitHub release with the
-  changelog section as its notes ([#1](https://github.com/b33eep/m2b/pull/1)).
+  changelog section as its notes ([#1](https://github.com/Kolibee-GmbH/m2b/pull/1)).
 
 ### Fixed
 
 - A capture that cannot be written (no write permission, a full or read-only disk) exits 4 with one
   line saying it was not saved, instead of a traceback, and removes the follow-up task it had
   already created; the capture skill no longer reports such a note as saved
-  ([#1](https://github.com/b33eep/m2b/pull/1)).
+  ([#1](https://github.com/Kolibee-GmbH/m2b/pull/1)).
 - A curation run stopped during a model step still checks `memory/` before it exits, and the next
   run compares `memory/` with the copy a run that never finished saved, names what it left in the
-  review and keeps that copy ([#1](https://github.com/b33eep/m2b/pull/1)).
+  review and keeps that copy ([#1](https://github.com/Kolibee-GmbH/m2b/pull/1)).
 - An old journal month that iCloud keeps in the cloud no longer fails every curation run: it is
   fetched first, or left for the next run and named in the review with `m2b store fetch`
-  ([#1](https://github.com/b33eep/m2b/pull/1)).
+  ([#1](https://github.com/Kolibee-GmbH/m2b/pull/1)).
 - A capture iCloud will not download no longer stops curation: it waits in the inbox, the run record
   names it, and it does not start a run at every session. `m2b capture` fetches an evicted
   `store.json` first and, when that fails, names the command that downloads it
-  ([#1](https://github.com/b33eep/m2b/pull/1)).
+  ([#1](https://github.com/Kolibee-GmbH/m2b/pull/1)).
 - The review names the copy of `memory/` however many captures a step filed; from about eleven, the
-  path used to be cut off ([#1](https://github.com/b33eep/m2b/pull/1)).
+  path used to be cut off ([#1](https://github.com/Kolibee-GmbH/m2b/pull/1)).
 - `m2b todos` names a task file it cannot read, with its path, instead of saying "No open tasks.",
   and exits 1; the todos skill says it could not look at it
-  ([#1](https://github.com/b33eep/m2b/pull/1)).
+  ([#1](https://github.com/Kolibee-GmbH/m2b/pull/1)).
 - Setup and `m2b curate take-over` refuse a store path such as `Notes (2026)` on a machine that is
   to curate, because the rules that fence curation cannot name it, and `m2b doctor` reports one
   already configured there; a machine that only captures may keep its store in such a folder
-  ([#1](https://github.com/b33eep/m2b/pull/1)).
+  ([#1](https://github.com/Kolibee-GmbH/m2b/pull/1)).
 
 ## [0.1.0] - 2026-11-09
 
