@@ -36,6 +36,9 @@ in this language) and `facts`. In `facts`:
   the owner's `prompts` in it), `commits`, and `state` (`agent`: `working`, `blocked` for an agent
   waiting for an approval, `idle`, or `null`; `last_answer`: the agent's last text).
 - `captures`: the notes still in the inbox from the period, by name.
+- `not_recorded`: stretches herdr did not record (herdr not running, the machine asleep or recording
+  off). Nothing is known about them: never call them a pause or a time without work. The note
+  names them by itself.
 
 ## 2. What the owner knows already
 

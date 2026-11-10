@@ -16,6 +16,10 @@ Focus and human periods are split at every event of the focused workspace, and e
 most a fixed time after its event, because herdr reports no idle keyboard; events of other
 workspaces say nothing about whether someone still looks at this one. Activity blocks are the
 periods merged across gaps up to a limit.
+
+The recorder's timer writes a sign of life every five minutes while herdr runs. A silence of more
+than two ticks, without a tick, herdr start or event, was not recorded: herdr was not running, the
+machine slept or recording was off. It is named as such, never read as a time without work.
 """
 
 from __future__ import annotations
@@ -44,14 +48,19 @@ HUMAN = "human"
 
 @dataclass(frozen=True)
 class Rules:
-    """The three numbers the periods depend on, in one place."""
+    """The numbers the periods depend on, in one place."""
 
     agent_silence: datetime.timedelta = datetime.timedelta(minutes=30)
     piece_cap: datetime.timedelta = datetime.timedelta(minutes=10)
     block_gap: datetime.timedelta = datetime.timedelta(minutes=15)
+    # The recorder's timer ticks this often; a silence of two ticks was not recorded, so one late
+    # tick names nothing.
+    tick_interval: datetime.timedelta = datetime.timedelta(minutes=5)
+    recording_gap: datetime.timedelta = datetime.timedelta(minutes=10)
 
 
 RULES = Rules()
+MINUTE = datetime.timedelta(minutes=1)
 
 
 @dataclass(frozen=True)
@@ -77,6 +86,37 @@ class Period:
 class Block:
     start: datetime.datetime
     end: datetime.datetime
+
+
+def not_recorded(
+    signs: Sequence[datetime.datetime],
+    recording_since: datetime.datetime | None,
+    start: datetime.datetime,
+    end: datetime.datetime,
+    rules: Rules = RULES,
+) -> list[Block]:
+    """The stretches of ``start`` to ``end`` in which the recorder was silent for longer than the gap.
+
+    ``signs`` are every line the recorder wrote, its ticks, herdr's starts and the events. A stretch
+    begins one tick after the last sign, when the next tick was due, and ends at the next sign. Only
+    from ``recording_since``, the first tick, on: a recorder without its timer writes no ticks, and
+    its quiet hours say nothing about whether it ran. With no sign before that point in what was
+    read, the silence began before it.
+    """
+    if recording_since is None:
+        return []
+    begin = max(recording_since, start)
+    ordered = sorted(signs)
+    before = [sign for sign in ordered if sign <= begin]
+    latest = before[-1] if before else begin - rules.tick_interval
+    found: list[Block] = []
+    for sign in [*(sign for sign in ordered if begin < sign < end), end]:
+        if sign - latest > rules.recording_gap:
+            stretch = Block(max(latest + rules.tick_interval, begin), sign)
+            if stretch.end - stretch.start >= MINUTE:
+                found.append(stretch)
+        latest = sign
+    return found
 
 
 def parse_event(line: str) -> Event | None:

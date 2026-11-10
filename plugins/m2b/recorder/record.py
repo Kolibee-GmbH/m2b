@@ -12,6 +12,14 @@ Each event becomes ``{"time", "kind", "workspace", "pane", "cwd"}`` in
 label and folder come from herdr's snapshot; the workspace cache keeps one entry per folder a
 workspace id was seen with, so an id herdr reuses for another folder starts a new entry.
 
+herdr sends nothing while it is not running or the machine sleeps, so silence alone cannot tell an
+idle evening from one nobody recorded. The recorder therefore writes signs of life (B88) to
+``alive/<year>-<month>.jsonl``: ``herdr_started`` from herdr's startup hook, and ``recorder_alive`` from
+``record.py --tick``, which an operating-system timer runs every five minutes (herdr has no timer
+for plugins, and its startup hooks must not leave a process behind). A tick writes only while
+recording is allowed and one of the herdr sockets the events came from accepts a connection, and it
+notes the first tick in ``alive/first-tick``, from which on the reader may name a silence.
+
 Whatever goes wrong, it exits 0 and prints nothing: a herdr hook must not disturb herdr.
 """
 
@@ -23,6 +31,7 @@ import fcntl
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import tempfile
@@ -36,6 +45,18 @@ SWITCH_ON = "on"
 CACHE_FILE = "workspaces.json"
 CACHE_LOCK = "workspaces.lock"
 SNAPSHOT_TIMEOUT_SECONDS = 2.0
+STARTUP_EVENT = "startup"
+TICK_FLAG = "--tick"
+HERDR_STARTED = "herdr_started"
+ALIVE = "recorder_alive"
+ALIVE_FOLDER = "alive"
+SOCKETS_FILE = "sockets.json"
+SOCKETS_LOCK = "sockets.lock"
+FIRST_TICK_FILE = "first-tick"
+MAX_SOCKETS = 8
+# The timer runs a tick this often; the reader calls two intervals of silence "not recorded".
+TICK_INTERVAL_SECONDS = 300
+SOCKET_TIMEOUT_SECONDS = 2.0
 
 AGENT_WORKING = "agent_working"
 AGENT_BLOCKED = "agent_blocked"
@@ -251,9 +272,13 @@ def _another_workspace(last: Mapping[str, Any], entry: Mapping[str, str | None],
     return is_worktree or (entry["label"] is not None and entry["label"] != last.get("label"))
 
 
+def may_record(environ: Mapping[str, str]) -> bool:
+    return m2b_installed(environ) and m2b_enabled(environ) and recording_on(environ)
+
+
 def record(environ: Mapping[str, str], now: datetime.datetime) -> bool:
     """Appends the event's line; False when nothing was written."""
-    if not m2b_installed(environ) or not m2b_enabled(environ) or not recording_on(environ):
+    if not may_record(environ):
         return False
     event = event_data(environ)
     if event is None:
@@ -271,15 +296,87 @@ def record(environ: Mapping[str, str], now: datetime.datetime) -> bool:
     line = json.dumps({"time": time, "kind": kind, "workspace": workspace, "pane": pane, "cwd": cwd}) + "\n"
     folder = state_dir(environ)
     folder.mkdir(parents=True, exist_ok=True)
+    _append(folder / f"{workspace}.jsonl", line)
+    entry, is_worktree = workspace_entry(snapshot, data, workspace, cwd)
+    update_cache(folder, workspace, entry, is_worktree, time)
+    return True
+
+
+def remember_socket(environ: Mapping[str, str]) -> None:
+    """Keeps the herdr socket this run came from, so a tick can ask whether herdr still runs."""
+    path = environ.get("HERDR_SOCKET_PATH")
+    if not path:
+        return
+    folder = state_dir(environ) / ALIVE_FOLDER
+    folder.mkdir(parents=True, exist_ok=True)
+    with (folder / SOCKETS_LOCK).open("a", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        known = remembered_sockets(environ)
+        if known and known[-1] == path:
+            return
+        kept = [*(known_path for known_path in known if known_path != path), path][-MAX_SOCKETS:]
+        _replace(folder / SOCKETS_FILE, json.dumps(kept) + "\n")
+
+
+def remembered_sockets(environ: Mapping[str, str]) -> list[str]:
+    try:
+        raw = json.loads((state_dir(environ) / ALIVE_FOLDER / SOCKETS_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return [path for path in raw if isinstance(path, str) and path] if isinstance(raw, list) else []
+
+
+def write_sign(environ: Mapping[str, str], now: datetime.datetime, kind: str) -> None:
+    folder = state_dir(environ) / ALIVE_FOLDER
+    folder.mkdir(parents=True, exist_ok=True)
+    line = json.dumps({"time": now.isoformat(timespec="milliseconds"), "kind": kind}) + "\n"
+    _append(folder / f"{now:%Y-%m}.jsonl", line)
+
+
+def handle(environ: Mapping[str, str], now: datetime.datetime) -> bool:
+    """One run from herdr: at its start a sign of life, else the event; False when nothing was written."""
+    if environ.get("HERDR_PLUGIN_EVENT") == STARTUP_EVENT:
+        if not may_record(environ):
+            return False
+        write_sign(environ, now, HERDR_STARTED)
+        wrote = True
+    else:
+        wrote = record(environ, now)
+    if wrote:
+        remember_socket(environ)
+    return wrote
+
+
+def tick(environ: Mapping[str, str], now: datetime.datetime) -> bool:
+    """The timer's run: a sign of life while recording is allowed and a herdr socket answers."""
+    if not may_record(environ) or not any(_socket_answers(path) for path in remembered_sockets(environ)):
+        return False
+    write_sign(environ, now, ALIVE)
+    first = state_dir(environ) / ALIVE_FOLDER / FIRST_TICK_FILE
+    if not first.exists():
+        _replace(first, now.isoformat(timespec="milliseconds") + "\n")
+    return True
+
+
+def _socket_answers(path: str) -> bool:
+    connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    connection.settimeout(SOCKET_TIMEOUT_SECONDS)
+    try:
+        connection.connect(path)
+    except OSError:
+        return False
+    finally:
+        connection.close()
+    return True
+
+
+def _append(path: Path, line: str) -> None:
     # One write of one short line on a file opened for appending: herdr may run several recorders at once.
-    descriptor = os.open(folder / f"{workspace}.jsonl", os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    descriptor = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
     try:
         os.write(descriptor, line.encode("utf-8"))
     finally:
         os.close(descriptor)
-    entry, is_worktree = workspace_entry(snapshot, data, workspace, cwd)
-    update_cache(folder, workspace, entry, is_worktree, time)
-    return True
 
 
 def _objects(value: object) -> list[dict[str, Any]]:
@@ -298,12 +395,16 @@ def _replace(path: Path, text: str) -> None:
         raise
 
 
-def main() -> int:
-    # A herdr hook must not disturb herdr, whatever went wrong.
+def main(arguments: list[str]) -> int:
+    # A herdr hook must not disturb herdr, and a timer run must not fill a log, whatever went wrong.
     with contextlib.suppress(Exception):
-        record(os.environ, datetime.datetime.now().astimezone())
+        now = datetime.datetime.now().astimezone()
+        if arguments == [TICK_FLAG]:
+            tick(os.environ, now)
+        else:
+            handle(os.environ, now)
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

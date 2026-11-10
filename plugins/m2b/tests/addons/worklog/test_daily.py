@@ -428,6 +428,48 @@ class StateTest(DailyFixture):
             "## Could not read\n\n- herdr: herdr did not answer", (self.store / note).read_text(encoding="utf-8")
         )
 
+    def test_a_stretch_the_recorder_did_not_record_is_named_in_the_note(self) -> None:
+        """Covers: B89"""
+        self.a_due_day()
+        self.alive(at(9), at(10, 50))
+        self.alive(at(13), at(18))
+
+        self.run_daily()
+
+        [note] = self.worklog_notes()
+        text = (self.store / note).read_text(encoding="utf-8")
+        self.assertIn(
+            "## Not recorded\n\nherdr was not running, the machine was asleep, recording was off or the recorder's "
+            "timer did not run:\n\n"
+            "- 2026-03-14 10:55 to 13:00\n",
+            text,
+        )
+        self.assertNotIn("## Could not read", text)
+
+    def test_a_stretch_over_midnight_carries_both_dates(self) -> None:
+        """Covers: B89"""
+        self.a_due_day()
+        self.alive(DAY_BEFORE, DAY_BEFORE + datetime.timedelta(hours=10))
+        self.alive(at(8, 30), at(18))
+
+        self.run_daily()
+
+        [note] = self.worklog_notes()
+        self.assertIn("- 2026-03-13 19:05 to 2026-03-14 08:30\n", (self.store / note).read_text("utf-8"))
+
+    def test_the_heading_of_stretches_not_recorded_follows_the_language(self) -> None:
+        self.profile["language"] = "de"
+        self.a_due_day()
+        self.alive(at(9), at(10, 50))
+        self.alive(at(13), at(18))
+
+        self.run_daily()
+
+        [note] = self.worklog_notes()
+        text = (self.store / note).read_text("utf-8")
+        self.assertIn("## Nicht aufgezeichnet\n\nherdr lief nicht", text)
+        self.assertIn("- 2026-03-14 10:55 bis 13:00\n", text)
+
     def test_the_note_follows_the_profiles_language(self) -> None:
         self.profile["language"] = "de"
         self.a_due_day()

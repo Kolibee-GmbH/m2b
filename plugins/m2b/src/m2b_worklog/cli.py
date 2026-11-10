@@ -1,5 +1,6 @@
 """The ``m2b-worklog`` command.
 
+``recorder check`` says whether herdr is there, new enough and running, which setup asks first.
 ``recorder install`` and ``recorder remove`` copy the recorder and link it in herdr, or unlink it;
 both run twice without harm. ``recordings delete`` deletes what the recorder wrote. ``collect``
 prints the facts of the period since the watermark. ``run`` is the daily worklog, the module's
@@ -32,6 +33,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="group", required=True)
     recorder_group = commands.add_parser("recorder", help="the activity recorder in herdr")
     recorder_commands = recorder_group.add_subparsers(dest="command", required=True)
+    check_command = recorder_commands.add_parser("check", help="whether herdr is installed, new enough and running")
+    check_command.add_argument("--json", action="store_true", help="answer as JSON")
     recorder_commands.add_parser("install", help="copy the recorder and link it in herdr")
     recorder_commands.add_parser("remove", help="unlink the recorder and delete its copy; recordings stay")
     recordings = commands.add_parser("recordings", help="what the recorder wrote on this machine")
@@ -81,12 +84,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         shutil.rmtree(paths.run_dir, ignore_errors=True)
         print(f"recordings deleted: {paths.state_dir}, {paths.run_dir}")
         return EXIT_OK
+    if arguments.command == "check":
+        return _check(arguments.json)
     action = recorder.install if arguments.command == "install" else recorder.remove
     try:
         print(action(paths, os.environ))
     except (recorder.HerdrError, OSError) as error:
         print(f"m2b-worklog: {error}", file=sys.stderr)
         return EXIT_PROBLEM
+    return EXIT_OK
+
+
+def _check(as_json: bool) -> int:
+    answer = recorder.check(os.environ)
+    if as_json:
+        print(json.dumps(answer))
+    elif answer["ready"]:
+        print(f"herdr {answer['herdr']} is running")
+    else:
+        print(answer["problem"])
     return EXIT_OK
 
 

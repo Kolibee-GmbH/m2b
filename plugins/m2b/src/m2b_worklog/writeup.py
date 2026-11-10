@@ -32,6 +32,10 @@ HEADINGS = {
         "no_bookings": "None.",
         "candidates": "Proposed for memory",
         "unread": "Could not read",
+        "not_recorded": "Not recorded",
+        "not_recorded_why": "herdr was not running, the machine was asleep, recording was off or the recorder's "
+        "timer did not run:",
+        "span": "{start} to {end}",
         "minutes": "{minutes} min",
         "hours": "{hours} h {minutes} min",
         "state": {"done": "done", "open": "open", "waiting": "waiting for the owner"},
@@ -45,6 +49,10 @@ HEADINGS = {
         "no_bookings": "Keine.",
         "candidates": "Zum Merken vorgeschlagen",
         "unread": "Nicht lesbar",
+        "not_recorded": "Nicht aufgezeichnet",
+        "not_recorded_why": "herdr lief nicht, der Rechner schlief, die Aufzeichnung war aus oder der Zeitgeber "
+        "des Recorders lief nicht:",
+        "span": "{start} bis {end}",
         "minutes": "{minutes} Min.",
         "hours": "{hours} Std. {minutes} Min.",
         "state": {"done": "erledigt", "open": "offen", "waiting": "wartet auf den Besitzer"},
@@ -191,6 +199,9 @@ def _note(
     unread = _unread(facts)
     if unread:
         lines += [f"## {words['unread']}", "", *[f"- {line}" for line in unread], ""]
+    if facts["not_recorded"]:
+        stretches = [f"- {_stretch(stretch, words)}" for stretch in facts["not_recorded"]]
+        lines += [f"## {words['not_recorded']}", "", words["not_recorded_why"], "", *stretches, ""]
     return "\n".join(lines)
 
 
@@ -226,6 +237,13 @@ def _unread(facts: Mapping[str, Any]) -> list[str]:
         if session["git"]["state"] != "read":
             lines.append(f"git in {session['folder'] or session['key']}: {session['git']['detail']}")
     return lines
+
+
+def _stretch(stretch: Mapping[str, Any], words: Mapping[str, Any]) -> str:
+    """A stretch nobody recorded, with the date again at its end when it crosses midnight (B89)."""
+    start, end = _time(stretch["start"]), _time(stretch["end"])
+    shown_end = f"{end:%H:%M}" if end.date() == start.date() else f"{end:%Y-%m-%d %H:%M}"
+    return str(words["span"].format(start=f"{start:%Y-%m-%d %H:%M}", end=shown_end))
 
 
 def _duration(minutes: int, words: Mapping[str, Any]) -> str:

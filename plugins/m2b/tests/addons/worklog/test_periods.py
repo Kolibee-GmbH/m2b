@@ -31,10 +31,16 @@ def of_kind(found: list[Period], kind: str) -> list[tuple[float, float, str]]:
 
 
 class RulesTest(unittest.TestCase):
-    def test_the_three_numbers_live_in_one_table(self) -> None:
+    def test_the_numbers_live_in_one_table(self) -> None:
         self.assertEqual(
-            (RULES.agent_silence, RULES.piece_cap, RULES.block_gap),
-            (datetime.timedelta(minutes=30), datetime.timedelta(minutes=10), datetime.timedelta(minutes=15)),
+            (RULES.agent_silence, RULES.piece_cap, RULES.block_gap, RULES.tick_interval, RULES.recording_gap),
+            (
+                datetime.timedelta(minutes=30),
+                datetime.timedelta(minutes=10),
+                datetime.timedelta(minutes=15),
+                datetime.timedelta(minutes=5),
+                datetime.timedelta(minutes=10),
+            ),
         )
 
 
@@ -207,6 +213,69 @@ class LoadTest(unittest.TestCase):
             events = periods.load_events(Path(folder))
 
         self.assertEqual([(e.workspace, e.kind) for e in events], [("w2", "focus"), ("w1", "agent_working")])
+
+
+def spans(found: list[Block]) -> list[tuple[float, float]]:
+    return [((b.start - DAY).total_seconds() / 60, (b.end - DAY).total_seconds() / 60) for b in found]
+
+
+def ticks(first: float, last: float) -> list[datetime.datetime]:
+    return [at(minute) for minute in range(int(first), int(last) + 1, 5)]
+
+
+class NotRecordedTest(unittest.TestCase):
+    """Stretches without a sign of life from the recorder: herdr was not running, the machine slept."""
+
+    def test_a_silence_of_more_than_two_ticks_is_named_from_the_tick_that_did_not_come(self) -> None:
+        """Covers: B89"""
+        found = periods.not_recorded([*ticks(0, 10), *ticks(200, 210)], at(0), at(0), at(210))
+
+        self.assertEqual(spans(found), [(15, 200)])
+
+    def test_exactly_ten_minutes_of_silence_names_nothing_a_second_more_does(self) -> None:
+        """Covers: B89"""
+        self.assertEqual(periods.not_recorded([at(0), at(10)], at(0), at(0), at(10)), [])
+        self.assertEqual(
+            spans(periods.not_recorded([at(0), at(10 + 1 / 60)], at(0), at(0), at(11))), [(5, 10 + 1 / 60)]
+        )
+
+    def test_one_late_tick_names_nothing(self) -> None:
+        found = periods.not_recorded([at(0), at(5), at(14), at(20)], at(0), at(0), at(25))
+
+        self.assertEqual(found, [])
+
+    def test_herdrs_start_and_an_event_are_signs_of_life_too(self) -> None:
+        """Covers: B89"""
+        found = periods.not_recorded([at(0), at(8), at(16), at(24), at(30)], at(0), at(0), at(30))
+
+        self.assertEqual(found, [])
+
+    def test_the_stretch_is_clipped_to_the_period_and_runs_to_its_end(self) -> None:
+        """Covers: B89"""
+        found = periods.not_recorded([at(-120), at(30)], at(-600), at(0), at(100))
+
+        self.assertEqual(spans(found), [(0, 30), (35, 100)])
+
+    def test_without_a_tick_ever_nothing_is_named(self) -> None:
+        """Covers: B89"""
+        self.assertEqual(periods.not_recorded([at(-600), at(0), at(5)], None, at(0), at(100)), [])
+
+    def test_nothing_is_named_before_the_first_tick(self) -> None:
+        """Covers: B89"""
+        found = periods.not_recorded([at(-600), at(0), *ticks(50, 60)], at(50), at(0), at(100))
+
+        self.assertEqual(spans(found), [(65, 100)])
+
+    def test_ticks_that_began_before_what_was_read_name_a_silence_from_the_periods_start(self) -> None:
+        """Covers: B89"""
+        found = periods.not_recorded(ticks(300, 330), at(-6000), at(0), at(330))
+
+        self.assertEqual(spans(found), [(0, 300)])
+
+    def test_less_than_a_minute_is_not_named(self) -> None:
+        found = periods.not_recorded([at(-20)], at(-100), at(0), at(0.5))
+
+        self.assertEqual(found, [])
 
 
 if __name__ == "__main__":

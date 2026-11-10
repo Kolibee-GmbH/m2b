@@ -38,7 +38,8 @@ ADDONS = (
     Addon("band", "open memory candidates, the open review and the state of curation above the prompt"),
     Addon(
         "worklog",
-        "records activity in herdr and writes a daily worklog with time spans and booking proposals",
+        "needs herdr 0.9 or later; records activity in herdr and writes a daily worklog with time spans "
+        "and booking proposals",
         AddonStep("before_ingest", ("bin/m2b-worklog", "run")),
     ),
 )

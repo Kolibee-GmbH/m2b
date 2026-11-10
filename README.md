@@ -236,7 +236,7 @@ and `m2b addons list` shows which are on.
 | Add-on | What it adds | Needs | Setup |
 |---|---|---|---|
 | [`band`](docs/addons/band.md) | A band above the prompt with memory candidates and "Still current?" questions to keep or drop in place and the review task with its findings, and a status line such as `brain: 3 in inbox · curated 18:02` | mods turned on in Claude Code | `/m2b:band-setup` |
-| [`worklog`](docs/addons/worklog.md) | A daily worklog of your sessions in herdr: topics, time spans per sphere of work, booking proposals for billable spheres, a ledger with CSV and XLSX exports | herdr 0.9 or later; the curating machine, which alone records; your spheres of work and customers, which its setup asks for | `/m2b:worklog-setup` |
+| [`worklog`](docs/addons/worklog.md) | A daily worklog of your sessions in herdr: topics, time spans per sphere of work, booking proposals for billable spheres, a ledger with CSV and XLSX exports | [herdr](https://herdr.dev) 0.9 or later, running; the curating machine, which alone records; your spheres of work and customers, which its setup asks for | `/m2b:worklog-setup` |
 
 Each add-on has its own page, linked in the table: what it reads and writes on the machine and in
 the store, its commands, and how you see that it runs. [Add-ons](docs/addons.md) is the overview.
@@ -275,7 +275,9 @@ its own events, because herdr cannot tell typing from looking), or messages in i
 15 minutes apart, merged across gaps of up to 15 minutes; waiting for an approval does not count.
 The same minutes count once, also when a workspace is closed and opened again. An agent left working
 on its own, a loop through the night for one, counts as well, so check a booking proposal before you
-enter it. The [worklog page](docs/addons/worklog.md#time-spans) has the rules.
+enter it. A stretch the recorder did not record, because herdr was not running or the machine slept,
+is named in the note as not recorded, never read as a time without work. The
+[worklog page](docs/addons/worklog.md#time-spans) has the rules.
 
 ## Configure
 
@@ -340,7 +342,7 @@ whether a run is due.
 - The task titles, notes and worklog m2b writes are in English or German; everything else it
   prints is in English. Your notes can be in any language.
 - On Linux there is no calendar backend, and a schedule is a cron line instead of a Shortcut.
-- The worklog needs [herdr](https://herdr.dev) and records only the curating machine. It never books anything: its
+- The worklog needs [herdr](https://herdr.dev) 0.9 or later and records only the curating machine. It never books anything: its
   bookings are proposals for you to enter.
 - Sync is whatever moves the folder. m2b has no sync and no server of its own.
 - Nothing captured is deleted automatically. What does get deleted: conflict copies identical

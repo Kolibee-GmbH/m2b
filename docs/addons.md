@@ -19,7 +19,7 @@ before. An add-on reaches the core only through the `m2b` command, the way an
 | Add-on | What it adds | Runs on | When |
 |---|---|---|---|
 | [band](addons/band.md) | memory candidates, "Still current?" questions and the review above the prompt, and a status line | every machine where it is on | in each session, about once a minute and after each of your turns |
-| [worklog](addons/worklog.md) | a daily worklog with time spans per sphere of work and booking proposals | the curating machine only | records in herdr all the time; writes once a day, in the curation run before the inbox is filed |
+| [worklog](addons/worklog.md) | a daily worklog with time spans per sphere of work and booking proposals; needs [herdr](https://herdr.dev) 0.9 or later | the curating machine only | records in herdr all the time; writes once a day, in the curation run before the inbox is filed |
 
 Each page says what the add-on does and needs, how to set it up and turn it off, what it reads and
 writes on the machine and in the store, its commands, and how you see that it runs.

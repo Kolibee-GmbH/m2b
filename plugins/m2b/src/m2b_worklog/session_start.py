@@ -6,7 +6,8 @@ Only the curating machine records, only while the worklog add-on is on, and only
 while all three hold, else ``off``, so a take-over or ``m2b addons off worklog`` turns recording off
 at the next session, and installing m2b alone never turns recording on. When the
 core cannot answer, the switch stays as it was and one line says so (B7). An installed recorder
-copy is brought to this plugin version's files, so an update needs no step.
+copy is brought to this plugin version's files, linked again in herdr when its version changed, and
+its timer put in place, so an update needs no step.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ import subprocess
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from m2b_worklog import recorder
+from m2b_worklog import recorder, timer
 from m2b_worklog.files import replace_file
 from m2b_worklog.paths import SWITCH_OFF, SWITCH_ON, WorklogPaths
 
@@ -133,6 +134,8 @@ def session_start(paths: WorklogPaths, environ: Mapping[str, str], run: recorder
                 set_switch(paths, False)
         return ""
     lines = []
+    # Unknown while the core cannot answer: the timer is then left as it is.
+    recording = False
     try:
         status = core_status(paths, run)
     except StatusError as error:
@@ -144,7 +147,11 @@ def session_start(paths: WorklogPaths, environ: Mapping[str, str], run: recorder
         except OSError as error:
             lines.append(f"m2b worklog: the recording switch could not be written ({error}).")
     try:
-        recorder.refresh(paths)
-    except OSError as error:
+        recorder.refresh(paths, environ, recording=recording)
+    except timer.TimerError as error:
+        lines.append(
+            f"m2b worklog: the recorder's timer could not be set up ({error}); /m2b:worklog-setup tries again."
+        )
+    except (OSError, recorder.HerdrError) as error:
         lines.append(f"m2b worklog: the installed recorder could not be updated ({error}).")
     return "".join(f"{line}\n" for line in lines)

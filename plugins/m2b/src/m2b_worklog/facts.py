@@ -130,6 +130,19 @@ def collect(inputs: Inputs, run: Runner = subprocess.run) -> dict[str, Any]:
         "customers": [c for c in inputs.profile.get("customers", []) if isinstance(c, str)],
         "sessions": [_session(draft, gits[draft.key], blocks[draft.key], owners, rules, zone) for draft in drafts],
         "captures": [{"name": c.name, "created": _iso(c.created, zone), "source": c.source} for c in inbox.captures],
+        "not_recorded": [
+            {
+                "start": _iso(b.start, zone),
+                "end": _iso(b.end, zone),
+                "minutes": round((b.end - b.start) / periods.MINUTE),
+            }
+            for b in periods.not_recorded(
+                [*recordings.alive, *(e.time for e in recordings.events)],
+                recordings.recording_since,
+                period.start,
+                period.end,
+            )
+        ],
     }
 
 

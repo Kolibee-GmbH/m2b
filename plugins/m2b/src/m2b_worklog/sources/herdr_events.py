@@ -1,16 +1,19 @@
-"""What the recorder wrote: the events of every workspace and the workspace cache."""
+"""What the recorder wrote: the events of every workspace, its signs of life and the workspace cache."""
 
 from __future__ import annotations
 
 import datetime
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from m2b_worklog.periods import FOCUS_EVENT, WORKSPACE_CLOSED, Event, load_events
 from m2b_worklog.sources import SourceState
 
 CACHE_FILE = "workspaces.json"
+ALIVE_FOLDER = "alive"
+SIGN_KINDS = ("recorder_alive", "herdr_started")
+FIRST_TICK_FILE = "first-tick"
 
 
 @dataclass(frozen=True)
@@ -29,6 +32,10 @@ class Recordings:
     events: list[Event]
     workspaces: list[Workspace]
     state: SourceState
+    # The recorder's signs of life (its ticks and herdr's starts), oldest first.
+    alive: list[datetime.datetime] = field(default_factory=list)
+    # The first tick of the recorder's timer; None while there was none.
+    recording_since: datetime.datetime | None = None
 
 
 def read_recordings(folder: Path, since: datetime.datetime | None = None) -> Recordings:
@@ -43,9 +50,40 @@ def read_recordings(folder: Path, since: datetime.datetime | None = None) -> Rec
     try:
         events = _from(load_events(folder, written_since=since), since)
         workspaces = _workspaces(folder / CACHE_FILE)
+        alive = _alive(folder / ALIVE_FOLDER, since)
+        recording_since = _first_tick(folder / ALIVE_FOLDER / FIRST_TICK_FILE)
     except OSError as error:
         return Recordings([], [], SourceState.failed(str(error)))
-    return Recordings(events, workspaces, SourceState.read())
+    return Recordings(events, workspaces, SourceState.read(), alive, recording_since)
+
+
+def _first_tick(path: Path) -> datetime.datetime | None:
+    if not path.exists():
+        return None
+    return _time(path.read_text(encoding="utf-8").strip())
+
+
+def _alive(folder: Path, since: datetime.datetime | None) -> list[datetime.datetime]:
+    """Signs of life from ``since`` on; a month's file last written before it holds none."""
+    if not folder.is_dir():
+        return []
+    found: list[datetime.datetime] = []
+    for path in sorted(folder.glob("*.jsonl")):
+        if since is not None and datetime.datetime.fromtimestamp(path.stat().st_mtime, datetime.timezone.utc) < since:
+            continue
+        with path.open(encoding="utf-8", errors="replace") as handle:
+            found.extend(moment for moment in map(_alive_time, handle) if moment is not None)
+    return sorted(moment for moment in found if since is None or moment >= since)
+
+
+def _alive_time(line: str) -> datetime.datetime | None:
+    try:
+        raw = json.loads(line)
+    except ValueError:
+        return None
+    if not isinstance(raw, dict) or raw.get("kind") not in SIGN_KINDS:
+        return None
+    return _time(raw.get("time"))
 
 
 def _from(events: list[Event], since: datetime.datetime | None) -> list[Event]:

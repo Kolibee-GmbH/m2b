@@ -13,6 +13,14 @@ All notable changes to this project are documented here. The format follows
   for link previews ([#9](https://github.com/Kolibee-GmbH/m2b/pull/9)).
 - `m2b-worklog state` shows the watermark, an unfinished worklog and the last period in the ledger,
   and names a file it cannot read.
+- The worklog's recorder writes a sign of life at herdr's start and, run by a timer of the operating
+  system (a launch agent on macOS, a systemd user timer on Linux), every five minutes while herdr
+  runs. A silence of more than 10 minutes appears in the note under "Not recorded" with its times,
+  instead of reading as a time without work. The next session start updates the recorder, links it
+  again in herdr and sets up the timer; `m2b-worklog recorder remove` takes the timer out too.
+- `m2b-worklog recorder check` says whether herdr is installed, at least 0.9.0 and running. The
+  worklog setup asks it first and stops before any question when herdr is missing, too old or not
+  running.
 
 ### Changed
 

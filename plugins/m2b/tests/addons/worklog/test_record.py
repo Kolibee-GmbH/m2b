@@ -5,10 +5,14 @@ from __future__ import annotations
 import datetime
 import json
 import os
+import shutil
+import socket
 import subprocess
 import sys
+import tempfile
+from pathlib import Path
 
-from m2b_worklog import periods
+from m2b_worklog import periods, timer
 from worklog_fixtures import RECORDER_DIR, WorklogFixture, load_recorder, snapshot_reply
 
 record = load_recorder()
@@ -274,3 +278,122 @@ class PlainWorkspaceCacheTest(WorklogFixture):
             [(entry["label"], entry["folder"]) for entry in entries],
             [("notes", "/home/alex/notes"), ("acme-invoices", "/home/alex/work/acme-invoices")],
         )
+
+
+class SignOfLifeTest(WorklogFixture):
+    """The recorder says it is alive at herdr's start and at each tick, so silence is not idleness."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.install_plugins("m2b@m2b")
+        self.switch("on")
+        self.herdr_reply.write_text(snapshot_reply([SHED], [SHED_PANE]), encoding="utf-8")
+        folder = Path(tempfile.mkdtemp(dir="/tmp"))
+        self.addCleanup(shutil.rmtree, folder, True)
+        self.socket_path = folder / "h.sock"
+        self.server = socket.socket(socket.AF_UNIX)
+        self.addCleanup(self.server.close)
+        self.server.bind(str(self.socket_path))
+        self.server.listen(4)
+        self.environ["HERDR_SOCKET_PATH"] = str(self.socket_path)
+
+    def signs(self) -> list[dict[str, object]]:
+        folder = self.state / "alive"
+        files = sorted(folder.glob("*.jsonl")) if folder.is_dir() else []
+        return [json.loads(line) for path in files for line in path.read_text(encoding="utf-8").splitlines()]
+
+    def stop_herdr(self) -> None:
+        self.server.close()
+        self.socket_path.unlink()
+
+    def test_herdrs_startup_writes_a_sign_of_life(self) -> None:
+        """Covers: B88"""
+        self.assertTrue(record.handle({**self.environ, "HERDR_PLUGIN_EVENT": "startup"}, NOW))
+
+        self.assertEqual(self.signs(), [{"time": "2026-03-14T09:30:00.250+01:00", "kind": "herdr_started"}])
+        self.assertEqual(sorted(p.name for p in (self.state / "alive").glob("*.jsonl")), ["2026-03.jsonl"])
+
+    def test_a_tick_writes_a_sign_while_a_socket_an_event_came_from_answers(self) -> None:
+        """Covers: B88"""
+        record.handle({**self.environ, **status_event("working")}, NOW)
+        timer_environ = {key: value for key, value in self.environ.items() if key != "HERDR_SOCKET_PATH"}
+        later = NOW + datetime.timedelta(minutes=5)
+
+        self.assertTrue(record.tick(timer_environ, later))
+
+        self.assertEqual(self.signs(), [{"time": "2026-03-14T09:35:00.250+01:00", "kind": "recorder_alive"}])
+        self.assertEqual(
+            (self.state / "alive" / "first-tick").read_text(encoding="utf-8"),
+            f"{later.isoformat(timespec='milliseconds')}\n",
+        )
+
+    def test_the_first_tick_stays_the_first(self) -> None:
+        record.handle({**self.environ, "HERDR_PLUGIN_EVENT": "startup"}, NOW)
+        record.tick(self.environ, NOW + datetime.timedelta(minutes=5))
+        record.tick(self.environ, NOW + datetime.timedelta(minutes=10))
+
+        self.assertEqual(
+            (self.state / "alive" / "first-tick").read_text(encoding="utf-8"), "2026-03-14T09:35:00.250+01:00\n"
+        )
+
+    def test_a_tick_writes_nothing_once_herdr_is_gone(self) -> None:
+        """Covers: B88"""
+        record.handle({**self.environ, "HERDR_PLUGIN_EVENT": "startup"}, NOW)
+        self.stop_herdr()
+
+        self.assertFalse(record.tick(self.environ, NOW + datetime.timedelta(minutes=5)))
+
+        self.assertEqual([sign["kind"] for sign in self.signs()], ["herdr_started"])
+        self.assertFalse((self.state / "alive" / "first-tick").exists())
+
+    def test_a_tick_writes_nothing_without_a_socket_it_learned_from_herdr(self) -> None:
+        self.assertFalse(record.tick(self.environ, NOW))
+        self.assertEqual(self.signs(), [])
+
+    def test_nothing_is_written_while_recording_is_not_allowed(self) -> None:
+        """Covers: B38, B88"""
+        record.handle({**self.environ, "HERDR_PLUGIN_EVENT": "startup"}, NOW)
+        self.switch("off")
+
+        self.assertFalse(record.handle({**self.environ, "HERDR_PLUGIN_EVENT": "startup"}, NOW))
+        self.assertFalse(record.tick(self.environ, NOW))
+
+        self.assertEqual(len(self.signs()), 1)
+
+    def test_a_tick_finds_herdr_in_any_session_it_saw_and_keeps_the_newest_eight(self) -> None:
+        for number in range(10):
+            environ = {**self.environ, "HERDR_SOCKET_PATH": f"/tmp/no-such-herdr-{number}.sock"}
+            record.handle({**environ, **status_event("working")}, NOW)
+        record.handle({**self.environ, **status_event("idle")}, NOW)
+
+        remembered = record.remembered_sockets(self.environ)
+
+        self.assertEqual(len(remembered), 8)
+        self.assertEqual(remembered[-1], str(self.socket_path))
+        self.assertTrue(record.tick(self.environ, NOW))
+
+    def test_the_tick_runs_as_a_script_and_exits_0_without_output(self) -> None:
+        record.handle({**self.environ, "HERDR_PLUGIN_EVENT": "startup"}, NOW)
+        environ = {key: value for key, value in self.environ.items() if key != "HERDR_SOCKET_PATH"}
+        environ["PATH"] = os.environ.get("PATH", "")
+
+        result = subprocess.run(
+            [sys.executable, str(RECORDER_DIR / "record.py"), "--tick"],
+            cwd="/",
+            env=environ,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
+        self.assertEqual([sign["kind"] for sign in self.signs()], ["herdr_started", "recorder_alive"])
+
+    def test_herdr_starts_the_recorder_at_its_own_start(self) -> None:
+        manifest = (RECORDER_DIR / "herdr-plugin.toml").read_text(encoding="utf-8")
+
+        self.assertRegex(manifest, r'\[\[startup\]\]\ncommand = \["python3", "record.py"\]')
+
+    def test_the_tick_interval_is_the_one_the_reader_and_the_timer_use(self) -> None:
+        self.assertEqual(record.TICK_INTERVAL_SECONDS, periods.RULES.tick_interval.total_seconds())
+        self.assertEqual(record.TICK_INTERVAL_SECONDS, timer.INTERVAL_SECONDS)

@@ -315,7 +315,7 @@ class AddonsCommandTest(test_runner.RunnerTest):
 
         code, out, _ = self.run_command("addons", "list")
         self.assertEqual(code, cli.EXIT_OK)
-        self.assertIn("worklog  off  records activity in herdr", out)
+        self.assertIn("worklog  off  needs herdr 0.9 or later; records activity in herdr", out)
 
     def test_an_unknown_addon_is_a_usage_error_that_names_the_addons(self) -> None:
         self.curating()

@@ -14,7 +14,9 @@ from typing import Any
 
 from m2b_worklog import facts, schema
 from m2b_worklog.facts import FactsError, Inputs
+from m2b_worklog.sources import herdr_events
 from m2b_worklog.sources.transcripts import prompt_text, redact
+from worklog_fixtures import load_recorder
 
 ZONE = datetime.timezone(datetime.timedelta(hours=1))
 NOW = datetime.datetime(2026, 3, 14, 18, 0, tzinfo=ZONE)
@@ -75,6 +77,18 @@ class Fixture(unittest.TestCase):
                 folder = str(cwd) if cwd is not None and pane is not None else None
                 record = {"time": moment.isoformat(), "kind": kind, "workspace": workspace, "pane": pane, "cwd": folder}
                 handle.write(json.dumps(record) + "\n")
+
+    def alive(self, start: datetime.datetime, end: datetime.datetime) -> None:
+        """The timer's ticks every five minutes from ``start`` up to ``end``; the first one ever is noted."""
+        folder = self.recordings / "alive"
+        folder.mkdir(exist_ok=True)
+        if not (folder / "first-tick").exists():
+            (folder / "first-tick").write_text(start.isoformat() + "\n", encoding="utf-8")
+        moment = start
+        while moment <= end:
+            with (folder / f"{moment:%Y-%m}.jsonl").open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps({"time": moment.isoformat(), "kind": "recorder_alive"}) + "\n")
+            moment += datetime.timedelta(minutes=5)
 
     def cache(self, entries: dict[str, list[dict[str, Any]]]) -> None:
         (self.recordings / "workspaces.json").write_text(json.dumps(entries), encoding="utf-8")
@@ -297,6 +311,67 @@ class CollectTest(Fixture):
 
         self.assertEqual(found["sources"]["recorder"]["state"], "could not read")
         self.assertEqual(found["sources"]["transcripts"]["state"], "could not read")
+
+
+class NotRecordedTest(Fixture):
+    def test_a_stretch_without_a_sign_of_life_is_named_not_recorded(self) -> None:
+        """Covers: B89"""
+        self.a_day_of_work()
+        self.alive(at(9), at(10, 50))
+        self.alive(at(13), at(18))
+
+        found = self.collect()
+
+        self.assertEqual(
+            found["not_recorded"],
+            [{"start": "2026-03-14T10:55:00+01:00", "end": "2026-03-14T13:00:00+01:00", "minutes": 125}],
+        )
+
+    def test_a_recorder_without_its_timer_names_nothing(self) -> None:
+        """Covers: B89"""
+        self.a_day_of_work()
+
+        self.assertEqual(self.collect()["not_recorded"], [])
+
+    def test_signs_of_two_months_and_herdrs_starts_are_read_and_an_old_file_is_skipped(self) -> None:
+        """Covers: B89"""
+        self.watermark(at(9))
+        self.alive(
+            datetime.datetime(2026, 2, 28, 23, 50, tzinfo=ZONE), datetime.datetime(2026, 3, 1, 0, 5, tzinfo=ZONE)
+        )
+        self.alive(at(9) - datetime.timedelta(hours=1), at(12))
+        self.alive(at(16, 5), at(18))
+        folder = self.recordings / "alive"
+        with (folder / "2026-03.jsonl").open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps({"time": at(16).isoformat(), "kind": "herdr_started"}) + "\n")
+        # A file last written long ago holds nothing newer, whatever its lines say: it is not read.
+        (folder / "2025-11.jsonl").write_text(json.dumps({"time": at(14).isoformat(), "kind": "recorder_alive"}) + "\n")
+        os.utime(folder / "2025-11.jsonl", (0, 0))
+
+        found = self.collect()
+
+        self.assertEqual(
+            [(s["start"], s["end"]) for s in found["not_recorded"]],
+            [("2026-03-14T12:05:00+01:00", "2026-03-14T16:00:00+01:00")],
+        )
+
+    def test_the_sign_kinds_are_the_ones_the_recorder_writes(self) -> None:
+        recorder_script = load_recorder()
+
+        self.assertEqual(herdr_events.SIGN_KINDS, (recorder_script.ALIVE, recorder_script.HERDR_STARTED))
+
+    def test_a_week_away_names_the_whole_period_before_herdr_came_back(self) -> None:
+        """Covers: B89"""
+        self.watermark(at(9) - datetime.timedelta(days=7))
+        self.alive(at(9) - datetime.timedelta(days=9), at(9) - datetime.timedelta(days=9, minutes=-10))
+        self.alive(at(15), at(18))
+
+        found = self.collect()
+
+        self.assertEqual(
+            [(s["start"], s["end"]) for s in found["not_recorded"]],
+            [("2026-03-11T18:00:00+01:00", "2026-03-14T15:00:00+01:00")],
+        )
 
 
 class PeriodTest(Fixture):

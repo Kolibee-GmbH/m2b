@@ -1,6 +1,8 @@
 # The worklog add-on
 
-One of the [add-ons](../addons.md) of m2b, off until its setup turns it on.
+The worklog needs [herdr](https://herdr.dev) 0.9 or later, running on the curating machine: herdr
+is where it sees which workspace is in use and when an agent works. It is one of the
+[add-ons](../addons.md) of m2b, off until its setup turns it on.
 
 ## What it does
 
@@ -43,6 +45,15 @@ enter it. Three rules keep a span from growing past the work:
   stretch longer than 30 minutes counts 30. An agent still writing to its transcript when the
   worklog is written counts up to that moment, and the next worklog continues from there. A long
   command that writes nothing for more than 30 minutes is counted short.
+- **A stretch nobody recorded is named, not counted as idle.** A timer of the operating system runs
+  the recorder every five minutes, and while herdr runs it writes a sign of life; herdr's start and
+  every event are signs too. A silence of more than 10 minutes was not recorded: herdr was not
+  running, the machine was asleep, recording was off or the timer did not run. It begins five
+  minutes after the last sign, when the next one was due, and ends at the next sign. A worklog's
+  note lists these stretches under a heading of their own, "Not recorded", as `2026-03-14 10:55 to
+  13:00`, so a gap in the recording does not read as a time without work; a night with the machine
+  asleep shows there too. A period with no session at all writes no note, as before. Nothing is
+  named before the timer's first run, so a recorder without the timer claims nothing.
 - **The same minutes count once.** Workspaces on the same folder are one session, so a workspace
   you close and open again, which herdr gives a new id, continues its session. A transcript belongs
   to the workspace whose folder, or one of whose panes' folders, holds its working folder: first
@@ -88,15 +99,25 @@ ago.
 
 ## What it needs
 
-herdr 0.9 or later, on the `PATH` Claude Code sees or named in the environment variable `M2B_HERDR`
-(the recorder uses the herdr that starts it); the curating machine, the only one that records, so a
-day is never counted on two machines; your spheres and customers, which its setup asks for.
+herdr 0.9 or later, running, on the `PATH` Claude Code sees or named in the environment variable
+`M2B_HERDR` (the recorder uses the herdr that starts it). `m2b-worklog recorder check` says whether
+it is there, new enough and running; setup asks it first and stops before any question when it is
+not. Beside herdr: the curating machine, the only one that records, so a day is never counted on
+two machines; your spheres and customers, which its setup asks for.
 
 ## Set up and turn off
 
-`/m2b:worklog-setup` asks for the spheres and customers, writes them to the profile, installs the
-recorder in herdr and turns the worklog on. `/m2b:worklog-setup remove` turns it off and unlinks the
-recorder; by hand:
+`/m2b:worklog-setup` first checks herdr, then asks for the spheres and customers, writes them to the
+profile, and turns the worklog on. It also hooks a plugin into herdr, the recorder
+`m2b.worklog-recorder`: a copy in `~/.local/share/m2b/worklog-recorder/` that herdr runs at its start
+and on each event; `herdr plugin list` shows it. And it sets up the timer that runs the same copy
+every five minutes: a launch agent `m2b.worklog-recorder.tick` on macOS (`launchctl list | grep m2b`
+shows it), a systemd user timer `m2b-worklog-recorder-tick.timer` on Linux (`systemctl --user
+list-timers`). Each run takes a moment and ends at once; on a machine that does not record it ends
+without writing. Where neither exists, the worklog works without the timer and names no stretch as
+not recorded. Setup checks that the timer is loaded and starts it when it is not; the session-start
+hook keeps it in place and links a new recorder version in herdr again. `/m2b:worklog-setup remove`
+takes out the timer, deletes the copy and unlinks the recorder, also when herdr is gone; by hand:
 
 ```bash
 m2b addons off worklog
@@ -105,7 +126,11 @@ m2b-worklog hook session-start
 ```
 
 The last command sets the recording switch to `off` at once instead of at the next session start.
-The recordings stay until `m2b-worklog recordings delete` removes them.
+Without m2b, `herdr plugin unlink m2b.worklog-recorder` takes the plugin out of herdr, and
+`launchctl bootout gui/$(id -u)/m2b.worklog-recorder.tick` with deleting
+`~/Library/LaunchAgents/m2b.worklog-recorder.tick.plist` (macOS) or `systemctl --user disable --now
+m2b-worklog-recorder-tick.timer` with deleting its two files in `~/.config/systemd/user/` (Linux)
+takes out the timer. The recordings stay until `m2b-worklog recordings delete` removes them.
 
 ## What it reads
 
@@ -121,8 +146,9 @@ Code's own folder: the one `CLAUDE_CONFIG_DIR` names, or `~/.claude` when that v
 
 | Where | What |
 |---|---|
-| `~/.local/share/m2b/worklog-recorder/` | the recorder copy herdr links, outside the plugin's folder, which an update replaces |
-| `~/.local/state/m2b/worklog/` | the recorder's events, one file per workspace, a workspace cache, and the switch file `recording` (`on` or `off`) |
+| `~/.local/share/m2b/worklog-recorder/` | the recorder copy herdr links, outside the plugin's folder, which an update replaces, with `linked-version`, the version herdr last linked |
+| `~/.local/state/m2b/worklog/` | the recorder's events, one file per workspace, a workspace cache, the switch file `recording` (`on` or `off`), and in `alive/` the signs of life (one file per month), the time of the timer's first run (`first-tick`) and the herdr sockets the events came from (`sockets.json`) |
+| `~/Library/LaunchAgents/m2b.worklog-recorder.tick.plist` (macOS), `~/.config/systemd/user/m2b-worklog-recorder-tick.service` and `.timer` (Linux) | the timer that runs the recorder every five minutes |
 | `~/.local/state/m2b/worklog-run/` | the facts and the verdict while one worklog is being written |
 | `inbox/` in the store | the day's note, with `source: worklog` and `kind: worklog` |
 | `state/addons/worklog/` in the store | `ledger.json` (the record), `ledger.csv` and `ledger.xlsx` (rebuilt every day, not for editing), `watermark.json` (where the next period starts), `intent.json` (only while a worklog is being written, so a rerun after a crash finishes the same plan) |
@@ -136,7 +162,8 @@ addons off worklog` turns recording off at the next session start.
 ## Its commands
 
 `m2b-worklog machine` says whether this machine curates, so it may record. `m2b-worklog recorder
-install` and `remove` link and unlink the recorder, `m2b-worklog recordings delete` deletes what it
+check` says whether herdr is installed, at least 0.9.0 and running. `m2b-worklog recorder install`
+and `remove` link and unlink the recorder, `m2b-worklog recordings delete` deletes what it
 recorded, and `m2b-worklog run` is the curation step. `m2b-worklog state` shows where the worklog
 stands, and names a file it cannot read:
 
@@ -154,8 +181,10 @@ hooks.
 
 ## How you see it runs
 
-The switch file `~/.local/state/m2b/worklog/recording` says `on`, and a note titled "Worklog ... to
-..." lands in the archive once a day. `ledger.csv` in `state/addons/worklog/` grows by the period's
+The switch file `~/.local/state/m2b/worklog/recording` says `on`, the newest file in `alive/` grows
+by a line every five minutes while herdr runs (a timer the session-start hook could not set up is
+named in one line at session start), and a note titled "Worklog ... to ..." lands in the archive once
+a day. `ledger.csv` in `state/addons/worklog/` grows by the period's
 spans. A worklog step that fails is a finding in the review task; the run goes on and still counts
 as succeeded, and the next run writes the worklog for the time since the last one, at most three
 days back.

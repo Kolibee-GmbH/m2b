@@ -12,7 +12,8 @@
     "spheres",
     "customers",
     "sessions",
-    "captures"
+    "captures",
+    "not_recorded"
   ],
   "properties": {
     "version": {
@@ -379,6 +380,33 @@
           },
           "source": {
             "type": "string"
+          }
+        }
+      }
+    },
+    "not_recorded": {
+      "description": "Stretches of the period without a sign of life from the recorder: herdr was not running, the machine slept or recording was off. Not a time without work; nothing is known about it.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "start",
+          "end",
+          "minutes"
+        ],
+        "properties": {
+          "start": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "minutes": {
+            "type": "integer",
+            "minimum": 1
           }
         }
       }
