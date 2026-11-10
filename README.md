@@ -1,6 +1,11 @@
-<h1 align="center">m2b</h1>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.png">
+    <img src="docs/images/logo-light.png" alt="m2b" width="230">
+  </picture>
+</p>
 
-<p align="center"><em>A second brain for Claude Code. Say "remember this" in any session; every new session already knows.</em></p>
+<p align="center"><em>A second brain for Claude Code. The right context in every session.</em></p>
 
 <p align="center">
   <a href="https://github.com/Kolibee-GmbH/m2b/releases"><img src="https://img.shields.io/github/v/release/Kolibee-GmbH/m2b?style=flat-square" alt="Release"></a>
