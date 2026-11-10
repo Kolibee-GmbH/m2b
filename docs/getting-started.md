@@ -70,7 +70,9 @@ nor a model. Both end with a first capture, a curation run and a first search.
    m2b search -- "spare key"
    ```
 
-The add-ons (the band and the worklog) are off until their own setup skill turns them on; [Add-ons](addons.md) describes each one.
+From the next session on, [the band](band.md) above the prompt shows what curation asks you to keep
+or drop, while Claude Code has mods on; `m2b doctor` says whether it ran. The worklog add-on is off until its own setup skill turns it on; [Add-ons](addons.md)
+describes it.
 
 ## From the command line, without Claude Code
 

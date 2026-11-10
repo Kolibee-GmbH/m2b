@@ -170,7 +170,7 @@ def demo_environment(environ: Mapping[str, str]) -> dict[str, str]:
 
 
 def build_demo(environ: Mapping[str, str]) -> None:
-    """A fresh demo machine: setup, the band on, filed notes and memory, tasks, two captures waiting,
+    """A fresh demo machine: setup, filed notes and memory, tasks, two captures waiting,
     and one curation run without a model, which asks whether the Porto trip, untouched since September,
     is still current: the band's question comes from the core, not from the worklog."""
     if DEMO.exists():
@@ -189,7 +189,6 @@ def build_demo(environ: Mapping[str, str]) -> None:
         "machine_id": MACHINE_ID,
     }
     _m2b(environ, "setup", "apply", "--answers", json.dumps(answers))
-    _m2b(environ, "addons", "on", "band")
     for relative, (created, source, text) in CORPUS.items():
         _write(store / "corpus" / relative, f"---\ncreated: {created}\nsource: {source}\n---\n{text}\n")
     # Recent on any day the pictures are taken, so only the Porto trip is quiet enough to be asked about.

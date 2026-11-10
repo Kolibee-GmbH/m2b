@@ -20,7 +20,7 @@ INVENTED_CONFIG: dict[str, Any] = {
     "calendar": {"backend": "apple-calendar", "timeout_seconds": 20},
     "executables": {"python3": "/usr/bin/python3", "claude": "/opt/homebrew/bin/claude"},
     "curation": {"model_timeout_minutes": 15},
-    "addons": {"band": {"on": True}, "worklog": {"on": True, "default_sphere": "own"}},
+    "addons": {"worklog": {"on": True, "default_sphere": "own"}},
 }
 
 
@@ -83,7 +83,7 @@ class ParseTest(unittest.TestCase):
             machine.parse_machine_config(_config(addons={"bakcup": {"on": True}}), HOME)
 
         self.assertIn("addons.bakcup", str(caught.exception))
-        self.assertTrue(str(caught.exception).endswith("known here: band, worklog"), str(caught.exception))
+        self.assertTrue(str(caught.exception).endswith("known here: worklog"), str(caught.exception))
 
     def test_an_addon_m2b_no_longer_has_is_ignored_with_its_settings(self) -> None:
         """Covers: B83"""
@@ -102,7 +102,7 @@ class ParseTest(unittest.TestCase):
     def test_on_must_be_true_or_false(self) -> None:
         for addon in ({"on": "yes"}, {"on": 1}, "on"):
             with self.subTest(addon=addon), self.assertRaises(InvalidConfigError):
-                machine.parse_machine_config(_config(addons={"band": addon}), HOME)
+                machine.parse_machine_config(_config(addons={"worklog": addon}), HOME)
 
     def test_the_curation_model_and_turn_limit_default_to_a_small_model_and_100(self) -> None:
         config = machine.parse_machine_config(_config(), HOME)
@@ -267,11 +267,9 @@ class FileTest(unittest.TestCase):
         self.assertFalse(machine.set_addon_on(self.machine, "worklog", False))
         raw = json.loads(self.machine.config_file.read_text(encoding="utf-8"))
         self.assertEqual(raw["addons"]["worklog"], {"on": False, "default_sphere": "own"})
-        self.assertTrue(machine.set_addon_on(self.machine, "band", False))
-        self.assertTrue(machine.set_addon_on(self.machine, "band", True))
+        self.assertTrue(machine.set_addon_on(self.machine, "worklog", True))
         raw = json.loads(self.machine.config_file.read_text(encoding="utf-8"))
-        self.assertEqual(raw["addons"]["band"], {"on": True})
-        self.assertEqual(raw["addons"]["worklog"], {"on": False, "default_sphere": "own"})
+        self.assertEqual(raw["addons"]["worklog"], {"on": True, "default_sphere": "own"})
 
     def test_the_entry_of_an_addon_m2b_no_longer_has_can_be_removed_and_nothing_else_changes(self) -> None:
         """Covers: B83"""

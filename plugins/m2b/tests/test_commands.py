@@ -538,6 +538,63 @@ class DoctorTest(CommandTest):
         self.environ["M2B_CORE_ROOT"] = "/sb-test-checkout/plugins/m2b"
         self.assertIn("claude-code: found (the launcher runs m2b from /sb-test-checkout", self.run_command("doctor")[1])
 
+    def seen(self, name: str, moment: str) -> None:
+        path = self.machine.state_dir / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"seenAt": moment}), encoding="utf-8")
+
+    def band_line(self) -> str:
+        code, out, _ = self.run_command("doctor")
+        self.assertEqual(code, cli.EXIT_OK, out)
+        return next(line for line in out.splitlines() if line.startswith("band: "))
+
+    def test_doctor_says_the_band_ran_in_the_latest_session_in_local_time(self) -> None:
+        """Covers: B92"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        self.seen("session-seen.json", "2026-03-14T18:30:00+01:00")
+        self.seen("band-seen.json", "2026-03-14T17:30:01.000Z")
+        local = datetime.datetime(2026, 3, 14, 17, 30, 1, tzinfo=datetime.timezone.utc).astimezone()
+
+        self.assertEqual(self.band_line(), f"band: seen (it ran in the latest session, started {local:%Y-%m-%d %H:%M})")
+
+    def test_a_latest_session_without_the_band_means_mods_are_off(self) -> None:
+        """Covers: B92"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        self.seen("band-seen.json", "2026-03-10T08:00:00.000Z")
+        self.seen("session-seen.json", "2026-03-14T18:30:00+01:00")
+
+        line = self.band_line()
+
+        self.assertTrue(line.startswith("band: not seen (the latest session"), line)
+        self.assertIn("ran m2b's hooks but not the band", line)
+        self.assertIn("rollout switch", line)
+        self.assertIn("the band last ran 2026-03-10", line)
+
+    def test_no_session_with_m2bs_hooks_names_the_cases_that_turn_all_hooks_off(self) -> None:
+        """Covers: B92"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        self.seen("band-seen.json", "not a time")
+
+        line = self.band_line()
+
+        self.assertTrue(line.startswith("band: not seen (no Claude Code session has run m2b's hooks"), line)
+        self.assertIn("--bare", line)
+        self.assertIn("allowManagedHooksOnly", line)
+        self.assertIn("distillate", line)
+
+    def test_the_launcher_hook_notes_the_session_and_removes_the_old_add_on_cache(self) -> None:
+        """Covers: B92"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        leftover = self.machine.state_dir / "band-addons.json"
+        leftover.parent.mkdir(parents=True, exist_ok=True)
+        leftover.write_text("{}", encoding="utf-8")
+
+        self.run_command("hook", "launcher")
+
+        noted = json.loads((self.machine.state_dir / "session-seen.json").read_text(encoding="utf-8"))
+        self.assertIsNotNone(datetime.datetime.fromisoformat(noted["seenAt"]).tzinfo)
+        self.assertFalse(leftover.exists())
+
     def test_a_store_path_the_curation_run_cannot_fence_is_a_problem(self) -> None:
         """Covers: B81"""
         self.set_up(calendar="none", tasks={"backend": "markdown"})

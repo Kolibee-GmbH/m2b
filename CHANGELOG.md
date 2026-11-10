@@ -24,6 +24,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The band is part of m2b instead of an add-on: it starts wherever m2b is set up, with no switch
+  and no setup skill (`/m2b:band-setup` is gone), also where it was turned off; `addons.band` in
+  `config.json` is ignored and `m2b addons off band` removes it. It needs mods on in Claude Code.
+  `m2b doctor` has a line `band` that says whether the latest session ran it, and if not, whether
+  only mods or all plugin hooks were off. Its page moved to `docs/band.md`. Sessions open during
+  the update keep the old band until they are started again.
+- The status line reads `2 in inbox · curated 18:02` without its own `brain:`, since Claude Code
+  already puts the plugin's name in front.
 - Every row of the worklog's ledger carries two numbers: `minutes`, the work in the span, and
   `minutes_present`, the part with the workspace in focus, in `ledger.json`, the CSV and the XLSX.
   Rows from before have the second cell empty.

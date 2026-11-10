@@ -20,12 +20,14 @@ from __future__ import annotations
 
 import contextlib
 import datetime
+import json
 import os
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from m2b import launcher, topic_state
+from m2b.atomic_file import write_text_atomically
 from m2b.config.errors import SETUP_COMMAND
 from m2b.config.machine import MachineConfig
 from m2b.curate import machine_state
@@ -78,6 +80,8 @@ WORK_PEOPLE_RULE = (
     "Knowledge about people and verbal agreements may be captured from work sessions; documents and "
     "confidential statements of customers or other third parties never."
 )
+# Written by the band of m2b 0.2.0, when it was an add-on; nothing reads it any more.
+OLD_BAND_ADDONS_CACHE = "band-addons.json"
 
 
 def now() -> datetime.datetime:
@@ -178,7 +182,8 @@ def launcher_check(
 ) -> None:
     """Rewrites a missing launcher, or one older than this core, without a word.
 
-    A file at that path without the launcher's version line is someone else's and stays.
+    A file at that path without the launcher's version line is someone else's and stays. Setup
+    calls it too.
     """
     installed = _installed_version(machine)
     current = launcher.core_version()
@@ -189,6 +194,24 @@ def launcher_check(
         launcher.install_launcher(machine, python)
     except OSError as error:
         raise launcher.LauncherError(f"the launcher {machine.launcher} could not be written: {error}") from error
+
+
+def launcher_hook(
+    config: MachineConfig, machine: MachinePaths, environ: Mapping[str, str], hook_input: HookInput | None = None
+) -> None:
+    """The session-start hook: notes the session for ``m2b doctor``, which compares it with the band's
+    note, then checks the launcher."""
+    note_session(machine)
+    launcher_check(config, machine, environ, hook_input)
+
+
+def note_session(machine: MachinePaths) -> None:
+    """Writes when a session last ran m2b's own hooks, and drops the add-on cache the band no longer reads."""
+    with contextlib.suppress(OSError):
+        machine.state_dir.mkdir(parents=True, exist_ok=True)
+        seen = json.dumps({"seenAt": now().isoformat(timespec="seconds")})
+        write_text_atomically(machine.session_seen_file, seen + "\n", machine.temp_dir)
+        (machine.state_dir / OLD_BAND_ADDONS_CACHE).unlink(missing_ok=True)
 
 
 def _installed_version(machine: MachinePaths) -> str | None:

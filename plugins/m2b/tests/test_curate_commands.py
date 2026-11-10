@@ -305,7 +305,7 @@ class AddonsCommandTest(test_runner.RunnerTest):
         self.curating()
         code, out, _ = self.run_command("addons", "list", "--json")
         self.assertEqual(code, cli.EXIT_OK)
-        self.assertEqual([(row["name"], row["on"]) for row in json.loads(out)], [("band", False), ("worklog", False)])
+        self.assertEqual([(row["name"], row["on"]) for row in json.loads(out)], [("worklog", False)])
 
         self.run_command("config", "set", "addons.worklog", '{"default_sphere": "own"}')
         self.assertEqual(self.run_command("addons", "on", "worklog"), (cli.EXIT_OK, "worklog is on\n", ""))
@@ -321,20 +321,24 @@ class AddonsCommandTest(test_runner.RunnerTest):
         self.curating()
         code, _, err = self.run_command("addons", "on", "bakcup")
         self.assertEqual(code, cli.EXIT_USAGE)
-        self.assertIn("band, worklog", err)
+        self.assertIn("the add-ons are worklog", err)
 
     def test_an_addon_m2b_no_longer_has_cannot_be_turned_on_and_off_removes_its_entry(self) -> None:
         """Covers: B83"""
         self.curating()
         config = json.loads(self.machine.config_file.read_text(encoding="utf-8"))
-        config["addons"] = {"herdr": {"on": True}, "backup": {"on": True, "target": "~/sb-test-backup"}}
+        config["addons"] = {
+            "herdr": {"on": True},
+            "backup": {"on": True, "target": "~/sb-test-backup"},
+            "band": {"on": False},
+        }
         self.machine.config_file.write_text(json.dumps(config), encoding="utf-8")
 
         code, out, err = self.run_command("addons", "list", "--json")
         self.assertEqual(code, cli.EXIT_OK, err)
-        self.assertEqual([row["name"] for row in json.loads(out)], ["band", "worklog"])
+        self.assertEqual([row["name"] for row in json.loads(out)], ["worklog"])
 
-        for name in ("herdr", "backup"):
+        for name in ("herdr", "backup", "band"):
             with self.subTest(name=name):
                 code, _, err = self.run_command("addons", "on", name)
                 self.assertEqual(code, cli.EXIT_USAGE)
@@ -347,7 +351,9 @@ class AddonsCommandTest(test_runner.RunnerTest):
         self.assertIn("its entry in config.json is removed", out)
         self.assertIn("left as it was", out)
         raw = json.loads(self.machine.config_file.read_text(encoding="utf-8"))
-        self.assertEqual(raw["addons"], {"herdr": {"on": True}})
+        self.assertEqual(raw["addons"], {"herdr": {"on": True}, "band": {"on": False}})
+        code, out, _ = self.run_command("addons", "off", "band")
+        self.assertIn("part of the core", out)
         self.assertIn("nothing to remove", self.run_command("addons", "off", "backup")[1])
 
         code, _, err = self.run_command("config", "set", "addons.backup.target", '"~/sb-test-backup"')

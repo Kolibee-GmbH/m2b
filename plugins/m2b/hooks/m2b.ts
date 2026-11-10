@@ -10,6 +10,14 @@ export async function m2bHome($: EngineInterface): Promise<string | undefined> {
   return home ? home.replace(/\/+$/, '') : undefined
 }
 
+const MACHINE_CONFIG = '.config/m2b/config.json'
+
+/** The machine config the core reads; it exists once m2b is set up on this machine. */
+export async function machineConfigPath($: EngineInterface): Promise<string | undefined> {
+  const home = await m2bHome($)
+  return home === undefined ? undefined : `${home}/${MACHINE_CONFIG}`
+}
+
 export async function launcherPath($: EngineInterface): Promise<string | undefined> {
   const home = await m2bHome($)
   return home === undefined ? undefined : `${home}/${LAUNCHER}`

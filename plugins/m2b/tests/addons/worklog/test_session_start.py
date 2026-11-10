@@ -12,7 +12,7 @@ from worklog_fixtures import WorklogFixture
 
 
 def addons(worklog: bool) -> list[dict[str, object]]:
-    return [{"name": "band", "on": True, "summary": "x"}, {"name": "worklog", "on": worklog, "summary": "y"}]
+    return [{"name": "worklog", "on": worklog, "summary": "y"}]
 
 
 class FakeStatus:
@@ -49,7 +49,7 @@ class FakeStatus:
 def status(curates: bool, worklog: bool = True) -> dict[str, object]:
     return {
         "machine_id": "alex-laptop",
-        "addons": {"band": False, "herdr": False, "worklog": worklog, "backup": False},
+        "addons": {"worklog": worklog},
         "curating_machine": "x",
         "this_machine_curates": curates,
         "inbox": {"count": 0},

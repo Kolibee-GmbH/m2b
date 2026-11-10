@@ -6,8 +6,9 @@ add-on's own settings sit beside ``on`` and are the add-on's to check. An add-on
 step runs it from this plugin's folder in its slot; the core needs no registration and nothing is
 left behind when an add-on is turned off.
 
-An add-on m2b no longer has keeps its name in ``REMOVED_ADDONS``: a ``config.json`` written by an
-older version still names it, and loading that file must not fail over an entry nobody reads.
+A name that is no longer an add-on, removed or moved into the core, stays in ``REMOVED_ADDONS``: a
+``config.json`` written by an older version still names it, and loading that file must not fail
+over an entry nobody reads.
 """
 
 from __future__ import annotations
@@ -35,7 +36,6 @@ class Addon:
 
 
 ADDONS = (
-    Addon("band", "open memory candidates, the open review and the state of curation above the prompt"),
     Addon(
         "worklog",
         "needs herdr 0.9 or later; records activity in herdr and writes a daily worklog with time spans "
@@ -43,12 +43,13 @@ ADDONS = (
         AddonStep("before_ingest", ("bin/m2b-worklog", "run")),
     ),
 )
-# Why each add-on an older version had is gone, in words for the owner who still has it set up.
+# Why each add-on an older version had is no longer one, in words for the owner who still has it set up.
 REMOVED_ADDONS = {
     "herdr": "m2b 0.3.0 removed it, because listing the other agent sessions is herdr's own business "
     "and never touched the store; herdr shows them itself",
     "backup": "m2b 0.3.0 removed it until a backup with a way back replaces it; "
     "the folder it wrote is left as it was, and Time Machine or a copy of the store folder keeps the store safe",
+    "band": "m2b 0.3.0 made it part of the core, so it runs wherever m2b is set up and needs no switch",
 }
 
 

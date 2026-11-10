@@ -29,7 +29,7 @@ flowchart LR
 | `plugins/m2b/skills/` | one folder per skill; the ones a curation run starts (`ingest`, `refresh`, `sort-facts`, `lint`, `worklog-verdict`) say so in their description |
 | `plugins/m2b/hooks/` | `hooks.json` (session-start commands, the prompt hook and the band mod), `register.tsx` and its helpers (the band) |
 | `plugins/m2b/recorder/` | the worklog's herdr recorder, copied out of the plugin when set up |
-| `plugins/m2b/tests/` | core tests; `tests/addons/<add-on>/` the add-ons', `tests/band/` the mod's |
+| `plugins/m2b/tests/` | core tests, with `tests/band/` the band's; `tests/addons/<add-on>/` the add-ons' |
 | `tests/e2e/` | end-to-end scenarios against a temporary store |
 | `scripts/` | `check` (the whole proof), `e2e`, `trigger-check`, `no-model`, `readme-images` |
 

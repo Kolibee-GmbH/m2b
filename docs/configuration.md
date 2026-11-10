@@ -32,7 +32,6 @@ An example with invented values:
   "executables": {"python3": "/usr/bin/python3", "claude": "/opt/homebrew/bin/claude", "reminders": "/opt/homebrew/bin/reminders"},
   "curation": {"model_timeout_minutes": 15},
   "addons": {
-    "band": {"on": true},
     "worklog": {"on": true}
   }
 }
@@ -51,8 +50,8 @@ An example with invented values:
 | `curation.max_budget_usd` | a spending cap per model step, from Claude Code's own estimate of API cost; it can differ from the bill and says little on a subscription | none |
 | `curation.max_turns` | the turns one model step may take before it stops and is reported | 100 |
 | `distillate.skip_under` | folders, absolute or starting with `~/`, in and below which sessions get no distillate; `m2b distillate off` and `on` change it | none |
-| `addons.<add-on>.on` | whether an add-on runs on this machine: `band`, `worklog` | off |
-| `addons.<add-on>.*` | the add-on's own settings; kept when the add-on is turned off. An entry for `herdr` or `backup`, add-ons m2b no longer has, is ignored, and `m2b addons off <add-on>` removes it | |
+| `addons.<add-on>.on` | whether an add-on runs on this machine: `worklog` | off |
+| `addons.<add-on>.*` | the add-on's own settings; kept when the add-on is turned off. An entry for `band`, `herdr` or `backup`, which are no longer add-ons, is ignored, and `m2b addons off <name>` removes it | |
 
 An add-on's setup skill turns it on once it is set up; by hand:
 

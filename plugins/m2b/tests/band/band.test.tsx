@@ -3,6 +3,7 @@ import type { Engine, MockClock } from 'claude-code/testing'
 import type { On, ProcessRunResult } from 'claude-code'
 
 const LAUNCHER = '/home/alex/.local/bin/m2b'
+const MACHINE_CONFIG = '/home/alex/.config/m2b/config.json'
 const NOW = Date.parse('2026-03-14T17:30:00Z')
 
 const BAND = {
@@ -41,8 +42,10 @@ class FakeM2b {
   status: unknown = STATUS
   failure: string | null = null
   statusFails = false
-  /** What `m2b addons list` says of the band add-on: on, off, or m2b not set up on this machine. */
-  band: 'on' | 'off' | 'not set up' | 'broken config' = 'on'
+  /** Whether m2b is set up on this machine: its machine config exists, else every command answers "not set up". */
+  isSetUp = true
+  /** Set up, but the store has no store.json yet, as on a machine whose synced store has not arrived. */
+  isStoreMissing = false
   /** The launcher the core writes at its first session start after setup. */
   hasLauncher = true
   /** How long the answer to a call takes on the test clock; it is read when the call starts. */
@@ -70,14 +73,11 @@ class FakeM2b {
     expect(argv[0]).toBe(LAUNCHER)
     const args = argv.slice(1)
     this.calls.push(args)
-    if (args[0] === 'addons') {
-      if (this.band === 'not set up') {
-        return fail('not set up: no machine config at /home/alex/.config/m2b/config.json')
-      }
-      if (this.band === 'broken config') {
-        return fail('config.json: addons.band.on must be true or false, got a string')
-      }
-      return ok(JSON.stringify([{ name: 'band', on: this.band === 'on', summary: 'the band' }]))
+    if (!this.isSetUp) {
+      return fail('not set up: no machine config at /home/alex/.config/m2b/config.json')
+    }
+    if (this.isStoreMissing && args[0] === 'tasks') {
+      return fail('not set up: no store.json in the store /home/alex/Notes')
     }
     if (args[0] === 'status') {
       return this.statusFails ? fail('could not read the machine config') : ok(JSON.stringify(this.status))
@@ -130,7 +130,9 @@ async function start(
 ): Promise<World> {
   const clock = mock.clock(on, { now: NOW })
   mock.env(on, { HOME: '/home/alex', ...env })
-  on('fs.exists', (_, e) => ({ value: e.path === LAUNCHER && fake.hasLauncher }))
+  on('fs.exists', (_, e) => ({
+    value: (e.path === LAUNCHER && fake.hasLauncher) || (e.path === MACHINE_CONFIG && fake.isSetUp),
+  }))
   if (files !== undefined) {
     on('fs.read', (_, e) => {
       const text = files.get(e.path)
@@ -204,28 +206,71 @@ test('nothing to show draws nothing of its own', async ($, on) => {
   await ui.unmount()
 })
 
-test('with the band add-on off it draws nothing and asks nothing else', async ($, on) => {
+test('the band runs without any switch once m2b is set up', async ($, on) => {
+  // Covers: B91
   const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
-  fake.band = 'off'
-  const { clock, statuses } = await start($, on, fake)
-  await clock.advance(60_000)
+  const { statuses } = await start($, on, fake)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(await texts(ui)).toEqual(['engine'])
+  expect(await ui.findAll({ type: 'Button' })).toHaveLength(2)
   await ui.unmount()
-  expect(fake.calls.every(call => call[0] === 'addons')).toBe(true)
-  expect(statuses.every(text => text === undefined)).toBe(true)
+  expect(statuses.at(-1)).toBe('2 in inbox · curated 18:02')
+  expect(fake.calls.some(call => call[0] === 'addons')).toBe(false)
 })
 
-test('before m2b is set up the band draws nothing and asks nothing else', async ($, on) => {
+test('before m2b is set up the band draws nothing, says nothing and asks m2b nothing', async ($, on) => {
+  // Covers: B91
   const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
-  fake.band = 'not set up'
+  fake.isSetUp = false
   const { clock, statuses } = await start($, on, fake)
   await clock.advance(60_000)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await texts(ui)).toEqual(['engine'])
   await ui.unmount()
-  expect(fake.calls.every(call => call[0] === 'addons')).toBe(true)
+  expect(statuses.length).toBeGreaterThan(0)
   expect(statuses.every(text => text === undefined)).toBe(true)
+  expect(fake.calls).toEqual([])
+})
+
+test('a machine config that goes away clears what the band showed', async ($, on) => {
+  const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
+  const { clock, statuses } = await start($, on, fake)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.findAll({ type: 'Button' })).toHaveLength(2)
+
+  fake.isSetUp = false
+  await clock.advance(60_000)
+  expect(await texts(ui)).toEqual(['engine'])
+  expect(statuses.at(-1)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a store without store.json shows the error line instead of an empty band', async ($, on) => {
+  const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
+  fake.isStoreMissing = true
+  await start($, on, fake)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await texts(ui)).join('\n')).toContain('m2b could not read the tasks: not set up: no store.json')
+  await ui.unmount()
+})
+
+test('a session start whose note cannot be written still starts the band', async ($, on) => {
+  on('fs.write', () => {
+    throw new Error('EACCES: permission denied')
+  })
+  const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
+  await start($, on, fake)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.findAll({ type: 'Button' })).toHaveLength(2)
+  await ui.unmount()
+})
+
+test('a session start notes that the band ran, for m2b doctor', async ($, on) => {
+  // Covers: B92
+  const files: Files = new Map()
+  await start($, on, new FakeM2b(), {}, files)
+  expect(JSON.parse(files.get('/home/alex/.local/state/m2b/band-seen.json') ?? '{}')).toEqual({
+    seenAt: '2026-03-14T17:30:00.000Z',
+  })
 })
 
 test('before the core wrote its launcher the band starts nothing and says nothing', async ($, on) => {
@@ -240,19 +285,6 @@ test('before the core wrote its launcher the band starts nothing and says nothin
   expect(statuses.every(text => text === undefined)).toBe(true)
 })
 
-test('when m2b cannot say whether the band is on, the status line says so and the band stays', async ($, on) => {
-  const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
-  const { clock, statuses } = await start($, on, fake)
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(await ui.findAll({ type: 'Button' })).toHaveLength(2)
-
-  fake.band = 'broken config'
-  await clock.advance(60_000)
-  expect(statuses.at(-1)).toBe('brain: could not look')
-  expect(await ui.findAll({ type: 'Button' })).toHaveLength(2)
-  await ui.unmount()
-})
-
 test('inside a fenced curation step the band asks m2b nothing', async ($, on) => {
   const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
   const { clock } = await start($, on, fake, { M2B_CURATION_RUN: '1' })
@@ -265,21 +297,20 @@ test('inside a fenced curation step the band asks m2b nothing', async ($, on) =>
 test('an answer another session stored within 55 seconds is used without starting m2b', async ($, on) => {
   const cache = '/home/alex/.local/state/m2b'
   const files: Files = new Map([
-    [`${cache}/band-addons.json`, JSON.stringify({ writtenAtMs: NOW - 10_000, value: { ok: true, stdout: JSON.stringify([{ name: 'band', on: true }]) } })],
     [`${cache}/band-snapshot.json`, JSON.stringify({ writtenAtMs: NOW - 10_000, value: { candidates: [{ id: 'c9', title: 'Remember? From the other session' }], review: null, error: null } })],
-    [`${cache}/band-status.json`, JSON.stringify({ writtenAtMs: NOW - 10_000, value: 'brain: 7 in inbox' })],
+    [`${cache}/band-status.json`, JSON.stringify({ writtenAtMs: NOW - 10_000, value: '7 in inbox' })],
   ])
   const fake = new FakeM2b()
   const { clock, statuses } = await start($, on, fake, {}, files)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await texts(ui)).toContain('Remember? From the other session')
-  expect(statuses.at(-1)).toBe('brain: 7 in inbox')
+  expect(statuses.at(-1)).toBe('7 in inbox')
   expect(fake.calls).toEqual([])
 
   fake.candidate('c1', 'Remember? Acme moved')
   await clock.advance(60_000)
   expect(await texts(ui)).toContain('Remember? Acme moved')
-  expect(fake.calls.map(call => call[0])).toContain('addons')
+  expect(fake.calls.map(call => call[0])).toContain('tasks')
   expect(JSON.parse(files.get(`${cache}/band-snapshot.json`) ?? '{}').value.candidates[0].id).toBe('c1')
   await ui.unmount()
 })
@@ -309,19 +340,6 @@ test('a slow load never replaces an answer another session started later', async
   files.set(cache, JSON.stringify(newer))
   await clock.advance(31_000)
   expect(JSON.parse(files.get(cache) ?? '{}')).toEqual(newer)
-})
-
-test('turning the band add-on off clears what it showed', async ($, on) => {
-  const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
-  const { clock, statuses } = await start($, on, fake)
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(await ui.findAll({ type: 'Button' })).toHaveLength(2)
-
-  fake.band = 'off'
-  await clock.advance(60_000)
-  expect(await texts(ui)).toEqual(['engine'])
-  expect(statuses.at(-1)).toBeUndefined()
-  await ui.unmount()
 })
 
 test('keep completes the candidate and drop drops it', async ($, on) => {
@@ -427,15 +445,15 @@ test('the band reloads every 60 seconds and after each turn', async ($, on) => {
 test('the status line follows m2b status, and says when it could not look', async ($, on) => {
   const fake = new FakeM2b()
   const { clock, statuses } = await start($, on, fake)
-  expect(statuses.at(-1)).toBe('brain: 2 in inbox · curated 18:02')
+  expect(statuses.at(-1)).toBe('2 in inbox · curated 18:02')
 
   fake.status = { ...STATUS, run: { state: 'running' } }
   await clock.advance(60_000)
-  expect(statuses.at(-1)).toBe('brain: curating')
+  expect(statuses.at(-1)).toBe('curating')
 
   fake.statusFails = true
   await clock.advance(60_000)
-  expect(statuses.at(-1)).toBe('brain: could not look')
+  expect(statuses.at(-1)).toBe('could not look')
 })
 
 test('a subagent finishing its turn does not reload the band', async ($, on) => {

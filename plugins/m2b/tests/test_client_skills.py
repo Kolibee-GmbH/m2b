@@ -16,7 +16,6 @@ SESSION_SKILLS = (
     "rediscover",
     "m2b",
     "setup",
-    "band-setup",
     "worklog-setup",
 )
 # A skill's allowed-tools cover each command alone; a model that appends `echo "exit=$?"` or

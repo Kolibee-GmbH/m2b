@@ -61,7 +61,7 @@ step:
 | | After install, before setup | After its setup |
 |---|---|---|
 | core | nothing: the session-start hooks print nothing and no run starts until `/m2b:m2b setup` | the distillate at session start, a curation run at the next session start after a capture on the curating machine |
-| `band` | draws nothing and starts nothing while there is no launcher; after the core's setup, asks `m2b addons list` about once a minute | the band and the status line |
+| band | draws nothing and starts nothing while there is no launcher | the band and the status line, while mods are on in Claude Code |
 | `worklog` | prints nothing, records nothing | herdr events recorded on the curating machine, a daily worklog note |
 
 ## After an update
@@ -141,8 +141,8 @@ is `~/.local/state/m2b/run.log`; a run that could not even write its record leav
 
 ## The status line
 
-With the `band` add-on on, one line below the prompt sums up the brain. It is refreshed about once a
-minute and after each of your turns. Normally it reads `brain: 0 in inbox · curated 17:07`: the
+While [the band](band.md) runs, one line below the prompt sums up the brain. It is refreshed about
+once a minute and after each of your turns. Normally it reads `0 in inbox · curated 17:07`: the
 captures waiting for the next run, and when the last successful run ended (the time today, the date
 on an earlier day), or `not curated yet` while no curation run has succeeded. Claude Code draws a
 ⚠ in front of every plugin's status line; it is not a warning. In place of the pair it can say:
@@ -156,5 +156,5 @@ on an earlier day), or `not curated yet` while no curation run has succeeded. Cl
 
 A problem is added after it, such as `could not read store.json` or `tasks not reachable` (likewise
 for the store and the calendar); the task list, store and calendar are checked every 5 minutes, so
-such a problem can show up or clear that much later. `brain: could not look` means `m2b status` gave no answer at all;
+such a problem can show up or clear that much later. `could not look` means `m2b status` gave no answer at all;
 run it in a terminal to see why.

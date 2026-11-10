@@ -1,4 +1,4 @@
-export const COULD_NOT_LOOK = 'brain: could not look'
+export const COULD_NOT_LOOK = 'could not look'
 
 const MAX_LENGTH = 79
 const NOT_REACHABLE = 'not reachable'
@@ -15,7 +15,7 @@ export function statusLine(answer: unknown, nowMs: number): string {
     return COULD_NOT_LOOK
   }
   const parts = [runPart(answer, nowMs), ...problemParts(answer)]
-  return fit(`brain: ${parts.join(' · ')}`)
+  return fit(parts.join(' · '))
 }
 
 function runPart(answer: JsonObject, nowMs: number): string {

@@ -39,8 +39,9 @@
 ![A Claude Code session in an unrelated project answers when Sam brings the plywood and where the shed key is, straight from the distillate, without a tool call; above the prompt the band asks whether planning the trip to Porto is still current, with keep and drop, below it the status line reads "brain: 2 in inbox · curated 21:36"](docs/images/session-start.png)
 
 <sub>A new session in an unrelated repository already knows. The band above the prompt and the
-status line below it are the optional `band` add-on; Claude Code draws the ⚠ in front of every
-plugin's status line, it is not a warning. All names and notes are invented.</sub>
+status line below it are [the band](docs/band.md), where m2b asks you to keep or drop; Claude Code
+draws the ⚠ in front of every plugin's status line, it is not a warning. All names and notes are
+invented.</sub>
 
 **Platform.** macOS 14 or newer, or Linux. Not Windows. Apple Reminders, Calendar and iCloud Drive
 are optional; on Linux, and on a Mac if you like, the store is a plain folder and tasks are
@@ -61,7 +62,8 @@ expiring, no memory link to repair) uses no model.
 | curation run | the background run that files the inbox, on one machine per store, the curating machine |
 | distillate | `memory/MEMORY.md`: lasting facts, each pointing to its fact file in `memory/`, and under "Current" what is going on now |
 | topic | a heading in the distillate for one subject, such as a customer or a club, whose facts come in only when a session is about it |
-| add-on | an optional piece of m2b, off until its own setup: `band`, `worklog` |
+| band | the rows above the prompt where you keep or drop what curation proposes, and the status line below it |
+| add-on | an optional piece of m2b, off until its own setup: `worklog` |
 
 ## Who it is for
 
@@ -228,22 +230,29 @@ current? ...": tick it and it stays; drop it in the band, or delete the task, an
 distillate. The worklog add-on may propose a fact the same way, as "Remember? ...": tick it and the
 next run files it; drop it in the band, or delete the task, and it does not come back for 90 days.
 
+## The band
+
+Above the prompt, [the band](docs/band.md) shows memory candidates and "Still current?" questions,
+each with keep and drop buttons you click with the mouse, and the open review task with its first
+findings; below the prompt, a status line such as `3 in inbox · curated 18:02`. It is part of m2b
+and starts once m2b is set up. It is a mod, so it needs mods on in Claude Code; `m2b doctor` says
+whether the latest session ran it, and why not.
+
 ## Add-ons
 
-m2b is one plugin. Two add-ons in it are off until you set them up; each has its own setup skill,
-and `m2b addons list` shows which are on.
+m2b is one plugin. One add-on in it is off until you set it up with its own setup skill, and
+`m2b addons list` shows whether it is on.
 
 | Add-on | What it adds | Needs | Setup |
 |---|---|---|---|
-| [`band`](docs/addons/band.md) | A band above the prompt with memory candidates and "Still current?" questions to keep or drop in place and the review task with its findings, and a status line such as `brain: 3 in inbox · curated 18:02` | mods turned on in Claude Code | `/m2b:band-setup` |
 | [`worklog`](docs/addons/worklog.md) | A daily worklog of your sessions in herdr: topics, time spans per sphere of work, booking proposals for billable spheres, a ledger with CSV and XLSX exports | [herdr](https://herdr.dev) 0.9 or later, running; the curating machine, which alone records; your spheres of work and customers, which its setup asks for | `/m2b:worklog-setup` |
 
-Each add-on has its own page, linked in the table: what it reads and writes on the machine and in
-the store, its commands, and how you see that it runs. [Add-ons](docs/addons.md) is the overview.
-To turn an add-on off again, keeping its settings:
+Its page, linked in the table, says what it reads and writes on the machine and in the store, its
+commands, and how you see that it runs. [Add-ons](docs/addons.md) is the overview. To turn it off
+again, keeping its settings:
 
 ```bash
-m2b addons off band
+m2b addons off worklog
 ```
 
 ## Cost and privacy

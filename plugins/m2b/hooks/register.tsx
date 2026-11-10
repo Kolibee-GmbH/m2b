@@ -2,9 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { BandCandidate, BandReview, BandSnapshot } from '../types'
-import { isAddonOn } from './addons'
-import { launcherPath, runM2b } from './m2b'
-import type { M2bOutcome } from './m2b'
+import { launcherPath, m2bHome, machineConfigPath, runM2b } from './m2b'
 import { shared } from './shared-cache'
 import { COULD_NOT_LOOK, statusLine } from './status-line'
 import { parseCandidates, parseReview } from './tasks'
@@ -18,11 +16,8 @@ const REFRESH_EVERY_MS = 60_000
 const TASKS_TIMEOUT_MS = 60_000
 // `m2b status` probes store, tasks and calendar one after another, 20 seconds each at most.
 const STATUS_TIMEOUT_MS = 90_000
-// `m2b addons list` reads the machine config only.
-const ADDONS_TIMEOUT_MS = 10_000
-const ADDON = 'band'
-// How the core begins its answer before setup has run, after `runM2b` dropped the `m2b: ` prefix.
-const NOT_SET_UP = 'not set up'
+// Read by `m2b doctor`: the core cannot see whether Claude Code loaded this module.
+const SEEN_FILE = '.local/state/m2b/band-seen.json'
 const CANDIDATES_SHOWN = 3
 const FINDINGS_SHOWN = 3
 
@@ -139,16 +134,6 @@ function isText(value: unknown): value is string {
   return typeof value === 'string'
 }
 
-function isOutcome(value: unknown): value is M2bOutcome {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'ok' in value &&
-    ((value.ok === true && 'stdout' in value && typeof value.stdout === 'string') ||
-      (value.ok === false && 'error' in value && typeof value.error === 'string'))
-  )
-}
-
 function reloadStatus($: EngineInterface, isForced = false): Promise<void> {
   if (isForced) {
     return statusJobs(() => loadStatusNow($, true))
@@ -171,39 +156,44 @@ async function clearBand($: EngineInterface): Promise<void> {
 }
 
 /**
- * Reloads band and status line, each on its own (the status probes can take far longer), while the
- * band add-on is on. Off, or m2b not set up, it clears both and calls nothing else; when m2b cannot
- * say, the status line says it could not look and the band keeps what it showed. The minute's
- * refresh takes another session's fresh answers; `isForced`, after this session's own turn, does not.
+ * Reloads band and status line, each on its own (the status probes can take far longer). Before
+ * m2b is set up on this machine (no machine config) or before the core wrote its launcher, it
+ * clears both and calls nothing; when m2b cannot say, the status line says it could not look. The
+ * minute's refresh takes another session's fresh answers; `isForced`, after this session's own
+ * turn, does not.
  */
 async function refresh($: EngineInterface, isForced = false): Promise<void> {
-  // The core writes the launcher at its first session start after setup; before that, m2b is not set up.
-  const launcher = await launcherPath($)
-  if (launcher === undefined || !(await $.fs.exists(launcher))) {
-    await clearBand($)
-    return
-  }
-  const outcome = await shared(
-    $,
-    'addons',
-    () => runM2b($, ['addons', 'list', '--json'], ADDONS_TIMEOUT_MS),
-    isOutcome,
-    isForced,
-  )
-  if (!outcome.ok) {
-    if (outcome.error.startsWith(NOT_SET_UP)) {
-      await clearBand($)
-    } else {
-      $.ui.status(COULD_NOT_LOOK)
-    }
-    return
-  }
-  if (!isAddonOn(outcome.stdout, ADDON)) {
+  if (!(await isSetUp($))) {
     await clearBand($)
     return
   }
   void reloadBand($, isForced)
   void reloadStatus($, isForced)
+}
+
+/**
+ * Set up means the machine config exists, as the core reads it, and the core has written its
+ * launcher, which it does at its first session start after setup. A store that is set up but
+ * cannot be read is not "not set up": the band shows the error.
+ */
+async function isSetUp($: EngineInterface): Promise<boolean> {
+  const [launcher, config] = [await launcherPath($), await machineConfigPath($)]
+  return (
+    launcher !== undefined && config !== undefined && (await $.fs.exists(config)) && (await $.fs.exists(launcher))
+  )
+}
+
+/** Notes that this session runs the band, which `m2b doctor` reports; a failed write changes nothing. */
+async function noteSeen($: EngineInterface): Promise<void> {
+  const home = await m2bHome($)
+  if (home === undefined) {
+    return
+  }
+  try {
+    await $.fs.write(`${home}/${SEEN_FILE}`, JSON.stringify({ seenAt: new Date(await $.clock.now()).toISOString() }))
+  } catch {
+    // The band runs all the same; doctor then says it has not seen it.
+  }
 }
 
 /** A fenced model step of a curation run loads this plugin too; the band stays out of it. */
@@ -279,6 +269,7 @@ export const register: Register = on => {
     }
     $.clock.every(REFRESH_EVERY_MS, () => void refresh($))
     $.clock.after(0, () => void refresh($))
+    void noteSeen($)
     return result
   })
 

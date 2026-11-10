@@ -274,7 +274,7 @@ class NewStoreTest(SetupTest):
 
         listed = [(addon["name"], addon["on"]) for addon in result["addons"]]
 
-        self.assertEqual(listed, [("band", False), ("worklog", False)])
+        self.assertEqual(listed, [("worklog", False)])
 
 
 class JoinTest(SetupTest):

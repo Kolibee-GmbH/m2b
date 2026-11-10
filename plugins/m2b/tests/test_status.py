@@ -1,4 +1,4 @@
-"""``m2b status``: inbox, due or running, the run record and the backends, for the band's status line."""
+"""``m2b status``: inbox, due or running, the run record and the backends, for the status line under the prompt."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ class StatusTest(test_runner.RunnerTest):
         self.assertEqual(status["backends"]["store"]["state"], "reachable")
         self.assertEqual(status["backends"]["tasks"]["state"], "reachable")
         self.assertEqual(status["backends"]["calendar"]["state"], "not configured")
-        self.assertEqual(status["addons"], {"band": False, "worklog": False})
+        self.assertEqual(status["addons"], {"worklog": False})
 
     def test_a_run_holding_the_lock_is_running(self) -> None:
         self.curating()
