@@ -230,14 +230,14 @@ and `m2b addons list` shows which are on.
 
 | Add-on | What it adds | Needs | Setup |
 |---|---|---|---|
-| `band` | A band above the prompt with memory candidates and "Still current?" questions to keep or drop in place and the review task with its findings, and a status line such as `brain: 3 in inbox · curated 18:02` | mods turned on in Claude Code | `/m2b:band-setup` |
-| `backup` | After each run, a local snapshot: a mirror of the store, a dated attic of replaced files, a dump of the task list | a folder for the snapshot, outside the store; the curating machine | `/m2b:backup-setup` |
-| `herdr` | At session start, the other agent sessions open in [herdr](https://herdr.dev), the terminal workspace manager for agents, so overlapping work is noticed before it starts | herdr 0.9 or later, sessions started in a herdr pane | `/m2b:herdr-setup` |
-| `worklog` | A daily worklog of your sessions in herdr: topics, time spans per sphere of work, booking proposals for billable spheres, a ledger with CSV and XLSX exports | herdr 0.9 or later; the curating machine, which alone records; your spheres of work and customers, which its setup asks for | `/m2b:worklog-setup` |
+| [`band`](docs/addons/band.md) | A band above the prompt with memory candidates and "Still current?" questions to keep or drop in place and the review task with its findings, and a status line such as `brain: 3 in inbox · curated 18:02` | mods turned on in Claude Code | `/m2b:band-setup` |
+| [`backup`](docs/addons/backup.md) | After each run, a local snapshot: a mirror of the store, a dated attic of replaced files, a dump of the task list | a folder for the snapshot, outside the store; the curating machine | `/m2b:backup-setup` |
+| [`herdr`](docs/addons/herdr.md) | At session start, the other agent sessions open in [herdr](https://herdr.dev), the terminal workspace manager for agents, so overlapping work is noticed before it starts | herdr 0.9 or later, sessions started in a herdr pane | `/m2b:herdr-setup` |
+| [`worklog`](docs/addons/worklog.md) | A daily worklog of your sessions in herdr: topics, time spans per sphere of work, booking proposals for billable spheres, a ledger with CSV and XLSX exports | herdr 0.9 or later; the curating machine, which alone records; your spheres of work and customers, which its setup asks for | `/m2b:worklog-setup` |
 
-[Add-ons](docs/addons.md) describes each one: what it reads and writes on the machine and in the
-store, its commands, and how you see that it runs. To turn an add-on off again, keeping its
-settings:
+Each add-on has its own page, linked in the table: what it reads and writes on the machine and in
+the store, its commands, and how you see that it runs. [Add-ons](docs/addons.md) is the overview.
+To turn an add-on off again, keeping its settings:
 
 ```bash
 m2b addons off band
