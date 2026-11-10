@@ -23,9 +23,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Two jobs cover both Pythons on both systems: on macOS, scripts/check runs the unit tests
+        # with the system /usr/bin/python3 (3.9) as well, and Ubuntu runs everything on 3.9.
         # Pinned: ubuntu-latest moved to 26.04, which has no Python 3.9 for setup-python.
-        os: [macos-latest, ubuntu-24.04]
-        python: ["3.9", "3.x"]
+        include:
+          - os: macos-latest
+            python: "3.x"
+          - os: ubuntu-24.04
+            python: "3.9"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
