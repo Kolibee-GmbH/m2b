@@ -11,6 +11,8 @@ All notable changes to this project are documented here. The format follows
 
 - Each add-on has its own page under `docs/addons/`, and `docs/addons.md` is the overview that
   links them ([#6](https://github.com/b33eep/m2b/pull/6)).
+- CI runs two jobs, macOS on the current Python and Ubuntu on 3.9, instead of four
+  ([#7](https://github.com/b33eep/m2b/pull/7)).
 
 ## [0.2.0] - 2026-11-09
 
