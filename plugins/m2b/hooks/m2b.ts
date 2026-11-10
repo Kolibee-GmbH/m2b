@@ -4,10 +4,25 @@ export type M2bOutcome = { ok: true; stdout: string } | { ok: false; error: stri
 
 const LAUNCHER = '.local/bin/m2b'
 
-/** The folder the core puts its machine paths under: `M2B_HOME` when set (as the core reads it), else the home folder. */
+/**
+ * The folder the core puts its machine paths under, resolved as the core resolves it: `M2B_HOME`
+ * when set, with a leading `~` meaning the home folder, else the home folder. The core falls back
+ * to the account's home when `HOME` is unset; the module cannot look that up and answers undefined.
+ */
 export async function m2bHome($: EngineInterface): Promise<string | undefined> {
-  const home = (await $.env.get('M2B_HOME')) || (await $.env.get('HOME'))
-  return home ? home.replace(/\/+$/, '') : undefined
+  const userHome = withoutTrailingSlash(await $.env.get('HOME'))
+  const override = await $.env.get('M2B_HOME')
+  if (!override) {
+    return userHome
+  }
+  if (override === '~' || override.startsWith('~/')) {
+    return userHome === undefined ? undefined : withoutTrailingSlash(userHome + override.slice(1))
+  }
+  return withoutTrailingSlash(override)
+}
+
+function withoutTrailingSlash(path: string | undefined): string | undefined {
+  return path ? path.replace(/\/+$/, '') || '/' : undefined
 }
 
 const MACHINE_CONFIG = '.config/m2b/config.json'

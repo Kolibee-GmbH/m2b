@@ -25,6 +25,10 @@ All notable changes to this project are documented here. The format follows
 - `m2b-worklog recorder check` says whether herdr is installed, at least 0.9.0 and running. The
   worklog setup asks it first and stops before any question when herdr is missing, too old or not
   running.
+- Undo in the band: keep and drop wait 5 seconds, while the row offers `undo`, and write only then.
+  A click taken back, or a session closed within those seconds, leaves the task as it was.
+- A session whose band is older than the installed m2b says so in one line and names
+  `/reload-plugins`; `m2b band --json` answers the installed `version` for that.
 
 ### Changed
 
@@ -81,6 +85,23 @@ All notable changes to this project are documented here. The format follows
 - The worklog page no longer names `~/.claude/projects/` as the fixed place of the transcripts: it
   says that `CLAUDE_CONFIG_DIR` moves it, and that `M2B_HERDR` names the `herdr` executable for the
   worklog's commands too ([#10](https://github.com/Kolibee-GmbH/m2b/pull/10)).
+- One control character in a title or a finding, such as an escape sequence pasted from terminal
+  output, made Claude Code refuse the band's drawing, and the band vanished in every session. Every
+  text is now drawn as one plain line.
+- A failure inside the band's timers left the status line at its old state; it now says
+  `could not look`.
+- After a keep or drop, a second click on the same row during the reload claimed that another
+  session had settled it. The row now stays locked until that reload has landed.
+- Turns ending while `m2b` was slow queued one reload each, so the band could lag minutes behind;
+  at most one reload waits now.
+- A shared answer of another shape, or one stamped later than now after the clock was set back,
+  could break the band or stop sessions from sharing; such an answer is loaded again.
+- `M2B_HOME` starting with `~` left the band empty; it resolves under the home folder, as for the
+  rest of m2b.
+- A task id that starts with a dash reached `m2b tasks complete` as an option; the band now passes
+  it after `--`.
+- The folder with the band's shared answer, which holds candidate titles and findings, is kept
+  readable by its owner only.
 
 ## [0.2.0] - 2026-11-09
 

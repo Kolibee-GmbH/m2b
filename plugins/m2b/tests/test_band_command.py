@@ -7,6 +7,7 @@ from typing import Any
 from unittest import mock
 
 import test_runner
+from m2b import launcher
 from m2b.commands import band, doctor
 from m2b.tasks import markers
 
@@ -55,6 +56,12 @@ class BandCommandTest(test_runner.RunnerTest):
         self.assertEqual(calls.read_text(encoding="utf-8").split(), ["show-lists", "show"])
         self.assertTrue(cache.exists())
         self.assertEqual(answer["status"]["backends"]["tasks"]["state"], "reachable")
+
+    def test_the_answer_names_the_installed_version(self) -> None:
+        """Covers: B96"""
+        self.curating()
+
+        self.assertEqual(self.band()["version"], launcher.core_version())
 
     def test_tasks_only_leaves_the_status_out(self) -> None:
         """Covers: B93"""

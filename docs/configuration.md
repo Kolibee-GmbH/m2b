@@ -118,7 +118,7 @@ For tests, development and unusual setups; none is needed in normal use.
 
 | Variable | Effect |
 |---|---|
-| `M2B_HOME` | moves every machine path (`~/.config/m2b`, `~/.local/state/m2b`, `~/.local/share/m2b`, the launcher) under this folder |
+| `M2B_HOME` | moves every machine path (`~/.config/m2b`, `~/.local/state/m2b`, `~/.local/share/m2b`, the launcher) under this folder; a leading `~` stands for your home folder |
 | `M2B_CORE_ROOT` | the launcher runs the core from this folder (a checkout) instead of Claude Code's plugin folder |
 | `M2B_INSTALLED_PLUGINS` | another `installed_plugins.json`, read by the launcher and the worklog's recorder |
 | `M2B_MODEL_RUNNER` | an executable used in place of `claude` for model steps, such as `scripts/no-model` |

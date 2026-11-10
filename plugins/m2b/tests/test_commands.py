@@ -7,6 +7,7 @@ import datetime
 import io
 import json
 import os
+import stat
 import sys
 import tempfile
 import unittest
@@ -116,6 +117,19 @@ class TasksCommandTest(CommandTest):
         self.assertEqual([task["title"] for task in self.run_json("tasks", "list")], ["Merken? Dana prefers tea"])
         (done,) = [task for task in self.run_json("tasks", "list", "--include-completed") if task["id"] == task_id]
         self.assertTrue(done["completed"])
+
+    def test_a_task_id_after_double_dash_is_never_read_as_an_option(self) -> None:
+        """Covers: B94"""
+        self.set_up()
+        task_id = self.run_json("tasks", "add", "Merken? Dana prefers tea", "--notes", "m2b:candidate")["id"]
+
+        self.assertEqual(self.run_command("tasks", "drop", "--", task_id)[0], cli.EXIT_OK)
+        code, out, _ = self.run_command("tasks", "complete", "--", "-h")
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        self.assertNotIn("usage:", out)
+        (dropped,) = self.run_json("tasks", "list", "--include-completed")
+        self.assertTrue(dropped["dropped"])
 
     def test_drop_notes_and_delete_against_apple_reminders(self) -> None:
         self.set_up(tasks={"backend": "apple-reminders", "list": "sb-test-inbox"})
@@ -599,6 +613,16 @@ class DoctorTest(CommandTest):
         self.assertIsNotNone(datetime.datetime.fromisoformat(noted["seenAt"]).tzinfo)
         self.assertEqual([path.exists() for path in leftovers], [False, False, False])
         self.assertTrue(kept.exists())
+
+    def test_the_launcher_hook_keeps_the_machine_state_readable_by_the_owner_only(self) -> None:
+        """Covers: B95"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        self.machine.state_dir.mkdir(parents=True, exist_ok=True)
+        self.machine.state_dir.chmod(0o755)
+
+        self.run_command("hook", "launcher")
+
+        self.assertEqual(stat.S_IMODE(self.machine.state_dir.stat().st_mode), 0o700)
 
     def test_a_store_path_the_curation_run_cannot_fence_is_a_problem(self) -> None:
         """Covers: B81"""

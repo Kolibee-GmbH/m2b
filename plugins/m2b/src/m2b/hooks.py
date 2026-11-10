@@ -206,9 +206,17 @@ def launcher_hook(
 
 
 def note_session(machine: MachinePaths) -> None:
-    """Writes when a session last ran m2b's own hooks, and drops the caches the band no longer reads."""
+    """Writes when a session last ran m2b's own hooks, and drops the caches the band no longer reads.
+
+    The band shares its answer, candidate titles and review findings among them, in this folder,
+    and Claude Code writes the band's files with a mode the band cannot choose; the folder is
+    therefore kept readable by its owner only.
+    """
     with contextlib.suppress(OSError):
-        machine.state_dir.mkdir(parents=True, exist_ok=True)
+        machine.state_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with contextlib.suppress(OSError):
+        machine.state_dir.chmod(0o700)
+    with contextlib.suppress(OSError):
         seen = json.dumps({"seenAt": now().isoformat(timespec="seconds")})
         write_text_atomically(machine.session_seen_file, seen + "\n", machine.temp_dir)
         for name in OLD_BAND_CACHES:

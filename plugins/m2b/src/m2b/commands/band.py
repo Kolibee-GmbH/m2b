@@ -9,6 +9,8 @@ configured timeout, so a hanging calendar costs the band a few seconds and is ca
 reachable instead of making the band's answer run past the band's own time limit.
 
 A task list that cannot be read is named in ``tasks.error``; the status part still answers.
+``version`` is this core's: the launcher always runs the installed one, while a session keeps the
+band it loaded, so the band compares the two and asks for a reload when they differ.
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ from m2b.commands.output import print_json
 from m2b.commands.status import status_answer
 from m2b.commands.tasks import task_json
 from m2b.config.machine import MachineConfig, load_machine_config
+from m2b.launcher import core_version
 from m2b.tasks import markers
 
 # The configured calendar timeout (20 seconds by default) may be longer; the band's answer is waited for.
@@ -38,7 +41,8 @@ def band_command(arguments: argparse.Namespace, context: Context) -> int:
     if arguments.tasks_only:
         print_json({"tasks": tasks})
         return 0
-    print_json({"tasks": tasks, "status": status_answer(_short_calendar(config), context, tasks_check)})
+    status = status_answer(_short_calendar(config), context, tasks_check)
+    print_json({"version": core_version(), "tasks": tasks, "status": status})
     return 0
 
 
