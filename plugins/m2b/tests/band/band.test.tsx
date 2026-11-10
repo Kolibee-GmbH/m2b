@@ -50,7 +50,7 @@ class FakeM2b {
   hasLauncher = true
   /** How long the answer to a call takes on the test clock; it is read when the call starts. */
   delayMs: (args: readonly string[]) => number = () => 0
-  /** Runs before a candidate list is answered, as another session would act meanwhile. */
+  /** Runs before the band's answer is made, as another session would act meanwhile. */
   beforeCandidateList: (() => void) | null = null
 
   candidate(id: string, title: string): this {
@@ -76,24 +76,13 @@ class FakeM2b {
     if (!this.isSetUp) {
       return fail('not set up: no machine config at /home/alex/.config/m2b/config.json')
     }
-    if (this.isStoreMissing && args[0] === 'tasks') {
-      return fail('not set up: no store.json in the store /home/alex/Notes')
-    }
-    if (args[0] === 'status') {
-      return this.statusFails ? fail('could not read the machine config') : ok(JSON.stringify(this.status))
+    if (args[0] === 'band') {
+      return this.bandAnswer()
     }
     if (this.failure !== null) {
       return fail(this.failure)
     }
     const [, verb, ...rest] = args
-    if (verb === 'list') {
-      const marker = rest[1]
-      if (marker === 'candidate' && this.beforeCandidateList !== null) {
-        this.beforeCandidateList()
-        this.beforeCandidateList = null
-      }
-      return ok(JSON.stringify(this.tasks.filter(task => task.marker === marker && !task.completed)))
-    }
     const task = this.tasks.find(open => open.id === rest[0])
     if (task === undefined) {
       return fail(`no task with id ${rest[0]}`)
@@ -103,8 +92,28 @@ class FakeM2b {
     return ok('')
   }
 
+  /** As `m2b band --json` answers: the open curator tasks by marker, or the error, and the status. */
+  bandAnswer(): ProcessRunResult {
+    if (this.statusFails) {
+      return fail('could not read the machine config')
+    }
+    if (this.beforeCandidateList !== null) {
+      this.beforeCandidateList()
+      this.beforeCandidateList = null
+    }
+    const open = (marker: string): FakeTask[] => this.tasks.filter(task => task.marker === marker && !task.completed)
+    const error = this.isStoreMissing
+      ? 'not set up: no store.json in the store /home/alex/Notes. Run /m2b:m2b setup in Claude Code.'
+      : this.failure
+    const tasks =
+      error === null
+        ? { candidates: open('candidate'), questions: open('current'), reviews: open('review') }
+        : { error }
+    return ok(JSON.stringify({ tasks, status: this.status }))
+  }
+
   writes(): string[][] {
-    return this.calls.filter(call => call[0] === 'tasks' && call[1] !== 'list')
+    return this.calls.filter(call => call[0] === 'tasks')
   }
 }
 
@@ -297,8 +306,16 @@ test('inside a fenced curation step the band asks m2b nothing', async ($, on) =>
 test('an answer another session stored within 55 seconds is used without starting m2b', async ($, on) => {
   const cache = '/home/alex/.local/state/m2b'
   const files: Files = new Map([
-    [`${cache}/band-snapshot.json`, JSON.stringify({ writtenAtMs: NOW - 10_000, value: { candidates: [{ id: 'c9', title: 'Remember? From the other session' }], review: null, error: null } })],
-    [`${cache}/band-status.json`, JSON.stringify({ writtenAtMs: NOW - 10_000, value: '7 in inbox' })],
+    [
+      `${cache}/band-view.json`,
+      JSON.stringify({
+        writtenAtMs: NOW - 10_000,
+        value: {
+          snapshot: { candidates: [{ id: 'c9', title: 'Remember? From the other session' }], review: null, error: null },
+          status: '7 in inbox',
+        },
+      }),
+    ],
   ])
   const fake = new FakeM2b()
   const { clock, statuses } = await start($, on, fake, {}, files)
@@ -310,8 +327,8 @@ test('an answer another session stored within 55 seconds is used without startin
   fake.candidate('c1', 'Remember? Acme moved')
   await clock.advance(60_000)
   expect(await texts(ui)).toContain('Remember? Acme moved')
-  expect(fake.calls.map(call => call[0])).toContain('tasks')
-  expect(JSON.parse(files.get(`${cache}/band-snapshot.json`) ?? '{}').value.candidates[0].id).toBe('c1')
+  expect(fake.calls.map(call => call[0])).toContain('band')
+  expect(JSON.parse(files.get(`${cache}/band-view.json`) ?? '{}').value.snapshot.candidates[0].id).toBe('c1')
   await ui.unmount()
 })
 
@@ -331,12 +348,13 @@ test('after its own turn a session reads again, whatever another session stored'
 })
 
 test('a slow load never replaces an answer another session started later', async ($, on) => {
-  const cache = '/home/alex/.local/state/m2b/band-snapshot.json'
+  const cache = '/home/alex/.local/state/m2b/band-view.json'
   const files: Files = new Map()
   const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
-  fake.delayMs = args => (args[0] === 'tasks' ? 30_000 : 0)
+  fake.delayMs = args => (args[0] === 'band' ? 30_000 : 0)
   const { clock } = await start($, on, fake, {}, files)
-  const newer = { writtenAtMs: NOW + 5_000, value: { candidates: [], review: null, error: null } }
+  const snapshot = { candidates: [], review: null, error: null }
+  const newer = { writtenAtMs: NOW + 5_000, value: { snapshot, status: '0 in inbox' } }
   files.set(cache, JSON.stringify(newer))
   await clock.advance(31_000)
   expect(JSON.parse(files.get(cache) ?? '{}')).toEqual(newer)
@@ -347,6 +365,7 @@ test('keep completes the candidate and drop drops it', async ($, on) => {
   await start($, on, fake)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
 
+  const before = fake.calls.length
   await ui.press({ key: 'keep:c1' })
   await ui.press({ key: 'drop:c2' })
 
@@ -354,6 +373,8 @@ test('keep completes the candidate and drop drops it', async ($, on) => {
     ['tasks', 'complete', 'c1'],
     ['tasks', 'drop', 'c2'],
   ])
+  // The look before each write reads the tasks alone, without the status and its probes.
+  expect(fake.calls.slice(before)[0]).toEqual(['band', '--json', '--tasks-only'])
   expect(await ui.findAll({ type: 'Button' })).toHaveLength(0)
   await ui.unmount()
 })
@@ -375,7 +396,16 @@ test('after keep the band reads the tasks itself, not the answer it stored a mom
   const cache = '/home/alex/.local/state/m2b'
   const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
   const files: Files = new Map([
-    [`${cache}/band-snapshot.json`, JSON.stringify({ writtenAtMs: NOW, value: { candidates: [{ id: 'c1', title: 'Remember? Acme moved' }], review: null, error: null } })],
+    [
+      `${cache}/band-view.json`,
+      JSON.stringify({
+        writtenAtMs: NOW,
+        value: {
+          snapshot: { candidates: [{ id: 'c1', title: 'Remember? Acme moved' }], review: null, error: null },
+          status: '2 in inbox',
+        },
+      }),
+    ],
   ])
   await start($, on, fake, {}, files)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -385,7 +415,7 @@ test('after keep the band reads the tasks itself, not the answer it stored a mom
 
   expect(fake.writes()).toEqual([['tasks', 'complete', 'c1']])
   expect(await ui.findAll({ type: 'Button' })).toHaveLength(0)
-  expect(JSON.parse(files.get(`${cache}/band-snapshot.json`) ?? '{}').value.candidates).toEqual([])
+  expect(JSON.parse(files.get(`${cache}/band-view.json`) ?? '{}').value.snapshot.candidates).toEqual([])
   await ui.unmount()
 })
 
@@ -491,11 +521,11 @@ test('a write that fails shows one error line and the candidate comes back on th
   await ui.unmount()
 })
 
-/** Delays the first candidate list after `armed()` is called: a reload that read before the click. */
+/** Delays the first band answer after `armed()` is called: a reload that read before the click. */
 function slowFirstCandidateList(fake: FakeM2b): () => void {
   let isArmed = false
   fake.delayMs = args => {
-    if (isArmed && args[3] === 'candidate') {
+    if (isArmed && args[0] === 'band') {
       isArmed = false
       return 5_000
     }
@@ -542,16 +572,20 @@ test('a reload that read before a failed write does not hide the error', async (
   await ui.unmount()
 })
 
-test('the band does not wait for the status line', async ($, on) => {
-  const fake = new FakeM2b()
-  const { clock } = await start($, on, fake)
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  fake.delayMs = args => (args[0] === 'status' ? 30_000 : 0)
-  fake.candidate('c1', 'Remember? Acme moved')
+test('a reload starts exactly one m2b process for the band and the status line', async ($, on) => {
+  // Covers: B93
+  const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved').question('q1', 'Still current? Porto')
+  fake.review('r1', ['lint: broken link in a.md'])
+  const { clock, statuses } = await start($, on, fake)
+  const before = fake.calls.length
 
   await clock.advance(60_000)
 
-  expect(await ui.findAll({ type: 'Button' })).toHaveLength(2)
+  expect(fake.calls.slice(before)).toEqual([['band', '--json']])
+  expect(statuses.at(-1)).toBe('2 in inbox · curated 18:02')
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.findAll({ type: 'Button' })).toHaveLength(4)
+  expect(await texts(ui)).toContain('lint: broken link in a.md')
   await ui.unmount()
 })
 

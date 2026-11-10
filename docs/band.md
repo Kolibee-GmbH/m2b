@@ -63,12 +63,35 @@ with the second case when no session has run m2b's hooks since setup. Right afte
 
 ## What it reads and writes
 
-It runs only while `~/.config/m2b/config.json` and the launcher exist, and then calls `m2b status`
-and `m2b tasks list` and nothing else; keep and drop call `m2b tasks complete` and `m2b tasks drop`.
-Every open session asks about once a minute and after each of your turns, so the answers are shared
-between sessions for 55 seconds in `~/.local/state/m2b/band-snapshot.json` and `band-status.json`.
-At each session start it writes `~/.local/state/m2b/band-seen.json`, which `m2b doctor` reads. Apart from keep and drop, which change that one task in your task list (with the
-`markdown` backend, its file in `tasks/` of the store), it writes nothing in the store.
+It runs only while `~/.config/m2b/config.json` and the launcher exist. Each refresh is one `m2b`
+call, `m2b band --json`; keep and drop call `m2b tasks complete` and `m2b tasks drop`, after
+reading the list again with `m2b band --json --tasks-only`. Every open session asks about once a minute and
+after each of your turns, so the answer is shared between sessions for 55 seconds in
+`~/.local/state/m2b/band-view.json`. At each session start it writes
+`~/.local/state/m2b/band-seen.json`, which `m2b doctor` reads. Apart from keep and drop, which
+change that one task in your task list (with the `markdown` backend, its file in `tasks/` of the
+store), it writes nothing in the store.
+
+`m2b band --json` reaches and reads the task list once (with Apple Reminders, two calls to
+`reminders`) and sorts the open tasks by their marker, and adds the answer of `m2b status --json`,
+reusing that one look at the task list for its check of the backends. With invented tasks:
+
+```json
+{
+  "tasks": {
+    "candidates": [{"id": "c1", "title": "Remember? Sam brings the plywood", "notes": "m2b:candidate", "due": null, "completed": false, "completed_at": null, "dropped": false, "marker": "candidate"}],
+    "questions": [],
+    "reviews": []
+  },
+  "status": {"machine_id": "alex-laptop", "inbox": {"count": 2, "evicted": 0}, "run": {"state": "succeeded", "last_succeeded_at": "2026-03-14T21:36:00+01:00"}, "backends": {"store": {"state": "reachable", "detail": ""}, "tasks": {"state": "reachable", "detail": ""}, "calendar": {"state": "not configured", "detail": ""}}}
+}
+```
+
+`status` holds more fields than shown, as `m2b status --json` does. When the task list cannot be
+read, `tasks` is `{"error": "<why>"}` and `status` still answers. The checks of the backends are
+kept for five minutes, so at most every five minutes the answer waits for the calendar too, here
+for at most 10 seconds whatever `calendar.timeout_seconds` says; a calendar that does not answer
+by then is reported as not reachable. `--tasks-only` leaves `status` out.
 
 ## Where it lives
 

@@ -11,6 +11,10 @@ All notable changes to this project are documented here. The format follows
 
 - m2b has a logo: the README shows it, and `docs/images/` holds the mark, an icon and the image
   for link previews ([#9](https://github.com/Kolibee-GmbH/m2b/pull/9)).
+- `m2b band --json` answers everything the band shows in one call: the open candidates, questions
+  and review tasks from one look at the task list, and the status. A refresh of the band is one
+  `m2b` call instead of four, and the list is read once instead of three times (with Apple
+  Reminders, two calls instead of six).
 - `m2b-worklog state` shows the watermark, an unfinished worklog and the last period in the ledger,
   and names a file it cannot read.
 - The worklog's recorder writes a sign of life at herdr's start and, run by a timer of the operating

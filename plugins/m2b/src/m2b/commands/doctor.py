@@ -42,7 +42,7 @@ UNUSABLE = "not usable for curation"
 APPLE_REMINDERS = "apple-reminders"
 PROBLEMS = (NOT_REACHABLE, MISSING, NEWER, UNUSABLE)
 _HOMEBREW_VERSION = re.compile(r"/reminders-cli/([^/]+)/")
-_FAILURES = (ConfigError, StoreUnreachableError, StoreError, TasksError, CalendarError, OSError)
+PROBE_FAILURES = (ConfigError, StoreUnreachableError, StoreError, TasksError, CalendarError, OSError)
 SEEN, NOT_SEEN = "seen", "not seen"
 # The band and the launcher hook start within moments of each other in one session.
 SAME_SESSION = datetime.timedelta(minutes=5)
@@ -141,7 +141,7 @@ def _store_format_check(config: MachineConfig, context: Context) -> list[Check]:
     """The store's format against this m2b; nothing when the store cannot be read, which ``store`` reports."""
     try:
         settings = load_store_settings(configured_store(config, context.machine))
-    except _FAILURES:
+    except PROBE_FAILURES:
         return []
     return [Check("store-format", format_state(settings), describe_format(settings))]
 
@@ -154,7 +154,7 @@ def _store_path_check(config: MachineConfig, context: Context) -> list[Check]:
         return []
     try:
         curates = load_store_settings(configured_store(config, context.machine)).curating_machine == config.machine_id
-    except _FAILURES:
+    except PROBE_FAILURES:
         return []
     return [Check("store-path", UNUSABLE, unusable)] if curates else []
 
@@ -166,7 +166,7 @@ def _check_store(config: MachineConfig, context: Context) -> None:
 def probe(name: str, call: Callable[[], None]) -> Check:
     try:
         call()
-    except _FAILURES as error:
+    except PROBE_FAILURES as error:
         return Check(name, NOT_REACHABLE, str(error))
     return Check(name, REACHABLE)
 
@@ -176,7 +176,7 @@ def calendar_check(config: MachineConfig) -> Check:
         configured_calendar(config).check_access()
     except CalendarNotConfigured:
         return Check("calendar", NOT_CONFIGURED)
-    except _FAILURES as error:
+    except PROBE_FAILURES as error:
         return Check("calendar", NOT_REACHABLE, str(error))
     return Check("calendar", REACHABLE, config.calendar.backend)
 
@@ -185,7 +185,7 @@ def _uses_reminders(config: MachineConfig, context: Context) -> bool:
     """True unless the store says otherwise: a store that cannot be read keeps the line."""
     try:
         return load_store_settings(configured_store(config, context.machine)).tasks.backend == APPLE_REMINDERS
-    except _FAILURES:
+    except PROBE_FAILURES:
         return True
 
 

@@ -80,8 +80,8 @@ WORK_PEOPLE_RULE = (
     "Knowledge about people and verbal agreements may be captured from work sessions; documents and "
     "confidential statements of customers or other third parties never."
 )
-# Written by the band of m2b 0.2.0, when it was an add-on; nothing reads it any more.
-OLD_BAND_ADDONS_CACHE = "band-addons.json"
+# Caches older bands wrote, one answer per call; the band now shares one answer in band-view.json.
+OLD_BAND_CACHES = ("band-addons.json", "band-snapshot.json", "band-status.json")
 
 
 def now() -> datetime.datetime:
@@ -206,12 +206,13 @@ def launcher_hook(
 
 
 def note_session(machine: MachinePaths) -> None:
-    """Writes when a session last ran m2b's own hooks, and drops the add-on cache the band no longer reads."""
+    """Writes when a session last ran m2b's own hooks, and drops the caches the band no longer reads."""
     with contextlib.suppress(OSError):
         machine.state_dir.mkdir(parents=True, exist_ok=True)
         seen = json.dumps({"seenAt": now().isoformat(timespec="seconds")})
         write_text_atomically(machine.session_seen_file, seen + "\n", machine.temp_dir)
-        (machine.state_dir / OLD_BAND_ADDONS_CACHE).unlink(missing_ok=True)
+        for name in OLD_BAND_CACHES:
+            (machine.state_dir / name).unlink(missing_ok=True)
 
 
 def _installed_version(machine: MachinePaths) -> str | None:

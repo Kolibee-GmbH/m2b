@@ -582,18 +582,23 @@ class DoctorTest(CommandTest):
         self.assertIn("allowManagedHooksOnly", line)
         self.assertIn("distillate", line)
 
-    def test_the_launcher_hook_notes_the_session_and_removes_the_old_add_on_cache(self) -> None:
+    def test_the_launcher_hook_notes_the_session_and_removes_the_old_band_caches(self) -> None:
         """Covers: B92"""
         self.set_up(calendar="none", tasks={"backend": "markdown"})
-        leftover = self.machine.state_dir / "band-addons.json"
-        leftover.parent.mkdir(parents=True, exist_ok=True)
-        leftover.write_text("{}", encoding="utf-8")
+        leftovers = [
+            self.machine.state_dir / name for name in ("band-addons.json", "band-snapshot.json", "band-status.json")
+        ]
+        kept = self.machine.state_dir / "band-view.json"
+        kept.parent.mkdir(parents=True, exist_ok=True)
+        for path in [*leftovers, kept]:
+            path.write_text("{}", encoding="utf-8")
 
         self.run_command("hook", "launcher")
 
         noted = json.loads((self.machine.state_dir / "session-seen.json").read_text(encoding="utf-8"))
         self.assertIsNotNone(datetime.datetime.fromisoformat(noted["seenAt"]).tzinfo)
-        self.assertFalse(leftover.exists())
+        self.assertEqual([path.exists() for path in leftovers], [False, False, False])
+        self.assertTrue(kept.exists())
 
     def test_a_store_path_the_curation_run_cannot_fence_is_a_problem(self) -> None:
         """Covers: B81"""

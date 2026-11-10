@@ -1,30 +1,33 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { BandCandidate, BandReview, BandSnapshot } from '../types'
+import type { BandCandidate, BandSnapshot } from '../types'
 import { launcherPath, m2bHome, machineConfigPath, runM2b } from './m2b'
 import { shared } from './shared-cache'
 import { COULD_NOT_LOOK, statusLine } from './status-line'
-import { parseCandidates, parseReview } from './tasks'
+import { parseBandTasks } from './tasks'
 
 const snapshotAtom = atom({ plugin: 'm2b', key: 'bandSnapshot' } as const, null)
 const noticeAtom = atom({ plugin: 'm2b', key: 'bandNotice' } as const, null)
 const busyAtom = atom({ plugin: 'm2b', key: 'bandIsBusy' } as const, false)
 
 const REFRESH_EVERY_MS = 60_000
-// The Apple Reminders backend allows each call 20 seconds and a list makes two calls.
-const TASKS_TIMEOUT_MS = 60_000
-// `m2b status` probes store, tasks and calendar one after another, 20 seconds each at most.
-const STATUS_TIMEOUT_MS = 90_000
+// `m2b band` reaches and reads the task list (two Apple Reminders calls, 20 seconds each by
+// default) and, at most every five minutes, probes the calendar within 10 seconds.
+const BAND_TIMEOUT_MS = 90_000
+// A drop on Apple Reminders is three calls (find, edit the notes, complete), 20 seconds each by default.
+const WRITE_TIMEOUT_MS = 90_000
 // Read by `m2b doctor`: the core cannot see whether Claude Code loaded this module.
 const SEEN_FILE = '.local/state/m2b/band-seen.json'
 const CANDIDATES_SHOWN = 3
 const FINDINGS_SHOWN = 3
 
-const CANDIDATE_LIST = ['tasks', 'list', '--marker', 'candidate', '--json'] as const
-// Whether a current item still holds is answered the same way as a candidate: keep or drop.
-const QUESTION_LIST = ['tasks', 'list', '--marker', 'current', '--json'] as const
-const REVIEW_LIST = ['tasks', 'list', '--marker', 'review', '--json'] as const
+const BAND_ANSWER = ['band', '--json'] as const
+// The second look before a keep or drop needs the tasks alone, not the status and its probes.
+const TASKS_ANSWER = ['band', '--json', '--tasks-only'] as const
+
+/** What one answer of `m2b band --json` draws: the band's rows and the status line. */
+type BandView = { snapshot: BandSnapshot; status: string }
 
 type Settle = 'complete' | 'drop'
 
@@ -40,83 +43,66 @@ function serialQueue(): (job: Job) => Promise<void> {
   }
 }
 
-/** The open candidates, then the open questions about current items; both are kept or dropped. */
-async function loadCandidates($: EngineInterface): Promise<BandCandidate[] | string> {
-  const lists = await Promise.all([CANDIDATE_LIST, QUESTION_LIST].map(list => loadTaskList($, list)))
-  const failure = lists.find((list): list is string => typeof list === 'string')
-  return failure ?? lists.flatMap(list => list as BandCandidate[])
-}
-
-async function loadTaskList($: EngineInterface, list: readonly string[]): Promise<BandCandidate[] | string> {
-  const outcome = await runM2b($, list, TASKS_TIMEOUT_MS)
+/** One call for everything the band and the status line show; whatever fails, it answers a view. */
+async function loadView($: EngineInterface, answer: readonly string[] = BAND_ANSWER): Promise<BandView> {
+  const outcome = await runM2b($, answer, BAND_TIMEOUT_MS)
   if (!outcome.ok) {
-    return outcome.error
+    return { snapshot: failed(`m2b could not read the tasks: ${outcome.error}`), status: COULD_NOT_LOOK }
   }
+  let parsed: unknown
   try {
-    return parseCandidates(outcome.stdout)
-  } catch (error) {
-    return String((error as Error).message)
-  }
-}
-
-async function loadReview($: EngineInterface): Promise<BandReview | null | string> {
-  const outcome = await runM2b($, REVIEW_LIST, TASKS_TIMEOUT_MS)
-  if (!outcome.ok) {
-    return outcome.error
-  }
-  try {
-    return parseReview(outcome.stdout)
-  } catch (error) {
-    return String((error as Error).message)
-  }
-}
-
-async function loadSnapshot($: EngineInterface): Promise<BandSnapshot> {
-  const [candidates, review] = await Promise.all([loadCandidates($), loadReview($)])
-  if (typeof candidates === 'string' || typeof review === 'string') {
-    const reason = typeof candidates === 'string' ? candidates : (review as string)
-    return failed(`m2b could not read the tasks: ${reason}`)
-  }
-  return { candidates, review, error: null }
-}
-
-async function loadStatusLine($: EngineInterface): Promise<string> {
-  const outcome = await runM2b($, ['status', '--json'], STATUS_TIMEOUT_MS)
-  if (!outcome.ok) {
-    return COULD_NOT_LOOK
-  }
-  let answer: unknown
-  try {
-    answer = JSON.parse(outcome.stdout)
+    parsed = JSON.parse(outcome.stdout)
   } catch {
-    return COULD_NOT_LOOK
+    return { snapshot: failed('m2b band answered something that is not JSON'), status: COULD_NOT_LOOK }
   }
-  return statusLine(answer, await $.clock.now())
+  const fields = typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {}
+  return { snapshot: snapshotOf(fields['tasks']), status: statusLine(fields['status'], await $.clock.now()) }
+}
+
+function snapshotOf(part: unknown): BandSnapshot {
+  try {
+    const tasks = parseBandTasks(part)
+    return typeof tasks === 'string'
+      ? failed(`m2b could not read the tasks: ${tasks}`)
+      : { candidates: tasks.candidates, review: tasks.review, error: null }
+  } catch (error) {
+    return failed(String((error as Error).message))
+  }
 }
 
 // Everything that reads or writes the band's rows goes through one queue, so a reload that read
 // the tasks before a keep or drop can never land after it. A reload asked for while one waits to
 // start is that same reload; asked for while one runs, it queues another, read after the request.
 const bandJobs = serialQueue()
-const statusJobs = serialQueue()
-let bandReloadWaiting: Promise<void> | null = null
-let statusReloadWaiting: Promise<void> | null = null
+let reloadWaiting: Promise<void> | null = null
 
-/** With `isForced` (after this session wrote), the band reads the tasks itself, never another session's answer. */
-function reloadBand($: EngineInterface, isForced = false): Promise<void> {
+/** With `isForced` (after this session wrote), the band reads itself, never another session's answer. */
+function reload($: EngineInterface, isForced = false): Promise<void> {
   if (isForced) {
-    return bandJobs(() => loadBandNow($, true))
+    return bandJobs(() => loadNow($, true))
   }
-  bandReloadWaiting ??= bandJobs(() => loadBandNow($, false))
-  return bandReloadWaiting
+  reloadWaiting ??= bandJobs(() => loadNow($, false))
+  return reloadWaiting
 }
 
-async function loadBandNow($: EngineInterface, isForced: boolean): Promise<void> {
+async function loadNow($: EngineInterface, isForced: boolean): Promise<void> {
   if (!isForced) {
-    bandReloadWaiting = null
+    reloadWaiting = null
   }
-  const snapshot = await shared($, 'snapshot', () => loadSnapshot($), isSnapshot, isForced)
-  await update($, snapshotAtom, () => snapshot)
+  const view = await shared($, 'view', () => loadView($), isView, isForced)
+  await update($, snapshotAtom, () => view.snapshot)
+  $.ui.status(view.status)
+}
+
+function isView(value: unknown): value is BandView {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'snapshot' in value &&
+    isSnapshot(value.snapshot) &&
+    'status' in value &&
+    typeof value.status === 'string'
+  )
 }
 
 function isSnapshot(value: unknown): value is BandSnapshot {
@@ -125,28 +111,11 @@ function isSnapshot(value: unknown): value is BandSnapshot {
     value !== null &&
     'candidates' in value &&
     Array.isArray(value.candidates) &&
+    'review' in value &&
+    (value.review === null || (typeof value.review === 'object' && 'findings' in value.review)) &&
     'error' in value &&
     (value.error === null || typeof value.error === 'string')
   )
-}
-
-function isText(value: unknown): value is string {
-  return typeof value === 'string'
-}
-
-function reloadStatus($: EngineInterface, isForced = false): Promise<void> {
-  if (isForced) {
-    return statusJobs(() => loadStatusNow($, true))
-  }
-  statusReloadWaiting ??= statusJobs(() => loadStatusNow($, false))
-  return statusReloadWaiting
-}
-
-async function loadStatusNow($: EngineInterface, isForced: boolean): Promise<void> {
-  if (!isForced) {
-    statusReloadWaiting = null
-  }
-  $.ui.status(await shared($, 'status', () => loadStatusLine($), isText, isForced))
 }
 
 async function clearBand($: EngineInterface): Promise<void> {
@@ -156,19 +125,17 @@ async function clearBand($: EngineInterface): Promise<void> {
 }
 
 /**
- * Reloads band and status line, each on its own (the status probes can take far longer). Before
- * m2b is set up on this machine (no machine config) or before the core wrote its launcher, it
- * clears both and calls nothing; when m2b cannot say, the status line says it could not look. The
- * minute's refresh takes another session's fresh answers; `isForced`, after this session's own
- * turn, does not.
+ * Reloads band and status line with one `m2b band` call. Before m2b is set up on this machine (no
+ * machine config) or before the core wrote its launcher, it clears both and calls nothing; when m2b
+ * cannot say, the status line says it could not look. The minute's refresh takes another session's
+ * fresh answer; `isForced`, after this session's own turn, does not.
  */
 async function refresh($: EngineInterface, isForced = false): Promise<void> {
   if (!(await isSetUp($))) {
     await clearBand($)
     return
   }
-  void reloadBand($, isForced)
-  void reloadStatus($, isForced)
+  void reload($, isForced)
 }
 
 /**
@@ -228,23 +195,24 @@ async function settle($: EngineInterface, candidate: BandCandidate, action: Sett
     await update($, busyAtom, () => false)
   }
   if (isWritten) {
-    await reloadBand($, true)
+    await reload($, true)
   }
 }
 
 async function settleNow($: EngineInterface, candidate: BandCandidate, action: Settle): Promise<boolean> {
   await update($, noticeAtom, () => null)
-  const current = await loadCandidates($)
-  if (typeof current === 'string') {
-    await update($, snapshotAtom, () => failed(`m2b could not read the tasks: ${current}`))
+  const { snapshot } = await loadView($, TASKS_ANSWER)
+  if (snapshot.error !== null) {
+    await update($, snapshotAtom, () => snapshot)
     return false
   }
+  const current = snapshot.candidates
   if (!current.some(open => open.id === candidate.id)) {
     await update($, noticeAtom, () => `Already settled in another session, nothing written: ${candidate.title}`)
     await update($, snapshotAtom, snapshot => (snapshot === null ? snapshot : { ...snapshot, candidates: current }))
     return false
   }
-  const outcome = await runM2b($, ['tasks', action, candidate.id], TASKS_TIMEOUT_MS)
+  const outcome = await runM2b($, ['tasks', action, candidate.id], WRITE_TIMEOUT_MS)
   if (!outcome.ok) {
     const verb = action === 'complete' ? 'keep' : 'drop'
     await update($, snapshotAtom, () => failed(`m2b could not ${verb} "${candidate.title}": ${outcome.error}`))

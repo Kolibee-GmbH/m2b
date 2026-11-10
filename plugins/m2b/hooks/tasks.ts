@@ -2,7 +2,7 @@ import type { BandCandidate, BandReview } from '../types'
 
 export class TaskJsonError extends Error {
   constructor() {
-    super('m2b answered something other than a task list')
+    super('m2b answered something other than the band\'s task lists')
     this.name = 'TaskJsonError'
   }
 }
@@ -29,30 +29,24 @@ function isTaskJson(value: unknown): value is TaskJson {
   )
 }
 
-/** The open tasks in the output of `m2b tasks list --json`. */
-function openTasks(stdout: string): TaskJson[] {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(stdout)
-  } catch {
+/** The open tasks of one list in the answer of `m2b band --json`. */
+function openTasks(list: unknown): TaskJson[] {
+  if (!Array.isArray(list) || !list.every(isTaskJson)) {
     throw new TaskJsonError()
   }
-  if (!Array.isArray(parsed) || !parsed.every(isTaskJson)) {
-    throw new TaskJsonError()
-  }
-  return parsed.filter(task => !task.completed && !task.dropped)
+  return list.filter(task => !task.completed && !task.dropped)
 }
 
-export function parseCandidates(stdout: string): BandCandidate[] {
-  return openTasks(stdout).map(({ id, title }) => ({ id, title }))
+export function parseCandidates(list: unknown): BandCandidate[] {
+  return openTasks(list).map(({ id, title }) => ({ id, title }))
 }
 
 /**
  * The open review task with its findings: the paragraphs of its notes after the first, which
  * holds the marker line and the time of the run.
  */
-export function parseReview(stdout: string): BandReview | null {
-  const [review] = openTasks(stdout)
+export function parseReview(list: unknown): BandReview | null {
+  const [review] = openTasks(list)
   if (review === undefined) {
     return null
   }
@@ -62,4 +56,20 @@ export function parseReview(stdout: string): BandReview | null {
     .map(paragraph => paragraph.trim())
     .filter(paragraph => paragraph !== '')
   return { id: review.id, title: review.title, findings }
+}
+
+/** The task part of `m2b band --json`: the band's rows, or the reason the task list could not be read. */
+export function parseBandTasks(part: unknown): { candidates: BandCandidate[]; review: BandReview | null } | string {
+  if (typeof part !== 'object' || part === null) {
+    throw new TaskJsonError()
+  }
+  const fields = part as Record<string, unknown>
+  if (typeof fields['error'] === 'string') {
+    return fields['error']
+  }
+  return {
+    // Whether a current item still holds is answered the same way as a candidate: keep or drop.
+    candidates: [...parseCandidates(fields['candidates']), ...parseCandidates(fields['questions'])],
+    review: parseReview(fields['reviews']),
+  }
 }
