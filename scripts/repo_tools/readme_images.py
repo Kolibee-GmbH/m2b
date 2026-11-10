@@ -44,7 +44,7 @@ XTERM = "@xterm/xterm@6.0.0"
 COLUMNS = 100
 BACKGROUND = "#1e1e2e"
 # Variables of the session that runs this script; inherited, they mark the recorded Claude Code as
-# a child session (no transcript, a warning line) and point m2b's herdr add-on at the real herdr.
+# a child session (no transcript, a warning line) and point m2b's worklog add-on at the real herdr.
 INHERITED_PREFIXES = ("CLAUDE", "HERDR_", "M2B_")
 # Where the user keeps Claude Code's config and login, when not in ~/.claude; the recording needs it.
 KEPT = frozenset({"CLAUDE_CONFIG_DIR"})

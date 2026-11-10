@@ -17,9 +17,7 @@ SESSION_SKILLS = (
     "m2b",
     "setup",
     "band-setup",
-    "backup-setup",
     "worklog-setup",
-    "herdr-setup",
 )
 # A skill's allowed-tools cover each command alone; a model that appends `echo "exit=$?"` or
 # chains a second command falls outside them, and the owner gets a permission prompt.

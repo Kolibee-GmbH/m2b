@@ -22,6 +22,15 @@ All notable changes to this project are documented here. The format follows
   `/plugin marketplace add Kolibee-GmbH/m2b`. An install from the old address keeps updating,
   because GitHub forwards it ([#8](https://github.com/Kolibee-GmbH/m2b/pull/8)).
 
+### Removed
+
+- The `herdr` add-on, which listed the other agent sessions open in herdr at session start. It
+  never read or wrote the store; herdr shows those sessions itself.
+- The `backup` add-on, until a backup with a way back replaces it: it kept only a mirror of the
+  store, had no restore, and could miss files iCloud Drive had not downloaded. The folder it wrote
+  is left as it was. A `config.json` that still names either add-on loads as before, and
+  `m2b addons off herdr` or `m2b addons off backup` removes the entry.
+
 ### Fixed
 
 - The worklog page no longer names `~/.claude/projects/` as the fixed place of the transcripts: it

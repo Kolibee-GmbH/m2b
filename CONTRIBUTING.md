@@ -15,7 +15,7 @@ Start with [Architecture](docs/architecture.md): where the code is and the three
 ## Checks
 
 ```bash
-scripts/check --quick <suite>    # fast: m2b (the core), worklog, backup, herdr or band
+scripts/check --quick <suite>    # fast: m2b (the core), worklog or band
 scripts/check                    # before every commit: everything, must end with "check: passed"
 ```
 

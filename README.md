@@ -61,7 +61,7 @@ expiring, no memory link to repair) uses no model.
 | curation run | the background run that files the inbox, on one machine per store, the curating machine |
 | distillate | `memory/MEMORY.md`: lasting facts, each pointing to its fact file in `memory/`, and under "Current" what is going on now |
 | topic | a heading in the distillate for one subject, such as a customer or a club, whose facts come in only when a session is about it |
-| add-on | an optional piece of m2b, off until its own setup: `band`, `backup`, `herdr`, `worklog` |
+| add-on | an optional piece of m2b, off until its own setup: `band`, `worklog` |
 
 ## Who it is for
 
@@ -230,14 +230,12 @@ next run files it; drop it in the band, or delete the task, and it does not come
 
 ## Add-ons
 
-m2b is one plugin. Four add-ons in it are off until you set them up; each has its own setup skill,
+m2b is one plugin. Two add-ons in it are off until you set them up; each has its own setup skill,
 and `m2b addons list` shows which are on.
 
 | Add-on | What it adds | Needs | Setup |
 |---|---|---|---|
 | [`band`](docs/addons/band.md) | A band above the prompt with memory candidates and "Still current?" questions to keep or drop in place and the review task with its findings, and a status line such as `brain: 3 in inbox · curated 18:02` | mods turned on in Claude Code | `/m2b:band-setup` |
-| [`backup`](docs/addons/backup.md) | After each run, a local snapshot: a mirror of the store, a dated attic of replaced files, a dump of the task list | a folder for the snapshot, outside the store; the curating machine | `/m2b:backup-setup` |
-| [`herdr`](docs/addons/herdr.md) | At session start, the other agent sessions open in [herdr](https://herdr.dev), the terminal workspace manager for agents, so overlapping work is noticed before it starts | herdr 0.9 or later, sessions started in a herdr pane | `/m2b:herdr-setup` |
 | [`worklog`](docs/addons/worklog.md) | A daily worklog of your sessions in herdr: topics, time spans per sphere of work, booking proposals for billable spheres, a ledger with CSV and XLSX exports | herdr 0.9 or later; the curating machine, which alone records; your spheres of work and customers, which its setup asks for | `/m2b:worklog-setup` |
 
 Each add-on has its own page, linked in the table: what it reads and writes on the machine and in
@@ -264,8 +262,7 @@ due and any archive file; sorting reads memory. Ingest, lint, `--refresh-all` an
 also get `m2b search` results over inbox, archive and memory. With the worklog add-on, its step sees
 the period's prompts and last answers, commits and session folders, the inbox, memory and your task list (below). In every session:
 the distillate, the routing rule and the notices at session start; before a prompt that names a
-topic, that topic's facts; with the herdr add-on, the titles and folders of your other agent
-sessions.
+topic, that topic's facts.
 
 **What the worklog reads** (only while on, only on the curating machine): the herdr events its
 recorder writes to `~/.local/state/m2b/worklog/`, the prompts and the end of each session's last
@@ -345,13 +342,12 @@ whether a run is due.
   bookings are proposals for you to enter.
 - Sync is whatever moves the folder. m2b has no sync and no server of its own.
 - Nothing captured is deleted automatically. What does get deleted: conflict copies identical
-  to their original, the product's own leftover temp files, settled candidate tasks, and in the
-  backup the expired attic.
+  to their original, the product's own leftover temp files and settled candidate tasks.
 
 ## Develop
 
 ```bash
-scripts/check --quick m2b   # unit tests of the core (or worklog, backup, herdr, band)
+scripts/check --quick m2b   # unit tests of the core (or worklog, band)
 scripts/check               # everything, must end with "check: passed"
 scripts/e2e --level stub    # end-to-end scenarios without a model
 ```

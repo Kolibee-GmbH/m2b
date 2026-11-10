@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 
+from m2b.addons import REMOVED_ADDONS, RemovedAddonError
 from m2b.commands import Context, UsageError
 from m2b.commands.backends import configured_store
 from m2b.commands.output import as_json, lookup, parse_value, print_value
@@ -31,6 +32,9 @@ def config_get(arguments: argparse.Namespace, context: Context) -> int:
 
 def config_set(arguments: argparse.Namespace, context: Context) -> int:
     value = parse_value(arguments.value)
+    removed = _removed_addon_written(arguments.key)
+    if removed is not None:
+        raise UsageError(str(RemovedAddonError(removed)))
     written = _store_path_written(arguments.key, value)
     if written is not None:
         path = expand(written, context.machine.home)
@@ -39,6 +43,14 @@ def config_set(arguments: argparse.Namespace, context: Context) -> int:
             raise UsageError(unusable)
     set_machine_config_value(context.machine, arguments.key, value)
     return 0
+
+
+def _removed_addon_written(key: str) -> str | None:
+    """The add-on m2b no longer has whose settings this call writes; the loader would ignore them."""
+    parts = key.split(".")
+    if len(parts) >= 2 and parts[0] == "addons" and parts[1] in REMOVED_ADDONS:
+        return parts[1]
+    return None
 
 
 def _store_path_written(key: str, value: object) -> str | None:

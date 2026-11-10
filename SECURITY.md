@@ -4,7 +4,7 @@
 
 Your notes, your task list and, with the worklog add-on, a record of when you work in which
 folder. All of it stays in folders you chose: the store, `~/.config/m2b/` and `~/.local/state/m2b/`
-on each machine, and the backup target. m2b makes no network calls of its own; the model steps go
+on each machine. m2b makes no network calls of its own; the model steps go
 through Claude Code like any session.
 
 The model runs only fenced: from an empty folder, without your settings or other plugins, with

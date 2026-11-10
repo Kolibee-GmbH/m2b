@@ -17,7 +17,6 @@ the reason. The examples use invented data. A test that covers a rule says so in
 | B7 | Session-start hooks always exit 0; without a config they print nothing, with a config they print one line when something needs the user | a hook must never block a session, and "could not look" must still show |
 | B8 | The distillate is printed up to 8 KB, cut on a character boundary, with a line saying it was cut | bounded context; the cut is visible |
 | B9 | The routing rule is printed only together with a distillate | no rule without a brain to route to |
-| B10 | Neighbour sessions: own pane left out, states in plain words, idle and done sessions stay listed, budget with "and N more" | an open task is exactly what a new one can overlap with |
 | B11 | The curation nudge only starts the runner detached and returns at once | the session must not wait for curation |
 | B12 | A run is due 20 hours after the last successful run or when the inbox holds a visible file (hidden files do not count), unless the backoff after a failed run (1, 4, 20 hours) has not passed | runs when there is work |
 | B13 | A failed step keeps the run due; the last successful run moves only after a fully successful run | a partial run must be repeated |
@@ -34,7 +33,6 @@ the reason. The examples use invented data. A test that covers a rule says so in
 | B24 | A tasks or calendar backend that answers with zero lists or zero calendars has failed; it never returns an empty result | without privacy grants, macOS answers empty with exit 0 |
 | B25 | Calendar events are deduplicated across accounts by title and start; read-only calendars are read but never offered for writing | the same meeting appears in several accounts |
 | B26 | Event creation requires a named, writable calendar and reads the event back before reporting success | an entry in the wrong calendar, or one that was never saved, must not read as done |
-| B27 | Backup: mirror of the store without hidden files, dated attic of replaced files, task dump; never replaces a good dump with an empty one; keeps its copy of a file that is evicted | iCloud is sync, not backup |
 | B28 | Worklog: the next period starts at the watermark; a period crossing it is clipped and finishes in the next | no gaps, no double counting |
 | B29 | Worklog: only spheres marked billable get booking proposals; the customer list is read only | booking is the owner's act |
 | B30 | Band: re-read before every click; when another session already settled the item, write nothing and say so in the band | a stale "drop" once deleted a candidate the owner had kept |
@@ -90,6 +88,7 @@ the reason. The examples use invented data. A test that covers a rule says so in
 | B80 | `m2b todos` names each Markdown task file it cannot read as a task, with its path and the reason, never says "No open tasks." beside one, and exits 1; JSON carries them as `unreadable`, and the todos skill says it could not look at them; a task file without read permission or not downloaded ends the command with exit 3 and its path | a list missing a task must not read as everything that is open |
 | B81 | Setup for a machine that is to curate refuses a store path holding a character the rules that fence a model step cannot name (`, ( ) [ ] * ?`, a backslash, a line break) with one line saying why, before anything is written, and `m2b curate take-over` and `m2b config set` (for `store.path` or a whole `store` section, judged by the store at the new path) refuse such a path likewise; `m2b setup inspect` names it in `store_path_problem` before the interview; `m2b doctor` on the curating machine names such a path as a problem; a machine that only captures may use one; the characters are listed in one place, which the curation run checks too | every curation run would refuse that store, and the owner would only learn it from a failed run |
 | B82 | `STORE.md` gives each integration (a program outside the marketplace that writes into the store) its own state folder `state/integrations/<name>/`, and the curation run never asks for anything under it | an integration's state is its own; reading it would download files the run does not need and let a foreign program steer the curator |
+| B83 | A `config.json` that names an add-on m2b no longer has (`herdr`, `backup`) loads as before and that entry is ignored with its settings; `m2b addons on` and `m2b config set addons.<it>...` refuse it with one line saying why it was removed; `m2b addons off` removes the entry and changes nothing else; `m2b curate take-over` does not list it | an update must not break a working machine over a setting nobody reads, and the owner needs a way to tidy it up that says why |
 
 ## Defects m2b does not have
 
@@ -97,7 +96,7 @@ the reason. The examples use invented data. A test that covers a rule says so in
 |---|---|---|
 | X1 | Store path hard-coded in many tools and skills, tied to one app's identifier | one config value, set by setup |
 | X2 | Three hand-copied Reminders wrappers with different error handling; one crashed on non-JSON | one tasks interface |
-| X3 | Only the runner treated zero lists as broken; journal and backup trusted an empty answer | `check_reachable` in the interface, called by every user |
+| X3 | Only the runner treated zero lists as broken; the journal trusted an empty answer | `check_reachable` in the interface, called by every user |
 | X4 | No timeouts on Reminders, rsync, the calendar access prompt or model runs; a hung prompt held the lock | every backend call and every model step has a timeout |
 | X5 | Two time bases for the month folder; `created` without offset accepted | one rule; an offset is required on write, tolerated on read with a lint finding |
 | X6 | A rename into the archive could overwrite an existing file | `finish` refuses an existing destination and reports it, before touching the capture |

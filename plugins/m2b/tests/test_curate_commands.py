@@ -219,7 +219,7 @@ class TakeOverTest(test_runner.RunnerTest):
         self.assertEqual(load_store_settings(self.store).curating_machine, "sb-test-m1")
         self.assertIn("sb-test-m2", out)
         self.assertIn("/m2b:worklog-setup", out)
-        self.assertIn("/m2b:backup-setup", out)
+        self.assertNotIn("backup", out)
         self.assertEqual(self.run_command("curate", "--force")[0], cli.EXIT_OK)
 
     def test_take_over_refuses_a_store_path_no_curation_run_can_work_in(self) -> None:
@@ -305,27 +305,55 @@ class AddonsCommandTest(test_runner.RunnerTest):
         self.curating()
         code, out, _ = self.run_command("addons", "list", "--json")
         self.assertEqual(code, cli.EXIT_OK)
-        self.assertEqual([(row["name"], row["on"]) for row in json.loads(out)], [
-            ("band", False), ("herdr", False), ("worklog", False), ("backup", False),
-        ])  # fmt: skip
+        self.assertEqual([(row["name"], row["on"]) for row in json.loads(out)], [("band", False), ("worklog", False)])
 
-        self.run_command("config", "set", "addons.backup", '{"target": "~/sb-test-backup"}')
-        self.assertEqual(self.run_command("addons", "on", "backup"), (cli.EXIT_OK, "backup is on\n", ""))
-        self.assertEqual(self.run_command("addons", "on", "backup")[1], "backup was on already\n")
-        self.assertEqual(self.run_command("addons", "off", "backup")[1], "backup is off\n")
-        self.assertEqual(
-            load_machine_config(self.machine).addons["backup"], {"target": "~/sb-test-backup", "on": False}
-        )
+        self.run_command("config", "set", "addons.worklog", '{"default_sphere": "own"}')
+        self.assertEqual(self.run_command("addons", "on", "worklog"), (cli.EXIT_OK, "worklog is on\n", ""))
+        self.assertEqual(self.run_command("addons", "on", "worklog")[1], "worklog was on already\n")
+        self.assertEqual(self.run_command("addons", "off", "worklog")[1], "worklog is off\n")
+        self.assertEqual(load_machine_config(self.machine).addons["worklog"], {"default_sphere": "own", "on": False})
 
         code, out, _ = self.run_command("addons", "list")
         self.assertEqual(code, cli.EXIT_OK)
-        self.assertIn("backup   off  after each curation run", out)
+        self.assertIn("worklog  off  records activity in herdr", out)
 
     def test_an_unknown_addon_is_a_usage_error_that_names_the_addons(self) -> None:
         self.curating()
         code, _, err = self.run_command("addons", "on", "bakcup")
         self.assertEqual(code, cli.EXIT_USAGE)
-        self.assertIn("band, herdr, worklog, backup", err)
+        self.assertIn("band, worklog", err)
+
+    def test_an_addon_m2b_no_longer_has_cannot_be_turned_on_and_off_removes_its_entry(self) -> None:
+        """Covers: B83"""
+        self.curating()
+        config = json.loads(self.machine.config_file.read_text(encoding="utf-8"))
+        config["addons"] = {"herdr": {"on": True}, "backup": {"on": True, "target": "~/sb-test-backup"}}
+        self.machine.config_file.write_text(json.dumps(config), encoding="utf-8")
+
+        code, out, err = self.run_command("addons", "list", "--json")
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertEqual([row["name"] for row in json.loads(out)], ["band", "worklog"])
+
+        for name in ("herdr", "backup"):
+            with self.subTest(name=name):
+                code, _, err = self.run_command("addons", "on", name)
+                self.assertEqual(code, cli.EXIT_USAGE)
+                self.assertIn(f"{name} is no longer an add-on of m2b", err)
+                self.assertIn(f"m2b addons off {name}", err)
+
+        code, out, err = self.run_command("addons", "off", "backup")
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertIn("backup is no longer an add-on of m2b", out)
+        self.assertIn("its entry in config.json is removed", out)
+        self.assertIn("left as it was", out)
+        raw = json.loads(self.machine.config_file.read_text(encoding="utf-8"))
+        self.assertEqual(raw["addons"], {"herdr": {"on": True}})
+        self.assertIn("nothing to remove", self.run_command("addons", "off", "backup")[1])
+
+        code, _, err = self.run_command("config", "set", "addons.backup.target", '"~/sb-test-backup"')
+        self.assertEqual(code, cli.EXIT_USAGE)
+        self.assertIn("backup is no longer an add-on of m2b", err)
+        self.assertNotIn("backup", json.loads(self.machine.config_file.read_text(encoding="utf-8"))["addons"])
 
     def test_before_setup_the_addons_cannot_be_listed(self) -> None:
         code, _, err = self.run_command("addons", "list", "--json")

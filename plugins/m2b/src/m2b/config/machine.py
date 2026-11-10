@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from m2b.addons import ADDON_NAMES, ON
+from m2b.addons import ON, REMOVED_ADDONS, addon_names
 from m2b.config.errors import FormatTooNewError, InvalidConfigError, NotSetUpError
 from m2b.config.fields import Fields
 from m2b.config.json_file import read_json_object, with_value, write_json_object
@@ -152,10 +152,17 @@ def _distillate(fields: Fields, home: Path) -> DistillateSettings:
 
 
 def _addons(fields: Fields) -> Mapping[str, Mapping[str, Any]]:
-    """Each known add-on's object; ``on`` must be a boolean, everything else is the add-on's own."""
-    fields.reject_unknown(ADDON_NAMES)
+    """Each known add-on's object; ``on`` must be a boolean, everything else is the add-on's own.
+
+    The entry of an add-on m2b no longer has is left out unread, settings and all.
+    """
+    known = addon_names()
     addons = {}
     for name in fields.names():
+        if name in REMOVED_ADDONS:
+            continue
+        if name not in known:
+            raise fields.error(name, f"is not a known key; known here: {', '.join(known)}")
         addon = fields.section(name)
         addon.boolean(ON, default=False)
         addons[name] = fields.mapping(name)
@@ -194,6 +201,19 @@ def set_addon_on(machine: MachinePaths, name: str, on: bool) -> bool:
     if addon.get(ON, False) is on:
         return False
     addon[ON] = on
+    save_machine_config(machine, raw)
+    return True
+
+
+def remove_addon_entry(machine: MachinePaths, name: str) -> bool:
+    """Deletes an add-on's object from ``addons``, settings and all; False when there was none."""
+    raw = _raw_config(machine)
+    addons = raw.get("addons")
+    if not isinstance(addons, dict) or name not in addons:
+        return False
+    del addons[name]
+    if not addons:
+        del raw["addons"]
     save_machine_config(machine, raw)
     return True
 

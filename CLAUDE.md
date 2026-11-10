@@ -4,7 +4,7 @@
 
 An open-source second brain for Claude Code: capture notes, curate them into an archive and a
 small distillate every session sees, tasks in Apple Reminders or Markdown files, add-ons
-(band mod, herdr neighbours, worklog, backup), all in one plugin. [Architecture](docs/architecture.md)
+(the band mod and the worklog), all in one plugin. [Architecture](docs/architecture.md)
 is the tour of the code; [Behavior](docs/behavior.md) lists the rules the tests cover.
 
 ## Tech Stack
@@ -37,7 +37,7 @@ published yet. New changes go under `## [Unreleased]`; how a release is made is 
 ## Development
 
 ```bash
-scripts/check --quick m2b        # the core's unit tests (or worklog, backup, herdr, band)
+scripts/check --quick m2b        # the core's unit tests (or worklog, band)
 scripts/check                    # the full proof
 scripts/e2e --level stub         # end-to-end scenarios with the scripted model
 ```

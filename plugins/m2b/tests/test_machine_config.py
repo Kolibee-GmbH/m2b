@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-from m2b import paths
+from m2b import addons, paths
 from m2b.config import machine
 from m2b.config.errors import FormatTooNewError, InvalidConfigError, NotSetUpError
 
@@ -20,7 +20,7 @@ INVENTED_CONFIG: dict[str, Any] = {
     "calendar": {"backend": "apple-calendar", "timeout_seconds": 20},
     "executables": {"python3": "/usr/bin/python3", "claude": "/opt/homebrew/bin/claude"},
     "curation": {"model_timeout_minutes": 15},
-    "addons": {"band": {"on": True}, "backup": {"on": True, "target": "~/Backups/m2b", "attic_days": 30}},
+    "addons": {"band": {"on": True}, "worklog": {"on": True, "default_sphere": "own"}},
 }
 
 
@@ -28,6 +28,13 @@ def _config(**changes: Any) -> dict[str, Any]:
     raw = copy.deepcopy(INVENTED_CONFIG)
     raw.update(changes)
     return raw
+
+
+class AddonCatalogueTest(unittest.TestCase):
+    def test_no_name_is_both_an_addon_and_a_removed_one(self) -> None:
+        # A removed name wins in the config loader and in ``m2b addons off``, so an add-on that comes
+        # back under its old name must leave the removed list, or its settings are dropped unread.
+        self.assertTrue(set(addons.addon_names()).isdisjoint(addons.REMOVED_ADDONS))
 
 
 class ParseTest(unittest.TestCase):
@@ -39,7 +46,7 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(config.calendar.backend, "apple-calendar")
         self.assertEqual(config.executables["python3"], "/usr/bin/python3")
         self.assertEqual(config.curation.model_timeout_minutes, 15)
-        self.assertEqual(config.addons["backup"], {"on": True, "target": "~/Backups/m2b", "attic_days": 30})
+        self.assertEqual(config.addons["worklog"], {"on": True, "default_sphere": "own"})
 
     def test_the_store_path_comes_from_the_config_with_the_tilde_expanded_at_load(self) -> None:
         """Covers: X1"""
@@ -76,7 +83,21 @@ class ParseTest(unittest.TestCase):
             machine.parse_machine_config(_config(addons={"bakcup": {"on": True}}), HOME)
 
         self.assertIn("addons.bakcup", str(caught.exception))
-        self.assertIn("band, herdr, worklog, backup", str(caught.exception))
+        self.assertTrue(str(caught.exception).endswith("known here: band, worklog"), str(caught.exception))
+
+    def test_an_addon_m2b_no_longer_has_is_ignored_with_its_settings(self) -> None:
+        """Covers: B83"""
+        raw = _config(
+            addons={
+                "herdr": {"on": True},
+                "backup": {"on": True, "target": "~/Backups/m2b", "attic_days": 30},
+                "worklog": {"on": True},
+            }
+        )
+
+        config = machine.parse_machine_config(raw, HOME)
+
+        self.assertEqual(config.addons, {"worklog": {"on": True}})
 
     def test_on_must_be_true_or_false(self) -> None:
         for addon in ({"on": "yes"}, {"on": 1}, "on"):
@@ -242,14 +263,25 @@ class FileTest(unittest.TestCase):
     def test_an_addon_turned_off_keeps_its_settings_and_on_again_changes_nothing_else(self) -> None:
         machine.save_machine_config(self.machine, INVENTED_CONFIG)
 
-        self.assertTrue(machine.set_addon_on(self.machine, "backup", False))
-        self.assertFalse(machine.set_addon_on(self.machine, "backup", False))
+        self.assertTrue(machine.set_addon_on(self.machine, "worklog", False))
+        self.assertFalse(machine.set_addon_on(self.machine, "worklog", False))
         raw = json.loads(self.machine.config_file.read_text(encoding="utf-8"))
-        self.assertEqual(raw["addons"]["backup"], {"on": False, "target": "~/Backups/m2b", "attic_days": 30})
-        self.assertTrue(machine.set_addon_on(self.machine, "herdr", True))
+        self.assertEqual(raw["addons"]["worklog"], {"on": False, "default_sphere": "own"})
+        self.assertTrue(machine.set_addon_on(self.machine, "band", False))
+        self.assertTrue(machine.set_addon_on(self.machine, "band", True))
         raw = json.loads(self.machine.config_file.read_text(encoding="utf-8"))
-        self.assertEqual(raw["addons"]["herdr"], {"on": True})
         self.assertEqual(raw["addons"]["band"], {"on": True})
+        self.assertEqual(raw["addons"]["worklog"], {"on": False, "default_sphere": "own"})
+
+    def test_the_entry_of_an_addon_m2b_no_longer_has_can_be_removed_and_nothing_else_changes(self) -> None:
+        """Covers: B83"""
+        raw = copy.deepcopy(INVENTED_CONFIG)
+        raw["addons"]["backup"] = {"on": True, "target": "~/Backups/m2b"}
+        machine.save_machine_config(self.machine, raw)
+
+        self.assertTrue(machine.remove_addon_entry(self.machine, "backup"))
+        self.assertFalse(machine.remove_addon_entry(self.machine, "backup"))
+        self.assertEqual(json.loads(self.machine.config_file.read_text(encoding="utf-8")), INVENTED_CONFIG)
 
 
 if __name__ == "__main__":

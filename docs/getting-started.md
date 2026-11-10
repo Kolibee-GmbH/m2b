@@ -70,8 +70,7 @@ nor a model. Both end with a first capture, a curation run and a first search.
    m2b search -- "spare key"
    ```
 
-The add-ons (band, herdr neighbours, worklog, backup) are off until their own setup skill
-turns them on; [Add-ons](addons.md) describes each one.
+The add-ons (the band and the worklog) are off until their own setup skill turns them on; [Add-ons](addons.md) describes each one.
 
 ## From the command line, without Claude Code
 
