@@ -22,6 +22,12 @@ All notable changes to this project are documented here. The format follows
   `/plugin marketplace add Kolibee-GmbH/m2b`. An install from the old address keeps updating,
   because GitHub forwards it ([#8](https://github.com/Kolibee-GmbH/m2b/pull/8)).
 
+### Fixed
+
+- The worklog page no longer names `~/.claude/projects/` as the fixed place of the transcripts: it
+  says that `CLAUDE_CONFIG_DIR` moves it, and that `M2B_HERDR` names the `herdr` executable for the
+  worklog's commands too ([#10](https://github.com/Kolibee-GmbH/m2b/pull/10)).
+
 ## [0.2.0] - 2026-11-09
 
 ### Added
