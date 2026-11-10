@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- m2b has a logo: the README shows it, and `docs/images/` holds the mark, an icon and the image
+  for link previews.
+
 ### Changed
 
 - Each add-on has its own page under `docs/addons/`, and `docs/addons.md` is the overview that

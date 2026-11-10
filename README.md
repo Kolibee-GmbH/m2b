@@ -1,4 +1,9 @@
-<h1 align="center">m2b</h1>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.png">
+    <img src="docs/images/logo-light.png" alt="m2b" width="340">
+  </picture>
+</p>
 
 <p align="center"><em>A second brain for Claude Code. Say "remember this" in any session; every new session already knows.</em></p>
 
