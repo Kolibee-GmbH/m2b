@@ -33,6 +33,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- A failing add-on step no longer makes the curation run fail. It is still a finding in the review
+  task, but the run counts as succeeded, so the inbox keeps being filed and no wait of 1, 4 or 20
+  hours starts; before, a worklog that kept failing held back curation to once every 20 hours.
 - The worklog no longer counts time nobody worked. Focus on a workspace counts up to 10 minutes
   after that workspace's own last event, also while agents in other workspaces keep sending events.
   An agent counts up to 30 minutes past its last sign of life, an event of its pane or a message in

@@ -863,19 +863,29 @@ class AddonStepTest(RunnerTest):
         self.assertTrue(after.exists())
         self.assertEqual(record.addons, ("worklog", "sample"))
 
-    def test_a_failing_addon_step_is_reported_and_the_run_goes_on(self) -> None:
+    def test_a_failing_addon_step_is_reported_but_neither_fails_the_run_nor_starts_the_backoff(self) -> None:
+        """Covers: B13, B63"""
         self.curating()
+        self.capture()
+        self.model({"m2b:ingest": INGEST_FILES_THE_CAPTURE})
         self.addon("worklog", "before_ingest")
         self.environ["SB_TEST_ADDON_EXIT"] = "4"
 
         outcome = self.run_curate()
 
-        self.assertEqual(outcome.state, FAILED)
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        self.assertIn("worklog", outcome.message)
         record = load_run_record(self.store)
         assert record is not None
         self.assertEqual([(step.name, step.result) for step in record.steps][1], ("worklog", "failed"))
         self.assertEqual(record.steps[-1].name, "review")
         self.assertIn("exit 4", record.steps[1].detail)
+        self.assertEqual(record.last_success, record.finished_at)
+        self.assertIsNone(machine_state.load_backoff(self.machine))
+        self.assertEqual(list((self.store_root / "inbox").iterdir()), [])
+        (review,) = self.review_tasks()
+        self.assertIn("worklog", review.notes)
+        self.assertIn("exit 4", review.notes)
 
     def test_an_addon_turned_off_has_no_step_and_leaves_nothing_to_clear(self) -> None:
         """Covers: B64"""

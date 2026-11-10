@@ -120,4 +120,6 @@ recorded, and `m2b-worklog run` is the curation step. The others (`facts`, `verd
 
 The switch file `~/.local/state/m2b/worklog/recording` says `on`, and a note titled "Worklog ... to
 ..." lands in the archive once a day. `ledger.csv` in `state/addons/worklog/` grows by the period's
-spans. A worklog step that fails is a finding in the review task, and the run goes on.
+spans. A worklog step that fails is a finding in the review task; the run goes on and still counts
+as succeeded, and the next run writes the worklog for the time since the last one, at most three
+days back.

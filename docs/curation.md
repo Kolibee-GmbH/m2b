@@ -7,7 +7,8 @@ A curation run files the inbox. It runs on one machine per store, the curating m
 
 At session start on the curating machine, in the background, when a run is due: the inbox holds
 a capture, or the last successful run is more than 20 hours old. So after a capture the next
-session start files it. After a failed run the next attempt waits 1 hour, then 4, then 20. A
+session start files it. After a failed run the next attempt waits 1 hour, then 4, then 20; a run
+in which only an add-on's step failed counts as succeeded and starts no wait. A
 schedule can start it too, for days without a session ([On a schedule](#on-a-schedule)), and
 `m2b curate --force` starts it now; add `--detach` to get your terminal back while it runs.
 
@@ -31,7 +32,9 @@ flowchart LR
 | Review task | code | one task in your list when something needs you |
 
 `before_ingest`, `after_ingest` and `after_journal` are where an add-on can hook in; the worklog
-runs before ingest. A step that fails is reported in the review task and the run goes on.
+runs before ingest. A step that fails is reported in the review task and the run goes on. When
+only an add-on's step failed, the run still counts as succeeded: the inbox is filed and the next run
+is due at the usual time, so an add-on that keeps failing never holds back the core.
 
 Each model step runs fenced: `claude -p` from an empty folder, with `--setting-sources project`,
 m2b alone as plugin, `--permission-mode dontAsk`, and allowed only the commands and paths of its
