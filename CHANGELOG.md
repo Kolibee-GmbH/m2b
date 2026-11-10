@@ -15,7 +15,7 @@ All notable changes to this project are documented here. The format follows
   ([#7](https://github.com/Kolibee-GmbH/m2b/pull/7)).
 - The repository moved to `Kolibee-GmbH/m2b`; new installs use
   `/plugin marketplace add Kolibee-GmbH/m2b`. An install from the old address keeps updating,
-  because GitHub forwards it.
+  because GitHub forwards it ([#8](https://github.com/Kolibee-GmbH/m2b/pull/8)).
 
 ## [0.2.0] - 2026-11-09
 
