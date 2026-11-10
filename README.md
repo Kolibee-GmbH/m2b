@@ -5,7 +5,7 @@
   </picture>
 </p>
 
-<p align="center"><em>A second brain for Claude Code. Say "remember this" in any session; every new session already knows.</em></p>
+<p align="center"><em>A second brain for Claude Code. The right context in every session.</em></p>
 
 <p align="center">
   <a href="https://github.com/Kolibee-GmbH/m2b/releases"><img src="https://img.shields.io/github/v/release/Kolibee-GmbH/m2b?style=flat-square" alt="Release"></a>
