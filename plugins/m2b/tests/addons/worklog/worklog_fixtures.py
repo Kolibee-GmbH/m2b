@@ -99,6 +99,11 @@ class WorklogFixture(unittest.TestCase):
         state["versions"] = {key: version for key in state["linked"]}
         self.herdr_state.write_text(json.dumps(state), encoding="utf-8")
 
+    def herdr_registered_version(self, plugin_id: str) -> str | None:
+        """The version herdr registered at link time, which its plugin list does not show."""
+        state = json.loads(self.herdr_state.read_text(encoding="utf-8"))
+        return state["versions"].get(plugin_id)
+
     def timer_calls_made(self) -> list[str]:
         return self.timer_calls.read_text(encoding="utf-8").splitlines() if self.timer_calls.exists() else []
 

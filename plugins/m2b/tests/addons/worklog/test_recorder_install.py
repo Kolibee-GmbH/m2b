@@ -95,16 +95,25 @@ class RecorderTest(CommandFixture):
 class RelinkTest(CommandFixture):
     """herdr keeps a plugin's events and startup as they were at link time, so a new version is linked again."""
 
-    def test_install_links_again_when_herdr_holds_another_version(self) -> None:
+    def test_install_links_again_when_another_version_was_linked(self) -> None:
         """Covers: B88"""
-        self.run_command("recorder", "install")
-        self.herdr_holds_version("0.1.0")
+        for noted in ("0.1.0\n", None):
+            with self.subTest(noted=noted):
+                self.run_command("recorder", "install")
+                # A copy an older m2b linked: herdr registered 0.1.0, and its list shows the manifest now.
+                self.herdr_holds_version("0.1.0")
+                if noted is None:
+                    (self.copy / "linked-version").unlink()
+                else:
+                    (self.copy / "linked-version").write_text(noted, encoding="utf-8")
+                links = self.herdr_calls_made().count(f"plugin link {self.copy}")
 
-        result = self.run_command("recorder", "install")
+                result = self.run_command("recorder", "install")
 
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.herdr_calls_made().count(f"plugin link {self.copy}"), 2)
-        self.assertIn("linked again in herdr", result.stdout)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(self.herdr_calls_made().count(f"plugin link {self.copy}"), links + 1)
+                self.assertIn("linked again in herdr", result.stdout)
+                self.assertEqual(self.herdr_registered_version(RECORDER_ID), "0.2.0")
 
     def test_an_upgrade_links_the_new_version_at_the_next_session_start_once(self) -> None:
         """Covers: B88"""
@@ -119,7 +128,7 @@ class RelinkTest(CommandFixture):
         recorder.refresh(paths, self.environ)
 
         self.assertEqual(self.herdr_calls_made().count(f"plugin link {self.copy}"), 2)
-        self.assertEqual(recorder.linked_recorder(self.environ)["version"], "0.2.0")  # type: ignore[index]
+        self.assertEqual(self.herdr_registered_version(RECORDER_ID), "0.2.0")
 
     def test_a_failed_link_is_tried_again_and_the_timer_is_set_up_anyway(self) -> None:
         """Covers: B88"""

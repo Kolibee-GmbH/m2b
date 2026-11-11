@@ -2,7 +2,8 @@
 """Stands in for ``herdr`` in the worklog's tests; never touches a real herdr.
 
 It keeps its linked plugins in the JSON file ``FAKE_HERDR_STATE`` (``{"linked": {id: path},
-"versions": {id: version at link time}}``) and
+"versions": {id: version at link time}}``); ``plugin list`` names the version in the linked
+manifest as it reads now, as herdr 0.9.3 does, not the one it registered at link time. It
 answers ``api snapshot`` from the file ``FAKE_HERDR_REPLY``, ``--version`` with ``FAKE_HERDR_VERSION``
 (default 0.9.3) and ``status server --json`` as running on the socket ``FAKE_HERDR_SOCKET`` unless
 ``FAKE_HERDR_RUNNING`` is ``no``. ``plugin link`` reads the manifest's
@@ -36,6 +37,13 @@ def _manifest_version(folder: Path) -> str | None:
     return found.group(1) if found else None
 
 
+def _listed_version(folder: Path) -> str | None:
+    try:
+        return _manifest_version(folder)
+    except OSError:
+        return None
+
+
 def main() -> int:
     arguments = sys.argv[1:]
     calls = os.environ.get("FAKE_HERDR_CALLS")
@@ -63,7 +71,7 @@ def main() -> int:
     if arguments[:2] == ["plugin", "list"]:
         wanted = arguments[arguments.index("--plugin") + 1] if "--plugin" in arguments else None
         plugins = [
-            {"plugin_id": key, "plugin_root": value, "enabled": True, "version": state["versions"].get(key)}
+            {"plugin_id": key, "plugin_root": value, "enabled": True, "version": _listed_version(Path(value))}
             for key, value in state["linked"].items()
             if wanted in (None, key)
         ]
