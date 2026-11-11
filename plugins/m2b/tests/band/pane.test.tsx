@@ -56,7 +56,7 @@ test('the review command opens the pane with every finding whole, every candidat
     expect(shown).toContain(`Remember? Dana prefers tea ${n}`)
   }
   expect(shown).toContain('Still current? Planning the trip to Porto')
-  expect(await ui.findAll({ type: 'Button' })).toHaveLength(10)
+  expect(await ui.findAll({ type: 'Button' })).toHaveLength(11) // with ok on the review
   await ui.unmount()
 })
 

@@ -3,7 +3,7 @@ import type { CommandSpec, EngineInterface, ResolveInput } from 'claude-code'
 import type { BandPress, BandRun, BandSnapshot, PaneSearch, PaneView, SearchHit } from '../types'
 import { runM2b } from './m2b'
 import { plainLine } from './plain-text'
-import { candidateRow } from './rows'
+import { candidateRow, changesSummary, reviewRow } from './rows'
 import type { RowActions } from './rows'
 
 /*
@@ -107,6 +107,27 @@ export function runLine(run: BandRun | null): string {
 }
 
 /** The review part as lines of text, for a surface that cannot show the pane. */
+// After the file, what happened to more than a word or two: a line or a whole fact file gone.
+const KIND_SHOWN: Record<string, string> = {
+  removed: ', line removed',
+  file_removed: ', file removed',
+  file_emptied: ', file emptied',
+}
+
+/** Where the copy of the facts from before the run lies, and how many notes the run filed. */
+function copyLine(copy: { path: string; captures: number }): string {
+  const filed = copy.captures > 0 ? `; ${copy.captures} ${copy.captures === 1 ? 'note' : 'notes'} filed` : ''
+  return `  facts before the run: ${plainLine(copy.path)}${filed}`
+}
+
+/** A changed line as text, the added words in [+ ] and the removed ones in [- ]. */
+function changeText(parts: { text: string; change: string }[]): string {
+  return parts
+    .map(part => (part.change === 'same' ? part.text : `[${part.change === 'added' ? '+' : '-'}${part.text}]`))
+    .map(plainLine)
+    .join('')
+}
+
 export function reviewLines(snapshot: BandSnapshot | null, run: BandRun | null): string[] {
   const lines = [runLine(run)]
   if (run?.message) {
@@ -117,7 +138,14 @@ export function reviewLines(snapshot: BandSnapshot | null, run: BandRun | null):
   }
   const review = snapshot?.review ?? null
   if (review !== null) {
-    lines.push(plainLine(review.title), ...review.findings.map(finding => `  ${plainLine(finding)}`))
+    lines.push(`${plainLine(review.title)}${changesSummary(review)}`)
+    for (const change of review.changes ?? []) {
+      lines.push(`  ${plainLine(change.topic)} (${plainLine(change.file)}): ${changeText(change.parts)}`)
+    }
+    if (review.copy) {
+      lines.push(copyLine(review.copy))
+    }
+    lines.push(...review.findings.map(finding => `  ${plainLine(finding)}`))
   }
   const candidates = snapshot?.candidates ?? []
   lines.push(
@@ -252,11 +280,28 @@ export function paneTree(
           {plainLine(snapshot.error)}
         </Text>
       ) : null}
-      {review !== null && (
-        <Text weight="semibold" wrap="wrap">
-          {plainLine(review.title)}
-        </Text>
-      )}
+      {review !== null && reviewRow($, e, review, presses[review.id], actions, 'wrap')}
+      {(review?.changes ?? []).map(change => (
+        <Box flexDirection="column">
+          <Text wrap="wrap">
+            <Text weight="semibold">{`  ${plainLine(change.topic)}`}</Text>
+            <Text dimColor>{` (${plainLine(change.file)}${KIND_SHOWN[change.kind] ?? ''})`}</Text>
+          </Text>
+          <Text wrap="wrap">
+            {'    '}
+            {change.parts.map(part =>
+              part.change === 'same' ? (
+                <Text>{plainLine(part.text)}</Text>
+              ) : (
+                <Text color={part.change === 'added' ? 'success' : 'error'} strikethrough={part.change === 'removed'}>
+                  {plainLine(part.text)}
+                </Text>
+              ),
+            )}
+          </Text>
+        </Box>
+      ))}
+      {review?.copy ? <Text dimColor wrap="wrap">{copyLine(review.copy)}</Text> : null}
       {(review?.findings ?? []).map(finding => (
         <Text wrap="wrap">
           {'  '}

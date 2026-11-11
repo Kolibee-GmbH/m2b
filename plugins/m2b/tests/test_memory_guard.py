@@ -6,7 +6,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from m2b.curate.memory_guard import Snapshot, fact_changes, refresh_problem, unsafe_line
+from m2b.curate.memory_guard import (
+    REWROTE,
+    FactChange,
+    Snapshot,
+    fact_change_list,
+    fact_changes,
+    refresh_problem,
+    unsafe_line,
+)
 from m2b.notes.characters import strip_unsafe, unsafe_characters
 from m2b.store.folder import FolderStore
 from m2b.store.guard import DatalessGuard
@@ -126,6 +134,21 @@ class RefreshProblemTest(unittest.TestCase):
 
 
 class FactChangesTest(unittest.TestCase):
+    def test_a_change_keeps_the_whole_lines_and_the_review_text_stays_cut(self) -> None:
+        """Covers: B106"""
+        long_before = (
+            "- Kim Lee leads Acme's IT, " + "with a long list of systems, " * 6 + "and the help desk (kim-lee.md)"
+        )
+        long_after = long_before.replace("and the help desk", "and the new help desk")
+        before = memory(MEMORY.replace("- Kim Lee leads Acme's IT (kim-lee.md)", long_before))
+        after = memory(MEMORY.replace("- Kim Lee leads Acme's IT (kim-lee.md)", long_after))
+
+        [change] = fact_change_list(before, after)
+
+        self.assertEqual(change, FactChange(REWROTE, "kim-lee.md", long_before, long_after))
+        self.assertEqual(fact_changes(before, after), [change.described()])
+        self.assertIn("...", change.described())
+
     def test_a_new_facts_line_or_one_moved_into_a_topic_is_no_change(self) -> None:
         """Covers: B55"""
         moved = MEMORY.replace("- Dana likes old maps (dana.md)\n", "").replace(

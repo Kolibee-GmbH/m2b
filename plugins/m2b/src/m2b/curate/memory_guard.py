@@ -151,7 +151,42 @@ def refresh_problem(before: Snapshot, after: Snapshot, files: Collection[str], c
     return None
 
 
+# The kinds of ``FactChange``, as ``m2b band --json`` names them.
+REWROTE = "rewrote"
+REMOVED = "removed"
+FILE_REMOVED = "file_removed"
+FILE_EMPTIED = "file_emptied"
+# Not a change: where the copy of ``memory/`` from before the run lies, and the captures it filed.
+COPY = "copy"
+
+
+@dataclass(frozen=True)
+class FactChange:
+    """One change of the facts that the review shows: the whole lines before and after, or the file."""
+
+    kind: str
+    file: str
+    before: str | None = None
+    after: str | None = None
+
+    def described(self) -> str:
+        """The finding's text in the review task, each line cut at ``_SHOWN_CHARACTERS``."""
+        if self.kind == REWROTE:
+            return f'rewrote the facts line "{_shown(self.before or "")}" as "{_shown(self.after or "")}"'
+        if self.kind == REMOVED:
+            return f'removed the facts line "{_shown(self.before or "")}"'
+        return f"{'removed' if self.kind == FILE_REMOVED else 'emptied'} {self.file}"
+
+    def as_json(self) -> dict[str, object]:
+        return {"kind": self.kind, "file": self.file, "before": self.before, "after": self.after}
+
+
 def fact_changes(before: Snapshot, after: Snapshot) -> list[str]:
+    """Each change of ``fact_change_list`` as the review task words it."""
+    return [change.described() for change in fact_change_list(before, after)]
+
+
+def fact_change_list(before: Snapshot, after: Snapshot) -> list[FactChange]:
     """Each facts line the step removed or rewrote, and each fact file it emptied or removed.
 
     A line moved to another place in the facts section, into a topic for one, is no change; a line
@@ -174,18 +209,20 @@ def fact_changes(before: Snapshot, after: Snapshot) -> list[str]:
             continue
         lost[line] -= 1
         parsed = parse_fact_line(line)
-        replacements = added_by_file.get(parsed.file_name, []) if parsed is not None else []
+        file_name = parsed.file_name if parsed is not None else ""
+        replacements = added_by_file.get(file_name, []) if parsed is not None else []
+        stated = line.strip()
         if replacements:
-            changes.append(f'rewrote the facts line "{_shown(line)}" as "{_shown(replacements.pop(0))}"')
+            changes.append(FactChange(REWROTE, file_name, stated, replacements.pop(0).strip()))
         else:
-            changes.append(f'removed the facts line "{_shown(line)}"')
+            changes.append(FactChange(REMOVED, file_name, stated))
     for path in sorted(before.files):
         if path == INDEX_PATH or not path.endswith(".md"):
             continue
         if path not in after.files:
-            changes.append(f"removed {path}")
+            changes.append(FactChange(FILE_REMOVED, path))
         elif (before.text(path) or "").strip() and not (after.text(path) or "").strip():
-            changes.append(f"emptied {path}")
+            changes.append(FactChange(FILE_EMPTIED, path))
     return changes
 
 

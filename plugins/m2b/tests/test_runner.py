@@ -1063,6 +1063,20 @@ class GuardedModelStepTest(RunnerTest):
         self.assertIn(f"memory/ as it was before this run is in {saved}", review.notes)
         self.assertIn("20261107T070000Z-cli-a1b2.md", review.notes)
         self.assertEqual((saved / "MEMORY.md").read_text(encoding="utf-8"), GUARDED)
+        kept = [finding.change for finding in machine_state.load_memory_changes(self.machine)]
+        self.assertEqual(
+            kept,
+            [
+                {
+                    "kind": "rewrote",
+                    "file": "dana.md",
+                    "before": "- Dana likes old maps (dana.md)",
+                    "after": "- Dana collects old maps (dana.md)",
+                },
+                {"kind": "removed", "file": "sam.md", "before": "- Sam brings plywood (sam.md)", "after": None},
+                {"kind": "copy", "path": str(saved), "captures": ["20261107T070000Z-cli-a1b2.md"]},
+            ],
+        )
 
     def test_the_review_names_the_copy_of_memory_however_many_captures_the_step_filed(self) -> None:
         """Covers: B55"""

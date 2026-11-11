@@ -25,7 +25,7 @@ test('the band shows candidates and the review, capped with "and N more"', async
     expect(shown).toContain('lint: broken link in a.md')
     expect(shown).not.toContain('ingest: y')
     expect(shown).toContain('and 1 more findings')
-    expect(await ui.findAll({ type: 'Button' })).toHaveLength(6)
+    expect(await ui.findAll({ type: 'Button' })).toHaveLength(7) // keep and drop on three rows, ok on the review
     await ui.unmount()
   }
 })
@@ -415,7 +415,7 @@ test('a reload starts exactly one m2b process for the band and the status line',
   expect(fake.calls.slice(before)).toEqual([['band', '--json']])
   expect(statuses.at(-1)).toBe('2 in inbox · curated 18:02')
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(await ui.findAll({ type: 'Button' })).toHaveLength(4)
+  expect(await ui.findAll({ type: 'Button' })).toHaveLength(5) // with ok on the review
   expect(await texts(ui)).toContain('lint: broken link in a.md')
   await ui.unmount()
 })

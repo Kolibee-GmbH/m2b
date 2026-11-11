@@ -231,3 +231,26 @@ class LeftoversTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MemoryChangesTest(unittest.TestCase):
+    def setUp(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.machine = MachinePaths(Path(temp.name) / "home")
+        self.machine.state_dir.mkdir(parents=True)
+        self.machine.temp_dir.mkdir(parents=True, exist_ok=True)
+
+    def test_a_change_kept_as_data_comes_back_with_it_and_an_older_file_loads(self) -> None:
+        """Covers: B106"""
+        from m2b.curate.report import ACTION, Finding
+
+        change = {"kind": "rewrote", "file": "sam.md", "before": "- a (sam.md)", "after": "- b (sam.md)"}
+        findings = [Finding("ingest", ACTION, "rewrote ...", change), Finding("lint", ACTION, "broken link")]
+
+        machine_state.save_memory_changes(self.machine, findings)
+
+        self.assertEqual(machine_state.load_memory_changes(self.machine), findings)
+        older = [{"step": "ingest", "kind": ACTION, "text": "rewrote ..."}]
+        (self.machine.state_dir / machine_state.MEMORY_CHANGES).write_text(json.dumps(older), encoding="utf-8")
+        self.assertEqual(machine_state.load_memory_changes(self.machine), [Finding("ingest", ACTION, "rewrote ...")])

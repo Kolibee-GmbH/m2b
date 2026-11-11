@@ -1,4 +1,4 @@
-import type { BandCandidate, BandDueTask, BandReview } from '../types'
+import type { BandCandidate, BandChangePart, BandDueTask, BandFactChange, BandReview } from '../types'
 
 export class TaskJsonError extends Error {
   constructor() {
@@ -45,7 +45,7 @@ export function parseCandidates(list: unknown): BandCandidate[] {
  * The open review task with its findings: the paragraphs of its notes after the first, which
  * holds the marker line and the time of the run.
  */
-export function parseReview(list: unknown): BandReview | null {
+export function parseReview(list: unknown, details?: unknown): BandReview | null {
   const [review] = openTasks(list)
   if (review === undefined) {
     return null
@@ -55,7 +55,47 @@ export function parseReview(list: unknown): BandReview | null {
     .slice(1)
     .map(paragraph => paragraph.trim())
     .filter(paragraph => paragraph !== '')
-  return { id: review.id, title: review.title, findings }
+  if (!isObject(details) || !Array.isArray(details['changes'])) {
+    return { id: review.id, title: review.title, findings }
+  }
+  const told = new Set(Array.isArray(details['paragraphs']) ? details['paragraphs'].filter(isString) : [])
+  const changes = details['changes'].filter(isObject).map(factChange)
+  return {
+    id: review.id,
+    title: review.title,
+    findings: findings.filter(paragraph => !told.has(paragraph)),
+    changes,
+    copy: copyOf(details['copy']),
+  }
+}
+
+function factChange(change: Record<string, unknown>): BandFactChange {
+  const parts = Array.isArray(change['parts']) ? change['parts'].filter(isObject) : []
+  return {
+    kind: String(change['kind'] ?? ''),
+    file: String(change['file'] ?? ''),
+    topic: String(change['topic'] ?? change['file'] ?? ''),
+    parts: parts.map(part => ({ text: String(part['text'] ?? ''), change: changeOf(part['change']) })),
+  }
+}
+
+function changeOf(value: unknown): BandChangePart['change'] {
+  return value === 'added' || value === 'removed' ? value : 'same'
+}
+
+function copyOf(value: unknown): BandReview['copy'] {
+  if (!isObject(value) || typeof value['path'] !== 'string') {
+    return null
+  }
+  return { path: value['path'], captures: Array.isArray(value['captures']) ? value['captures'].length : 0 }
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string'
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /** The tasks due today or overdue; none when the part is absent, as with `band.due_tasks` off. */
@@ -84,7 +124,7 @@ export function parseBandTasks(
   return {
     // Whether a current item still holds is answered the same way as a candidate: keep or drop.
     candidates: [...parseCandidates(fields['candidates']), ...parseCandidates(fields['questions'])],
-    review: parseReview(fields['reviews']),
+    review: parseReview(fields['reviews'], fields['review']),
     due: parseDue(fields['due']),
   }
 }

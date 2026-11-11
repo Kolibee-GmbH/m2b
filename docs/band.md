@@ -7,8 +7,9 @@ machine.
 ```text
  [ keep ] [ drop ] Remember? Sam brings the plywood on Saturday
  [ keep ] [ drop ] Still current? Planning the trip to Porto
- m2b: review
+ [ ok ] m2b: review  1 fact changed: Sam
    lint: broken link in people/sam.md
+   the whole review: /m2b-review
 ╭──────────────────────────────────────────────────────────────╮
 │ >                                                            │
 ╰──────────────────────────────────────────────────────────────╯
@@ -19,7 +20,11 @@ machine.
 
 - **Memory candidates**, "Remember? ...": facts a curation run proposes for the distillate.
 - **"Still current?" questions**: items under "Current" in the distillate that have gone quiet.
-- **The review**: the open review task of the last curation run, with its first findings.
+- **The review**: the open review task of the last curation run. When the run changed facts in
+  the distillate, one row names them by what they are about (`2 facts changed: Sam, Dana`); the
+  other findings follow as written. `ok` closes the review task, with the same 5 seconds and
+  `undo` as keep; until then the review comes back after every run, so a changed fact is never
+  missed.
 - **Tasks due today or overdue**: your own tasks, not the curator's, in at most three quiet rows
   below the candidates (`due today: Call Dana`, `overdue: Return the drill`), without buttons;
   today's first, then the overdue ones, the most recent first. `m2b config set band.due_tasks
@@ -82,12 +87,19 @@ the tool below, or the skill `/m2b:capture` where the mod does not run.
 The band keeps to a few rows. `/m2b-review` opens the m2b pane beside the conversation with the
 last curation run in full: its state and times, every finding of the review task whole, paths
 included, and every candidate and "Still current?" question with keep and drop, which work as in
-the band, undo included.
+the band, undo included. Each changed fact gets two lines: what it is about with its fact file,
+then the fact as it reads now, the added words in green and the removed ones in red and struck
+through; below them where the copy of the facts from before the run lies, and how many notes the
+run filed.
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
 │ Last curation run: succeeded, 2026-03-14 18:00 to 18:02      │
-│ m2b: review                                                  │
+│ [ ok ] m2b: review  1 fact changed: Sam                      │
+│   Sam (sam.md)                                               │
+│     Sam Rivers (carpenter), neighbour, has a van             │
+│   facts before the run: ~/.local/state/m2b/memory-before-run/│
+│ 20260314T170005Z; 2 notes filed                              │
 │   lint: broken link in people/sam.md                         │
 │   ingest: eleven captures were not filed because their photos│
 │ are not downloaded; a copy of the run log is at ~/.local/stat│
@@ -241,6 +253,13 @@ read, `tasks` is `{"error": "<why>"}` and `status` still answers. The checks of 
 kept for five minutes, so at most every five minutes the answer waits for the calendar too, here
 for at most 10 seconds whatever `calendar.timeout_seconds` says; a calendar that does not answer
 by then is reported as not reachable. `--tasks-only` leaves `status` out.
+
+While a review task is open, `tasks.review` names the changes of the facts the last runs made, as
+the curation run kept them for the review: per change its `kind` (`rewrote`, `removed`,
+`file_removed`, `file_emptied`), the fact `file`, a short `topic`, the statement `before` and
+`after`, and `parts`, the statement word by word, each `same`, `added` or `removed`; `copy` names
+the copy of `memory/` from before the run and the notes it filed; `paragraphs` are the review's
+paragraphs these stand for, which the band leaves out of the findings it shows.
 
 ## Where it lives
 

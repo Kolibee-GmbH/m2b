@@ -1,6 +1,23 @@
 export type BandCandidate = { id: string; title: string }
 
-export type BandReview = { id: string; title: string; findings: string[] }
+/** A part of a changed facts line: kept, added or removed, word by word. */
+export type BandChangePart = { text: string; change: 'same' | 'added' | 'removed' }
+
+/** A change of the facts the open review names: its fact file, what it is about, and the line in parts. */
+export type BandFactChange = { kind: string; file: string; topic: string; parts: BandChangePart[] }
+
+/**
+ * The open review task: its findings, the paragraphs of its notes, less those `changes` and `copy`
+ * stand for. `changes` and `copy` are absent from a core before 0.3.3, and then every paragraph
+ * is a finding.
+ */
+export type BandReview = {
+  id: string
+  title: string
+  findings: string[]
+  changes?: BandFactChange[]
+  copy?: { path: string; captures: number } | null
+}
 
 /** One of the owner's own tasks due today or overdue. */
 export type BandDueTask = { id: string; title: string; overdue: boolean }

@@ -131,3 +131,80 @@ if __name__ == "__main__":
     import unittest
 
     unittest.main()
+
+
+class BandReviewChangesTest(test_runner.RunnerTest):
+    BEFORE = "- Sam, neighbour (garden shed) — Sam Rivers, Dana, Lee (sam.md)"
+    AFTER = "- Sam, neighbour (garden shed) — Sam Rivers (carpenter), Dana, Lee (sam.md)"
+
+    def keep_changes(self) -> None:
+        from m2b.curate import machine_state, memory_guard
+        from m2b.curate.report import ACTION, Finding
+
+        change = memory_guard.FactChange(memory_guard.REWROTE, "sam.md", self.BEFORE, self.AFTER)
+        machine_state.save_memory_changes(
+            self.machine,
+            [
+                Finding("ingest", ACTION, change.described(), change.as_json()),
+                Finding(
+                    "ingest",
+                    ACTION,
+                    "memory/ as it was before this run is in /home/alex/copy; check the changes above",
+                    {"kind": memory_guard.COPY, "path": "/home/alex/copy", "captures": ["a.md", "b.md"]},
+                ),
+            ],
+        )
+
+    def test_an_open_review_comes_with_its_changes_as_data(self) -> None:
+        """Covers: B106"""
+        self.curating()
+        self.tasks().add("m2b: review", notes=markers.marker_line(markers.REVIEW) + "\n\ningest: rewrote ...")
+        self.keep_changes()
+
+        review = self.run_json("band")["tasks"]["review"]
+
+        self.assertEqual(
+            review["changes"],
+            [
+                {
+                    "kind": "rewrote",
+                    "file": "sam.md",
+                    "topic": "Sam",
+                    "before": "Sam, neighbour (garden shed) — Sam Rivers, Dana, Lee",
+                    "after": "Sam, neighbour (garden shed) — Sam Rivers (carpenter), Dana, Lee",
+                    "parts": [
+                        {"text": "Sam, neighbour (garden shed) — Sam Rivers", "change": "same"},
+                        {"text": " (carpenter)", "change": "added"},
+                        {"text": ", Dana, Lee", "change": "same"},
+                    ],
+                }
+            ],
+        )
+        self.assertEqual(review["copy"], {"path": "/home/alex/copy", "captures": ["a.md", "b.md"]})
+        self.assertEqual(
+            review["paragraphs"],
+            [
+                f'ingest: rewrote the facts line "{self.BEFORE}" as "{self.AFTER}"',
+                "ingest: memory/ as it was before this run is in /home/alex/copy; check the changes above",
+            ],
+        )
+
+    def test_without_an_open_review_no_changes_are_named(self) -> None:
+        """Covers: B106"""
+        self.curating()
+        self.keep_changes()
+
+        self.assertNotIn("review", self.run_json("band")["tasks"])
+
+    def test_a_removed_word_and_a_removed_line_are_parts_too(self) -> None:
+        """Covers: B106"""
+        parts = band._parts("Sam Rivers, Dana, Lee", "Sam Rivers, Lee")
+        self.assertEqual(
+            parts,
+            [
+                {"text": "Sam Rivers, ", "change": "same"},
+                {"text": "Dana, ", "change": "removed"},
+                {"text": "Lee", "change": "same"},
+            ],
+        )
+        self.assertEqual(band._parts("Sam Rivers", None), [{"text": "Sam Rivers", "change": "same"}])
