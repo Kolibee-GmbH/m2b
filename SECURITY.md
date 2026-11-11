@@ -62,6 +62,29 @@ looks like an instruction. So:
 - `m2b distillate off` keeps the distillate out of projects where it must not appear, on the
   machine you run it on.
 
+## Reading your sessions
+
+Off until you say yes in setup ([docs/curation.md](docs/curation.md#reading-your-sessions)). A
+curation run then gives a model what you typed in Claude Code since the last reading, with the
+folder and the day of each session: the prompts Claude Code marks as typed by you, without pasted
+blocks, Claude's answers, tool results and what a plugin or another agent sent, each cut at 2,000
+characters, with credentials redacted by pattern, which stays incomplete. A session in a folder
+you left out does not reach it. With the prompts the model gets the distillate and, from
+`state/core/proposals.json` in the store, up to 30 proposals you kept and 30 you dropped, each
+with the words of yours it stood on; so words you typed in an earlier period go to the model again
+while such a proposal is among them, until 90 days after a run settled your answer to it.
+
+That model can call nothing: it reads its input and answers once. Code keeps a proposal only when
+the words it quotes stand in a prompt of the period, and nothing is filed before you say keep. The
+distillate and the proposals file lie in the store, so whoever can write the store can try to
+steer that model through them. What this reaches is which proposals you are shown and their text,
+which is the model's wording and is not checked against the quote. Proposals are written into the
+proposals file before you answer, and a dropped one stays there for 90 days, so whoever can steer
+that model can have words from any prompt it was given written into the store: a proposal's quote
+can be a whole prompt of the session it names, and nothing holds its text, up to 300 characters,
+or its topic against a prompt. Read a proposal's text beside your words before you keep it;
+`keep --all` keeps each as it is written.
+
 ## The tools the model calls
 
 Where the mod runs, the model has two tools, `mcp__m2b__note` and `mcp__m2b__search`. They can do

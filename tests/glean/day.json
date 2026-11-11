@@ -24,6 +24,57 @@
   "captures": [
     "Kim Lee ist ab April montags nicht erreichbar."
   ],
+  "answered": {
+    "kept": [
+      {
+        "kind": "person",
+        "text": "Ines Vogel leads purchasing at Fabrikam and approves the budgets.",
+        "quote": "Ines Vogel leads purchasing at Fabrikam and approves the budgets"
+      },
+      {
+        "kind": "agreement",
+        "text": "Tailspin extended the maintenance contract until 30 June 2027.",
+        "quote": "Tailspin extended the maintenance contract until 30 June 2027"
+      },
+      {
+        "kind": "commitment",
+        "text": "Send Ravi the quote for the redesign by Wednesday.",
+        "quote": "I still owe Ravi the quote for the redesign, by Wednesday"
+      },
+      {
+        "kind": "personal",
+        "text": "Lena's birthday is on 3 October.",
+        "quote": "Lena has her birthday on 3 October"
+      },
+      {
+        "kind": "person",
+        "text": "Urs Keller ist der neue Präsident des Chors.",
+        "quote": "Urs Keller ist der neue Präsident vom Chor"
+      }
+    ],
+    "dropped": [
+      {
+        "kind": "agreement",
+        "text": "The weekly call with Fabrikam is on Tuesdays at 10:00 from now on.",
+        "quote": "the weekly call with Fabrikam is on Tuesdays at 10 from now on"
+      },
+      {
+        "kind": "agreement",
+        "text": "The workshop with Tailspin is moved to 12 February.",
+        "quote": "the workshop with Tailspin is moved to 12 February"
+      },
+      {
+        "kind": "agreement",
+        "text": "The retro with the Wingtip team starts at 9:15 tomorrow.",
+        "quote": "the retro with the Wingtip team starts at 9:15 tomorrow"
+      },
+      {
+        "kind": "agreement",
+        "text": "Die Probe mit dem Chor ist auf Mittwoch 19 Uhr verschoben.",
+        "quote": "die Probe mit dem Chor ist auf Mittwoch 19 Uhr verschoben"
+      }
+    ]
+  },
   "sessions": [
     {
       "name": "portal-morning",
@@ -335,7 +386,11 @@
         "center it",
         "add a pricing section with three tiers",
         "the middle tier should stand out",
-        "lighthouse score?",
+        {
+          "text": "the review call with Globex is moved to Thursday at 14:00, so the pricing section has to be done before that",
+          "trap": "like-dropped",
+          "statement": "the review call with Globex is moved to Thursday at 14:00"
+        },
         "fix the contrast warning",
         "lazy load the images below the fold",
         "add a sitemap",

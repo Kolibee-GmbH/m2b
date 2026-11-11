@@ -12,7 +12,7 @@ from typing import Any
 
 from m2b import proposals
 from m2b.config.errors import ConfigError
-from m2b.glean import KINDS, Proposal
+from m2b.glean import KINDS, Example, Examples, Proposal
 from m2b.proposals import Said
 from m2b.store.folder import FolderStore
 from m2b.store.guard import DatalessGuard
@@ -422,6 +422,90 @@ class OutcomesTest(ProposalsFixture):
 
     def test_the_window_of_the_keep_rate_lies_within_the_time_an_answer_is_remembered(self) -> None:
         self.assertLessEqual(proposals.KEEP_RATE_PERIOD, proposals.REMEMBER_SETTLED)
+
+
+class ExamplesTest(ProposalsFixture):
+    def examples(self, now: datetime.datetime = NOW + datetime.timedelta(days=3)) -> Examples:
+        return proposals.examples(proposals.load(self.store), now)
+
+    def settled_entries(self, state: str, number: int) -> dict[str, dict[str, Any]]:
+        """``number`` proposals in the state as the file holds them, each settled a minute after the one before."""
+        return {
+            f"{len(state):x}{index:011x}": {
+                **_entry(),
+                "text": f"{state} {index}",
+                "state": state,
+                "since": (NOW + datetime.timedelta(minutes=index)).isoformat(),
+            }
+            for index in range(number)
+        }
+
+    def test_what_the_person_kept_and_dropped_are_examples_the_last_settled_first(self) -> None:
+        tea = Proposal("personal", "Alex drinks green tea.", "I only drink green tea", "kitchen")
+        offer = Proposal("commitment", "Send Dana the offer.", "I still have to send Dana the offer", "shed")
+        self.kept(DANA, LADDER, tea, offer)
+        self.settle(proposals.proposal_id(DANA), proposals.KEPT, NOW)
+        self.settle(proposals.proposal_id(offer), proposals.KEPT, NOW + datetime.timedelta(days=2))
+        self.settle(proposals.proposal_id(tea), proposals.DROPPED, NOW + datetime.timedelta(days=1))
+        self.settle(proposals.proposal_id(LADDER), proposals.DROPPED, NOW + datetime.timedelta(hours=1))
+
+        examples = self.examples()
+
+        self.assertEqual(
+            examples.kept,
+            (
+                Example("commitment", "Send Dana the offer.", "I still have to send Dana the offer"),
+                Example("person", "Dana runs IT at Northwind.", "Dana runs IT at Northwind"),
+            ),
+        )
+        self.assertEqual(
+            examples.dropped,
+            (
+                Example("personal", "Alex drinks green tea.", "I only drink green tea"),
+                Example("commitment", "Call Sam about the ladder.", "I still have to call Sam"),
+            ),
+        )
+
+    def test_a_proposal_that_waits_or_expired_is_no_example(self) -> None:
+        self.kept(DANA, LADDER)
+        self.settle(proposals.proposal_id(LADDER), proposals.EXPIRED)
+
+        self.assertEqual(self.examples(), Examples())
+
+    def test_of_each_answer_the_thirty_settled_last_are_examples(self) -> None:
+        self.write(
+            {"format": 1, "proposals": {**self.settled_entries("kept", 32), **self.settled_entries("dropped", 31)}}
+        )
+
+        examples = self.examples()
+
+        self.assertEqual([example.text for example in examples.kept], [f"kept {index}" for index in range(31, 1, -1)])
+        self.assertEqual(
+            [example.text for example in examples.dropped], [f"dropped {index}" for index in range(30, 0, -1)]
+        )
+
+    def test_a_proposal_settled_ninety_days_ago_is_no_example_also_while_the_file_still_holds_it(self) -> None:
+        tea = Proposal("personal", "Alex drinks green tea.", "I only drink green tea", "kitchen")
+        self.kept(DANA, tea)
+        self.settle(proposals.proposal_id(DANA), proposals.KEPT, NOW)
+        self.settle(proposals.proposal_id(tea), proposals.DROPPED, NOW + datetime.timedelta(seconds=1))
+
+        examples = self.examples(NOW + proposals.REMEMBER_SETTLED)
+
+        self.assertEqual(examples.kept, ())
+        self.assertEqual([example.text for example in examples.dropped], ["Alex drinks green tea."])
+        self.assertEqual(len(self.written()["proposals"]), 2)
+
+    def test_proposals_settled_in_one_run_are_examples_in_the_same_order_every_time(self) -> None:
+        together = {key: {**entry, "since": NOW.isoformat()} for key, entry in self.settled_entries("kept", 5).items()}
+        self.write({"format": 1, "proposals": together})
+        backwards = {"format": 1, "proposals": dict(reversed(list(together.items())))}
+
+        first = self.examples()
+        self.write(backwards)
+
+        self.assertEqual(self.examples(), first)
+        self.assertEqual(len(first.kept), 5)
 
 
 class UnreadableFileTest(ProposalsFixture):

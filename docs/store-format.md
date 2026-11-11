@@ -171,7 +171,8 @@ session and its `quote`, your own words; `kind` is `person`, `agreement`, `commi
 `personal`; `day` is the day you said it, `due` the day a commitment names. `state` is `open`,
 `kept`, `dropped` or `expired`, and `since` the moment it got that state. An open proposal that
 has no answer 14 days after it was added expires. A kept, dropped or expired proposal stays for 90
-days, so the same one is not proposed again; the first curation run after that removes it.
+days, so the same one is not proposed again; the first curation run after that removes it. The
+kept and the dropped ones are also what the next reading shows the model, the last 30 of each.
 
 `counts` says per kind how many proposals were added (`proposed`), how many of them ended `kept`,
 `dropped` or `expired`, and how many more were refused because the words they quote do not stand,

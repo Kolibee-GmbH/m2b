@@ -53,9 +53,17 @@ class Sandbox(unittest.TestCase):
         projects = Path(tempfile.mkdtemp(dir=self.root))
         return glean_eval.build_case(glean_eval.load_day(day), projects)
 
-    def day_file(self, *sessions: dict[str, Any], captures: tuple[str, ...] = ()) -> Path:
+    def day_file(
+        self, *sessions: dict[str, Any], captures: tuple[str, ...] = (), kept: tuple[dict[str, str], ...] = ()
+    ) -> Path:
         path = self.root / "day.json"
-        day = {"day": "2026-03-04", "memory": ["# Memory"], "captures": list(captures), "sessions": list(sessions)}
+        day = {
+            "day": "2026-03-04",
+            "memory": ["# Memory"],
+            "captures": list(captures),
+            "answered": {"kept": list(kept)},
+            "sessions": list(sessions),
+        }
         path.write_text(json.dumps(day), encoding="utf-8")
         return path
 
@@ -117,6 +125,23 @@ class InventedDayTest(Sandbox):
             with self.subTest(statement.text):
                 self.assertIn(statement.text, case.step_input)
 
+    def test_the_model_is_shown_five_proposals_the_person_kept_and_four_they_dropped(self) -> None:
+        case = self.case()
+        answered = json.loads(case.step_input)["answered"]
+
+        self.assertEqual((len(answered["kept"]), len(answered["dropped"])), (5, 4))
+        self.assertEqual({each["kind"] for each in answered["kept"]}, set(glean.KINDS))
+        self.assertEqual(case.day.examples.kept[0].quote, answered["kept"][0]["quote"])
+
+    def test_asked_without_examples_the_model_is_shown_none_and_the_day_stays_the_same(self) -> None:
+        day = glean_eval.load_day(glean_eval.DAY)
+
+        case = glean_eval.build_case(day, Path(tempfile.mkdtemp(dir=self.root)), with_examples=False)
+
+        given = json.loads(case.step_input)
+        self.assertEqual(given["answered"], {"kept": [], "dropped": []})
+        self.assertEqual(given["sessions"], json.loads(self.case().step_input)["sessions"])
+
     def test_the_sentence_the_person_captured_is_among_the_captures(self) -> None:
         case = self.case()
 
@@ -136,6 +161,10 @@ class InventedDayTest(Sandbox):
         for statement in (*day.planted, *day.traps):
             with self.subTest(statement.text):
                 self.assertNotIn(statement.text, instruction)
+        for example in (*day.examples.kept, *day.examples.dropped):
+            with self.subTest(example.quote):
+                self.assertNotIn(example.quote, instruction)
+                self.assertNotIn(example.text, instruction)
 
     def test_the_instruction_names_nobody_and_no_company_of_the_day(self) -> None:
         instruction = glean.instruction()
@@ -157,6 +186,13 @@ class BrokenDayTest(Sandbox):
     def test_a_planted_statement_the_reader_does_not_give_is_refused(self) -> None:
         sent = {"text": "Dana runs IT at Northwind", "sent_by": "plugin", "planted": "person"}
         day = self.day_file(session("shed", "hello there", {**sent, "statement": "Dana runs IT at Northwind"}))
+
+        with self.assertRaises(glean_eval.FixtureError):
+            self.case(day)
+
+    def test_an_example_whose_words_are_typed_in_the_day_is_refused(self) -> None:
+        typed_again = {"kind": "person", "text": "Dana runs IT.", "quote": "Dana runs IT at Northwind"}
+        day = self.day_file(session("shed", "hello there", "Dana runs IT at Northwind, ask her"), kept=(typed_again,))
 
         with self.assertRaises(glean_eval.FixtureError):
             self.case(day)
@@ -230,7 +266,7 @@ class ScoreTest(Sandbox):
         self.assertEqual((result.found, result.right_kind), (1, 0))
 
     def test_a_proposal_from_a_trap_the_model_must_resist_springs_it_and_is_wrong(self) -> None:
-        for label in ("hypothetical", "test-data", "project-todo", "in-memory"):
+        for label in ("hypothetical", "test-data", "project-todo", "in-memory", "like-dropped"):
             with self.subTest(label):
                 result = self.score(entry(self.given, trap(self.given, label), kind="person"))
 
@@ -367,6 +403,16 @@ class MainTest(WithFakeClaude):
         self.assertEqual(Path(call["m2b_home"]).resolve(), (self.root / "sandbox" / "home").resolve())
         self.assertEqual(call["argv"][1], glean.instruction())
         self.assertIn("Dana runs IT at Northwind", json.loads(call["stdin"])["sessions"][0]["prompts"][5])
+
+    def test_a_run_shows_the_model_the_examples_of_the_day_unless_asked_without_them(self) -> None:
+        self.answer_with(any=answer())
+
+        self.run_main("--model", "haiku", "--runs", "1")
+        self.run_main("--model", "haiku", "--runs", "1", "--without-examples")
+
+        shown, not_shown = (json.loads(call["stdin"])["answered"] for call in self.calls())
+        self.assertEqual((len(shown["kept"]), len(shown["dropped"])), (5, 4))
+        self.assertEqual(not_shown, {"kept": [], "dropped": []})
 
     def test_the_real_store_is_refused(self) -> None:
         real_config = Path(self.environ["HOME"]) / ".config" / "m2b" / "config.json"

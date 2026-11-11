@@ -21,6 +21,10 @@ check refused. The counts outlast the proposals: they are what shows whether a k
 proposing to this person. What was kept and dropped lately is read from the
 settled proposals themselves (``outcomes_since``), which carry the moment.
 
+The kept and the dropped proposals are also what the next reading shows the model (``examples``),
+so it proposes what this person keeps. An expired one is not shown: the person did not look at it,
+and that says nothing about the proposal.
+
 A proposal's id comes from its session and its quote alone. A run that reads a period a second
 time, because the first reading failed after the model had answered, finds the same ids and adds
 nothing. A proposal with the text of an open one, or of one settled within the 90 days, is refused
@@ -43,7 +47,7 @@ from typing import Any
 from m2b.candidates import REMEMBER_DROPPED as REMEMBER_SETTLED
 from m2b.candidates import same_text
 from m2b.config.json_file import read_store_json_object, write_store_json_object
-from m2b.glean import KINDS, Proposal
+from m2b.glean import KINDS, Example, Examples, Proposal
 from m2b.notes.layout import STATE
 from m2b.store.base import Store
 
@@ -57,6 +61,9 @@ STATES = (OPEN, KEPT, DROPPED, EXPIRED)
 EXPIRES_AFTER = datetime.timedelta(days=14)
 # Shorter than a settled proposal is remembered, so the settled proposals alone give the rate.
 KEEP_RATE_PERIOD = datetime.timedelta(days=30)
+# How many kept and how many dropped proposals a reading shows the model. Chosen, not derived:
+# enough to show a line the person draws, and a part of the input that stays small beside a day's prompts.
+EXAMPLES_OF_EACH = 30
 ID_LENGTH = 12
 _ID = re.compile(rf"[0-9a-f]{{{ID_LENGTH}}}")
 
@@ -273,6 +280,30 @@ def outcomes_since(current: Proposals, start: datetime.datetime) -> Outcomes:
     """How the proposals settled at ``start`` or later ended; only as far back as a settled one is remembered."""
     ended = [entry.state for entry in current.entries.values() if entry.state != OPEN and entry.since >= start]
     return Outcomes(ended.count(KEPT), ended.count(DROPPED), ended.count(EXPIRED))
+
+
+def examples(current: Proposals, now: datetime.datetime) -> Examples:
+    """What the person kept and what they dropped, of each the ``EXAMPLES_OF_EACH`` a run settled last, newest first.
+
+    The moment is the one a run settled the answer at, so the answers one run settled share it;
+    among those the id decides, which keeps the order the same from run to run. A proposal settled
+    90 days ago or longer is none, also while it is still in the file: a run removes those only
+    in its last step, and what ``add`` takes as forgotten must not be shown as remembered.
+    """
+
+    def settled_last(state: str) -> tuple[Example, ...]:
+        ended = sorted(
+            (
+                (entry.since, key, entry)
+                for key, entry in _remembered(current.entries, now).items()
+                if entry.state == state
+            ),
+            key=lambda item: item[:2],
+            reverse=True,
+        )
+        return tuple(Example(entry.kind, entry.text, entry.quote) for _, _, entry in ended[:EXAMPLES_OF_EACH])
+
+    return Examples(settled_last(KEPT), settled_last(DROPPED))
 
 
 def _remembered(entries: Mapping[str, Entry], now: datetime.datetime) -> dict[str, Entry]:

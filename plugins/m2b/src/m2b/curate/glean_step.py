@@ -13,7 +13,9 @@ m2b never reads" cannot be forgotten in one of two places. A session whose folde
 absolute path cannot be compared with either and is left out too.
 
 The model is asked once, with nothing to call (``model.text_step``), and only when a session left
-has a typed prompt. Code checks its answer (``glean.check``) against the prompts and against the
+has a typed prompt. With the prompts it gets the distillate and what the person kept and dropped of
+earlier proposals (``proposals.examples``); harvest has settled the answers by then, so the last
+ones are among them. Code checks its answer (``glean.check``) against the prompts and against the
 captures of the period, and ``proposals`` keeps what is new and counts, per kind, what was added
 and what stood on no words of the person. The counts go to the run as
 information, never into the review: nothing here asks the person to act. What the reader left out
@@ -121,9 +123,14 @@ def propose(
         proposals.save(store, dataclasses.replace(kept, read_until=started))
         return Reading(f"no session since {start.strftime(_MOMENT)} has a typed prompt", tuple(notes))
     captures = _captures(store, start, started)
-    run = model.text_step(
-        config, machine, environ, glean.instruction(), glean.step_input(read, _distillate(store), zone), pass_fds
-    )
+    examples = proposals.examples(kept, started)
+    if examples != glean.NO_EXAMPLES:
+        notes.append(
+            f"the model was shown {len(examples.kept)} kept and "
+            f"{_count(len(examples.dropped), 'dropped proposal')} as examples"
+        )
+    given = glean.step_input(read, _distillate(store), zone, examples)
+    run = model.text_step(config, machine, environ, glean.instruction(), given, pass_fds)
     if run.answer is None:
         raise GleanStepError(run.failure())
     answer = glean.parse_answer(run.answer, read)

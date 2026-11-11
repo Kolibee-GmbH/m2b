@@ -31,6 +31,13 @@ DANA = {
     "due": None,
 }
 DANA_ID = proposals.proposal_id(glean.Proposal("person", "", "Dana runs IT at Northwind", "shed"))
+# Proposals of earlier readings, as the proposals file and the model's input hold what they say.
+KIM = {"kind": "person", "text": "Kim Lee is the accountant.", "quote": "Kim Lee is my accountant"}
+TEA = {"kind": "personal", "text": "Alex drinks green tea.", "quote": "I only drink green tea"}
+OFFER = {"kind": "commitment", "text": "Send Robin the offer.", "quote": "I still owe Robin the offer"}
+BOAT = {"kind": "agreement", "text": "Sam lends the boat in May.", "quote": "Sam lends us the boat in May"}
+MIA = {"kind": "personal", "text": "Mia starts school in August.", "quote": "Mia starts school in August"}
+PLYWOOD = {"kind": "agreement", "text": "Sam brings the plywood.", "quote": "Sam brings the plywood on Friday"}
 
 
 def capture(text: str, hour: int) -> str:
@@ -419,6 +426,69 @@ class ChecksTest(GleanStepTest):
 
         self.assertEqual(self.kept(), once)
         self.assertIn("0 proposals added, 1 like one that waits, is answered or expired", self.info()[0])
+
+
+class ExamplesTest(GleanStepTest):
+    def answered_before(self) -> None:
+        """A store whose earlier readings left two kept, a dropped, an expired and a waiting proposal.
+
+        A sixth was kept 91 days ago: the file still holds it, since a run removes such a one only in its last step.
+        """
+
+        def entry(example: dict[str, str], state: str, hours_ago: int) -> dict[str, Any]:
+            since = (START - DAY - hours_ago * HOUR).isoformat()
+            return {**example, "topic": None, "due": None, "day": "2026-11-01", "state": state, "since": since}
+
+        ends = {
+            "a" * 12: entry(KIM, "kept", 2),
+            "b" * 12: entry(TEA, "dropped", 3),
+            "c" * 12: entry(OFFER, "expired", 4),
+            "d" * 12: entry(BOAT, "open", 5),
+            "e" * 12: entry(MIA, "kept", 6),
+            "f" * 12: entry(PLYWOOD, "kept", 90 * 24),
+        }
+        self.write(proposals.PROPOSALS_FILE, json.dumps({**nothing_kept(START - DAY), "proposals": ends}))
+
+    def test_a_reading_shows_the_model_what_the_person_kept_and_dropped_and_nothing_else_of_the_file(self) -> None:
+        """Covers: B134"""
+        self.reading()
+        self.answered_before()
+        self.typed(DANA_SAID, START - HOUR)
+        self.answers(DANA)
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        (asked,) = self.asked()
+        self.assertEqual(asked["answered"], {"kept": [KIM, MIA], "dropped": [TEA]})
+        self.assertIn("the model was shown 2 kept and 1 dropped proposal as examples", self.info())
+
+    def test_a_reading_before_any_answer_shows_no_example_and_says_nothing_of_it(self) -> None:
+        """Covers: B134"""
+        self.reading()
+        self.typed(DANA_SAID, START - HOUR)
+        self.answers(DANA)
+
+        self.run_curate()
+
+        (asked,) = self.asked()
+        self.assertEqual(asked["answered"], {"kept": [], "dropped": []})
+        self.assertEqual([note for note in self.info() if "examples" in note], [])
+
+    def test_a_proposal_that_quotes_an_example_and_no_prompt_is_refused_by_the_quote_check(self) -> None:
+        """Covers: B134"""
+        self.reading()
+        self.answered_before()
+        self.typed(DANA_SAID, START - HOUR)
+        again = {**DANA, **TEA, "text": "Alex drinks only green tea."}
+        self.answers(DANA, again)
+
+        self.run_curate()
+
+        kept = self.kept()
+        self.assertEqual(sorted(kept["proposals"]), sorted([*(letter * 12 for letter in "abcde"), DANA_ID]))
+        self.assertEqual(kept["counts"]["personal"]["not_quoted"], 1)
+        self.assertIn("1 proposal added, 0 like one that waits, is answered or expired, 1 without", self.info()[0])
 
 
 class AnsweredTest(GleanStepTest):

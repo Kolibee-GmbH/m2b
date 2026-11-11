@@ -300,8 +300,9 @@ and is billed like your sessions.
 and lint read the captures and memory files; refresh reads the distillate, the fact files that are
 due and any archive file; sorting reads memory. Ingest, lint, `--refresh-all` and the worklog step
 also get `m2b search` results over inbox, archive and memory. The reading of your sessions sends
-the distillate and, per session, its folder, its day and the prompts you typed, redacted, to a
-model that can call nothing. With the worklog add-on, its step sees the period's prompts and last
+the distillate, up to 30 proposals you kept and 30 you dropped lately, each with your words, and,
+per session, its folder, its day and the prompts you typed, redacted, to a model that can call
+nothing. With the worklog add-on, its step sees the period's prompts and last
 answers, commits and session folders, the inbox and memory (below). In every session:
 the distillate, the routing rule and the notices at session start; before a prompt that names a
 topic, that topic's facts.

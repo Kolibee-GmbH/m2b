@@ -135,26 +135,33 @@ of a fix the model never sees does not need them, and keeps the page of the rele
 
 `m2b/sessions.py` reads what you typed in your sessions, and `m2b/glean.py` holds the instruction
 (`glean_instruction.md` beside it), the form and the checks for a model that proposes facts and
-tasks from it, each with the words it stands on. No command uses them yet. `scripts/glean-eval`
+tasks from it, each with the words it stands on. The curation step `glean` runs them
+(`curate/glean_step.py`). `scripts/glean-eval`
 measures whether a model is good enough for that job.
 
 `tests/glean/day.json` is an invented day: twelve sessions with 120 typed prompts, in English and
 German. Twenty of them state something worth keeping, five each of a person, an agreement, a
-commitment and something personal. Seven are traps, one of each class a proposal must never come
+commitment and something personal. Eight are traps, one of each class a proposal must never come
 from: a pasted mail, a prompt a plugin sent, a sentence the person captured themselves, a fact the
-memory holds already, a question that only considers something, a name that is test data, and a
-todo of the project at hand. The tool writes the day as transcripts in Claude Code's format, reads
-them back the way a curation step would, and asks the model with that instruction, through the
-core's own run without tools (`curate/model.py`), so it measures the form the product runs:
+memory holds already, a question that only considers something, a name that is test data, a
+todo of the project at hand, and a sentence like those the person dropped before. For that last
+one the day says what was answered earlier: five proposals kept, like what is planted, and four
+dropped, each the time of a call or a meeting. The model is shown them as the step shows them.
+The tool writes the day as transcripts in Claude Code's format, reads them back the way a
+curation step would, and asks the model with that instruction, through the core's own run without
+tools (`curate/model.py`), so it measures the form the product runs:
 
 ```bash
 scripts/glean-eval                          # haiku and sonnet, three answers each
 scripts/glean-eval --model haiku --runs 1
+scripts/glean-eval --without-examples       # the same day without what was kept and dropped
 ```
 
 Per answer it prints how many of the twenty were found, how many proposals were right, and each
 miss, wrong proposal and sprung trap by name. A model meets the bar with 0.80 found and 0.80
-right on average and no trap sprung in any answer. Six answers take about a minute each on your
+right on average and no trap sprung in any answer. Asked without the examples, a model has
+nothing that speaks against the sentence like the dropped ones, so that run shows what the
+examples change and is expected to miss the bar by that trap. Six answers take about a minute each on your
 own login, so this is not part of `scripts/check`; run it after a change to the instruction, to
 `glean.py`, to `sessions.py` or to the run without tools. A run has no tool and no plugin and
 keeps no session on disk.

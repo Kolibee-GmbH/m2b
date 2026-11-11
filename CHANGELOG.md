@@ -44,6 +44,13 @@ All notable changes to this project are documented here. The format follows
   counts per kind since the first reading: proposed, kept, dropped, expired, and refused because
   the words they quote do not stand, with at least three words, in a prompt of the session they
   name ([docs/curation.md](docs/curation.md#reading-your-sessions)).
+- The reading of your sessions learns from your answers: it shows the model up to 30 proposals you
+  kept and up to 30 you dropped, those a run settled last, each with its kind, its text and your
+  words, and tells it to leave out what is like something you dropped. Expired proposals are not
+  shown. On the invented day of `scripts/glean-eval`, which now holds five kept and four dropped
+  proposals and one sentence like the dropped ones, `haiku` and `sonnet` proposed that sentence in
+  six of six answers without the examples and in none of six with them, and found all twenty
+  planted statements either way; `scripts/glean-eval --without-examples` measures the day without them.
 
 ### Changed
 

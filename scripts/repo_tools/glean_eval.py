@@ -8,6 +8,12 @@ it over: with the step's own instruction (``m2b.glean.instruction``), through th
 without tools (``m2b.curate.model``). The answer goes through ``m2b.glean``, the step's parser
 and checks. So the tool measures the form the product runs, with nothing of its own in between.
 
+The day also says what the person answered before: proposals of earlier readings they kept, like
+what is planted, and some they dropped, all of one sort (the time of a call or a meeting). The
+model is shown them as the step shows them (``answered`` in its input), and one trap of the day
+is a sentence like the dropped ones. ``--without-examples`` asks without them, which shows what
+they change: that trap is then nobody's to catch.
+
 Counted per run: how many planted statements a kept proposal stands on (found), how many kept
 proposals are the first to stand on one (right; a second proposal for the same statement is not),
 and which traps were sprung. A proposal stands on a statement when its quote and the statement
@@ -61,7 +67,9 @@ BAR = 0.8
 
 PASTED_MAIL = "pasted-mail"
 AUTOMATION = "automation"
-TRAPS = ("hypothetical", "test-data", "project-todo", "in-memory", "captured", PASTED_MAIL, AUTOMATION)
+# A sentence the instruction alone would allow and the person's earlier drops speak against.
+LIKE_DROPPED = "like-dropped"
+TRAPS = ("hypothetical", "test-data", "project-todo", "in-memory", LIKE_DROPPED, "captured", PASTED_MAIL, AUTOMATION)
 # Their words must not be among the prompts the reader gives; no model is asked to resist them.
 TRAPS_OF_THE_READER = (PASTED_MAIL, AUTOMATION)
 
@@ -92,6 +100,8 @@ class Day:
     start: datetime.datetime
     memory: str
     captures: tuple[str, ...]
+    # What the person kept and dropped of earlier proposals.
+    examples: glean.Examples
     # Session id to the records of its transcript, and to the name the fixture gives it.
     transcripts: Mapping[str, Sequence[Mapping[str, Any]]]
     names: Mapping[str, str]
@@ -168,7 +178,15 @@ def load_day(path: Path) -> Day:
                     _must_hold(entry, session["name"])
                     into.append(Statement(session_id, label, entry["statement"]))
     memory = "\n".join(raw["memory"]) + "\n"
-    return Day(start, memory, tuple(raw["captures"]), transcripts, names, tuple(planted), tuple(traps))
+    examples = _examples(raw.get("answered", {}))
+    return Day(start, memory, tuple(raw["captures"]), examples, transcripts, names, tuple(planted), tuple(traps))
+
+
+def _examples(answered: Mapping[str, Any]) -> glean.Examples:
+    def of(answer: str) -> tuple[glean.Example, ...]:
+        return tuple(glean.Example(each["kind"], each["text"], each["quote"]) for each in answered.get(answer, ()))
+
+    return glean.Examples(of("kept"), of("dropped"))
 
 
 def _must_hold(entry: Mapping[str, Any], session_name: str) -> None:
@@ -195,7 +213,7 @@ def _record(entry: Mapping[str, Any], folder: str, moment: datetime.datetime, in
     }
 
 
-def build_case(day: Day, projects: Path) -> Case:
+def build_case(day: Day, projects: Path, with_examples: bool = True) -> Case:
     """Writes the day as transcripts under ``projects`` and reads it back as a curation step would."""
     for session_id, records in day.transcripts.items():
         folder = projects / str(records[0]["cwd"]).replace("/", "-")
@@ -210,7 +228,12 @@ def build_case(day: Day, projects: Path) -> Case:
         holding = [prompt for prompt in typed.get(statement.session, ()) if statement.text in prompt]
         if len(holding) != 1:
             raise FixtureError(f"{statement.text!r} stands in {len(holding)} prompts the reader gives, not in one")
-    return Case(day, read.sessions, glean.step_input(read.sessions, day.memory))
+    for example in (*day.examples.kept, *day.examples.dropped):
+        # Such a proposal would pass the quote check, and nothing counted could tell it from a find.
+        if any(example.quote in prompt for prompts in typed.values() for prompt in prompts):
+            raise FixtureError(f"the example {example.quote!r} is typed in the day; an example is from before it")
+    examples = day.examples if with_examples else glean.NO_EXAMPLES
+    return Case(day, read.sessions, glean.step_input(read.sessions, day.memory, examples=examples))
 
 
 def score(case: Case, answer: str) -> Score:
@@ -485,6 +508,11 @@ def _parse_arguments(argv: Sequence[str]) -> argparse.Namespace:
     )
     parser.add_argument("--runs", type=int, default=DEFAULT_RUNS, help="answers per model for the invented day")
     parser.add_argument(
+        "--without-examples",
+        action="store_true",
+        help="ask about the invented day without what the person kept and dropped before",
+    )
+    parser.add_argument(
         "--replay", type=int, metavar="DAYS", help="read your own last DAYS days instead, today included"
     )
     parser.add_argument("--out", type=Path, help="with --replay: the file the proposals are written to")
@@ -523,7 +551,7 @@ def main(argv: Sequence[str] | None = None, environ: Mapping[str, str] | None = 
         days = [today - datetime.timedelta(days=back) for back in reversed(range(arguments.replay))]
         return _replay(claude_code.transcripts_folder(environ), days, model, asker, arguments.jobs, arguments.out)
     try:
-        case = build_case(load_day(arguments.day), projects)
+        case = build_case(load_day(arguments.day), projects, with_examples=not arguments.without_examples)
     except (FixtureError, SessionsError) as error:
         print(f"glean-eval: {error}", file=sys.stderr)
         return EXIT_USAGE

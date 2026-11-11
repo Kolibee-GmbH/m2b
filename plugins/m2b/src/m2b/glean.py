@@ -6,10 +6,15 @@ about the person's own life. This module is the part of such a step that is code
 model gets, the form its answer must have, and two checks no instruction can replace.
 
 The input is one JSON document: the distillate, so the model can leave out what is known already,
-and per session its folder, its day and every prompt whole. A session is named by a small number,
-its place in the sequence the caller passes; the model repeats a number more reliably than an id,
-and ``parse_answer`` turns it back with the same sequence. JSON keeps a prompt one string whatever
-it holds, so no typed text can pass as another session or as the memory.
+the proposals of earlier readings the person kept and those they dropped (``Examples``), and per
+session its folder, its day and every prompt whole. A session is named by a small number, its
+place in the sequence the caller passes; the model repeats a number more reliably than an id, and
+``parse_answer`` turns it back with the same sequence. JSON keeps a prompt one string whatever it
+holds, so no typed text can pass as another session or as the memory, and no example as a session.
+
+What this person keeps and drops says more about what to propose to them than a rule written for
+everybody, so the model is shown it. An example is words of another period and no session: a
+proposal that quotes one stands in no prompt, and ``check`` refuses it like any other.
 
 A proposal carries the words it stands on, its ``quote``. ``check`` keeps a proposal only when the
 quote stands, white space aside, in one prompt of the session it names, with at least
@@ -84,6 +89,26 @@ class Proposal:
 
 
 @dataclass(frozen=True)
+class Example:
+    """A proposal of an earlier reading the person answered: what it said and the words it stood on."""
+
+    kind: str
+    text: str
+    quote: str
+
+
+@dataclass(frozen=True)
+class Examples:
+    """The earlier proposals the person kept and those they dropped, the last answered first."""
+
+    kept: tuple[Example, ...] = ()
+    dropped: tuple[Example, ...] = ()
+
+
+NO_EXAMPLES = Examples()
+
+
+@dataclass(frozen=True)
 class Answer:
     proposals: tuple[Proposal, ...]
     # How many entries of the answer were not a proposal in the form.
@@ -104,8 +129,17 @@ def instruction() -> str:
     return INSTRUCTION.read_text(encoding="utf-8")
 
 
-def step_input(sessions: Sequence[Session], distillate: str, zone: datetime.tzinfo = datetime.timezone.utc) -> str:
-    """The JSON document the model reads; ``zone`` is where the person is, for the day of a session."""
+def step_input(
+    sessions: Sequence[Session],
+    distillate: str,
+    zone: datetime.tzinfo = datetime.timezone.utc,
+    examples: Examples = NO_EXAMPLES,
+) -> str:
+    """The JSON document the model reads; ``zone`` is where the person is, for the day of a session.
+
+    ``answered`` is in it also while it is empty: the instruction describes one form, and a model
+    that sees two empty lists knows that nothing was answered yet.
+    """
     given = [
         {
             "session": number,
@@ -116,7 +150,11 @@ def step_input(sessions: Sequence[Session], distillate: str, zone: datetime.tzin
         for number, session in enumerate(sessions, start=1)
         if session.prompts
     ]
-    return json.dumps({"memory": distillate, "sessions": given}, ensure_ascii=False, indent=1)
+    answered = {
+        "kept": [_as_given(example) for example in examples.kept],
+        "dropped": [_as_given(example) for example in examples.dropped],
+    }
+    return json.dumps({"memory": distillate, "answered": answered, "sessions": given}, ensure_ascii=False, indent=1)
 
 
 def parse_answer(answer: str, sessions: Sequence[Session]) -> Answer:
@@ -155,6 +193,10 @@ def check(proposals: Sequence[Proposal], sessions: Sequence[Session], captures: 
             kept.append(proposal)
             kept_at.append(quoted_from[0][1])
     return Checked(tuple(kept), tuple(not_quoted), tuple(already_captured), tuple(kept_at))
+
+
+def _as_given(example: Example) -> dict[str, str]:
+    return {"kind": example.kind, "text": example.text, "quote": example.quote}
 
 
 def _entries(answer: str) -> list[Any]:
