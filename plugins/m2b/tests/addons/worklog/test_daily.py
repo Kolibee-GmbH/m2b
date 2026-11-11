@@ -34,7 +34,7 @@ class Crash(Exception):
 
 
 def judged(found: dict[str, Any]) -> dict[str, Any]:
-    """What the verdict skill hands in for the day of work: one session, b1 booked, one candidate."""
+    """What the verdict skill hands in for the day of work: one session, b1 booked."""
     sessions = []
     for session in found["sessions"]:
         blocks: dict[str, Any] = {block["id"]: None for block in session["blocks"]}
@@ -48,14 +48,7 @@ def judged(found: dict[str, Any]) -> dict[str, Any]:
                 "blocks": blocks,
             }
         )
-    return {
-        "version": 1,
-        "sessions": sessions,
-        "candidates": [
-            {"text": "Dana reviews the invoice export on Fridays"},
-            {"text": "dana reviews the invoice  export on fridays"},
-        ],
-    }
+    return {"version": 1, "sessions": sessions}
 
 
 def hand_in(paths: WorklogPaths, verdict: Any) -> None:
@@ -70,8 +63,6 @@ class FakeCore:
     def __init__(self, paths: WorklogPaths, store: Path, profile: dict[str, Any], judge: Callable[..., Any]) -> None:
         self.paths, self._store, self._profile, self._judge = paths, store, profile, judge
         self.model_calls: list[tuple[str, tuple[str, ...]]] = []
-        self.proposed: list[str] = []
-        self.attempts: list[str] = []
 
     def store(self) -> Path:
         return self._store
@@ -90,12 +81,6 @@ class FakeCore:
         problems = daily.accept_verdict(self.paths)
         if problems:
             raise AssertionError(problems)
-
-    def propose(self, text: str) -> None:
-        # The core refuses a text it holds open already, with exit 0 (B35).
-        self.attempts.append(text)
-        if text not in self.proposed:
-            self.proposed.append(text)
 
 
 class DailyFixture(Fixture):
@@ -201,7 +186,6 @@ class WriteTest(DailyFixture):
                 "Bash(m2b-worklog facts *)",
                 "Bash(m2b-worklog verdict *)",
                 "Bash(m2b search *)",
-                "Bash(m2b tasks list *)",
                 "Bash(m2b curate report *)",
                 "Read(<store>/memory/**)",
                 "Read(<store>/inbox/**)",
@@ -211,7 +195,7 @@ class WriteTest(DailyFixture):
             ),
         )
 
-    def test_a_worklog_writes_the_note_the_ledger_the_exports_the_candidates_and_the_watermark(self) -> None:
+    def test_a_worklog_writes_the_note_the_ledger_the_exports_and_the_watermark(self) -> None:
         """Covers: B28"""
         self.a_due_day()
 
@@ -228,7 +212,6 @@ class WriteTest(DailyFixture):
         self.assertIn("- 2026-03-14 10:00-10:50 (50 min): Globex, Invoices, development", note)
         spans = self.ledger_periods()[period]["spans"]
         self.assertEqual([(s["block"], s["customer"]) for s in spans], [("b1", "Globex"), ("b2", None)])
-        self.assertEqual(self.core.proposed, ["Dana reviews the invoice export on Fridays"])
         self.assertEqual(self.watermark_end(), NOW.isoformat())
         self.assertFalse((self.store / STATE / "intent.json").exists())
 
@@ -593,15 +576,15 @@ class VerdictTest(DailyFixture):
         daily.hand_to_model(self.paths, self.store, "en", found)
         return found
 
-    def test_more_than_three_candidates_are_refused(self) -> None:
-        """Covers: B99"""
+    def test_a_verdict_that_names_something_for_memory_is_refused(self) -> None:
+        """Covers: B129"""
         self.a_due_day()
         good = judged(self.handed_facts())
-        four = {**good, "candidates": [{"text": f"Dana likes tea number {n}"} for n in range(4)]}
+        for candidates in ([{"text": "Dana reviews the invoice export on Fridays"}], []):
+            with self.subTest(candidates=candidates):
+                self.assertEqual(self.problems({**good, "candidates": candidates}), ["$: candidates is not allowed"])
 
-        self.assertEqual(self.problems(four), ["$.candidates: 4 candidates, at most 3"])
-
-    def test_a_line_break_in_a_topic_a_detail_a_note_or_a_candidate_is_refused(self) -> None:
+    def test_a_line_break_in_a_topic_a_detail_a_note_or_a_booking_is_refused(self) -> None:
         """Covers: B99"""
         self.a_due_day()
         good = judged(self.handed_facts())
@@ -610,8 +593,6 @@ class VerdictTest(DailyFixture):
             broken["sessions"][0][field] = "Invoice export\n## Not a heading"
             with self.subTest(field=field):
                 self.assertEqual(self.problems(broken), [f"$.sessions[0].{field}: holds a line break"])
-        candidate = {**good, "candidates": [{"text": "Dana reviews\nthe export"}]}
-        self.assertEqual(self.problems(candidate), ["$.candidates[0].text: holds a line break"])
         booking = json.loads(json.dumps(good))
         booking["sessions"][0]["blocks"]["b1"]["activity"] = "Review\x0b## Not a heading"
         self.assertEqual(self.problems(booking), ["$.sessions[0].blocks.b1.activity: holds a line break"])
@@ -652,7 +633,6 @@ class RerunTest(DailyFixture):
         self.assertEqual(len(self.core.model_calls), 1)
         self.assertEqual(len(self.worklog_notes()), 1)
         self.assertEqual(len(self.ledger_periods()), 1)
-        self.assertEqual(self.core.proposed, ["Dana reviews the invoice export on Fridays"])
         self.assertEqual(self.watermark_end(), NOW.isoformat())
         self.assertFalse((self.store / STATE / "intent.json").exists())
 
@@ -671,11 +651,6 @@ class RerunTest(DailyFixture):
     def test_a_crash_after_the_exports(self) -> None:
         """Covers: B28"""
         self.assert_rerun_completes(ledger, "export")
-
-    def test_a_crash_after_a_candidate_was_proposed(self) -> None:
-        """Covers: B28"""
-        self.assert_rerun_completes(self.core, "propose")
-        self.assertEqual(len(self.core.attempts), 2)
 
     def test_a_crash_after_the_watermark(self) -> None:
         """Covers: B28"""
@@ -816,8 +791,6 @@ elif arguments[:2] == ["curate", "model"]:
     with open(facts["verdict_file"], "w", encoding="utf-8") as draft:
         draft.write(open({str(verdict)!r}).read())
     subprocess.run([{str(COMMAND)!r}, "verdict"])
-elif arguments[:3] == ["tasks", "add", "--candidate"]:
-    print("aaaa00000001")
 else:
     sys.exit(f"unexpected: {{arguments}}")
 """
@@ -842,7 +815,8 @@ else:
             "TZ": TEST_TZ,
         }
 
-    def test_run_asks_the_core_for_the_model_step_and_the_candidates(self) -> None:
+    def test_run_asks_the_core_for_the_model_step_and_for_no_task(self) -> None:
+        """Covers: B129"""
         calls = self.launcher()
         self.a_due_day()
         collected = self.command("collect", "--now", NOW.isoformat())
@@ -856,7 +830,7 @@ else:
         [model] = [call for call in made if call[:2] == ["curate", "model"]]
         self.assertEqual(model[:5], ["curate", "model", "--skill", "m2b:worklog-verdict", "--allow"])
         self.assertIn("Read(<store>/inbox/**)", model)
-        self.assertIn(["tasks", "add", "--candidate", "--", "Dana reviews the invoice export on Fridays"], made)
+        self.assertEqual([call for call in made if call[:1] == ["tasks"]], [])
         [note] = self.worklog_notes()
         self.assertIn("- herdr: herdr did not answer", (self.store / note).read_text(encoding="utf-8"))
 

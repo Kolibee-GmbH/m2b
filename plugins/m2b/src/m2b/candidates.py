@@ -1,9 +1,9 @@
 """Memory candidates: proposed as tasks, remembered in ``state/core/candidates.json``.
 
-The core owns a candidate's life, so any add-on can propose one and a tick is filed even without the
-worklog.
+The core owns a candidate's life: whoever proposes one calls ``m2b tasks add --candidate``, a script
+or an integration of the owner's, and nothing in the product proposes one by itself.
 
-A module proposes a fact the owner may want kept; it becomes a task with the candidate marker and
+A caller proposes a fact the owner may want kept; it becomes a task with the candidate marker and
 the localized title prefix ("Remember? "). The file holds each open candidate's text, so one deleted
 outside the product is still known, and each dropped candidate's text for 90 days, so the same
 proposal does not come back daily (B35). Harvest (``harvest.py``) moves entries along; nothing keeps

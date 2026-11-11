@@ -18,7 +18,8 @@ machine.
 
 ## What it shows
 
-- **Memory candidates**, "Remember? ...": facts a curation run proposes for the distillate.
+- **Memory candidates**, "Remember? ...": facts proposed for the distillate with
+  `m2b tasks add --candidate`.
 - **"Still current?" questions**: items under "Current" in the distillate that have gone quiet.
 - **The review**: the open review task of the last curation run. When the run changed facts in
   the distillate, one row names them by what they are about (`2 facts changed: Sam, Dana`); the

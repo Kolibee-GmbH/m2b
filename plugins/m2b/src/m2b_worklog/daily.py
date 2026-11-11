@@ -14,13 +14,13 @@ the facts since the watermark, has the model judge them through ``m2b curate mod
    later in the same run, so the distillate's current section sees the day);
 3. the ledger gets the period's spans, unless it holds the period;
 4. ``ledger.csv`` and ``ledger.xlsx`` are regenerated;
-5. each candidate is proposed, and the intent notes it as proposed;
-6. the watermark moves to the period's end;
-7. the intent is removed.
+5. the watermark moves to the period's end;
+6. the intent is removed.
 
 A rerun that finds an intent carries out that plan, not a new one, so each missing piece is written
-once and nothing twice (B28). Nothing is written outside the inbox, ``state/addons/worklog/`` and
-the task list: bookings are proposals, because a wrong one ends up on an invoice.
+once and nothing twice (B28). Nothing is written outside the inbox and ``state/addons/worklog/``:
+bookings are proposals, because a wrong one ends up on an invoice, and the worklog adds no task and
+proposes nothing for memory (B129).
 """
 
 from __future__ import annotations
@@ -49,13 +49,12 @@ DUE_AFTER = datetime.timedelta(hours=20)
 FACTS_FILE = "facts.json"
 VERDICT_FILE = "verdict.json"
 VERDICT_SKILL = "m2b:worklog-verdict"
-# The verdict's fence: its own two commands, read-only core commands, reports, memory and inbox,
-# and the one file it writes its verdict to.
+# The verdict's fence: its own two commands, the core's search, reports, memory and inbox, and the
+# one file it writes its verdict to.
 VERDICT_RULES = (
     "Bash(m2b-worklog facts *)",
     "Bash(m2b-worklog verdict *)",
     "Bash(m2b search *)",
-    "Bash(m2b tasks list *)",
     "Bash(m2b curate report *)",
     "Read(<store>/memory/**)",
     "Read(<store>/inbox/**)",
@@ -93,7 +92,7 @@ def run(paths: WorklogPaths, core: Core, now: datetime.datetime, sources: Source
     folder = store / STATE_DIR
     intent = read_intent(folder)
     if intent is not None:
-        return "worklog: resumed; " + carry_out(store, intent, core)
+        return "worklog: resumed; " + carry_out(store, intent)
     watermark = facts.read_watermark(store)
     if watermark is not None and now - watermark < DUE_AFTER:
         return f"worklog: not due, the last one ended {watermark.isoformat(timespec='minutes')}"
@@ -116,30 +115,22 @@ def run(paths: WorklogPaths, core: Core, now: datetime.datetime, sources: Source
         # The facts hold the owner's prompts; once judged, or not, they are not kept on disk.
         clear_handed(paths)
     plan = writeup.build(collected, judged, language)
-    intent = {"version": INTENT_VERSION, "plan": plan.as_json(), "proposed": []}
+    intent = {"version": INTENT_VERSION, "plan": plan.as_json()}
     _write_intent(folder, intent)
-    return "worklog: " + carry_out(store, intent, core)
+    return "worklog: " + carry_out(store, intent)
 
 
-def carry_out(store: Path, intent: dict[str, Any], core: Core) -> str:
+def carry_out(store: Path, intent: Mapping[str, Any]) -> str:
     folder = store / STATE_DIR
     plan = writeup.Plan.from_json(intent["plan"])
     wrote_note = _write_note(store, plan)
     added = ledger.add(folder, plan.period_id, plan.start, plan.end, plan.spans)
     ledger.export(folder)
-    proposed: list[str] = intent["proposed"]
-    for text in plan.candidates:
-        if text in proposed:
-            continue
-        core.propose(text)
-        proposed.append(text)
-        _write_intent(folder, intent)
     _move_watermark(folder, plan)
     (folder / INTENT).unlink()
     parts = [
         f"note {'written' if wrote_note else 'already there'}: inbox/{plan.note_name}",
         f"{len(plan.spans)} spans {'added to' if added else 'already in'} the ledger",
-        f"{len(plan.candidates)} candidates proposed",
     ]
     return ", ".join(parts)
 
@@ -192,8 +183,6 @@ def read_intent(folder: Path) -> dict[str, Any] | None:
     try:
         intent: Any = json.loads(path.read_text(encoding="utf-8"))
         writeup.Plan.from_json(intent["plan"])
-        if not isinstance(intent["proposed"], list):
-            raise TypeError("proposed is not a list")
     except (OSError, ValueError, KeyError, TypeError) as error:
         raise DailyError(
             f"the unfinished worklog {STATE_DIR}/{INTENT} cannot be read ({error}); repair it by hand: "

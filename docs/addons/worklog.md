@@ -9,8 +9,10 @@ is where it sees which workspace is in use and when an agent works. It is one of
 Once a day it writes a worklog of your sessions: for each session its topic and state, time spans
 per sphere of work, and booking proposals for billable spheres. The note lands in the inbox like any
 capture and is filed into the archive by the same run, so the distillate's Current section sees your
-day. The time spans also go into a ledger in the store, with CSV and XLSX exports. It may propose a
-fact for memory as a "Remember? ..." task; tick it and the next run files it.
+day. The time spans also go into a ledger in the store, with CSV and XLSX exports. It proposes
+nothing for your memory and adds no task: what your sessions hold for memory is proposed by the
+curation run's own [reading of your sessions](../curation.md#reading-your-sessions), once you
+turned that on.
 
 ## Spheres
 
@@ -138,9 +140,9 @@ midnight ends with the next date:
 - 2026-03-13 23:30-2026-03-14 00:00, 2026-03-14 10:00-10:50
 ```
 
-On a single date the times stand alone, as `10:00-10:50`. The model step proposes at most three
-memory candidates, and a topic, detail, note, candidate, project or activity is one line: a
-verdict that breaks either rule is refused and handed back to the model to fix.
+On a single date the times stand alone, as `10:00-10:50`. A topic, detail, note, project or
+activity is one line, and the verdict names the sessions and nothing else: one that breaks either
+rule is refused and handed back to the model to fix.
 
 ## The period
 
@@ -190,7 +192,10 @@ Claude Code transcripts for the period, the prompts (240 characters each) and th
 characters of each session's last answer, where a question to you stands; your own git commits and
 the `origin` remote in the session folders; and the names of the period's captures in the inbox. A
 prompt loses the blocks Claude Code adds to it, such as a `<system-reminder>`, before it is cut, and
-the summary Claude Code writes after a context cut counts as no prompt.
+the summary Claude Code writes after a context cut counts as no prompt. Neither does what Claude
+Code marks as sent by someone else than you: a plugin that drives the session, a finished task,
+another session. Its time still counts as work. A prompt without that mark, which a Claude Code
+before the mark writes, counts as yours.
 
 Prompts, answers and commit subjects are redacted before the model sees them: the value after a
 word such as password, `pw`, secret or token ("the password for the db is hunter2" becomes "the
@@ -204,8 +209,8 @@ short value with no such name before it goes through. With the name, the whole v
 next space goes, so the rest of a connection string after `AccountKey=` goes too. For work where
 that is not enough, see "Leaving work out". The facts wait in
 `~/.local/state/m2b/worklog-run/`, readable by you only, while the model step runs. Its model step, once a
-day, reads these facts, memory, the inbox notes and your task list, and may search the archive with
-`m2b search` to place a session. The transcripts are read from the `projects/` folder of Claude
+day, reads these facts and, to place a session, may read memory and the inbox notes and search the
+archive with `m2b search`. The transcripts are read from the `projects/` folder of Claude
 Code's own folder: the one `CLAUDE_CONFIG_DIR` names, or `~/.claude` when that variable is not set.
 
 ## What it writes
@@ -218,7 +223,6 @@ Code's own folder: the one `CLAUDE_CONFIG_DIR` names, or `~/.claude` when that v
 | `~/.local/state/m2b/worklog-run/` | while one worklog is being written: the facts, `verdict-draft.json`, which the model step writes and `m2b-worklog verdict` checks, and the accepted verdict |
 | `inbox/` in the store | the day's note, with `source: worklog` and `kind: worklog` |
 | `state/addons/worklog/` in the store | `ledger.json` (the record), `ledger.csv` and `ledger.xlsx` (rebuilt every day, not for editing), `watermark.json` (where the next period starts), `intent.json` (only while a worklog is being written, so a rerun after a crash finishes the same plan) |
-| the task list | "Remember? ..." candidates |
 
 The recorder writes only while the m2b plugin is installed and on in Claude Code and the switch says
 `on`. The worklog's session-start hook sets the switch: on while the worklog is on, this machine

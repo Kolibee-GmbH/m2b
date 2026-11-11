@@ -201,9 +201,10 @@ A capture with `source: candidate` is a fact the owner already confirmed: file i
 fact as it stands, without weighing it again.
 
 A capture with `kind: worklog` is the day's worklog, written by the worklog add-on from the
-owner's sessions. It holds no facts and no tasks to file: its proposals for memory are candidates
-already. Use its topics only for `## Current` (what the owner is working on now; replace a line
-about the same work instead of adding one), then note and move it like any capture.
+owner's sessions. It holds no facts and no tasks to file: a program wrote it from a model's
+judgement of the sessions, and nothing in it is something the owner asked to keep. Use its topics
+only for `## Current` (what the owner is working on now; replace a line about the same work instead
+of adding one), then note and move it like any capture.
 
 **Current.** Something going on right now (a trip being planned, a job being started) becomes a
 line under `## Current`, unless the capture has `quiet: true`; a quiet capture is filed, but

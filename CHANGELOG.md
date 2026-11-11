@@ -39,6 +39,19 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The worklog proposes nothing for your memory any more and adds no task. Its model step judged
+  prompts cut at 240 characters and proposed at most three facts a day, each as a task
+  "Remember? ..."; what your sessions hold for memory comes from the curation run's reading of
+  your sessions, once you turned it on, with your own words beside each proposal
+  ([docs/curation.md](docs/curation.md#reading-your-sessions)). The worklog keeps topics, time
+  spans and booking proposals. Its verdict names the sessions only, its note has no part
+  "Proposed for memory", and its model step no longer reads your task list. "Remember? ..." tasks
+  work as before for a fact proposed with `m2b tasks add --candidate`.
+- The worklog takes as your prompts only what you sent. What Claude Code marks as sent by a
+  plugin, a finished task or another session is no prompt in the facts its model step judges,
+  while its time still counts as work; before, a plugin that drives a session filled the session's
+  prompts with its own tasks. A prompt without the mark, from a Claude Code before the mark,
+  counts as yours.
 - The model's note tool runs without asking only for a note in your own words: every word of it
   stands in one prompt you submitted in the session, in any order, apart from additions of up to
   four words in square brackets. For any other note Claude Code asks, as it does for a tool no rule

@@ -233,22 +233,37 @@ was true until, such as an appointment. A step that fails is reported and the ru
 review task in your list says what needs you. [The curation run](docs/curation.md) lists its
 steps, the one-off runs for a distillate moved over from another tool, and the status line.
 
-### Memory candidates
+### What a run asks you
 
 A line under Current that no capture has touched for a month comes back as a task "Still
 current? ...": tick it and it stays; drop it in the band, or delete the task, and it leaves the
-distillate. The worklog add-on may propose a fact the same way, as "Remember? ...": tick it and the
-next run files it; drop it in the band, or delete the task, and it does not come back for 90 days.
+distillate.
+
+**Proposals from your sessions.** Much of what belongs in a second brain you say in passing,
+without "remember this": who runs what at a customer, what was agreed, what you promised by
+Friday. A curation run can read what you typed in Claude Code since the last reading and propose
+it, each proposal with your own words beside it. It is off until you say yes in setup
+(`curation.read_sessions` in the machine config), and nothing is filed before you say keep: in
+the band's pane, which `/m2b-proposals` opens, or with `m2b proposals`, `m2b proposals keep <id>`
+and `m2b proposals drop <id>`. Only the prompts you typed are read, with credentials redacted: no
+answer of Claude, no tool result, no pasted block, nothing a plugin or another agent sent, and no
+session in a folder you left out ([Reading your sessions](docs/curation.md#reading-your-sessions)).
+
+**Memory candidates.** `m2b tasks add --candidate "<a fact>"` proposes one fact as a task
+"Remember? ...", for a script or an integration of yours: tick it and the next run files it; drop
+it in the band, or delete the task, and it does not come back for 90 days.
 
 ## The band
 
 Above the prompt, [the band](docs/band.md) shows memory candidates and "Still current?" questions,
 each with keep and drop buttons you click with the mouse (a click waits 5 seconds with `undo`
-before it writes), and the open review task: the facts a run changed in one row, its other
+before it writes), one row that says how many proposals from your sessions wait, and the open
+review task: the facts a run changed in one row, its other
 findings, and `ok` to close it; below the prompt, a status
 line such as `3 in inbox · curated 18:02`. `/m2b-note <text>` notes a text into the inbox at once,
 without a model turn, also while one is working. `/m2b-review` opens a pane with the whole last
-curation run, and `/m2b-search <text>` shows search hits there. The model notes and searches
+curation run, `/m2b-proposals` shows the proposals from your sessions there, each with keep and
+drop, and `/m2b-search <text>` shows search hits. The model notes and searches
 through two tools of the mod, `mcp__m2b__note` and `mcp__m2b__search`, without a shell call. The
 band is part of m2b and starts once m2b is set up. It is a mod, so it needs mods on in Claude Code; `m2b doctor` says
 whether the latest session ran it, and why not.
@@ -274,8 +289,9 @@ m2b addons off worklog
 
 **The model.** Only a curation run calls a model, and only for a step with something to read:
 ingest for new captures, refresh for a fact past its day, lint for a broken link in memory with
-exactly one candidate, and the worklog's verdict once a day while that add-on is on, unless the day
-had no sessions. Each step runs with `curation.model` (`haiku` by default; setup offers `sonnet`
+exactly one candidate, the reading of your sessions once in a run while it is on and you typed
+something since the last reading, and the worklog's verdict once a day while that add-on is on,
+unless the day had no sessions. Each step runs with `curation.model` (`haiku` by default; setup offers `sonnet`
 for more careful filing at a higher cost) and stops after `curation.max_turns` turns;
 `curation.max_budget_usd`, unset by default, caps its spending. It runs on your Claude Code login
 and is billed like your sessions.
@@ -283,15 +299,17 @@ and is billed like your sessions.
 **What reaches the model.** In a curation step: what the step's rules allow, nothing else. Ingest
 and lint read the captures and memory files; refresh reads the distillate, the fact files that are
 due and any archive file; sorting reads memory. Ingest, lint, `--refresh-all` and the worklog step
-also get `m2b search` results over inbox, archive and memory. With the worklog add-on, its step sees
-the period's prompts and last answers, commits and session folders, the inbox, memory and your task list (below). In every session:
+also get `m2b search` results over inbox, archive and memory. The reading of your sessions sends
+the distillate and, per session, its folder, its day and the prompts you typed, redacted, to a
+model that can call nothing. With the worklog add-on, its step sees the period's prompts and last
+answers, commits and session folders, the inbox and memory (below). In every session:
 the distillate, the routing rule and the notices at session start; before a prompt that names a
 topic, that topic's facts.
 
 **What the worklog reads** (only while on, only on the curating machine): the herdr events its
 recorder writes to `~/.local/state/m2b/worklog/`, the prompts and the end of each session's last
 answer from your Claude Code transcripts for the period (with credentials and long tokens
-redacted), your own git commits (their subjects redacted the same way), and the inbox. Of the
+redacted, and without a prompt a plugin, a finished task or another session sent), your own git commits (their subjects redacted the same way), and the inbox. Of the
 folders you tell it to leave out it keeps nothing; its model step may also search the archive. Its
 ledger with time spans and booking proposals lands in the store under `state/addons/worklog/`.
 A time span is when a workspace was in use: an agent at work (up to 30 minutes past its last sign

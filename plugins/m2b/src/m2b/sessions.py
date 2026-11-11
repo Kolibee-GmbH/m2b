@@ -38,13 +38,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from m2b.claude_code import PROMPT_BLOCK
+from m2b.claude_code import HUMAN, PROMPT_BLOCK, sender_of
 from m2b.redaction import redact
 
 PROMPT_LENGTH = 2000
 
 _HEADLESS = "sdk-cli"
-_HUMAN = "human"
 _SUGGESTION = "suggestion_accepted"
 # What Claude Code writes into the transcript when the person stops a turn.
 _INTERRUPTED = "[Request interrupted"
@@ -210,12 +209,11 @@ def _take(record: Mapping[str, Any], moment: datetime.datetime, reading: _Readin
     text = _text_of(message.get("content") if isinstance(message, dict) else None)
     if text is None:
         return False
-    origin = record.get("origin")
-    sender = origin.get("kind") if isinstance(origin, dict) else None
+    sender = sender_of(record)
     source = record.get("promptSource")
     # A slash command's record names no source; a typed prompt that starts with the tags has one.
     command = _COMMAND.match(text) if source is None else None
-    if sender not in (None, _HUMAN):
+    if sender not in (None, HUMAN):
         reading.sent_by_others += 1
     elif command is not None:
         reading.prompts.append(Prompt(moment, f"/{command.group(1)}"))

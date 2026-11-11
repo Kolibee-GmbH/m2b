@@ -181,7 +181,7 @@ answer file.
 | `corpus/` | ingest, the journal | the journal (appends to the month's file) | lint, only conflict copies identical to their original |
 | `memory/` | ingest | ingest, refresh, the sorting step, a migration after an update, harvest (only `## Current`, from "Still current?" answers), lint (a broken link it repairs) | nobody |
 | `state/core/` | the curation run; any client adds an answer to a proposal under `proposal-answers/` | the curating machine | harvest prunes settled candidates and removes the answers it settled; a reading of the sessions that asks the model removes the proposals answered 90 days ago or longer |
-| tasks (`tasks/` with the `markdown` backend, or the Reminders list) | you, integrations, capture (a follow-up), ingest, the curation run (review, candidates, "Still current?" questions, the task for waiting proposals) | you; the band ticks or drops a curator task; the curation run completes its review task when nothing needs you, and the task for waiting proposals when none waits | harvest and the refresh step, once a curator task is settled or its item is gone; you |
+| tasks (`tasks/` with the `markdown` backend, or the Reminders list) | you, integrations, capture (a follow-up), ingest, `m2b tasks add --candidate` (a memory candidate), the curation run (review, "Still current?" questions, the task for waiting proposals) | you; the band ticks or drops a curator task; the curation run completes its review task when nothing needs you, and the task for waiting proposals when none waits | harvest and the refresh step, once a curator task is settled or its item is gone; you |
 | `state/addons/<a>/`, `state/integrations/<i>/` | that add-on or integration | the same | the same |
 
 Nothing captured is ever deleted by m2b.

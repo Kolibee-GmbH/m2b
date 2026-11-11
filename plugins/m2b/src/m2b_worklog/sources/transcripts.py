@@ -7,8 +7,14 @@ Claude Code wraps around them and the summaries it writes after a context cut, k
 are redacted and cut short. The last answer is the end of the last reply, where a question to the
 owner stands.
 
-How they are redacted is in the core's ``m2b.redaction``; which blocks are Claude Code's is in its
-``m2b.claude_code``.
+A prompt is the owner's unless Claude Code marks it as sent by someone else: a plugin that drives
+the session, a finished task, another session. Such a record is no prompt, and its time still is a
+sign of work. A prompt without the mark, which an older Claude Code writes, counts as the owner's:
+the worklog asks what a session was about, and a prompt too many costs less there than a session
+without any (B130). A suggested prompt the owner accepted counts as well, because they sent it.
+
+How they are redacted is in the core's ``m2b.redaction``; which blocks are Claude Code's and how
+it marks the sender is in its ``m2b.claude_code``.
 """
 
 from __future__ import annotations
@@ -21,7 +27,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from m2b.claude_code import PROMPT_BLOCK
+from m2b.claude_code import HUMAN, PROMPT_BLOCK, sender_of
 from m2b.redaction import redact
 
 from m2b_worklog.sources import SourceState
@@ -158,7 +164,7 @@ def _read(
                 continue
             stamps.append(moment)
             message: dict[str, Any] = record["message"] if isinstance(record.get("message"), dict) else {}
-            if record["type"] == "user" and not record.get("isMeta") and not record.get("isCompactSummary"):
+            if record["type"] == "user" and _is_the_owners(record):
                 text = prompt_text(message.get("content"))
                 if text is not None:
                     prompts.append(Prompt(moment, text))
@@ -167,6 +173,12 @@ def _read(
     if cwd is None or not (stamps or earlier):
         return None
     return Transcript(session_id, cwd, prompts, stamps, answer, earlier)
+
+
+def _is_the_owners(record: Mapping[str, Any]) -> bool:
+    if record.get("isMeta") or record.get("isCompactSummary"):
+        return False
+    return sender_of(record) in (None, HUMAN)
 
 
 def _time(value: object) -> datetime.datetime | None:

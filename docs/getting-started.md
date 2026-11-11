@@ -72,10 +72,26 @@ nor a model. Both end with a first capture, a curation run and a first search.
 
 From the next session on, while Claude Code has mods on, [the band](band.md) above the prompt
 shows what curation asks you to keep or drop, and `m2b doctor` says whether it ran. With it come
-`/m2b-note <text>`, which notes a text at once without a model turn, `/m2b-review` and
-`/m2b-search <text>`, which show the last curation run and search hits in a pane, and two tools
-through which the model notes and searches without a shell call. The worklog add-on is off until
-its own setup skill turns it on; [Add-ons](addons.md) describes it.
+`/m2b-note <text>`, which notes a text at once without a model turn, `/m2b-review`,
+`/m2b-proposals` and `/m2b-search <text>`, which show the last curation run, the proposals from
+your sessions and search hits in a pane, and two tools through which the model notes and searches
+without a shell call. The worklog add-on is off until its own setup skill turns it on;
+[Add-ons](addons.md) describes it.
+
+Setup asked, on the machine that curates, whether curation runs may read your sessions. It is off
+until you say yes there, or later with `m2b config set curation.read_sessions true`. With a yes, a
+run reads what you typed in Claude Code since the last reading, and only that: no answer of Claude,
+no tool result, no pasted block, nothing a plugin or another agent sent. A model proposes from it what belongs in your memory
+although you never said "remember this", each proposal with your own words, and nothing is filed
+before you keep it: `/m2b-proposals` in a session, or from a terminal:
+
+```bash
+m2b proposals
+m2b proposals keep <id>
+m2b proposals drop <id>
+```
+
+[Reading your sessions](curation.md#reading-your-sessions) says what is read and where it goes.
 
 ## From the command line, without Claude Code
 

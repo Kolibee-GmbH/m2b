@@ -628,7 +628,6 @@ class VerdictSchemaTest(unittest.TestCase):
                     "blocks": {"b1": {"customer": "Globex", "activity": "development"}, "b2": None},
                 }
             ],
-            "candidates": [{"text": "Dana reviews the export on Fridays", "session": "workspace:w1:"}],
         }
 
         self.assertEqual(schema.check(verdict, verdict_schema), [])
@@ -1181,6 +1180,68 @@ class WhatLeavesATranscriptTest(Fixture):
                     ]
                 )
                 self.assertEqual([prompt.text for prompt in found.prompts], ["Fix the export"])
+
+
+class WhoSentAPromptTest(Fixture):
+    """Claude Code marks on every prompt who sent it; the worklog gives the owner's."""
+
+    def prompts_of(self, *records: dict[str, Any]) -> list[str]:
+        self.transcript("s1", self.repo, list(records))
+        [found] = read_transcripts(self.projects, at(9), NOW).transcripts
+        self.assertEqual(len(found.stamps), len(records))
+        return [prompt.text for prompt in found.prompts]
+
+    def sent(self, minute: int, text: str, **mark: Any) -> dict[str, Any]:
+        return {"type": "user", "timestamp": f"2026-03-14T09:{minute:02d}:00Z", "message": {"content": text}, **mark}
+
+    def test_what_another_sender_sent_is_no_prompt_and_still_a_sign_of_work(self) -> None:
+        """Covers: B130"""
+        found = self.prompts_of(
+            self.sent(1, "Fix the invoice export", origin={"kind": "human"}, promptSource="typed"),
+            self.sent(2, "Build the next step of the plan", origin={"kind": "plugin"}, promptSource="system"),
+            self.sent(3, "The background tests finished", origin={"kind": "task-notification"}),
+            self.sent(4, "Another session asks for the schema", origin={"kind": "peer"}),
+            self.sent(5, "A sender this version does not know", origin={"kind": 7}),
+        )
+
+        self.assertEqual(found, ["Fix the invoice export"])
+
+    def test_a_prompt_typed_while_claude_was_busy_or_accepted_from_a_suggestion_is_the_owners(self) -> None:
+        """Covers: B130"""
+        found = self.prompts_of(
+            self.sent(1, "Also round per line", origin={"kind": "human"}, promptSource="queued"),
+            self.sent(2, "Run the tests", origin={"kind": "human"}, promptSource="suggestion_accepted"),
+        )
+
+        self.assertEqual(found, ["Also round per line", "Run the tests"])
+
+    def test_a_prompt_without_the_mark_counts_as_the_owners(self) -> None:
+        """Covers: B130"""
+        found = self.prompts_of(
+            self.sent(1, "Fix the invoice export"),
+            self.sent(2, "Then the totals", origin=None),
+            self.sent(3, "And the footer", origin={}),
+        )
+
+        self.assertEqual(found, ["Fix the invoice export", "Then the totals", "And the footer"])
+
+    def test_a_session_only_another_sender_prompted_needs_fifteen_minutes_of_work(self) -> None:
+        """Covers: B130"""
+        self.projects.mkdir(parents=True)
+        # git log fails in a repository without a commit, which would keep every session.
+        self.commit("chore: start", at(9) - datetime.timedelta(days=1))
+        self.watermark(at(9))
+        self.cache(
+            {"w1": [{"repo": "invoices", "label": "invoices", "folder": str(self.repo), "since": at(8).isoformat()}]}
+        )
+        self.events("w1", (at(10), "agent_working", "p1"), (at(10, 14), "agent_stopped", "p1"))
+        for sender, named in (("plugin", []), ("human", ["w1"])):
+            with self.subTest(sender=sender):
+                self.transcript("s1", self.repo, [self.sent(5, "Build the next step", origin={"kind": sender})])
+
+                found = self.collect()
+
+                self.assertEqual([s["workspace"] for s in found["sessions"]], named)
 
 
 class TimesTest(Fixture):

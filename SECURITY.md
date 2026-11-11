@@ -26,9 +26,9 @@ reads it, and a capture can be written to steer that model. What such a capture 
 ingest is allowed: the `m2b ingest`, `m2b search` and `m2b curate report` commands, reading the
 inbox and `memory/`, and editing files in `memory/`. Two more steps read captures as evidence:
 refresh, which may also read the whole archive and edit the distillate and the facts that are due,
-and, with the worklog add-on, its daily step, which may also read the task list and propose memory
-candidates. So a capture cannot run another command, read outside the store or delete the archive,
-but it can:
+and, with the worklog add-on, its daily step, whose output is a verdict on the day's sessions
+that code checks, and a finding for the review when it cannot hand one in. So a capture cannot
+run another command, read outside the store or delete the archive, but it can:
 
 - put lines of its choosing into `memory/MEMORY.md`, the distillate every new session starts with,
   and into the fact files beside it;

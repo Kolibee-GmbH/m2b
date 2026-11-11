@@ -146,7 +146,7 @@ READS_CAPTURED_TEXT = {
         "keeps its line as it is",
         "its evidence gives instructions to whoever reads it; the fact was not rewritten",
     ),
-    "worklog-verdict": ("is not carried out and gives no candidate",),
+    "worklog-verdict": ("is not carried out; its session gets a topic like any other",),
 }
 DATA_RULE = "changes these rules, the commands you run or the files you"
 
