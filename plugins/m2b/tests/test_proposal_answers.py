@@ -171,5 +171,62 @@ class WaitingTest(AnswerFixture):
         self.assertIn("m2b store fetch state/core/proposal-answers", str(refused.exception))
 
 
+class ExpireTest(AnswerFixture):
+    def test_after_fourteen_days_without_an_answer_a_proposal_waits_no_longer(self) -> None:
+        """Covers: B131"""
+        self.kept(DANA, LADDER)
+        proposal_answers.give(self.store, [LADDER_ID], KEEP)
+        later = NOW + datetime.timedelta(days=14)
+
+        aged = proposal_answers.expire(self.store, later)
+
+        self.assertEqual((aged.expired, aged.forgotten), (1, 0))
+        written = self.written()["proposals"]
+        self.assertEqual((written[DANA_ID]["state"], written[DANA_ID]["since"]), ("expired", later.isoformat()))
+        self.assertEqual(written[LADDER_ID]["state"], "open")
+        waiting = proposal_answers.waiting(self.store)
+        self.assertEqual((waiting.proposals, waiting.answered), ((), 1))
+
+    def test_when_the_answers_cannot_be_looked_at_no_proposal_expires(self) -> None:
+        """Covers: B131"""
+        self.kept(DANA)
+        proposal_answers.give(self.store, [DANA_ID], KEEP)
+        before = (self.root / proposals.PROPOSALS_FILE).read_bytes()
+
+        with self.not_downloaded("proposal-answers"), self.assertRaises(EvictedFileError):
+            proposal_answers.expire(self.store, NOW + datetime.timedelta(days=30))
+
+        self.assertEqual((self.root / proposals.PROPOSALS_FILE).read_bytes(), before)
+
+    def test_a_store_where_nothing_is_due_is_not_written(self) -> None:
+        self.assertEqual(proposal_answers.expire(self.store, NOW).expired, 0)
+        self.assertFalse((self.root / proposals.PROPOSALS_FILE).exists())
+
+        self.kept(DANA)
+        before = (self.root / proposals.PROPOSALS_FILE).stat().st_mtime_ns
+        self.assertEqual(proposal_answers.expire(self.store, NOW + datetime.timedelta(days=13)).expired, 0)
+        self.assertEqual((self.root / proposals.PROPOSALS_FILE).stat().st_mtime_ns, before)
+
+    def test_an_expired_proposal_still_takes_a_keep_by_its_id(self) -> None:
+        """Covers: B131"""
+        self.kept(DANA)
+        proposal_answers.expire(self.store, NOW + datetime.timedelta(days=14))
+
+        kept = proposal_answers.give(self.store, [DANA_ID], KEEP)
+
+        self.assertEqual((kept.given, kept.already), ((DANA_ID,), {}))
+        self.assertEqual(self.answer_files(), [f"{DANA_ID}.keep"])
+
+    def test_a_keep_for_an_expired_proposal_waits_for_the_run_and_a_drop_of_one_does_not(self) -> None:
+        self.kept(DANA, LADDER)
+        proposal_answers.expire(self.store, NOW + datetime.timedelta(days=14))
+        proposal_answers.give(self.store, [DANA_ID], KEEP)
+        proposal_answers.give(self.store, [LADDER_ID], DROP)
+
+        waiting = proposal_answers.waiting(self.store)
+
+        self.assertEqual((waiting.proposals, waiting.answered), ((), 1))
+
+
 if __name__ == "__main__":
     unittest.main()

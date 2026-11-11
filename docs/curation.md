@@ -90,8 +90,8 @@ session its folder, its day and its prompts. It answers with proposals of four k
 agreement, a commitment and something personal, each with the words of yours it stands on. Code
 keeps a proposal only when those words stand in one prompt of the session it names, with at least
 three words, and when you did not capture the same thing in that time. A proposal like one that
-waits, or like one you kept or dropped within 90 days, is not kept a second time, so reading a
-period again adds nothing.
+waits, or like one you kept or dropped or that expired within 90 days, is not kept a second time,
+so reading a period again adds nothing.
 
 **Your answer.** `m2b proposals` lists what waits, each with its id, its kind, the text, your words
 and the day you said them:
@@ -117,6 +117,26 @@ however many there are; its notes say how many wait, so a phone shows that somet
 task is no answer: completing or deleting it keeps and drops nothing. Every curation run brings
 the number up to date, whether or not it reads the sessions, and completes the task once nothing
 waits. A task you completed or deleted comes back only when a proposal was added since.
+
+**Without an answer.** A proposal you did not answer within 14 days expires: it leaves the
+listing, the task and the band's row, and is not proposed again for 90 days. It does not count as
+dropped. While it is remembered, `m2b proposals keep <id>` still keeps it. Every curation run lets
+proposals expire and removes those kept, dropped or expired 90 days ago, whether or not it reads
+the sessions.
+
+**How much you keep.** `m2b status` says what share you kept of the proposals you answered in the
+last 30 days, and how many expired in that time:
+
+```text
+proposals: kept 7 of 10 answered in the last 30 days (70%), 2 expired without an answer
+```
+
+Expired proposals are not part of the share, and without an answer in the 30 days the line says
+so instead of 0%. `m2b status --json` holds the same under `proposal_answers`, and with it the
+counts per kind since the first reading: how many were proposed, kept, dropped and expired, and how
+many were refused because the words they quote do not stand, with at least three words, in a
+prompt of the session they name. m2b does nothing with these numbers: they are there for you to
+see whether the reading proposes what you want, and `curation.read_sessions` stays your switch.
 
 **When it fails.** A transcripts folder m2b cannot look at, a model without an answer or an answer
 it cannot read fails the step alone: the review says so, nothing is saved, and the next run reads

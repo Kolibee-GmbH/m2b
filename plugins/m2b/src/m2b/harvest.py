@@ -22,7 +22,6 @@ cannot tell, so it captures nothing of that kind and drops no candidate this run
 
 from __future__ import annotations
 
-import dataclasses
 import datetime
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
@@ -178,36 +177,45 @@ def _settle_proposals(store: Store, tasks: Tasks, now: datetime.datetime, report
         return
     if kept is None:
         return
-    entries = dict(kept.entries)
+    current = kept
     to_keep = [
         key
         for key, answer in answers.items()
-        if answer == proposal_answers.KEEP and key in entries and entries[key].state == proposals.OPEN
+        if answer == proposal_answers.KEEP and key in current.entries and _takes(current.entries[key], answer)
     ]
-    since = min((entries[key].since for key in to_keep), default=None)
+    since = min((current.entries[key].since for key in to_keep), default=None)
     earlier = _earlier(store, since - CLOCK_MARGIN if since else None, PROPOSAL_SOURCE, keys.FROM_PROPOSAL)
     report.problems += _uncertain(earlier, "proposal", "kept proposals")
     settled: list[str] = []
     try:
         for key, answer in sorted(answers.items()):
-            entry = entries.get(key)
-            if entry is None or entry.state != proposals.OPEN:
+            entry = current.entries.get(key)
+            if entry is None or not _takes(entry, answer):
                 # Settled by an earlier run that could not remove the file, or never known: only the file goes.
                 settled.append(key)
             elif answer == proposal_answers.DROP:
-                entries[key] = dataclasses.replace(entry, state=proposals.DROPPED, since=now)
+                current = proposals.settled(current, key, proposals.DROPPED, now)
                 report.dropped.append(entry.text)
                 settled.append(key)
             elif key in earlier.ids or earlier.certain:
                 if key not in earlier.ids:
                     _capture_proposal(store, tasks, key, entry, now, report)
-                entries[key] = dataclasses.replace(entry, state=proposals.KEPT, since=now)
+                current = proposals.settled(current, key, proposals.KEPT, now)
                 settled.append(key)
     finally:
-        if entries != kept.entries:
-            proposals.save(store, dataclasses.replace(kept, entries=entries))
+        if current != kept:
+            proposals.save(store, current)
     for key in settled:
         proposal_answers.remove(store, key)
+
+
+def _takes(entry: proposals.Entry, answer: str) -> bool:
+    """An open proposal takes either answer. An expired one can still be kept: it never had an
+    answer, and a keep that reached the store late, from a machine that had not seen it expire,
+    must not be lost. A drop of it changes nothing."""
+    if entry.state == proposals.EXPIRED:
+        return answer == proposal_answers.KEEP
+    return entry.state == proposals.OPEN
 
 
 def _capture_proposal(

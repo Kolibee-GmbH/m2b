@@ -332,8 +332,8 @@ kept for five minutes, so at most every five minutes the answer waits for the ca
 for at most 10 seconds whatever `calendar.timeout_seconds` says; a calendar that does not answer
 by then is reported as not reachable. `--tasks-only` leaves `proposals` and `status` out.
 
-`proposals` lists what a reading of your sessions proposed and you have not answered, the
-earliest said first, and in `answered` how many answers wait for the next curation run. When
+`proposals` lists what a reading of your sessions proposed and still waits for your answer (one
+without an answer for 14 days no longer does), the earliest said first, and in `answered` how many answers wait for the next curation run. When
 that cannot be looked at (the proposals file or the answers folder is not downloaded, a newer m2b
 wrote the proposals file, the store is out of reach), `proposals` is `{"error": "<why>"}` and the
 other parts still answer. An entry of the proposals file that is not in the form, or holds half a

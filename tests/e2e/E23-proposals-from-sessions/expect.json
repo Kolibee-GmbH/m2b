@@ -17,7 +17,7 @@
     },
     {
       "path": "state/core/proposals.json",
-      "content": "\\{\\n  \"format\": 1,\\n  \"read_until\": \"[^\"\\n]+\",\\n  \"announced_until\": \"[^\"\\n]+\",\\n  \"proposals\": \\{\\n    \"[0-9a-f]{12}\": \\{\\n      \"kind\": \"person\",\\n      \"text\": \"Dana is head of IT at Northwind\\.\",\\n      \"quote\": \"Dana runs IT at Northwind\",\\n      \"topic\": null,\\n      \"due\": null,\\n      \"day\": \"\\d{4}-\\d{2}-\\d{2}\",\\n      \"state\": \"kept\",\\n      \"since\": \"[^\"\\n]+\"\\n    \\}\\n  \\}\\n\\}\\n"
+      "content": "\\{\\n  \"format\": 1,\\n  \"read_until\": \"[^\"\\n]+\",\\n  \"announced_until\": \"[^\"\\n]+\",\\n  \"counts\": \\{\\n    \"person\": \\{\\n      \"proposed\": 1,\\n      \"kept\": 1,\\n      \"dropped\": 0,\\n      \"expired\": 0,\\n      \"not_quoted\": 0\\n    \\},\\n    \"agreement\": \\{\\n      \"proposed\": 0,\\n      \"kept\": 0,\\n      \"dropped\": 0,\\n      \"expired\": 0,\\n      \"not_quoted\": 0\\n    \\},\\n    \"commitment\": \\{\\n      \"proposed\": 0,\\n      \"kept\": 0,\\n      \"dropped\": 0,\\n      \"expired\": 0,\\n      \"not_quoted\": 0\\n    \\},\\n    \"personal\": \\{\\n      \"proposed\": 0,\\n      \"kept\": 0,\\n      \"dropped\": 0,\\n      \"expired\": 0,\\n      \"not_quoted\": 0\\n    \\}\\n  \\},\\n  \"proposals\": \\{\\n    \"[0-9a-f]{12}\": \\{\\n      \"kind\": \"person\",\\n      \"text\": \"Dana is head of IT at Northwind\\.\",\\n      \"quote\": \"Dana runs IT at Northwind\",\\n      \"topic\": null,\\n      \"due\": null,\\n      \"day\": \"\\d{4}-\\d{2}-\\d{2}\",\\n      \"state\": \"kept\",\\n      \"since\": \"[^\"\\n]+\"\\n    \\}\\n  \\}\\n\\}\\n"
     },
     {
       "path": "state/core/last-run.json",

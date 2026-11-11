@@ -2,7 +2,8 @@
 hanging or failed run at once.
 
 Inbox count, the run record, whether a run is due (only on the curating machine, the only one
-where that question has an answer), and whether the backends can be reached. The backend probes
+where that question has an answer), whether the backends can be reached, and, where sessions are
+read for proposals or were, how many of the proposals the person kept lately. The backend probes
 start other programs, so their answer is kept for 5 minutes in the machine state; the rest is read
 fresh. Each part that cannot be looked at says why instead of disappearing.
 
@@ -14,10 +15,12 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import dataclasses
 import datetime
 import json
 from typing import Any
 
+from m2b import proposals
 from m2b.addons import ADDONS, is_on
 from m2b.atomic_file import replace_atomically
 from m2b.commands import Context
@@ -30,6 +33,7 @@ from m2b.config.machine import MachineConfig, load_machine_config
 from m2b.config.store_settings import describe_format, format_state, load_store_settings
 from m2b.curate import machine_state
 from m2b.curate.due import check_due
+from m2b.glean import KINDS
 from m2b.notes.layout import INBOX
 from m2b.paths import MachinePaths
 from m2b.run_record import RUNNING, RunRecordError, is_interrupted, load_run_record
@@ -81,6 +85,9 @@ def status_answer(config: MachineConfig, context: Context, tasks_check: Check | 
     checked_at, backends = _backends(config, context, now, tasks_check)
     answer["backends"] = backends
     answer["backends_checked_at"] = checked_at
+    answers = _proposal_answers(store, config, now)
+    if answers is not None:
+        answer["proposal_answers"] = answers
     return answer
 
 
@@ -129,6 +136,31 @@ def _run(store: Store, machine: MachinePaths, this_machine: str, now: datetime.d
     if record.message:
         run["message"] = record.message
     return run
+
+
+def _proposal_answers(store: Store, config: MachineConfig, now: datetime.datetime) -> dict[str, Any] | None:
+    """How the proposals from the sessions ended lately, and the counts per kind since the first one.
+
+    None, so the part is left out, on a machine that reads no sessions in a store that never held a
+    proposal: there the part would say nothing to anyone. ``keep_rate`` is null without an answer
+    in the period, which is not a rate of 0.
+    """
+    try:
+        current = proposals.load(store)
+    except (ConfigError, proposals.ProposalsError, StoreError) as error:
+        return {"error": str(error)}
+    if not (config.curation.read_sessions or current.entries or current.counts):
+        return None
+    outcomes = proposals.outcomes_since(current, now - proposals.KEEP_RATE_PERIOD)
+    rate = outcomes.keep_rate
+    return {
+        "days": proposals.KEEP_RATE_PERIOD.days,
+        "kept": outcomes.kept,
+        "dropped": outcomes.dropped,
+        "expired": outcomes.expired,
+        "keep_rate": None if rate is None else round(rate, 2),
+        "counts": {kind: dataclasses.asdict(current.tally(kind)) for kind in KINDS},
+    }
 
 
 def _last_attempt(machine: MachinePaths, run: dict[str, Any]) -> dict[str, str] | None:
@@ -191,8 +223,25 @@ def _print_text(answer: dict[str, Any]) -> None:
     store_format = answer.get("store_format")
     if store_format is not None:
         print(f"store format: {store_format['state']} ({store_format['detail']})")
+    answers = answer.get("proposal_answers")
+    if answers is not None:
+        print(f"proposals: {_proposal_answers_text(answers)}")
     on = [name for name, is_addon_on in answer["addons"].items() if is_addon_on]
     print(f"add-ons on: {', '.join(on) if on else 'none'}")
+
+
+def _proposal_answers_text(answers: dict[str, Any]) -> str:
+    if "error" in answers:
+        return f"could not look: {answers['error']}"
+    answered = answers["kept"] + answers["dropped"]
+    if answered:
+        text = (
+            f"kept {answers['kept']} of {answered} answered in the last {answers['days']} days "
+            f"({round(100 * answers['kept'] / answered)}%)"
+        )
+    else:
+        text = f"no answer in the last {answers['days']} days"
+    return text + (f", {answers['expired']} expired without an answer" if answers["expired"] else "")
 
 
 def _iso(moment: datetime.datetime) -> str:

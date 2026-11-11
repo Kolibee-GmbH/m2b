@@ -11,11 +11,15 @@ still counts. An answers folder that is not downloaded cannot be listed, and the
 what is answered: that raises, it never reads as "no answer yet". Where a keep and a drop for the
 same proposal meet, from two machines that did not see each other, keep stands: a fact kept by
 mistake can be removed, one dropped by mistake is gone.
+
+A proposal nobody answered for 14 days expires (``expire``, in every curation run) and waits no
+longer. It has no answer, so a keep by its id is still taken while the store remembers it.
 """
 
 from __future__ import annotations
 
 import contextlib
+import datetime
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -42,7 +46,10 @@ class UnknownProposalError(Exception):
 
 @dataclass(frozen=True)
 class Waiting:
-    """The open proposals without an answer, the earliest said first, and how many answers wait for a run."""
+    """The open proposals without an answer, the earliest said first, and how many answers wait for a run.
+
+    A keep for an expired proposal is such an answer; a drop of one is not, since the run does nothing with it.
+    """
 
     proposals: tuple[tuple[str, Entry], ...]
     answered: int
@@ -83,7 +90,23 @@ def waiting(store: Store) -> Waiting:
     still_open = {key: entry for key, entry in entries.items() if entry.state == proposals.OPEN}
     unanswered = [(key, entry) for key, entry in still_open.items() if key not in answers]
     unanswered.sort(key=lambda item: (item[1].day, item[0]))
-    return Waiting(tuple(unanswered), len(still_open) - len(unanswered))
+    kept_late = sum(
+        1 for key, entry in entries.items() if entry.state == proposals.EXPIRED and answers.get(key) == KEEP
+    )
+    return Waiting(tuple(unanswered), len(still_open) - len(unanswered) + kept_late)
+
+
+def expire(store: Store, now: datetime.datetime) -> proposals.Aged:
+    """Lets time pass for the proposals (``proposals.aged``) and says how many expired and were forgotten.
+
+    The answers are looked at first: when they cannot be, this raises and no proposal expires.
+    A store in which nothing is due is not written.
+    """
+    answers = read(store)
+    aged = proposals.aged(proposals.load(store), answers.keys(), now)
+    if aged.expired or aged.forgotten:
+        proposals.save(store, aged.proposals)
+    return aged
 
 
 def give(store: Store, proposal_ids: Sequence[str], answer: str) -> Given:

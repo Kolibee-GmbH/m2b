@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import json
 import tempfile
@@ -11,7 +12,7 @@ from typing import Any
 
 from m2b import proposals
 from m2b.config.errors import ConfigError
-from m2b.glean import Proposal
+from m2b.glean import KINDS, Proposal
 from m2b.proposals import Said
 from m2b.store.folder import FolderStore
 from m2b.store.guard import DatalessGuard
@@ -25,8 +26,16 @@ LADDER = Proposal(
 )
 
 
+NOTHING_COUNTED = {"proposed": 0, "kept": 0, "dropped": 0, "expired": 0, "not_quoted": 0}
+
+
 def said(*found: Proposal) -> list[Said]:
     return [Said(proposal, DAY) for proposal in found]
+
+
+def counts(**per_kind: dict[str, int]) -> dict[str, dict[str, int]]:
+    """What the file holds under ``counts``: every kind, with the numbers named here and 0 for the rest."""
+    return {kind: {**NOTHING_COUNTED, **per_kind.get(kind, {})} for kind in KINDS}
 
 
 class ProposalsFixture(unittest.TestCase):
@@ -78,6 +87,7 @@ class KeepingTest(ProposalsFixture):
                 "format": 1,
                 "read_until": None,
                 "announced_until": None,
+                "counts": counts(person={"proposed": 1}, commitment={"proposed": 1}),
                 "proposals": dict(
                     sorted(
                         {
@@ -110,11 +120,13 @@ class KeepingTest(ProposalsFixture):
     def test_what_was_saved_is_what_is_loaded(self) -> None:
         added = self.kept(DANA, LADDER)
         read_until = NOW - datetime.timedelta(minutes=5)
-        proposals.save(self.store, proposals.Proposals(added.proposals.entries, read_until))
+        saved = dataclasses.replace(added.proposals, read_until=read_until)
+        proposals.save(self.store, saved)
 
         loaded = proposals.load(self.store)
 
-        self.assertEqual(loaded, proposals.Proposals(added.proposals.entries, read_until))
+        self.assertEqual(loaded, saved)
+        self.assertEqual(loaded.read_until, read_until)
         entry = loaded.entries[proposals.proposal_id(LADDER)]
         self.assertEqual((entry.due, entry.day, entry.state), (datetime.date(2026, 3, 6), DAY, proposals.OPEN))
 
@@ -231,6 +243,185 @@ class RefusingTest(ProposalsFixture):
         self.kept(LADDER, now=NOW + datetime.timedelta(days=91))
 
         self.assertEqual(list(self.written()["proposals"]), [proposals.proposal_id(LADDER)])
+
+
+class ExpiringTest(ProposalsFixture):
+    def aged(self, days: float, answered: tuple[str, ...] = ()) -> proposals.Aged:
+        return proposals.aged(proposals.load(self.store), answered, NOW + datetime.timedelta(days=days))
+
+    def test_an_open_proposal_without_an_answer_expires_after_fourteen_days(self) -> None:
+        """Covers: B131"""
+        self.kept(DANA)
+        dana = proposals.proposal_id(DANA)
+
+        early = self.aged(13.99)
+        late = self.aged(14)
+
+        self.assertEqual((early.expired, early.proposals.entries[dana].state), (0, proposals.OPEN))
+        entry = late.proposals.entries[dana]
+        self.assertEqual(late.expired, 1)
+        self.assertEqual((entry.state, entry.since), (proposals.EXPIRED, NOW + datetime.timedelta(days=14)))
+
+    def test_a_proposal_whose_answer_waits_for_a_run_does_not_expire(self) -> None:
+        """Covers: B131"""
+        self.kept(DANA, LADDER)
+        dana, ladder = proposals.proposal_id(DANA), proposals.proposal_id(LADDER)
+
+        aged = self.aged(20, answered=(dana,))
+
+        states = {key: entry.state for key, entry in aged.proposals.entries.items()}
+        self.assertEqual(states, {dana: proposals.OPEN, ladder: proposals.EXPIRED})
+        self.assertEqual(aged.expired, 1)
+
+    def test_an_expired_proposal_is_refused_for_ninety_days_by_its_id_and_by_its_text(self) -> None:
+        """Covers: B118"""
+        self.kept(DANA)
+        self.settle(proposals.proposal_id(DANA), proposals.EXPIRED)
+        said_again = Proposal("person", "Dana runs IT at Northwind.", "Dana is the one who runs IT there", "trip")
+
+        again = self.kept(DANA, said_again, now=NOW + datetime.timedelta(days=89))
+        after = self.kept(DANA, now=NOW + datetime.timedelta(days=90))
+
+        self.assertEqual((again.added, again.like_an_expired_one, again.like_a_dropped_one), (0, 2, 0))
+        self.assertEqual(again.added_before, 2)
+        self.assertEqual((after.added, after.like_an_expired_one), (1, 0))
+
+    def test_what_was_answered_or_expired_ninety_days_ago_is_forgotten_and_what_waits_is_not(self) -> None:
+        """Covers: B131"""
+        tea = Proposal("personal", "Alex drinks green tea.", "I only drink green tea", "kitchen")
+        offer = Proposal("commitment", "Send Dana the offer.", "I still have to send Dana the offer", "shed")
+        self.kept(DANA, LADDER, tea, offer)
+        for proposal, state in ((DANA, proposals.KEPT), (LADDER, proposals.DROPPED), (tea, proposals.EXPIRED)):
+            self.settle(proposals.proposal_id(proposal), state)
+
+        before = self.aged(89.99, answered=(proposals.proposal_id(offer),))
+        after = self.aged(90, answered=(proposals.proposal_id(offer),))
+
+        self.assertEqual(len(before.proposals.entries), 4)
+        self.assertEqual(list(after.proposals.entries), [proposals.proposal_id(offer)])
+        self.assertEqual((before.forgotten, after.forgotten, after.expired), (0, 3, 0))
+
+    def test_a_store_where_nothing_is_due_stays_as_it_is(self) -> None:
+        self.kept(DANA)
+        current = proposals.load(self.store)
+
+        self.assertEqual(proposals.aged(current, (), NOW + datetime.timedelta(days=1)).proposals, current)
+
+
+class CountingTest(ProposalsFixture):
+    def test_a_proposal_is_counted_for_its_kind_when_it_is_added_and_a_refused_one_is_not(self) -> None:
+        """Covers: B132"""
+        self.kept(DANA, LADDER)
+
+        self.kept(DANA, Proposal("person", "Kim Lee leads Acme's IT.", "Kim Lee leads Acme's IT", "shed"))
+
+        self.assertEqual(self.written()["counts"], counts(person={"proposed": 2}, commitment={"proposed": 1}))
+
+    def test_each_end_of_a_proposal_is_counted_once_for_its_kind(self) -> None:
+        """Covers: B132"""
+        tea = Proposal("personal", "Alex drinks green tea.", "I only drink green tea", "kitchen")
+        current = self.kept(DANA, LADDER, tea).proposals
+        later = NOW + datetime.timedelta(days=1)
+
+        current = proposals.settled(current, proposals.proposal_id(DANA), proposals.KEPT, later)
+        current = proposals.settled(current, proposals.proposal_id(LADDER), proposals.DROPPED, later)
+        current = proposals.aged(current, (), NOW + datetime.timedelta(days=14)).proposals
+        proposals.save(self.store, current)
+
+        self.assertEqual(
+            self.written()["counts"],
+            counts(
+                person={"proposed": 1, "kept": 1},
+                commitment={"proposed": 1, "dropped": 1},
+                personal={"proposed": 1, "expired": 1},
+            ),
+        )
+        entry = current.entries[proposals.proposal_id(DANA)]
+        self.assertEqual((entry.state, entry.since), (proposals.KEPT, later))
+
+    def test_a_proposal_kept_after_it_expired_is_counted_as_kept_and_no_longer_as_expired(self) -> None:
+        """Covers: B132"""
+        current = self.kept(DANA).proposals
+        expired = proposals.aged(current, (), NOW + datetime.timedelta(days=14)).proposals
+
+        kept = proposals.settled(
+            expired, proposals.proposal_id(DANA), proposals.KEPT, NOW + datetime.timedelta(days=15)
+        )
+
+        self.assertEqual(expired.tally("person"), proposals.Tally(proposed=1, expired=1))
+        self.assertEqual(kept.tally("person"), proposals.Tally(proposed=1, kept=1))
+
+    def test_an_end_the_file_never_counted_is_not_counted_below_nothing_when_it_changes(self) -> None:
+        self.kept(DANA)
+        self.settle(proposals.proposal_id(DANA), proposals.EXPIRED)
+        raw = self.written()
+        del raw["counts"]
+        self.write(raw)
+
+        kept = proposals.settled(proposals.load(self.store), proposals.proposal_id(DANA), proposals.KEPT, NOW)
+
+        self.assertEqual(kept.tally("person"), proposals.Tally(kept=1))
+
+    def test_what_the_quote_check_refused_is_counted_although_it_is_never_kept(self) -> None:
+        """Covers: B132"""
+        current = proposals.counted(proposals.load(self.store), "agreement", "not_quoted", 2)
+        proposals.save(self.store, proposals.counted(current, "agreement", "not_quoted"))
+
+        self.assertEqual(self.written()["counts"], counts(agreement={"not_quoted": 3}))
+        self.assertEqual(proposals.load(self.store).tally("agreement").not_quoted, 3)
+
+    def test_the_counts_outlast_the_proposals_they_counted(self) -> None:
+        """Covers: B132"""
+        self.kept(DANA)
+        current = proposals.settled(proposals.load(self.store), proposals.proposal_id(DANA), proposals.DROPPED, NOW)
+
+        aged = proposals.aged(current, (), NOW + datetime.timedelta(days=90)).proposals
+
+        self.assertEqual(aged.entries, {})
+        self.assertEqual(aged.tally("person"), proposals.Tally(proposed=1, dropped=1))
+
+    def test_a_file_without_counts_or_with_counts_that_are_no_numbers_counts_nothing(self) -> None:
+        self.kept(DANA)
+        raw = self.written()
+        raw["counts"] = {"person": {"proposed": "many", "kept": -1, "dropped": True}, "stranger": {"proposed": 4}}
+        self.write(raw)
+        with_odd_counts = proposals.load(self.store)
+        del raw["counts"]
+        self.write(raw)
+
+        self.assertEqual(with_odd_counts.counts, {})
+        self.assertEqual(proposals.load(self.store).counts, {})
+        self.assertEqual(with_odd_counts.tally("person"), proposals.Tally())
+
+
+class OutcomesTest(ProposalsFixture):
+    def test_the_proposals_settled_since_a_moment_are_counted_by_their_end(self) -> None:
+        """Covers: B133"""
+        tea = Proposal("personal", "Alex drinks green tea.", "I only drink green tea", "kitchen")
+        offer = Proposal("commitment", "Send Dana the offer.", "I still have to send Dana the offer", "shed")
+        self.kept(DANA, LADDER, tea, offer)
+        self.settle(proposals.proposal_id(DANA), proposals.KEPT, NOW)
+        self.settle(proposals.proposal_id(LADDER), proposals.KEPT, NOW - datetime.timedelta(seconds=1))
+        self.settle(proposals.proposal_id(tea), proposals.DROPPED, NOW + datetime.timedelta(days=3))
+        self.settle(proposals.proposal_id(offer), proposals.EXPIRED, NOW + datetime.timedelta(days=4))
+
+        outcomes = proposals.outcomes_since(proposals.load(self.store), NOW)
+
+        self.assertEqual(outcomes, proposals.Outcomes(kept=1, dropped=1, expired=1))
+        self.assertEqual(outcomes.keep_rate, 0.5)
+
+    def test_without_an_answer_there_is_no_keep_rate_also_when_proposals_expired(self) -> None:
+        """Covers: B133"""
+        self.kept(DANA, LADDER)
+        self.settle(proposals.proposal_id(DANA), proposals.EXPIRED, NOW)
+
+        outcomes = proposals.outcomes_since(proposals.load(self.store), NOW)
+
+        self.assertEqual(outcomes, proposals.Outcomes(kept=0, dropped=0, expired=1))
+        self.assertIsNone(outcomes.keep_rate)
+
+    def test_the_window_of_the_keep_rate_lies_within_the_time_an_answer_is_remembered(self) -> None:
+        self.assertLessEqual(proposals.KEEP_RATE_PERIOD, proposals.REMEMBER_SETTLED)
 
 
 class UnreadableFileTest(ProposalsFixture):

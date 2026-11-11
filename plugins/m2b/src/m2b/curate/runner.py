@@ -12,8 +12,9 @@ the backoff makes the next attempt wait. After preflight every step runs whateve
 did (B13): a failing step is recorded and reported in the review, and when it is a core step the
 run counts as failed, so the last successful run does not move; an add-on's failing step leaves the
 run succeeded, so an add-on never holds back the core, and so do the reading of the sessions
-(``glean_step``), which is in the run only while ``curation.read_sessions`` is on, and the task for
-the proposals that wait (``proposals_task``), the last step before the review. The one
+(``glean_step``), which is in the run only while ``curation.read_sessions`` is on, and the last
+step before the review, which lets proposals without an answer expire and brings the task for
+those that wait up to date (``proposals_task``). The one
 exception is a migration (``migrations``): the due ones run first, and when one fails the run goes
 straight to the review, because every later step follows rules the store does not hold yet. Ingest
 is skipped when the inbox holds nothing, refresh when no fact is past its day.
@@ -44,7 +45,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from m2b import current_check, expiry, ingest, launcher, lint, proposals_task
+from m2b import current_check, expiry, ingest, launcher, lint, proposal_answers, proposals, proposals_task
 from m2b.addons import CURATION_SLOTS, Addon, names_on, steps_in
 from m2b.candidates import PREFIX_KEY
 from m2b.config.errors import ConfigError, NotSetUpError
@@ -516,20 +517,29 @@ class _Run:
         return Skipped(reading.skipped) if reading.skipped is not None else None
 
     def _proposals_task(self, tasks: Tasks, locale: Locale) -> Skipped | None:
-        """The one task for the proposals that wait, in every run: harvest settles answers in every run.
+        """What time makes of the proposals, then the one task for those that wait.
+
+        In every run, whether or not it reads the sessions: harvest settles answers in every run, and
+        a proposal expires or is forgotten by the calendar, not by a reading.
 
         Only a task list that did not answer clears by itself, so only then the review says the next
         run does it; any other cause says itself what it takes.
         """
         not_done = "the task for the proposals that wait was not brought up to date"
         try:
+            aged = proposal_answers.expire(self.store, self.clock())
+            if aged.expired:
+                self.findings.append(report.Finding(PROPOSALS, report.INFO, _expired_note(aged.expired)))
             outcome = proposals_task.update(self.store, tasks, locale)
         except Exception as error:
             cause = str(error) or type(error).__name__
             if isinstance(error, TasksError):
                 raise StepError(f"{not_done} ({cause}); the next run does it") from error
             raise StepError(f"{not_done}: {cause}") from error
-        return Skipped("no proposal waits for an answer") if outcome.had_nothing_to_do else None
+        # A step that let a proposal expire or forgot one did run, also when no task changed for it.
+        if outcome.had_nothing_to_do and not (aged.expired or aged.forgotten):
+            return Skipped("no proposal waits for an answer")
+        return None
 
     def _journal(self, tasks: Tasks) -> None:
         result = write_journal(
@@ -914,6 +924,14 @@ def refresh_rules(due_files: Sequence[str], fixed: Sequence[str] = REFRESH_RULES
     for relative in due_files:
         rules += [f"Read(<store>/{relative})", f"Edit(<store>/{relative})"]
     return rules
+
+
+def _expired_note(expired: int) -> str:
+    one = expired == 1
+    return (
+        f"{expired} {'proposal' if one else 'proposals'} from the sessions got no answer for "
+        f"{proposals.EXPIRES_AFTER.days} days and {'waits' if one else 'wait'} no longer"
+    )
 
 
 def _copy_started(copy: Path) -> datetime.datetime | None:

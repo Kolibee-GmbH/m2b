@@ -14,7 +14,8 @@ absolute path cannot be compared with either and is left out too.
 
 The model is asked once, with nothing to call (``model.text_step``), and only when a session left
 has a typed prompt. Code checks its answer (``glean.check``) against the prompts and against the
-captures of the period, and ``proposals`` keeps what is new. The counts go to the run as
+captures of the period, and ``proposals`` keeps what is new and counts, per kind, what was added
+and what stood on no words of the person. The counts go to the run as
 information, never into the review: nothing here asks the person to act. What the reader left out
 of the sessions it read is among them, so a day's reading shows what it did not take.
 
@@ -132,13 +133,15 @@ def propose(
         for proposal, typed_at in zip(checked.kept, checked.kept_at)
     ]
     added = proposals.add(kept, said, started)
-    proposals.save(store, dataclasses.replace(added.proposals, read_until=started))
+    counted = added.proposals
+    for refused in checked.not_quoted:
+        counted = proposals.counted(counted, refused.kind, "not_quoted")
+    proposals.save(store, dataclasses.replace(counted, read_until=started))
     typed = sum(len(session.prompts) for session in read)
     summary = (
         f"read {_count(len(read), 'session')} with {_count(typed, 'typed prompt')} since {start.strftime(_MOMENT)}: "
         f"{_count(added.added, 'proposal')} added, "
-        f"{added.like_an_open_one + added.like_a_kept_one + added.like_a_dropped_one} "
-        "like one that waits or is answered, "
+        f"{added.added_before} like one that waits, is answered or expired, "
         f"{len(checked.not_quoted)} without the person's words, "
         f"{len(checked.already_captured)} captured already, {answer.malformed} not in the form"
     )

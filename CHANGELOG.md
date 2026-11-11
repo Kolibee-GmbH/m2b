@@ -36,6 +36,14 @@ All notable changes to this project are documented here. The format follows
   Of a session in a folder of `worklog_leave_out`, or in one where you ran `m2b distillate off`,
   nothing reaches the model ([docs/curation.md](docs/curation.md#reading-your-sessions)). A new
   scenario, `E23-proposals-from-sessions`, runs it from setup's yes to the filed capture.
+- A proposal from your sessions that got no answer for 14 days expires: it waits no longer, does
+  not count as dropped and is not proposed again for 90 days; `m2b proposals keep <id>` still keeps
+  it in that time. Every curation run does this and removes the proposals kept, dropped or expired
+  90 days ago, whether or not it reads the sessions. `m2b status` says what share you kept of the
+  proposals you answered in the last 30 days and how many expired, and `m2b status --json` adds the
+  counts per kind since the first reading: proposed, kept, dropped, expired, and refused because
+  the words they quote do not stand, with at least three words, in a prompt of the session they
+  name ([docs/curation.md](docs/curation.md#reading-your-sessions)).
 
 ### Changed
 

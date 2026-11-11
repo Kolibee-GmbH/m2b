@@ -143,6 +143,12 @@ it proposes in `state/core/proposals.json`:
   "format": 1,
   "read_until": "2026-11-07T07:30:00+01:00",
   "announced_until": "2026-11-07T07:30:01+01:00",
+  "counts": {
+    "person": {"proposed": 9, "kept": 5, "dropped": 2, "expired": 1, "not_quoted": 0},
+    "agreement": {"proposed": 3, "kept": 3, "dropped": 0, "expired": 0, "not_quoted": 1},
+    "commitment": {"proposed": 0, "kept": 0, "dropped": 0, "expired": 0, "not_quoted": 0},
+    "personal": {"proposed": 0, "kept": 0, "dropped": 0, "expired": 0, "not_quoted": 0}
+  },
   "proposals": {
     "c501eff5fc0e": {
       "kind": "person",
@@ -163,9 +169,17 @@ newest proposal was added that the task for the waiting proposals has told you o
 completed or deleted comes back only for a proposal added after it. A proposal's id comes from its
 session and its `quote`, your own words; `kind` is `person`, `agreement`, `commitment` or
 `personal`; `day` is the day you said it, `due` the day a commitment names. `state` is `open`,
-`kept` or `dropped`, and `since` the moment it got that state; an answered proposal stays for at
-least 90 days, so the same one is not proposed again; after that, the next reading that asks the
-model removes it. Only the curation run writes the file. A file whose
+`kept`, `dropped` or `expired`, and `since` the moment it got that state. An open proposal that
+has no answer 14 days after it was added expires. A kept, dropped or expired proposal stays for 90
+days, so the same one is not proposed again; the first curation run after that removes it.
+
+`counts` says per kind how many proposals were added (`proposed`), how many of them ended `kept`,
+`dropped` or `expired`, and how many more were refused because the words they quote do not stand,
+with at least three words, in a prompt of the session they name (`not_quoted`). A proposal kept
+after it expired counts as kept. The counts stay when a proposal is removed: they go back to the
+first reading.
+
+Only the curation run writes the file. A file whose
 `format` this m2b does not know is left as it is: the reading fails alone, and the review says so.
 
 Your answer is an empty file a client adds: `state/core/proposal-answers/<id>.keep` or
@@ -180,7 +194,7 @@ answer file.
 | `inbox/` | clients, integrations, harvest (a ticked candidate, a kept proposal), the worklog | the curating machine (name, frontmatter, trailer; never the text) | ingest moves files into the archive; normalize removes conflict copies identical to their original |
 | `corpus/` | ingest, the journal | the journal (appends to the month's file) | lint, only conflict copies identical to their original |
 | `memory/` | ingest | ingest, refresh, the sorting step, a migration after an update, harvest (only `## Current`, from "Still current?" answers), lint (a broken link it repairs) | nobody |
-| `state/core/` | the curation run; any client adds an answer to a proposal under `proposal-answers/` | the curating machine | harvest prunes settled candidates and removes the answers it settled; a reading of the sessions that asks the model removes the proposals answered 90 days ago or longer |
+| `state/core/` | the curation run; any client adds an answer to a proposal under `proposal-answers/` | the curating machine | harvest prunes settled candidates and removes the answers it settled; every curation run removes the proposals kept, dropped or expired 90 days ago or longer |
 | tasks (`tasks/` with the `markdown` backend, or the Reminders list) | you, integrations, capture (a follow-up), ingest, `m2b tasks add --candidate` (a memory candidate), the curation run (review, "Still current?" questions, the task for waiting proposals) | you; the band ticks or drops a curator task; the curation run completes its review task when nothing needs you, and the task for waiting proposals when none waits | harvest and the refresh step, once a curator task is settled or its item is gone; you |
 | `state/addons/<a>/`, `state/integrations/<i>/` | that add-on or integration | the same | the same |
 

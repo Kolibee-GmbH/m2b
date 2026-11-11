@@ -8,7 +8,7 @@ from typing import Any
 from unittest import mock
 
 import test_runner
-from m2b import cli
+from m2b import cli, proposals
 from m2b.curate import machine_state
 from m2b.run_record import RUN_RECORD
 
@@ -160,6 +160,119 @@ class StatusTest(test_runner.RunnerTest):
         self.assertIn("inbox: 1", out)
         self.assertIn("tasks: reachable", out)
         self.assertIn("add-ons on: none", out)
+
+    def proposed(self, *ended: tuple[str, float], counts: dict[str, proposals.Tally] | None = None) -> None:
+        """Proposals in the store, one per state given, settled (or added) so many days ago."""
+        now = datetime.datetime.now().astimezone()
+        entries = {
+            f"{number:012x}": proposals.Entry(
+                "person",
+                f"Fact {number}.",
+                f"the words of fact {number}",
+                now.date(),
+                state,
+                now - datetime.timedelta(days=days),
+            )
+            for number, (state, days) in enumerate(ended)
+        }
+        proposals.save(self.store, proposals.Proposals(entries, counts=counts or {}))
+
+    def test_it_shows_the_share_kept_of_what_was_answered_in_the_last_thirty_days(self) -> None:
+        """Covers: B133"""
+        self.curating(curation={"read_sessions": True})
+        self.proposed(
+            ("kept", 0),
+            ("kept", 29.9),
+            ("kept", 30.1),
+            ("dropped", 12),
+            ("expired", 3),
+            ("open", 20),
+            counts={"person": proposals.Tally(proposed=9, kept=5, dropped=1, expired=1, not_quoted=2)},
+        )
+
+        status = self.status()
+        _, out, _ = self.run_command("status")
+
+        nothing = {"proposed": 0, "kept": 0, "dropped": 0, "expired": 0, "not_quoted": 0}
+        self.assertEqual(
+            status["proposal_answers"],
+            {
+                "days": 30,
+                "kept": 2,
+                "dropped": 1,
+                "expired": 1,
+                "keep_rate": 0.67,
+                "counts": {
+                    "person": {"proposed": 9, "kept": 5, "dropped": 1, "expired": 1, "not_quoted": 2},
+                    "agreement": nothing,
+                    "commitment": nothing,
+                    "personal": nothing,
+                },
+            },
+        )
+        self.assertIn("\nproposals: kept 2 of 3 answered in the last 30 days (67%), 1 expired without an answer\n", out)
+
+    def test_without_an_answer_in_the_thirty_days_it_shows_no_rate_instead_of_none_kept(self) -> None:
+        """Covers: B133"""
+        self.curating()
+        self.proposed(("kept", 31), ("open", 2))
+
+        status = self.status()
+        _, out, _ = self.run_command("status")
+
+        answers = status["proposal_answers"]
+        self.assertEqual((answers["kept"], answers["dropped"], answers["expired"]), (0, 0, 0))
+        self.assertIsNone(answers["keep_rate"])
+        self.assertIn("\nproposals: no answer in the last 30 days\n", out)
+        self.assertNotIn("%", out)
+
+    def test_proposals_that_only_expired_are_named_and_give_no_rate(self) -> None:
+        """Covers: B133"""
+        self.curating()
+        self.proposed(("expired", 1), ("expired", 2))
+
+        _, out, _ = self.run_command("status")
+
+        self.assertIsNone(self.status()["proposal_answers"]["keep_rate"])
+        self.assertIn("\nproposals: no answer in the last 30 days, 2 expired without an answer\n", out)
+
+    def test_a_machine_that_reads_no_sessions_in_a_store_without_proposals_shows_nothing_of_it(self) -> None:
+        """Covers: B133"""
+        self.curating()
+
+        _, out, _ = self.run_command("status")
+
+        self.assertNotIn("proposal_answers", self.status())
+        self.assertNotIn("proposals", out)
+
+    def test_a_store_that_only_holds_counts_of_proposals_long_gone_still_shows_the_part(self) -> None:
+        """Covers: B133"""
+        self.curating()
+        self.proposed(counts={"agreement": proposals.Tally(proposed=2, dropped=2)})
+
+        answers = self.status()["proposal_answers"]
+
+        self.assertEqual(answers["counts"]["agreement"]["dropped"], 2)
+        self.assertIsNone(answers["keep_rate"])
+
+    def test_a_machine_that_reads_the_sessions_shows_the_part_before_anything_was_proposed(self) -> None:
+        """Covers: B133"""
+        self.curating(curation={"read_sessions": True})
+
+        _, out, _ = self.run_command("status")
+
+        self.assertIsNone(self.status()["proposal_answers"]["keep_rate"])
+        self.assertIn("\nproposals: no answer in the last 30 days\n", out)
+
+    def test_a_proposals_file_that_cannot_be_used_says_so_instead_of_nothing(self) -> None:
+        """Covers: B133"""
+        self.curating()
+        self.write(proposals.PROPOSALS_FILE, json.dumps({"format": 2, "proposals": {}}))
+
+        _, out, _ = self.run_command("status")
+
+        self.assertIn("format 2", self.status()["proposal_answers"]["error"])
+        self.assertIn("\nproposals: could not look: ", out)
 
     def set_curating(self, machine_id: str) -> None:
         path = self.store_root / "store.json"

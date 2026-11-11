@@ -15,7 +15,7 @@ from m2b.proposal_answers import DROP, KEEP
 from m2b.tasks.base import UnconfirmedTaskError
 from m2b.tasks.markdown import MarkdownTasks
 from test_proposal_answers import DANA_ID, LADDER_ID, NOBODYS_ID, AnswerFixture
-from test_proposals import DANA, LADDER, NOW
+from test_proposals import DANA, LADDER, NOW, counts
 
 LATER = NOW + datetime.timedelta(days=1)
 SOMEDAY = Proposal("commitment", "Send Dana the offer.", "I still have to send Dana the offer", "shed")
@@ -259,6 +259,57 @@ class LeftAloneTest(ProposalHarvestFixture):
         self.harvest()
 
         self.assertEqual(self.state(LADDER_ID), ("open", NOW.isoformat()))
+
+
+class CountedTest(ProposalHarvestFixture):
+    def test_each_answer_is_counted_for_the_kind_of_its_proposal(self) -> None:
+        """Covers: B132"""
+        self.kept(DANA, LADDER, SOMEDAY)
+        proposal_answers.give(self.store, [DANA_ID, SOMEDAY_ID], KEEP)
+        proposal_answers.give(self.store, [LADDER_ID], DROP)
+
+        self.harvest()
+        self.harvest(LATER + datetime.timedelta(days=1))
+
+        self.assertEqual(
+            self.written()["counts"],
+            counts(person={"proposed": 1, "kept": 1}, commitment={"proposed": 2, "kept": 1, "dropped": 1}),
+        )
+
+
+class ExpiredTest(ProposalHarvestFixture):
+    def expired(self, *found: Proposal) -> datetime.datetime:
+        """Proposals that got no answer for 14 days, and the moment a run let them expire."""
+        self.kept(*found)
+        when = NOW + datetime.timedelta(days=14)
+        proposal_answers.expire(self.store, when)
+        return when
+
+    def test_a_keep_for_an_expired_proposal_is_filed_like_any_keep(self) -> None:
+        """Covers: B131"""
+        when = self.expired(DANA)
+        proposal_answers.give(self.store, [DANA_ID], KEEP)
+        day_after = when + datetime.timedelta(days=1)
+
+        report = self.harvest(day_after)
+
+        (note,) = self.captures()
+        self.assertEqual(self.frontmatter(note).get("from_proposal"), DANA_ID)
+        self.assertEqual(self.state(DANA_ID), ("kept", day_after.isoformat()))
+        self.assertEqual(self.answer_files(), [])
+        self.assertEqual(self.written()["counts"], counts(person={"proposed": 1, "kept": 1}))
+        self.assertEqual(report.problems, [])
+
+    def test_a_drop_for_an_expired_proposal_only_loses_its_file(self) -> None:
+        """Covers: B131"""
+        when = self.expired(DANA)
+        proposal_answers.give(self.store, [DANA_ID], DROP)
+
+        report = self.harvest(when + datetime.timedelta(days=1))
+
+        self.assertEqual(self.state(DANA_ID), ("expired", when.isoformat()))
+        self.assertEqual(self.answer_files(), [])
+        self.assertEqual((report.dropped, self.captures()), ([], []))
 
 
 class CannotTellTest(ProposalHarvestFixture):
