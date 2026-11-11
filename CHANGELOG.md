@@ -16,7 +16,7 @@ All notable changes to this project are documented here. The format follows
   as before and a line naming `/m2b-review`. The pane shows each changed fact with its file and
   the added words green and the removed ones red, instead of the old and new line as two cut
   sentences. The curation run keeps each change with its whole lines, and `m2b band --json` names
-  them under `tasks.review`.
+  them under `tasks.review` ([#14](https://github.com/Kolibee-GmbH/m2b/pull/14)).
 
 ## [0.3.2] - 2026-11-11
 
