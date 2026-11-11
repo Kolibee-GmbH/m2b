@@ -1,7 +1,8 @@
-"""The fenced model run: the one way the core and its add-ons start the model.
+"""The fenced model run: the one place the core and its add-ons start the model from.
 
 A product cannot rely on one user's permission rules, so every model step brings its own: it never
-prompts, never hangs on a prompt and never does more than its step needs.
+prompts, never hangs on a prompt and never does more than its step needs. A step has one of two
+forms: a skill with the commands and paths of its step, or a text to read with nothing to call.
 
 ``claude -p /<skill>`` starts from an empty folder with ``--setting-sources project`` (the user's
 own settings, permission rules and plugins stay out), ``--plugin-dir`` for this plugin, whose
@@ -15,6 +16,15 @@ with ``--add-dir``, because an added folder is readable as a whole and would voi
 rules; and a path rule for writing is ``Edit(...)``, because ``Write(<path>)`` leaves the Write
 tool denied. That a ``Read`` rule also covers Glob and Grep is Claude Code's documented behaviour,
 not measured here; so ``<store>`` goes into Read rules only, never into Glob or Grep rules.
+
+A step that only reads a text and answers runs without tools (``text_step``): ``claude -p`` with the
+instruction as its prompt and the text on standard input, ``--tools ""``, no plugin, no MCP server,
+no skill, one turn, and no session kept on disk. It is for text the model must not act on, such as
+what a person typed in their sessions: with nothing to call, whatever the text says can only change
+the answer, and the caller checks the answer in code. Nothing is kept on disk, so the text is not
+written a second time under Claude Code's folder. Measured with Claude Code 2.1.322 on 2026-11-11:
+the answer is the ``result`` of the one JSON object the run prints, the model that gave it the key
+of ``modelUsage``.
 
 ``M2B_MODEL_RUNNER`` replaces the ``claude`` executable (tests and the e2e stub).
 """
@@ -33,6 +43,7 @@ import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import IO
 
 from m2b.config import store_path
 from m2b.config.machine import MachineConfig
@@ -79,6 +90,27 @@ class ModelRun:
     error: str | None
     denials: tuple[Denial, ...]
     seconds: float
+
+
+@dataclass(frozen=True)
+class TextRun:
+    """What a run without tools answered and which model answered, or why there is no answer.
+
+    ``error`` never holds text of the run; ``detail`` may: what Claude Code said about a failure, or
+    the end of what the command wrote as its error. ``advice`` is what to do about it where that is
+    known, a sentence of m2b's own.
+    """
+
+    answer: str | None
+    model: str | None
+    error: str | None
+    detail: str
+    seconds: float
+    advice: str = ""
+
+    def failure(self) -> str:
+        """Why there is no answer, in one line: the error, what was said, then the advice."""
+        return (f"{self.error}: {self.detail}" if self.detail else str(self.error)) + self.advice
 
 
 def store_rules(rules: Sequence[str], store: Path) -> list[str]:
@@ -140,6 +172,16 @@ def fenced_command(
     return command
 
 
+def text_command(executable: str, instruction: str, model: str, max_budget_usd: float | None = None) -> list[str]:
+    """A run that reads the instruction and its standard input and answers once, with nothing to call."""
+    command = [executable, "-p", instruction, "--model", model, "--setting-sources", "project", "--tools", ""]
+    command += ["--strict-mcp-config", "--disable-slash-commands", "--no-session-persistence"]
+    command += ["--permission-mode", "dontAsk", "--max-turns", "1"]
+    if max_budget_usd is not None:
+        command += ["--max-budget-usd", f"{max_budget_usd:g}"]
+    return [*command, "--output-format", "json"]
+
+
 def run_fenced(
     command: Sequence[str],
     temp_dir: Path,
@@ -196,18 +238,68 @@ def run_model(
     return ModelRun("the model run ended without a result", denials, end.seconds)
 
 
+def run_text(
+    command: Sequence[str],
+    text: str,
+    cwd: Path,
+    environ: Mapping[str, str],
+    timeout_seconds: float,
+    grace_seconds: float = DEFAULT_GRACE_SECONDS,
+    pass_fds: Sequence[int] = (),
+) -> TextRun:
+    """Runs the command under ``run_supervised`` with ``text`` as its standard input and reads its one result."""
+    output: list[bytes] = []
+    end = run_supervised(command, cwd, environ, timeout_seconds, grace_seconds, pass_fds, output.append, text)
+    result = _one_result(b"".join(output))
+    usage = result.get("modelUsage") if result else None
+    answered_by = ", ".join(sorted(usage)) if isinstance(usage, dict) and usage else None
+    if end.timed_out:
+        return TextRun(None, answered_by, f"timed out after {_duration(timeout_seconds)}", "", end.seconds)
+    if result is None:
+        return TextRun(None, None, f"exit {end.returncode} without a result", end.stderr_tail, end.seconds)
+    if result.get("subtype") == "error_max_budget_usd":
+        limit = "its spending cap (curation.max_budget_usd in config.json)"
+        return TextRun(None, answered_by, f"the model run stopped at {limit}", "", end.seconds)
+    answer = result.get("result")
+    if result.get("is_error") or result.get("subtype") not in (None, "success") or not isinstance(answer, str):
+        what, said, advice = _failure_parts(result)
+        return TextRun(None, answered_by, what, said, end.seconds, advice)
+    return TextRun(answer, answered_by, None, "", end.seconds)
+
+
+def _one_result(output: bytes) -> dict[str, object] | None:
+    """The JSON object a run with ``--output-format json`` prints, whole or as its last line that is one."""
+    text = output.decode("utf-8", errors="replace")
+    for candidate in (text, *reversed(text.splitlines())):
+        try:
+            found = json.loads(candidate)
+        except ValueError:
+            continue
+        if isinstance(found, dict):
+            return found
+    return None
+
+
 def _failure(result: Mapping[str, object]) -> str:
-    """Claude Code reports some failures, a missing login among them, as subtype success with ``is_error``."""
+    what, said, advice = _failure_parts(result)
+    return f"{what}: {said}{advice}" if said else what + advice
+
+
+def _failure_parts(result: Mapping[str, object]) -> tuple[str, str, str]:
+    """That the run failed, what Claude Code said about it, and what to do where that is known.
+
+    Claude Code reports some failures, a missing login among them, as subtype success with ``is_error``.
+    """
     subtype = result.get("subtype")
-    text = " ".join(str(result.get("result") or "").split())[:RESULT_TEXT_LENGTH]
-    detail = f"the model run failed{f' ({subtype})' if subtype and subtype != 'success' else ''}"
-    detail += f": {text}" if text else ""
-    if "logged in" in text.lower() or "/login" in text:
-        detail += (
+    said = " ".join(str(result.get("result") or "").split())[:RESULT_TEXT_LENGTH]
+    what = f"the model run failed{f' ({subtype})' if subtype and subtype != 'success' else ''}"
+    advice = ""
+    if "logged in" in said.lower() or "/login" in said:
+        advice = (
             ". Claude Code has no login for this run: run claude once and sign in with /login, or set "
             "ANTHROPIC_API_KEY, which bills the API instead of a subscription"
         )
-    return detail
+    return what, said, advice
 
 
 @dataclass(frozen=True)
@@ -229,6 +321,7 @@ def run_supervised(
     grace_seconds: float = DEFAULT_GRACE_SECONDS,
     pass_fds: Sequence[int] = (),
     on_line: Callable[[bytes], None] | None = None,
+    standard_input: str | None = None,
 ) -> ProcessEnd:
     """Runs a child in its own process group; past the timeout the whole group is stopped.
 
@@ -237,17 +330,18 @@ def run_supervised(
     itself stopped with SIGTERM (an add-on step past its timeout that runs a model step) stops its
     child's group first, because that group is its own and the outer stop does not reach it.
     ``pass_fds`` hands the run's lock to the child, so a killed runner leaves the lock held until
-    the child is gone. Without ``on_line`` the output is dropped.
+    the child is gone. Without ``on_line`` the output is dropped; without ``standard_input`` the
+    child reads nothing.
     """
     started = time.monotonic()
     timed_out = threading.Event()
-    with tempfile.TemporaryFile() as stderr:
+    with tempfile.TemporaryFile() as stderr, _as_standard_input(standard_input) as stdin:
         try:
             process = subprocess.Popen(
                 list(command),
                 cwd=cwd,
                 env=dict(environ),
-                stdin=subprocess.DEVNULL,
+                stdin=stdin,
                 stdout=subprocess.PIPE if on_line else subprocess.DEVNULL,
                 stderr=stderr,
                 start_new_session=True,
@@ -316,6 +410,41 @@ def model_step(
         text = f"the model step {skill} was denied {denial}"
         report.add_finding(machine, token, report.Finding(step, report.ACTION, text))
     return run
+
+
+def text_step(
+    config: MachineConfig,
+    machine: MachinePaths,
+    environ: Mapping[str, str],
+    instruction: str,
+    text: str,
+    pass_fds: Sequence[int] = (),
+) -> TextRun:
+    """Asks the curation model once, with nothing to call: ``instruction`` as the prompt, ``text`` to read."""
+    executable = environ.get(MODEL_RUNNER_VARIABLE) or config.executables.get("claude", "claude")
+    curation = config.curation
+    command = text_command(executable, instruction, curation.model, curation.max_budget_usd)
+    step_environ = {**environ, CURATION_RUN_VARIABLE: "1"}
+    timeout = curation.model_timeout_minutes * 60
+    with empty_folder(machine.temp_dir) as work:
+        return run_text(command, text, work, step_environ, timeout, pass_fds=pass_fds)
+
+
+@contextlib.contextmanager
+def _as_standard_input(text: str | None) -> Iterator[int | IO[bytes]]:
+    """What the child reads: nothing, or the text from a file without a name.
+
+    A file and not a pipe, so a child that reads late or not at all blocks nobody, whatever the
+    text's size; without a name, so the text lies on no path. Half a character, as a transcript can
+    hold one, becomes a question mark.
+    """
+    if text is None:
+        yield subprocess.DEVNULL
+        return
+    with tempfile.TemporaryFile() as handle:
+        handle.write(text.encode("utf-8", errors="replace"))
+        handle.seek(0)
+        yield handle
 
 
 @contextlib.contextmanager

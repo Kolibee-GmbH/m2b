@@ -16,7 +16,7 @@ from typing import Any
 
 from m2b import glean
 
-from repo_tools import REPO_ROOT, fenced_claude, glean_eval
+from repo_tools import REPO_ROOT, glean_eval
 
 # Answers like `claude -p --output-format json`: what the answers file holds for the model (or for
 # "*"), a crash for "crash" and a run that ended in an error for "refused". It records its
@@ -123,14 +123,14 @@ class InventedDayTest(Sandbox):
         self.assertTrue(any(trap(case, "captured").text in capture for capture in case.day.captures))
 
     def test_the_instruction_names_every_kind_and_every_field_of_a_proposal(self) -> None:
-        instruction = glean_eval.INSTRUCTION.read_text(encoding="utf-8")
+        instruction = glean.instruction()
 
         for word in (*glean.KINDS, "text", "quote", "session", "topic", "due", "proposals"):
             with self.subTest(word):
                 self.assertIn(f"`{word}`" if word != "proposals" else '"proposals"', instruction)
 
     def test_the_instruction_gives_no_statement_of_the_day_as_an_example(self) -> None:
-        instruction = glean_eval.INSTRUCTION.read_text(encoding="utf-8")
+        instruction = glean.instruction()
         day = self.case().day
 
         for statement in (*day.planted, *day.traps):
@@ -138,7 +138,7 @@ class InventedDayTest(Sandbox):
                 self.assertNotIn(statement.text, instruction)
 
     def test_the_instruction_names_nobody_and_no_company_of_the_day(self) -> None:
-        instruction = glean_eval.INSTRUCTION.read_text(encoding="utf-8")
+        instruction = glean.instruction()
         day = self.case().day
         words = {word for each in (*day.planted, *day.traps) for word in re.findall(r"\b[A-Z][a-z]{2,}\b", each.text)}
 
@@ -260,53 +260,6 @@ class ScoreTest(Sandbox):
         self.assertEqual(glean_eval.score(self.case(day), answer()).sprung, ("automation",))
 
 
-class TextRunTest(unittest.TestCase):
-    def test_the_command_gives_the_model_nothing_to_call_and_keeps_no_session(self) -> None:
-        command = fenced_claude.text_command("read this", "haiku", claude="claude")
-
-        self.assertEqual(command[:3], ["claude", "-p", "read this"])
-        for flag, value in (
-            ("--model", "haiku"),
-            ("--setting-sources", "project"),
-            ("--tools", ""),
-            ("--permission-mode", "dontAsk"),
-            ("--max-turns", "1"),
-            ("--output-format", "json"),
-        ):
-            with self.subTest(flag=flag):
-                self.assertEqual(command[command.index(flag) + 1], value)
-        for flag in ("--strict-mcp-config", "--disable-slash-commands", "--no-session-persistence"):
-            with self.subTest(flag=flag):
-                self.assertIn(flag, command)
-        self.assertNotIn("--plugin-dir", command)
-        self.assertNotIn("--allowedTools", command)
-
-    def test_a_command_that_cannot_be_started_or_prints_no_result_is_an_error_with_no_answer(self) -> None:
-        with tempfile.TemporaryDirectory() as folder:
-            missing = [str(Path(folder) / "no-such-command")]
-            silent = [sys.executable, "-c", "print('not a result')"]
-            for command, said in ((missing, "the command could not be started"), (silent, "exit 0 without a result")):
-                with self.subTest(said):
-                    run = fenced_claude.run_text(command, "input", Path(folder), dict(os.environ), 30)
-
-                    self.assertEqual((run.answer, run.error), (None, said))
-
-    def test_half_a_character_in_the_input_does_not_stop_the_run(self) -> None:
-        echo = [sys.executable, "-c", "import json, sys; print(json.dumps({'result': sys.stdin.read()}))"]
-        with tempfile.TemporaryDirectory() as folder:
-            run = fenced_claude.run_text(echo, "half \ud83d of an emoji", Path(folder), dict(os.environ), 30)
-
-        self.assertEqual((run.answer, run.error), ("half ? of an emoji", None))
-
-    def test_a_command_that_does_not_answer_in_time_is_stopped(self) -> None:
-        slow = [sys.executable, "-c", "import time; time.sleep(30)"]
-        with tempfile.TemporaryDirectory() as folder:
-            run = fenced_claude.run_text(slow, "input", Path(folder), dict(os.environ), 0.2)
-
-        self.assertEqual((run.answer, run.error), (None, "no answer within 0.2 seconds"))
-        self.assertLess(run.seconds, 10)
-
-
 class WithFakeClaude(Sandbox):
     def setUp(self) -> None:
         super().setUp()
@@ -393,7 +346,7 @@ class MainTest(WithFakeClaude):
     def test_a_run_that_fails_or_ends_in_an_error_is_an_error(self) -> None:
         for model_answer, said in (
             ("crash", "exit 1 without a result: boom"),
-            ("refused", "the run ended as error_max_turns"),
+            ("refused", "the model run failed (error_max_turns)"),
         ):
             with self.subTest(model_answer):
                 self.answer_with(any=model_answer)
@@ -412,7 +365,7 @@ class MainTest(WithFakeClaude):
         self.assertEqual(Path(call["cwd"]).resolve(), (self.root / "sandbox" / "work").resolve())
         self.assertEqual(call["files"], [])
         self.assertEqual(Path(call["m2b_home"]).resolve(), (self.root / "sandbox" / "home").resolve())
-        self.assertEqual(call["argv"][1], glean_eval.INSTRUCTION.read_text(encoding="utf-8"))
+        self.assertEqual(call["argv"][1], glean.instruction())
         self.assertIn("Dana runs IT at Northwind", json.loads(call["stdin"])["sessions"][0]["prompts"][5])
 
     def test_the_real_store_is_refused(self) -> None:
@@ -426,6 +379,17 @@ class MainTest(WithFakeClaude):
 
         self.assertEqual(code, glean_eval.EXIT_REFUSED, out)
         self.assertFalse(self.log.exists())
+
+    def test_a_claude_that_cannot_be_started_is_reported_for_each_run(self) -> None:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            code = glean_eval.main(
+                ["--model", "haiku", "--runs", "1", "--work-root", str(self.root / "sandbox"), "--claude", "/no/such"],
+                self.environ,
+            )
+
+        self.assertEqual(code, glean_eval.EXIT_FAILED, out.getvalue())
+        self.assertIn("haiku run 1: error: the command could not be started", out.getvalue())
 
     def test_a_number_of_runs_below_one_is_a_usage_error(self) -> None:
         code, out = self.run_main("--runs", "0")

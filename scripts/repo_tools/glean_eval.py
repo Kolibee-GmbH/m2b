@@ -3,9 +3,10 @@
 ``tests/glean/day.json`` is an invented day: sessions with what the person typed, some of it
 planted (a person, an agreement, a commitment, something personal) and some of it a trap, one of
 each class a proposal must never come from. The day is written as transcripts in Claude Code's
-format, read back with ``m2b.sessions`` and handed, with the instruction in
-``tests/glean/instruction.md``, to a fenced ``claude -p`` that has no tool (``fenced_claude``).
-The answer goes through ``m2b.glean``, the same parser and checks a curation step would use.
+format, read back with ``m2b.sessions`` and handed to the model the way the curation step hands
+it over: with the step's own instruction (``m2b.glean.instruction``), through the core's run
+without tools (``m2b.curate.model``). The answer goes through ``m2b.glean``, the step's parser
+and checks. So the tool measures the form the product runs, with nothing of its own in between.
 
 Counted per run: how many planted statements a kept proposal stands on (found), how many kept
 proposals are the first to stand on one (right; a second proposal for the same statement is not),
@@ -42,14 +43,14 @@ from typing import Any
 
 from m2b import claude_code, glean
 from m2b.config.machine import CURATION_MODELS, DEFAULT_CURATION_MODEL
+from m2b.curate import model as model_run
 from m2b.paths import HOME_VARIABLE, machine_paths
 from m2b.sessions import Session, Sessions, SessionsError, read_sessions
 
-from repo_tools import REPO_ROOT, fenced_claude
+from repo_tools import REPO_ROOT
 from repo_tools.e2e import TEST_RESOURCE_PREFIX, RealStoreError, refuse_real_store
 
 DAY = REPO_ROOT / "tests" / "glean" / "day.json"
-INSTRUCTION = REPO_ROOT / "tests" / "glean" / "instruction.md"
 DEFAULT_WORK_ROOT = Path(tempfile.gettempdir()) / f"{TEST_RESOURCE_PREFIX}m2b-glean-eval"
 DEFAULT_RUNS = 3
 DEFAULT_JOBS = 3
@@ -137,7 +138,7 @@ class Score:
 @dataclass(frozen=True)
 class Outcome:
     model: str
-    run: fenced_claude.TextRun
+    run: model_run.TextRun
     # None when the run gave no answer that could be read; ``problem`` says why.
     score: Score | None
     problem: str | None
@@ -282,23 +283,26 @@ def prepare_sandbox(work_root: Path, environ: Mapping[str, str]) -> tuple[Path, 
 
 @dataclass(frozen=True)
 class Asker:
-    """How a model is asked: the instruction, the fenced command and where it runs."""
+    """How a model is asked: the step's instruction, the core's run without tools and where it runs."""
 
     instruction: str
     claude: str
     work: Path
     environment: Mapping[str, str]
 
-    def ask(self, model: str, step_input: str) -> fenced_claude.TextRun:
-        command = fenced_claude.text_command(self.instruction, model, claude=self.claude)
-        return fenced_claude.run_text(command, step_input, self.work, self.environment, RUN_TIMEOUT_SECONDS)
+    def ask(self, model: str, step_input: str) -> model_run.TextRun:
+        command = model_run.text_command(self.claude, self.instruction, model)
+        try:
+            return model_run.run_text(command, step_input, self.work, self.environment, RUN_TIMEOUT_SECONDS)
+        except model_run.ModelUnreachableError as error:
+            return model_run.TextRun(None, None, "the command could not be started", str(error), 0.0)
 
 
 def evaluate(case: Case, models: Sequence[str], runs: int, asker: Asker, jobs: int) -> list[Outcome]:
     def one(model: str) -> Outcome:
         run = asker.ask(model, case.step_input)
         if run.answer is None:
-            return Outcome(model, run, None, f"{run.error}: {run.detail}" if run.detail else run.error)
+            return Outcome(model, run, None, run.failure())
         try:
             return Outcome(model, run, score(case, run.answer), None)
         except glean.GleanError as error:
@@ -358,7 +362,7 @@ class ReplayDay:
     day: datetime.date
     read: Sessions
     # None for a day without a prompt, when no model was asked.
-    run: fenced_claude.TextRun | None = None
+    run: model_run.TextRun | None = None
     answer: glean.Answer | None = None
     checked: glean.Checked | None = None
     problem: str | None = None
@@ -402,7 +406,8 @@ def replay(transcripts: Path, days: Sequence[datetime.date], model: str, asker: 
             return ReplayDay(day, read)
         run = asker.ask(model, glean.step_input(read.sessions, "", start.tzinfo or _UTC))
         if run.answer is None:
-            return ReplayDay(day, read, run, problem=run.error)
+            # Without what the command said: that goes into the file, not onto the terminal.
+            return ReplayDay(day, read, run, problem=f"{run.error}{run.advice}")
         try:
             answer = glean.parse_answer(run.answer, read.sessions)
         except glean.GleanError as error:
@@ -511,7 +516,7 @@ def main(argv: Sequence[str] | None = None, environ: Mapping[str, str] | None = 
     except RealStoreError as error:
         print(f"glean-eval: {error}", file=sys.stderr)
         return EXIT_REFUSED
-    asker = Asker(INSTRUCTION.read_text(encoding="utf-8"), arguments.claude, work, environment)
+    asker = Asker(glean.instruction(), arguments.claude, work, environment)
     if arguments.replay is not None:
         model = arguments.model[0] if arguments.model else DEFAULT_CURATION_MODEL
         today = arguments.today or datetime.datetime.now().astimezone().date()

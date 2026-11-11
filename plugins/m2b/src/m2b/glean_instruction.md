@@ -29,7 +29,7 @@ A proposal has these fields:
 - `topic`: the name of the `###` heading in `memory` the proposal belongs under, or null.
 - `due`: for a commitment with a day, that day as YYYY-MM-DD, worked out from the session's `day`; otherwise null.
 
-One proposal for each fact: a prompt that states two things gives two proposals, and the same fact is never proposed twice.
+One proposal for each person, agreement, commitment or personal matter a prompt states. A sentence that says several things about the same person or the same agreement is one proposal, whose `text` carries all of it: a role and a duty of one person are one proposal, not two. A prompt about two people gives two proposals. Never propose the same thing twice.
 
 Answer with one JSON object and nothing else:
 

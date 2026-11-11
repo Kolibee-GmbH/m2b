@@ -16,8 +16,19 @@ quote stands, white space aside, in one prompt of the session it names, with at 
 ``QUOTE_WORDS`` words: fewer show nothing. A proposal that fails is the model's wording and not
 the person's; it is returned apart, so a caller can count it. The second check takes away what the
 person captured themselves in the same period: the quote stands in a capture, or a capture of at
-least ``QUOTE_WORDS`` words stands in the quote, case and the punctuation at the ends aside. A
-capture worded differently from the prompt it came from is not recognised.
+least ``QUOTE_WORDS`` words stands in the quote, case and the punctuation at the ends aside.
+
+A capture often words its prompt anew: "remember that I would rather sit at the window" is noted
+as "I would rather sit at the window.", in another order where the language asks for it, with what
+the sentence leaves open added in square brackets. Such a capture is recognised by its words: it
+has at least ``QUOTE_WORDS`` different ones, all of them stand in the prompt the quote is from (so
+it came from that prompt), and it shares at least ``SAME_STATEMENT`` of the shorter one's words
+with the quote (so it is about what the quote says, not about the prompt's other sentence). Order,
+case, punctuation and the additions in brackets do not count. A capture made elsewhere in words of
+its own is not recognised; the person sees that proposal and drops it.
+
+The instruction the model is asked with is ``glean_instruction.md`` beside this module. It is the
+prompt of a run without tools (``curate.model.text_step``), not a skill: no session can call it.
 
 An answer that cannot be read is an error (``GleanError``), never an answer without proposals. A
 single proposal that is not in the form is left out and counted.
@@ -30,6 +41,7 @@ import json
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from m2b.notes.characters import unsafe_characters
@@ -43,9 +55,16 @@ KINDS = (PERSON, AGREEMENT, COMMITMENT, PERSONAL)
 # A proposal is one fact or one task; a longer text is a summary, which nobody asked for.
 TEXT_LENGTH = 300
 QUOTE_WORDS = 3
+# The share of the shorter one's words a capture and a quote have in common when they say the same.
+SAME_STATEMENT = 0.8
+INSTRUCTION = Path(__file__).with_name("glean_instruction.md")
 
 _DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
 _ENDS = " .,;:!?\"'()"
+_WORD = re.compile(r"\w+")
+# What a note adds to a sentence that leans on its conversation: "He [Sam] brings the plywood."
+# No bracket inside, so a long run of brackets that never close costs one pass, not one per bracket.
+_ADDITION = re.compile(r"\[[^\[\]]*\]")
 
 
 class GleanError(Exception):
@@ -76,6 +95,11 @@ class Checked:
     kept: tuple[Proposal, ...]
     not_quoted: tuple[Proposal, ...]
     already_captured: tuple[Proposal, ...]
+
+
+def instruction() -> str:
+    """What the model is asked to do with ``step_input``."""
+    return INSTRUCTION.read_text(encoding="utf-8")
 
 
 def step_input(sessions: Sequence[Session], distillate: str, zone: datetime.tzinfo = datetime.timezone.utc) -> str:
@@ -109,15 +133,17 @@ def parse_answer(answer: str, sessions: Sequence[Session]) -> Answer:
 def check(proposals: Sequence[Proposal], sessions: Sequence[Session], captures: Sequence[str]) -> Checked:
     """Sorts the proposals by the two checks; ``captures`` are the texts captured in the period."""
     typed = {session.session_id: [_collapsed(prompt.text) for prompt in session.prompts] for session in sessions}
-    captured = [_bare(capture) for capture in captures]
+    # Only a capture adds in brackets; what the person typed in brackets are words of their prompt.
+    captured = [(_bare(capture), _words(_ADDITION.sub(" ", capture))) for capture in captures]
     kept: list[Proposal] = []
     not_quoted: list[Proposal] = []
     already_captured: list[Proposal] = []
     for proposal in proposals:
         quote = _collapsed(proposal.quote)
-        if len(quote.split()) < QUOTE_WORDS or not any(quote in prompt for prompt in typed.get(proposal.session, ())):
+        quoted_from = [prompt for prompt in typed.get(proposal.session, ()) if quote in prompt]
+        if len(quote.split()) < QUOTE_WORDS or not quoted_from:
             not_quoted.append(proposal)
-        elif any(_same_words(_bare(quote), capture) for capture in captured):
+        elif _is_captured(quote, quoted_from, captured):
             already_captured.append(proposal)
         else:
             kept.append(proposal)
@@ -201,5 +227,24 @@ def _bare(text: str) -> str:
     return _collapsed(text).casefold().strip(_ENDS)
 
 
+def _is_captured(quote: str, quoted_from: Sequence[str], captured: Sequence[tuple[str, frozenset[str]]]) -> bool:
+    """Whether one of the captures, each as its bare text and its words, says what the quote says."""
+    bare = _bare(quote)
+    return any(_same_words(bare, text) or _worded_anew(words, quote, quoted_from) for text, words in captured)
+
+
 def _same_words(quote: str, capture: str) -> bool:
     return bool(capture) and (quote in capture or (len(capture.split()) >= QUOTE_WORDS and capture in quote))
+
+
+def _words(text: str) -> frozenset[str]:
+    """The different words of a text, without case."""
+    return frozenset(_WORD.findall(text.casefold()))
+
+
+def _worded_anew(capture: frozenset[str], quote: str, quoted_from: Sequence[str]) -> bool:
+    """Whether the capture is the quote's statement, noted from the prompt the quote stands in."""
+    if len(capture) < QUOTE_WORDS or not any(capture <= _words(prompt) for prompt in quoted_from):
+        return False
+    quoted = _words(quote)
+    return len(capture & quoted) >= SAME_STATEMENT * min(len(capture), len(quoted))

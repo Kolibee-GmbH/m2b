@@ -14,6 +14,7 @@ from typing import Any
 
 import test_commands
 from m2b import cli, launcher
+from m2b.config.machine import load_machine_config
 from m2b.curate import model, report
 
 FAKE_CLAUDE = test_commands.FAKES / "fake_claude.py"
@@ -345,6 +346,160 @@ class ModelCommandTest(test_commands.CommandTest):
 
         self.assertEqual(code, cli.EXIT_OK, err)
         self.assertEqual(len(self.calls()), 1)
+
+
+class TextCommandTest(unittest.TestCase):
+    def test_the_run_without_tools_gives_the_model_nothing_to_call_and_keeps_no_session(self) -> None:
+        """Covers: B61"""
+        command = model.text_command("claude", "read this", "haiku")
+
+        self.assertEqual(command[:3], ["claude", "-p", "read this"])
+        for flag, value in (
+            ("--model", "haiku"),
+            ("--setting-sources", "project"),
+            ("--tools", ""),
+            ("--permission-mode", "dontAsk"),
+            ("--max-turns", "1"),
+            ("--output-format", "json"),
+        ):
+            with self.subTest(flag=flag):
+                self.assertEqual(command[command.index(flag) + 1], value)
+        for flag in ("--strict-mcp-config", "--disable-slash-commands", "--no-session-persistence"):
+            with self.subTest(flag=flag):
+                self.assertIn(flag, command)
+        for flag in ("--plugin-dir", "--allowedTools", "--max-budget-usd"):
+            with self.subTest(flag=flag):
+                self.assertNotIn(flag, command)
+
+    def test_a_spending_cap_is_passed_to_the_run(self) -> None:
+        command = model.text_command("claude", "read this", "haiku", max_budget_usd=0.5)
+
+        self.assertEqual(command[command.index("--max-budget-usd") + 1], "0.5")
+
+
+class RunTextTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.folder = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.folder, True)
+        self.actions = self.folder / "model.json"
+        self.work = self.folder / "work"
+        self.work.mkdir()
+
+    def ask(self, script: dict[str, Any], text: str = "the input", timeout_seconds: float = 30) -> model.TextRun:
+        self.actions.write_text(json.dumps(script), encoding="utf-8")
+        command = model.text_command(sys.executable, "read this", "haiku")
+        command[1:1] = [str(FAKE_CLAUDE), str(self.actions)]
+        return model.run_text(command, text, self.work, dict(os.environ), timeout_seconds, grace_seconds=1)
+
+    def given(self) -> str:
+        lines = Path(f"{self.actions}.calls").read_text(encoding="utf-8").splitlines()
+        return str(json.loads(lines[-1])["stdin"])
+
+    def test_the_answer_comes_back_with_the_model_that_gave_it(self) -> None:
+        run = self.ask({"answer": '{"proposals": []}'})
+
+        self.assertEqual((run.answer, run.model, run.error, run.detail), ('{"proposals": []}', "fake-model", None, ""))
+
+    def test_the_text_reaches_the_model_on_standard_input_whatever_its_size(self) -> None:
+        text = "Dana runs IT at Northwind. " * 20000
+
+        run = self.ask({"answer": "read"}, text)
+
+        self.assertIsNone(run.error)
+        self.assertEqual(self.given(), text)
+
+    def test_half_a_character_in_the_text_does_not_stop_the_run(self) -> None:
+        run = self.ask({"answer": "read"}, "half \ud83d of an emoji")
+
+        self.assertIsNone(run.error)
+        self.assertEqual(self.given(), "half ? of an emoji")
+
+    def test_a_run_that_prints_no_result_is_an_error_with_no_answer(self) -> None:
+        run = self.ask({"outcome": "no-result"})
+
+        self.assertEqual((run.answer, run.error), (None, "exit 1 without a result"))
+        self.assertIn("fake claude: crashed", run.detail)
+
+    def test_a_run_that_ends_in_an_error_gives_no_answer_and_keeps_what_was_said_apart(self) -> None:
+        run = self.ask({"outcome": "error"})
+
+        self.assertEqual((run.answer, run.error), (None, "the model run failed (error_during_execution)"))
+        self.assertEqual(run.detail, "the run broke")
+        self.assertEqual(run.failure(), "the model run failed (error_during_execution): the run broke")
+
+    def test_a_run_without_a_login_says_so_and_what_to_do(self) -> None:
+        run = self.ask({"outcome": "not-logged-in"})
+
+        self.assertEqual(
+            (run.answer, run.error, run.detail), (None, "the model run failed", "Not logged in · Please run /login")
+        )
+        self.assertEqual(
+            run.failure(),
+            "the model run failed: Not logged in · Please run /login. Claude Code has no login for this run: "
+            "run claude once and sign in with /login, or set ANTHROPIC_API_KEY, which bills the API instead "
+            "of a subscription",
+        )
+
+    def test_a_result_that_is_not_text_is_no_answer(self) -> None:
+        run = self.ask({"outcome": "not-text"})
+
+        self.assertEqual((run.answer, run.error, run.failure()), (None, "the model run failed", "the model run failed"))
+
+    def test_a_run_stopped_at_its_spending_cap_names_the_setting(self) -> None:
+        run = self.ask({"outcome": "over-budget"})
+
+        self.assertIn("curation.max_budget_usd", run.error or "")
+
+    def test_a_run_past_its_timeout_is_stopped(self) -> None:
+        started = time.monotonic()
+
+        run = self.ask({"answer": "late", "sleep": 30}, timeout_seconds=1)
+
+        self.assertLess(time.monotonic() - started, 10)
+        self.assertEqual((run.answer, run.error), (None, "timed out after 1 seconds"))
+
+    def test_a_command_that_cannot_be_started_is_a_model_out_of_reach(self) -> None:
+        with self.assertRaises(model.ModelUnreachableError):
+            model.run_text([str(self.folder / "no-such-claude")], "the input", self.work, dict(os.environ), 30)
+
+
+class TextStepTest(test_commands.CommandTest):
+    def setUp(self) -> None:
+        super().setUp()
+        self.actions = self.bin.parent / "model.json"
+        self.actions.write_text(json.dumps({"answer": "an answer"}), encoding="utf-8")
+        self.environ[model.MODEL_RUNNER_VARIABLE] = self.fake_program("claude", "fake_claude.py", self.actions)
+
+    def call(self) -> dict[str, Any]:
+        lines = Path(f"{self.actions}.calls").read_text(encoding="utf-8").splitlines()
+        return dict(json.loads(lines[-1]))
+
+    def test_the_step_asks_the_curation_model_from_an_empty_folder_inside_the_run(self) -> None:
+        """Covers: B61"""
+        self.set_up(curation={"model": "sonnet", "max_budget_usd": 0.5})
+        config = load_machine_config(self.machine)
+
+        run = model.text_step(config, self.machine, self.environ, "read this", "the input")
+
+        self.assertEqual((run.answer, run.error), ("an answer", None))
+        call = self.call()
+        arguments = call["arguments"]
+        self.assertEqual(arguments[:2], ["-p", "read this"])
+        self.assertEqual(arguments[arguments.index("--model") + 1], "sonnet")
+        self.assertEqual(arguments[arguments.index("--max-budget-usd") + 1], "0.5")
+        self.assertEqual(call["stdin"], "the input")
+        self.assertEqual(call["cwd_entries"], [])
+        self.assertTrue(Path(call["cwd"]).resolve().is_relative_to(self.machine.temp_dir.resolve()))
+        self.assertFalse(Path(call["cwd"]).exists())
+        self.assertEqual(call["environment"]["M2B_CURATION_RUN"], "1")
+
+    def test_claude_comes_from_the_config_without_the_runner_variable(self) -> None:
+        runner = self.environ.pop(model.MODEL_RUNNER_VARIABLE)
+        self.set_up(executables={"claude": runner})
+
+        run = model.text_step(load_machine_config(self.machine), self.machine, self.environ, "read this", "x")
+
+        self.assertEqual(run.answer, "an answer")
 
 
 class TimeoutTest(unittest.TestCase):
