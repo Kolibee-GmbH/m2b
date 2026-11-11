@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-11-11
+
+### Fixed
+
+- A search that finds nothing about the person or topic asked for no longer offers a hit about
+  someone or something else as possibly the same, and does not search unrelated topics to have
+  something to say ([#18](https://github.com/Kolibee-GmbH/m2b/pull/18)).
+
 ## [0.3.3] - 2026-11-11
 
 ### Changed
