@@ -70,6 +70,53 @@ and checks that "remember that ..." about a person lands in m2b's inbox and not 
 memory. Claude Code's memory needs your login, so this scenario leaves one session folder under
 `~/.claude/projects/`, as every model run does.
 
+## Evals
+
+The scenarios check that m2b does what it should. The evals in `plugins/m2b/evals/` check what it
+does to Claude's answers: each case runs the same prompt in a session with m2b and in one without,
+and `claude plugin eval` scores both.
+
+| Case | Asks | Passes with m2b when |
+|---|---|---|
+| `recall` | when Sam brings the plywood, where the shed key is | the answer names both, from the distillate |
+| `topic` | who runs IT at Northwind, when the contract renews | the topic's facts arrive with the prompt that names it |
+| `no-invention` | Dana's favourite colour, which no note holds | no colour is named, not even as a guess |
+| `note` | "Remember this: ..." | the note is saved in the user's words, "my" kept |
+| `routing` | a todo for the project | it lands in the project's `TODO.md`, not in m2b |
+| `coding` | a one-line bug fix | the fix is made without searching or noting anything |
+| `no-leak` | a README for a public repository | no name from the notes appears in it |
+
+Every case starts from the same invented store, `evals/demo-store.sh`: it sets m2b up in the
+fresh `HOME` the eval gives each run, so your own store is never read. Run it from the plugin:
+
+```bash
+cd plugins/m2b
+claude plugin eval . --ablation with-without --scaffold --trust-plugin --no-publish -j 4 \
+  --max-cost-usd 6 --allow-tools mcp__m2b__search mcp__m2b__note Write Read Edit
+```
+
+It runs each case three times per arm, 42 runs in all, and takes a few minutes on your own login.
+The report prices the runs as the API would, a few dollars; on a Claude subscription nothing is
+billed and the runs count against the plan's usage limits instead. `--max-cost-usd` stops the
+suite once that price passes the ceiling. The report lands in
+`evals/results/`, which git ignores. The runs ask nothing, so the m2b tools and the file tools a
+case needs are granted with `--allow-tools`; a tool missing there fails its case without a word.
+`--keep-temp` keeps each run's folder, and its `out/trace.jsonl` shows which tools it called.
+
+Two things to know when you read the numbers:
+
+- The cases that ask about the notes take Read, Grep, Glob, Bash and Agent away in both arms.
+  With them, the arm without m2b finds the demo store in its `HOME` and answers from the files, so
+  the case would measure grep. A 0 without m2b there says the path through m2b works, not how much
+  better everyday answers get.
+- In `routing`, the arm without m2b now and then tries Claude Code's own memory instead of
+  `TODO.md` and scores lower. The case is there for the arm with m2b: a project's todo must not end
+  up in the owner's notes.
+
+Run the evals before a release that changes a skill, a hook, a tool description, the text a
+session starts with, or the distillate's format. A release of docs or of a fix the model never sees
+does not need them.
+
 ## Releasing
 
 Claude Code installs a plugin by its version number. `/plugin update` compares the installed
@@ -83,7 +130,8 @@ match, however many commits came since. A change reaches users only with a relea
    above it. Entries sit under `### Added`, `### Changed` or `### Fixed`, one sentence or two each
    on what changes for the user, ending in the pull request that made it, as
    `([#12](https://github.com/Kolibee-GmbH/m2b/pull/12))`.
-3. Run `scripts/check`; it must end with `check: passed`.
+3. Run `scripts/check`; it must end with `check: passed`. If the release changes what the model
+   sees, run the [evals](#evals) too; every case must score 1.00 with m2b.
 4. Commit both files as `chore(release): m2b X.Y.Z`, open a pull request to `main` and merge it;
    a squash merge is fine. The marketplace reads `plugins/m2b` from `main`, not from a tag, so
    until the merge `/plugin update` keeps reporting the old version.
