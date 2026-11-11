@@ -9,35 +9,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [0.3.0] - 2026-11-11
 
-### Upgrading from 0.2.0
-
-What goes away: the add-ons `herdr` and `backup`, and the skill `/m2b:band-setup`. The folder the
-backup wrote stays as it was; delete it yourself once you no longer want it.
-
-What happens by itself:
-
-- The band starts wherever m2b is set up, also where it was turned off. Entries `addons.band`,
-  `addons.herdr` and `addons.backup` in `config.json` are ignored.
-- With the worklog on, the next session start updates its recorder, links it again in herdr and
-  sets up the timer for its sign of life. Ledger rows from before keep an empty
-  `minutes_present`.
-- The status line drops its `brain:` in front.
-
-What you do:
-
-1. Update the plugin and restart Claude Code, on the curating machine first when you have several
-   ([Updating](README.md#updating)). A session open during the update loses its band and status
-   line, because the 0.2.0 band no longer finds itself among the add-ons; start it again or run
-   `/reload-plugins`. From 0.3.0 on, an older band names `/reload-plugins` itself.
-2. Optionally clear the ignored entries: `m2b addons off band`, `m2b addons off herdr`,
-   `m2b addons off backup`.
-3. If you keep permission rules for `Bash(m2b capture:*)` or `Bash(m2b search:*)`, they now hold for
-   the model's tools too. To be asked before every note, or keep the model from noting, see
-   [the band's tools](docs/band.md#noting-and-searching-as-tools-of-the-model).
-4. If the band's rows of due tasks are noise to you: `m2b config set band.due_tasks false`.
-5. With the worklog on: `m2b-worklog recorder check` says whether herdr is at least 0.9 and
-   running, which the worklog now needs.
-
 ### Added
 
 - m2b has a logo: the README shows it, and `docs/images/` holds the mark, an icon and the image
@@ -87,9 +58,8 @@ What you do:
   and no setup skill (`/m2b:band-setup` is gone), also where it was turned off; `addons.band` in
   `config.json` is ignored and `m2b addons off band` removes it. It needs mods on in Claude Code.
   `m2b doctor` has a line `band` that says whether the latest session ran it, and if not, whether
-  only mods or all plugin hooks were off. Its page moved to `docs/band.md`. Sessions open during
-  the update lose the band and the status line until they are started again or run
-  `/reload-plugins` ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+  only mods or all plugin hooks were off. Its page moved to `docs/band.md`
+  ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
 - The status line reads `2 in inbox · curated 18:02` without its own `brain:`, since Claude Code
   already puts the plugin's name in front ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
 - Every row of the worklog's ledger carries two numbers: `minutes`, the work in the span, and

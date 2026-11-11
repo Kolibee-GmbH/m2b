@@ -178,9 +178,7 @@ the session's band is the older one, it says so in one line:
 ```
 
 `/reload-plugins` in that session, or a new session, loads the installed band. A band newer than
-the installed m2b, as when Claude Code runs it from a checkout, says nothing. A session started
-before m2b 0.3.0 cannot say this yet; its band shows an error line or nothing until it is started
-again.
+the installed m2b, as when Claude Code runs it from a checkout, says nothing.
 
 ## What it needs
 
@@ -247,19 +245,6 @@ by then is reported as not reachable. `--tasks-only` leaves `status` out.
 In `plugins/m2b/hooks/`: `register.tsx` and its helpers, loaded through `"modules"` in
 `hooks/hooks.json`. Its tests are in `plugins/m2b/tests/band/` and run with
 `scripts/check --quick band`.
-
-## Upgrading from m2b 0.2.0
-
-The band was an add-on there, off until `/m2b:band-setup` turned it on. Now it runs wherever m2b is
-set up, also on a machine where it was turned off: an entry `addons.band` in `config.json` is
-ignored, and `m2b addons off band` removes it. Sessions open during the update lose the band and
-the status line, because the 0.2.0 band no longer finds itself among the add-ons, until they are
-started again or run `/reload-plugins`.
-
-The model now notes and searches through the tools `mcp__m2b__note` and `mcp__m2b__search`
-instead of a shell call. A rule you had for `Bash(m2b capture:*)` or `Bash(m2b search:*)` holds for
-them too; how to be asked each time, or keep the model from noting, is under "Noting and searching
-as tools of the model".
 
 ## How you see it runs
 
