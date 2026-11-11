@@ -142,6 +142,7 @@ class JournalTest(unittest.TestCase):
                 done("aaaa00000001", "m2b: review", local(2026, 11, 13), notes=markers.marker_line(markers.REVIEW)),
                 done("bbbb00000002", "Remember? Dana prefers tea", local(2026, 11, 13), notes="m2b:candidate"),
                 done("dddd00000004", "Still current? The trip", local(2026, 11, 13), notes="m2b:current 1a2b3c4d5e6f"),
+                done("eeee00000005", "m2b: proposals from your sessions", local(2026, 11, 13), notes="m2b:proposals"),
                 done("cccc00000003", "Call Dana", local(2026, 11, 13), notes="m2b:capture x.md follow-up"),
             ]
         )
@@ -149,6 +150,7 @@ class JournalTest(unittest.TestCase):
         self.assertNotIn("review", self.read("corpus/2026/11/202611-done.md"))
         self.assertNotIn("Remember?", self.read("corpus/2026/11/202611-done.md"))
         self.assertNotIn("Still current?", self.read("corpus/2026/11/202611-done.md"))
+        self.assertNotIn("proposals", self.read("corpus/2026/11/202611-done.md"))
         self.assertIn("Call Dana", self.read("corpus/2026/11/202611-done.md"))
 
     def test_nothing_before_journal_since_is_asked_for_or_written(self) -> None:

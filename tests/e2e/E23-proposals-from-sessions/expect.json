@@ -12,8 +12,12 @@
       "content": "---\\ncreated: [^\\n]+\\nsource: proposal\\nfrom_proposal: [0-9a-f]{12}\\ncurated: true\\n---\\nDana is head of IT at Northwind\\.\\n<!-- m2b:curation -->\\nfiled: nothing, scripted\\n"
     },
     {
+      "path": "tasks/????????????.md",
+      "content": "---\\nstatus: done\\ncreated: [^\\n]+\\ndone: [^\\n]+\\n---\\nm2b: proposals from your sessions\\nm2b:proposals\\nOne proposal from your sessions waits for your answer: m2b proposals shows it, and there you keep or drop it\\. Completing this task answers nothing\\.\\n"
+    },
+    {
       "path": "state/core/proposals.json",
-      "content": "\\{\\n  \"format\": 1,\\n  \"read_until\": \"[^\"\\n]+\",\\n  \"proposals\": \\{\\n    \"[0-9a-f]{12}\": \\{\\n      \"kind\": \"person\",\\n      \"text\": \"Dana is head of IT at Northwind\\.\",\\n      \"quote\": \"Dana runs IT at Northwind\",\\n      \"topic\": null,\\n      \"due\": null,\\n      \"day\": \"\\d{4}-\\d{2}-\\d{2}\",\\n      \"state\": \"kept\",\\n      \"since\": \"[^\"\\n]+\"\\n    \\}\\n  \\}\\n\\}\\n"
+      "content": "\\{\\n  \"format\": 1,\\n  \"read_until\": \"[^\"\\n]+\",\\n  \"announced_until\": \"[^\"\\n]+\",\\n  \"proposals\": \\{\\n    \"[0-9a-f]{12}\": \\{\\n      \"kind\": \"person\",\\n      \"text\": \"Dana is head of IT at Northwind\\.\",\\n      \"quote\": \"Dana runs IT at Northwind\",\\n      \"topic\": null,\\n      \"due\": null,\\n      \"day\": \"\\d{4}-\\d{2}-\\d{2}\",\\n      \"state\": \"kept\",\\n      \"since\": \"[^\"\\n]+\"\\n    \\}\\n  \\}\\n\\}\\n"
     },
     {
       "path": "state/core/last-run.json",

@@ -129,6 +129,7 @@ class TodosTest(unittest.TestCase):
         self.tasks.add("Keep: Dana likes maps?", notes=markers.with_marker(markers.CANDIDATE, "", "c1"))
         question = markers.with_marker(markers.CURRENT, "", "1a2b3c4d5e6f")
         self.tasks.add("Still current? Planning the trip", notes=question)
+        self.tasks.add("m2b: proposals from your sessions", notes=markers.with_marker(markers.PROPOSALS, "2 wait"))
         self.tasks.add(
             "Call Dana about the shed",
             notes=markers.marker_line(markers.CAPTURE, "20261107T101500Z-cli-a1b2.md", "follow-up"),

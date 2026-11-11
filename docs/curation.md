@@ -8,7 +8,8 @@ A curation run files the inbox. It runs on one machine per store, the curating m
 At session start on the curating machine, in the background, when a run is due: the inbox holds
 a capture, or the last successful run is more than 20 hours old. So after a capture the next
 session start files it. After a failed run the next attempt waits 1 hour, then 4, then 20; a run
-in which only an add-on's step failed counts as succeeded and starts no wait. A
+in which only a step failed that does not fail the run ([The steps](#the-steps)) counts as
+succeeded and starts no wait. A
 schedule can start it too, for days without a session ([On a schedule](#on-a-schedule)), and
 `m2b curate --force` starts it now; add `--detach` to get your terminal back while it runs.
 
@@ -16,7 +17,7 @@ schedule can start it too, for days without a session ([On a schedule](#on-a-sch
 
 ```mermaid
 flowchart LR
-  pre[Preflight] --> migrate[Migrate] --> harvest[Harvest] --> glean[Glean] --> before[before_ingest] --> ingest[Ingest] --> afteri[after_ingest] --> refresh[Refresh] --> sort[Sort] --> lint[Lint] --> journal[Journal] --> after[after_journal] --> review[Review task]
+  pre[Preflight] --> migrate[Migrate] --> harvest[Harvest] --> glean[Glean] --> before[before_ingest] --> ingest[Ingest] --> afteri[after_ingest] --> refresh[Refresh] --> sort[Sort] --> lint[Lint] --> journal[Journal] --> after[after_journal] --> proposals[Proposals task] --> review[Review task]
 ```
 
 | Step | Done by | What it does |
@@ -30,13 +31,14 @@ flowchart LR
 | Sort | model, only with `m2b curate --sort-facts` | moves facts lines of an older distillate into topics; code puts the file back if a statement changed |
 | Lint | code; the model only to repair a broken memory link with exactly one candidate | checks names, links, conflict copies and the distillate's size |
 | Journal | code | adds the tasks you completed to the month's `corpus/YYYY/MM/YYYYMM-done.md` |
+| Proposals task | code | one task in your list while proposals from your sessions wait for your answer, completed once none waits |
 | Review task | code | one task in your list when something needs you |
 
 `before_ingest`, `after_ingest` and `after_journal` are where an add-on can hook in; the worklog
 runs before ingest. A step that fails is reported in the review task and the run goes on. When
-only an add-on's step or the reading of the sessions failed, the run still counts as succeeded: the
-inbox is filed and the next run is due at the usual time, so neither an add-on that keeps failing
-nor a transcript m2b cannot read holds back the core.
+only an add-on's step, the reading of the sessions or the proposals task failed, the run still
+counts as succeeded: the inbox is filed and the next run is due at the usual time, so neither an
+add-on that keeps failing nor a transcript m2b cannot read holds back the core.
 
 Each model step runs fenced: `claude -p` from an empty folder, with `--setting-sources project`,
 m2b alone as plugin, `--permission-mode dontAsk`, and allowed only the commands and paths of its
@@ -105,6 +107,12 @@ An answer is filed by the next curation run: harvest writes a capture with the p
 commitment that names its day gets its task with the capture. A dropped proposal is remembered for
 90 days and not proposed again. Where a keep and a drop for one proposal meet, from two machines,
 keep stands.
+
+While proposals wait, your task list holds one task for them, "m2b: proposals from your sessions",
+however many there are; its notes say how many wait, so a phone shows that something does. The
+task is no answer: completing or deleting it keeps and drops nothing. Every curation run brings
+the number up to date, whether or not it reads the sessions, and completes the task once nothing
+waits. A task you completed or deleted comes back only when a proposal was added since.
 
 **When it fails.** A transcripts folder m2b cannot look at, a model without an answer or an answer
 it cannot read fails the step alone: the review says so, nothing is saved, and the next run reads

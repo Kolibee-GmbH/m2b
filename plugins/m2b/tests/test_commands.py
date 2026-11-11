@@ -104,7 +104,11 @@ class TasksCommandTest(CommandTest):
         task_id = out.strip()
         self.run_command("tasks", "add", "Merken? Dana prefers tea", "--notes", "m2b:candidate")
 
+        self.run_command("tasks", "add", "m2b: proposals from your sessions", "--notes", "m2b:proposals\n2 wait")
+
         (candidate,) = self.run_json("tasks", "list", "--marker", "candidate")
+        (waiting,) = self.run_json("tasks", "list", "--marker", "proposals")
+        self.assertEqual((waiting["title"], waiting["marker"]), ("m2b: proposals from your sessions", "proposals"))
         listed = self.run_json("tasks", "list")
         self.assertEqual(candidate["title"], "Merken? Dana prefers tea")
         self.assertEqual(candidate["marker"], "candidate")
@@ -114,7 +118,10 @@ class TasksCommandTest(CommandTest):
         )
 
         self.assertEqual(self.run_command("tasks", "complete", task_id)[0], cli.EXIT_OK)
-        self.assertEqual([task["title"] for task in self.run_json("tasks", "list")], ["Merken? Dana prefers tea"])
+        self.assertEqual(
+            sorted(task["title"] for task in self.run_json("tasks", "list")),
+            ["Merken? Dana prefers tea", "m2b: proposals from your sessions"],
+        )
         (done,) = [task for task in self.run_json("tasks", "list", "--include-completed") if task["id"] == task_id]
         self.assertTrue(done["completed"])
 

@@ -12,9 +12,11 @@ CANDIDATE = "candidate"
 CAPTURE = "capture"
 # A question to the owner whether a current item of the distillate is still going on.
 CURRENT = "current"
-KINDS = (REVIEW, CANDIDATE, CAPTURE, CURRENT)
+# The one task that says proposals from the sessions wait for an answer.
+PROPOSALS = "proposals"
+KINDS = (REVIEW, CANDIDATE, CAPTURE, CURRENT, PROPOSALS)
 # The curator's own tasks: never listed as the owner's todos, never journaled as the owner's work.
-CURATOR = frozenset({REVIEW, CANDIDATE, CURRENT})
+CURATOR = frozenset({REVIEW, CANDIDATE, CURRENT, PROPOSALS})
 # Where a backend has no state for it (Apple Reminders), a dropped task carries this line in its notes.
 DROPPED_LINE = f"{PREFIX}dropped"
 

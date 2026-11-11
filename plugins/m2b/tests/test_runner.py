@@ -180,6 +180,7 @@ class CleanRunTest(RunnerTest):
                 ("refresh", "skipped"),
                 ("lint", "succeeded"),
                 ("journal", "succeeded"),
+                ("proposals", "skipped"),
                 ("review", "succeeded"),
             ],
         )
@@ -573,6 +574,7 @@ class FailingStepTest(RunnerTest):
                 ("refresh", "skipped"),
                 ("lint", "succeeded"),
                 ("journal", "succeeded"),
+                ("proposals", "skipped"),
                 ("review", "succeeded"),
             ],
         )
@@ -849,7 +851,7 @@ class AddonStepTest(RunnerTest):
         assert record is not None
         self.assertEqual(
             [step.name for step in record.steps],
-            ["harvest", "worklog", "ingest", "refresh", "lint", "journal", "sample", "review"],
+            ["harvest", "worklog", "ingest", "refresh", "lint", "journal", "sample", "proposals", "review"],
         )
         (seen,) = [json.loads(line) for line in before.read_text(encoding="utf-8").splitlines()]
         self.assertEqual((seen["argv"], seen["cwd_entries"], seen["curation_run"]), (["run"], [], "1"))

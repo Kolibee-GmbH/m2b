@@ -11,8 +11,9 @@ records the cause (in the run record, or in the local log when even that cannot 
 the backoff makes the next attempt wait. After preflight every step runs whatever the one before
 did (B13): a failing step is recorded and reported in the review, and when it is a core step the
 run counts as failed, so the last successful run does not move; an add-on's failing step leaves the
-run succeeded, so an add-on never holds back the core, and so does the reading of the sessions
-(``glean_step``), which is in the run only while ``curation.read_sessions`` is on. The one
+run succeeded, so an add-on never holds back the core, and so do the reading of the sessions
+(``glean_step``), which is in the run only while ``curation.read_sessions`` is on, and the task for
+the proposals that wait (``proposals_task``), the last step before the review. The one
 exception is a migration (``migrations``): the due ones run first, and when one fails the run goes
 straight to the review, because every later step follows rules the store does not hold yet. Ingest
 is skipped when the inbox holds nothing, refresh when no fact is past its day.
@@ -43,7 +44,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from m2b import current_check, expiry, ingest, launcher, lint
+from m2b import current_check, expiry, ingest, launcher, lint, proposals_task
 from m2b.addons import CURATION_SLOTS, Addon, names_on, steps_in
 from m2b.candidates import PREFIX_KEY
 from m2b.config.errors import ConfigError, NotSetUpError
@@ -90,7 +91,7 @@ from m2b.setup import write_store_contract
 from m2b.sort_facts import sorting_problem
 from m2b.store.base import DEFAULT_FETCH_TIMEOUT_SECONDS, FetchError, Store, StoreError, fetch_command
 from m2b.store.factory import open_store
-from m2b.tasks.base import Tasks
+from m2b.tasks.base import Tasks, TasksError
 from m2b.tasks.factory import open_tasks
 
 __all__ = ["NotSetUpError", "RunOutcome", "RunRecordWriteError", "StoreError", "curate"]
@@ -103,6 +104,7 @@ REFRESH = "refresh"
 SORT = "sort"
 LINT = "lint"
 JOURNAL = "journal"
+PROPOSALS = "proposals"
 REVIEW = "review"
 # A failure between preflight and review that belongs to no step.
 RUN = "run"
@@ -149,8 +151,8 @@ LINT_RULES = (
     "Edit(<store>/memory/**)",
 )
 MODEL_STEPS = 3
-# Harvest, journal and review have no timeout of their own; they get this much in the deadline. The
-# journal's fetch of evicted month files is counted with the preflight fetch.
+# Harvest, journal, the proposals task and review have no timeout of their own; they get this much
+# in the deadline. The journal's fetch of evicted month files is counted with the preflight fetch.
 CODE_STEPS_MARGIN = datetime.timedelta(minutes=10)
 
 NOT_CURATING = "not-curating"
@@ -263,8 +265,8 @@ class _Run:
     undated: expiry.Undated | None = None
     steps: list[StepResult] = field(default_factory=list)
     failures: list[StepFailure] = field(default_factory=list)
-    # The steps whose failure goes into the review but leaves the run succeeded: the add-ons' and
-    # the reading of the sessions.
+    # The steps whose failure goes into the review but leaves the run succeeded: the add-ons', the
+    # reading of the sessions and the task for the proposals that wait.
     forgiven_steps: set[str] = field(default_factory=set)
     findings: list[report.Finding] = field(default_factory=list)
     last_success: datetime.datetime | None = None
@@ -418,6 +420,8 @@ class _Run:
         self._step(LINT, lambda: self._lint(tasks, token))
         self._step(JOURNAL, lambda: self._journal(tasks))
         self._addons("after_journal", token)
+        self.forgiven_steps.add(PROPOSALS)
+        self._step(PROPOSALS, lambda: self._proposals_task(tasks, locale))
 
     def _step(self, name: str, action: Callable[[], object], reported: bool = True) -> None:
         """Runs one step; a failure is recorded, and reported in the review unless it is the review.
@@ -510,6 +514,22 @@ class _Run:
             ) from error
         self.findings += [report.Finding(GLEAN, report.INFO, note) for note in reading.notes]
         return Skipped(reading.skipped) if reading.skipped is not None else None
+
+    def _proposals_task(self, tasks: Tasks, locale: Locale) -> Skipped | None:
+        """The one task for the proposals that wait, in every run: harvest settles answers in every run.
+
+        Only a task list that did not answer clears by itself, so only then the review says the next
+        run does it; any other cause says itself what it takes.
+        """
+        not_done = "the task for the proposals that wait was not brought up to date"
+        try:
+            outcome = proposals_task.update(self.store, tasks, locale)
+        except Exception as error:
+            cause = str(error) or type(error).__name__
+            if isinstance(error, TasksError):
+                raise StepError(f"{not_done} ({cause}); the next run does it") from error
+            raise StepError(f"{not_done}: {cause}") from error
+        return Skipped("no proposal waits for an answer") if outcome.had_nothing_to_do else None
 
     def _journal(self, tasks: Tasks) -> None:
         result = write_journal(
@@ -812,8 +832,9 @@ class _Run:
             raise StepError(end.failure())
 
     def _finish(self, started: datetime.datetime, findings: list[report.Finding]) -> RunOutcome:
-        """A failed core step fails the run (B13, B63); a failed add-on step and a failed reading of
-        the sessions only reach the review.
+        """A failed core step fails the run (B13, B63); a failed add-on step, a failed reading of the
+        sessions and a task for the waiting proposals that could not be brought up to date only
+        reach the review.
 
         Such a failure that does not clear by itself must not hold back the filing of the inbox
         with the backoff, nor keep the run due at every session start.

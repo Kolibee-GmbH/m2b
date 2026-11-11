@@ -7,10 +7,11 @@ run finds, all are kept: the person answers them together, not one reminder at a
 
 The person answers with keep or drop (``proposal_answers``), and the run's harvest settles the
 answer here. The file also holds ``read_until``, the moment up to which the sessions were read,
-and each answered proposal for 90 days, so the same proposal does not come back with the next
-reading: a dropped one because the person did not want it, a kept one because its capture holds
-the proposal's text and not the person's words, so a second reading of the period would not know
-it by the capture.
+``announced_until``, the newest addition the task for the waiting proposals has told the person of
+(``proposals_task``), and each answered proposal for 90 days, so the same proposal does not come
+back with the next reading: a dropped one because the person did not want it, a kept one because
+its capture holds the proposal's text and not the person's words, so a second reading of the period
+would not know it by the capture.
 
 A proposal's id comes from its session and its quote alone. A run that reads a period a second
 time, because the first reading failed after the model had answered, finds the same ids and adds
@@ -23,6 +24,7 @@ not read, so this one never writes over what it does not know.
 
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import hashlib
 import re
@@ -71,6 +73,8 @@ class Proposals:
     entries: Mapping[str, Entry]
     # Up to when the sessions were read; None before the first reading.
     read_until: datetime.datetime | None = None
+    # When the newest proposal was added that the task for the waiting ones has told of; None before any.
+    announced_until: datetime.datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -117,7 +121,7 @@ def load(store: Store) -> Proposals:
         entry = _entry(value)
         if entry is not None and is_id(str(key)):
             entries[str(key)] = entry
-    return Proposals(entries, _moment(raw.get("read_until")))
+    return Proposals(entries, _moment(raw.get("read_until")), _moment(raw.get("announced_until")))
 
 
 def save(store: Store, proposals: Proposals) -> None:
@@ -127,6 +131,7 @@ def save(store: Store, proposals: Proposals) -> None:
         {
             "format": FORMAT,
             "read_until": proposals.read_until.isoformat() if proposals.read_until else None,
+            "announced_until": proposals.announced_until.isoformat() if proposals.announced_until else None,
             "proposals": {key: _as_json(entry) for key, entry in sorted(proposals.entries.items())},
         },
     )
@@ -157,7 +162,8 @@ def add(current: Proposals, found: Sequence[Said], now: datetime.datetime) -> Ad
             proposal.kind, proposal.text, proposal.quote, said.day, OPEN, now, proposal.topic, proposal.due
         )
         added += 1
-    return Added(Proposals(entries, current.read_until), added, counts[OPEN], counts[KEPT], counts[DROPPED])
+    kept = dataclasses.replace(current, entries=entries)
+    return Added(kept, added, counts[OPEN], counts[KEPT], counts[DROPPED])
 
 
 def _entry(value: object) -> Entry | None:

@@ -77,6 +77,7 @@ class KeepingTest(ProposalsFixture):
             {
                 "format": 1,
                 "read_until": None,
+                "announced_until": None,
                 "proposals": dict(
                     sorted(
                         {

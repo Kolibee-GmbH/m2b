@@ -28,6 +28,7 @@ class BandCommandTest(test_runner.RunnerTest):
         )
         tasks.add("m2b: review", notes=markers.marker_line(markers.REVIEW) + "\n\nlint: broken link in a.md")
         tasks.add("Buy screws")
+        tasks.add("m2b: proposals from your sessions", notes=markers.marker_line(markers.PROPOSALS))
         done = tasks.add("Remember? Settled already", notes=markers.marker_line(markers.CANDIDATE))
         tasks.complete(done)
         self.capture()
@@ -74,6 +75,7 @@ class BandCommandTest(test_runner.RunnerTest):
         tasks.add("Book the trip", due=today + datetime.timedelta(days=1))
         tasks.add("Buy screws")
         tasks.add("Remember? Sam moved", notes=markers.marker_line(markers.CANDIDATE), due=today)
+        tasks.add("m2b: proposals from your sessions", notes=markers.marker_line(markers.PROPOSALS), due=today)
         done = tasks.add("Water the plants", due=today)
         tasks.complete(done)
 

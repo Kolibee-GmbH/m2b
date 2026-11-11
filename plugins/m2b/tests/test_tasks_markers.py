@@ -17,6 +17,12 @@ class MarkerTest(unittest.TestCase):
             with self.subTest(notes=notes):
                 self.assertIsNone(markers.marker_of(notes))
 
+    def test_the_task_for_waiting_proposals_is_one_of_the_curators_own(self) -> None:
+        notes = markers.with_marker(markers.PROPOSALS, "2 proposals wait")
+
+        self.assertEqual(markers.marker_of(notes), ("proposals", ()))
+        self.assertIn(markers.PROPOSALS, markers.CURATOR)
+
     def test_a_marker_counts_only_on_the_first_line(self) -> None:
         self.assertIsNone(markers.marker_of("buy milk\nm2b:review"))
 

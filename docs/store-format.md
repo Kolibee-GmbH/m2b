@@ -112,7 +112,8 @@ starts with aims at 2 KB, and so does each topic; lint reports more.
 
 The curator's own tasks carry a marker as the first line of their notes, so they are found by
 marker, never by title: `m2b:review` for the review task, `m2b:candidate` for a memory candidate,
-`m2b:current` for a "Still current? ..." question about a current item, and
+`m2b:current` for a "Still current? ..." question about a current item, `m2b:proposals` for the
+one task that says proposals from your sessions wait for an answer, and
 `m2b:capture <file> <key>` for a task ingest made from a capture. On Apple Reminders, which has
 no dropped state, a dropped curator task carries the line `m2b:dropped` in its notes.
 
@@ -141,6 +142,7 @@ it proposes in `state/core/proposals.json`:
 {
   "format": 1,
   "read_until": "2026-11-07T07:30:00+01:00",
+  "announced_until": "2026-11-07T07:30:01+01:00",
   "proposals": {
     "c501eff5fc0e": {
       "kind": "person",
@@ -156,7 +158,9 @@ it proposes in `state/core/proposals.json`:
 }
 ```
 
-`read_until` is the moment up to which the sessions were read. A proposal's id comes from its
+`read_until` is the moment up to which the sessions were read. `announced_until` is when the
+newest proposal was added that the task for the waiting proposals has told you of: a task you
+completed or deleted comes back only for a proposal added after it. A proposal's id comes from its
 session and its `quote`, your own words; `kind` is `person`, `agreement`, `commitment` or
 `personal`; `day` is the day you said it, `due` the day a commitment names. `state` is `open`,
 `kept` or `dropped`, and `since` the moment it got that state; an answered proposal stays for at
@@ -177,7 +181,7 @@ answer file.
 | `corpus/` | ingest, the journal | the journal (appends to the month's file) | lint, only conflict copies identical to their original |
 | `memory/` | ingest | ingest, refresh, the sorting step, a migration after an update, harvest (only `## Current`, from "Still current?" answers), lint (a broken link it repairs) | nobody |
 | `state/core/` | the curation run; any client adds an answer to a proposal under `proposal-answers/` | the curating machine | harvest prunes settled candidates and removes the answers it settled; a reading of the sessions that asks the model removes the proposals answered 90 days ago or longer |
-| tasks (`tasks/` with the `markdown` backend, or the Reminders list) | you, integrations, capture (a follow-up), ingest, the curation run (review, candidates, "Still current?" questions) | you; the band ticks or drops a curator task; the curation run completes its review task when nothing needs you | harvest and the refresh step, once a curator task is settled or its item is gone; you |
+| tasks (`tasks/` with the `markdown` backend, or the Reminders list) | you, integrations, capture (a follow-up), ingest, the curation run (review, candidates, "Still current?" questions, the task for waiting proposals) | you; the band ticks or drops a curator task; the curation run completes its review task when nothing needs you, and the task for waiting proposals when none waits | harvest and the refresh step, once a curator task is settled or its item is gone; you |
 | `state/addons/<a>/`, `state/integrations/<i>/` | that add-on or integration | the same | the same |
 
 Nothing captured is ever deleted by m2b.

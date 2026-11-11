@@ -166,7 +166,9 @@ class ReadingTest(GleanStepTest):
         self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
         self.assertEqual(self.steps()[1], ("glean", "skipped"))
         self.assertEqual(self.calls(), [])
-        self.assertEqual(self.kept(), {"format": 1, "read_until": START.isoformat(), "proposals": {}})
+        self.assertEqual(
+            self.kept(), {"format": 1, "read_until": START.isoformat(), "announced_until": None, "proposals": {}}
+        )
 
     def test_what_the_reader_left_out_of_the_sessions_is_counted_in_the_runs_information(self) -> None:
         """Covers: B115"""
@@ -449,6 +451,119 @@ class AnsweredTest(GleanStepTest):
         self.assertIn("the answers to proposals wait for the next run", notes)
 
 
+class WaitingTaskTest(GleanStepTest):
+    def proposed(self) -> None:
+        """A run that read the sessions and left one proposal waiting."""
+        self.reading()
+        self.typed(DANA_SAID, START - HOUR)
+        self.answers(DANA)
+        self.run_curate()
+
+    def proposals_tasks(self) -> list[Any]:
+        return self.tasks().items(marker=markers.PROPOSALS, include_completed=True)
+
+    def test_a_run_that_leaves_a_proposal_waiting_leaves_one_task_for_it(self) -> None:
+        """Covers: B124"""
+        self.proposed()
+
+        self.assertEqual(self.steps()[-2:], [("proposals", "succeeded"), ("review", "succeeded")])
+        (task,) = self.proposals_tasks()
+        self.assertFalse(task.completed)
+        self.assertIn("\nOne proposal from your sessions waits for your answer", task.notes)
+        self.assertEqual(self.review_tasks(), [])
+
+        self.run_curate()
+
+        self.assertEqual([task.id], [again.id for again in self.proposals_tasks()])
+
+    def test_a_run_that_does_not_read_the_sessions_completes_the_task_once_all_are_answered(self) -> None:
+        """Covers: B124"""
+        self.proposed()
+        proposal_answers.give(self.store, [DANA_ID], proposal_answers.DROP)
+        self.curating()
+
+        self.run_curate()
+
+        self.assertNotIn("glean", [name for name, _ in self.steps()])
+        (task,) = self.proposals_tasks()
+        self.assertTrue(task.completed)
+        self.assertEqual(self.kept()["announced_until"], START.isoformat())
+
+    def test_completing_the_task_keeps_and_drops_nothing_and_is_not_the_persons_work(self) -> None:
+        """Covers: B125"""
+        self.proposed()
+        tasks = self.tasks()
+        (task,) = self.proposals_tasks()
+        tasks.complete(task.id)
+        tasks.complete(tasks.add("Call Dana"))
+        self.clock = START + DAY
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        self.assertEqual(self.kept()["proposals"][DANA_ID]["state"], "open")
+        self.assertEqual(list(self.store_root.glob("inbox/*")), [])
+        self.assertEqual([again.completed for again in self.proposals_tasks()], [True])
+        journaled = "".join(path.read_text(encoding="utf-8") for path in self.store_root.rglob("*-done.md"))
+        self.assertIn("Call Dana", journaled)
+        self.assertNotIn("proposals from your sessions", journaled)
+
+    def test_a_task_list_that_does_not_answer_for_the_task_fails_that_step_alone(self) -> None:
+        """Covers: B124"""
+        self.proposed()
+        proposal_answers.give(self.store, [DANA_ID], proposal_answers.DROP)
+        self.capture()
+        self.answers(DANA, skills={"m2b:ingest": INGEST_FILES_THE_CAPTURE})
+        real_items = MarkdownTasks.items
+
+        def items(tasks: MarkdownTasks, *arguments: Any, **options: Any) -> Any:
+            if options.get("marker") == markers.PROPOSALS:
+                raise TasksError("the task list does not answer")
+            return real_items(tasks, *arguments, **options)
+
+        with mock.patch.object(MarkdownTasks, "items", items):
+            outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        self.assertEqual(self.kept()["proposals"][DANA_ID]["state"], "dropped")
+        self.assertIn(("ingest", "succeeded"), self.steps())
+        self.assertIn(("proposals", "failed"), self.steps())
+        self.assertIn(
+            "The step proposals failed: the task for the proposals that wait was not brought up to date "
+            "(the task list does not answer); the next run does it",
+            "\n".join(task.notes for task in self.review_tasks()),
+        )
+        self.assertEqual([task.completed for task in self.proposals_tasks()], [False])
+
+        self.run_curate()
+
+        self.assertEqual([task.completed for task in self.proposals_tasks()], [True])
+
+    def test_a_cause_that_does_not_clear_by_itself_is_not_left_to_the_next_run(self) -> None:
+        self.curating()
+        self.write(proposals.PROPOSALS_FILE, json.dumps({"format": 2, "proposals": {}}))
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        self.assertIn(("proposals", "failed"), self.steps())
+        (review,) = self.review_tasks()
+        self.assertIn(
+            "The step proposals failed: the task for the proposals that wait was not brought up to date: "
+            "state/core/proposals.json has format 2 and this m2b knows 1: update m2b on this machine",
+            review.notes,
+        )
+        self.assertNotIn("the next run does it", review.notes)
+
+    def test_without_a_proposal_the_step_has_nothing_to_do(self) -> None:
+        self.curating()
+
+        self.run_curate()
+
+        self.assertIn(("proposals", "skipped"), self.steps())
+        self.assertEqual(self.tasks().items(include_completed=True), [])
+
+
 class FailingReadingTest(GleanStepTest):
     def failed_reading(self) -> None:
         """A run whose reading fails: it is in the review, the run succeeded, the inbox is filed, the mark stays."""
@@ -462,7 +577,10 @@ class FailingReadingTest(GleanStepTest):
         self.assertIn("glean", outcome.message)
         self.assertEqual(self.steps()[:3], [("harvest", "succeeded"), ("glean", "failed"), ("ingest", "succeeded")])
         self.assertEqual(list((self.store_root / "inbox").iterdir()), [])
-        self.assertEqual(self.kept(), {"format": 1, "read_until": read_before.isoformat(), "proposals": {}})
+        self.assertEqual(
+            self.kept(),
+            {"format": 1, "read_until": read_before.isoformat(), "announced_until": None, "proposals": {}},
+        )
         record = load_run_record(self.store)
         assert record is not None
         self.assertEqual(record.last_success, record.finished_at)
