@@ -61,7 +61,15 @@ complete, and a model may still follow text that looks like an instruction.
 
 The mod lets a call of either tool run where Claude Code would only ask because no rule allows it,
 as the skills run their commands without asking; then neither the classifier of auto mode nor a
-`PermissionRequest` hook is asked. Your own rules come first, those for the tools' names and those
+`PermissionRequest` hook is asked. For the note tool this holds only for a note in your own words:
+every word of it stands in one prompt you submitted in the session (typed, sent over Remote Control,
+or the prompt a headless run was started with), apart from additions of up to four words in square
+brackets, which together hold fewer words than the rest has different ones, and it holds no
+invisible format characters. For any other note Claude Code's ask stands, so
+text the model read elsewhere does not reach the inbox through the tool unseen. Two limits: text you
+paste into a prompt is part of that prompt, and the check covers the tool only. The `capture` skill
+still runs `m2b capture` without asking, whatever the text, so a model that follows text it read
+can note through the skill. Your own rules come first, those for the tools' names and those
 for the skills' commands: `Bash(m2b capture:*)` in `permissions.ask` has Claude Code ask for every
 note, and `mcp__m2b__note` together with `Bash(m2b capture:*)` in `permissions.deny` keeps the
 model from noting by either way. An organization that allows only managed permission rules adds

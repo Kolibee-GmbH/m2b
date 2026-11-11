@@ -163,7 +163,20 @@ skill's command applies to the tool too: with `Bash(m2b capture:*)` in `permissi
 `deny`, the note tool asks or is refused the same way, and `Bash(m2b search:*)` does that for
 search. Where no such rule, no hook, setting or organization limit decides and Claude Code would
 only ask because nothing allows the tool, the mod lets the call run, as the skills run their own
-`m2b` commands without asking. A deny of the session's mode, such as `dontAsk`, stands; in plan
+`m2b` commands without asking. For a note it does so only when the note is in your own words:
+every word of it is in one prompt you submitted in this session, in any order ("remember that Sam
+brings the plywood" and the note "Sam brings the plywood."). An addition of up to four words in
+square brackets, as in "He [Sam] brings the plywood", does not have to be in the prompt, as long
+as the additions together hold fewer words than the rest of the note has different ones. A note
+with invisible format characters in it, other than the joiners emoji and some scripts need, is
+never taken as yours. A prompt counts when you
+typed it, sent it over Remote Control or started a headless run with it; a prompt from a plugin,
+another session or a notification does not, and neither does one further back than the last 100
+or text beyond the first 50,000 characters of a prompt. For any other note Claude Code asks as it
+does for a tool nothing allows. This keeps text the model read somewhere, a web page for one, from
+becoming a note nobody saw; it does not cover the `capture` skill's command, which runs without
+asking for any text. To let every note run without asking, put `mcp__m2b__note` in
+`permissions.allow`. A deny of the session's mode, such as `dontAsk`, stands; in plan
 mode Claude Code keeps its own verdict; where an application embedding Claude Code answers the
 asks itself, it still does.
 

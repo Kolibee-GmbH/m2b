@@ -89,6 +89,8 @@ declare module 'claude-code' {
       paneView: PaneView | null
       /** The start of the last failed run this session was shown, so it is shown once. */
       bandToastedRun: string | null
+      /** The words of each prompt the person submitted in this session, the newest last. */
+      ownPrompts: string[][]
     }
   }
 }

@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The model's note tool runs without asking only for a note in your own words: every word of it
+  stands in one prompt you submitted in the session, in any order, apart from additions of up to
+  four words in square brackets. For any other note Claude Code asks, as it does for a tool no rule
+  allows. Before, the mod let every note run, so text the model had read elsewhere, such as a web
+  page, could become a note without you seeing it. The `capture` skill's command is unchanged.
+
 ### Fixed
 
 - The worklog finishes an unfinished worklog only when the note's name in `intent.json` is one the

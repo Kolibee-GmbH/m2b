@@ -265,19 +265,28 @@ function shortened(text: string): string {
 export const NOTE_COMMAND_LINE = 'm2b capture --source claude -'
 export const SEARCH_COMMAND_LINE = 'm2b search --json -- term'
 
+/** The text a call of the note tool would write, or none when the call names no text. */
+export function noteTextOf(input: unknown): string {
+  const text = isObject(input) ? input['text'] : undefined
+  return typeof text === 'string' ? text : ''
+}
+
 /**
  * The verdict on a call of one of these tools. Claude Code holds a mod's tool to be a write and
  * asks for it like an MCP tool; the skills run their commands without asking (`allowed-tools`),
  * and these tools do the same. Every verdict a rule, a hook, a setting, another plugin or the
  * organization reached stands, as does a deny of the session's mode and a host that answers asks
  * itself. A rule the owner set for the skill's command (`Bash(m2b capture:*)` in `ask` or `deny`)
- * holds for the tool too, so the tool does not get round it.
+ * holds for the tool too, so the tool does not get round it. Where `mayRunUnasked` is false,
+ * Claude Code's ask stands after that rule had its say: the note tool passes whether the note is
+ * in the person's own words.
  */
 export async function verdictFor(
   $: EngineInterface,
   question: ToolCheckInput,
   verdict: ToolCheckResult,
   commandLine: string,
+  mayRunUnasked = true,
 ): Promise<ToolCheckResult> {
   const isPlainAsk =
     question.ceiling === undefined &&
@@ -299,6 +308,9 @@ export async function verdictFor(
   }
   if (shell.rule !== undefined && shell.decision !== 'allow') {
     return { decision: shell.decision, reason: `the rule ${shell.rule} for the m2b command holds for this tool too` }
+  }
+  if (!mayRunUnasked) {
+    return verdict
   }
   return { decision: 'allow', reason: 'm2b runs its own note and search tools as its skills run their commands' }
 }

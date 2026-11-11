@@ -13,6 +13,7 @@ import type {
 } from '../types'
 import { launcherPath, m2bHome, machineConfigPath, runM2b } from './m2b'
 import { NOTE_COMMAND, note } from './note'
+import { isInOwnWords, isOwnPrompt, withPrompt } from './own-words'
 import {
   PANE_ID,
   REVIEW_COMMAND,
@@ -41,6 +42,7 @@ import {
   SEARCH_COMMAND_LINE,
   SEARCH_TOOL,
   SEARCH_TOOL_NAME,
+  noteTextOf,
   noteTool,
   searchTool,
   verdictFor,
@@ -53,6 +55,7 @@ const versionNoticeAtom = atom({ plugin: 'm2b', key: 'bandVersionNotice' } as co
 const runAtom = atom({ plugin: 'm2b', key: 'bandRun' } as const, null)
 const paneViewAtom = atom({ plugin: 'm2b', key: 'paneView' } as const, null)
 const toastedRunAtom = atom({ plugin: 'm2b', key: 'bandToastedRun' } as const, null)
+const ownPromptsAtom = atom({ plugin: 'm2b', key: 'ownPrompts' } as const, [])
 
 const REFRESH_EVERY_MS = 60_000
 // `m2b band` reaches and reads the task list (two Apple Reminders calls, 20 seconds each by
@@ -683,7 +686,11 @@ export const register: Register = on => {
     return 'error' in answer ? { deny: answer.error } : { result: answer.text }
   })
 
-  on('tool.check', { tool: NOTE_TOOL_NAME }, async ($, e, next) => verdictFor($, e, await next(e), NOTE_COMMAND_LINE))
+  on('tool.check', { tool: NOTE_TOOL_NAME }, async ($, e, next) => {
+    const verdict = await next(e)
+    const isOwn = isInOwnWords(noteTextOf(e.input), await read($, ownPromptsAtom))
+    return verdictFor($, e, verdict, NOTE_COMMAND_LINE, isOwn)
+  })
   on('tool.check', { tool: SEARCH_TOOL_NAME }, async ($, e, next) =>
     verdictFor($, e, await next(e), SEARCH_COMMAND_LINE),
   )
@@ -696,10 +703,14 @@ export const register: Register = on => {
     return paneTree($, e, view, snapshot, run, presses, rowActions($))
   })
 
-  // The band only clears its notice here; when that throws or overruns, the prompt still enters
-  // as typed, through the catch instead of an engine report naming m2b as the failed hook.
+  // The band clears its notice here and keeps the words of the person's own prompt for the note
+  // tool; when that throws or overruns, the prompt still enters as typed, through the catch instead
+  // of an engine report naming m2b as the failed hook. A prompt not kept only makes a note ask.
   on('prompt.submit', async ($, e, next) => {
     await update($, noticeAtom, () => null)
+    if (isOwnPrompt(e)) {
+      await update($, ownPromptsAtom, prompts => withPrompt(prompts ?? [], e.text))
+    }
     return next(e)
   }).catch(($, e, next) => next(e))
 
