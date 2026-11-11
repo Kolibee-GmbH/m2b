@@ -1,6 +1,6 @@
 import type { EngineInterface, ResolveInput } from 'claude-code'
 
-import type { BandCandidate, BandPress, BandSettle } from '../types'
+import type { BandCandidate, BandPress, BandReview, BandSettle } from '../types'
 import { plainLine } from './plain-text'
 
 /** What a row's buttons do; the band and the pane share one way of keeping and dropping. */
@@ -48,6 +48,57 @@ export function candidateRow(
       {pressedLine(pressed.action, candidate.title)}
     </Text>
   )
+}
+
+/**
+ * The open review: `ok` closes it, as a keep closes a candidate, with the same undo. Beside the
+ * title, which facts the run changed, by what they are about.
+ */
+export function reviewRow(
+  $: EngineInterface,
+  e: ResolveInput,
+  review: BandReview,
+  pressed: BandPress | undefined,
+  actions: RowActions,
+  wrap: 'truncate-end' | 'wrap' = 'truncate-end',
+) {
+  const { Box, Button, Text } = $.ui.resolve(e)
+  const title = plainLine(review.title)
+  if (pressed === undefined) {
+    return (
+      <Box key={`review:${review.id}`} flexDirection="row">
+        <Button key={`ok:${review.id}`} label="ok" onPress={() => actions.press(review, 'complete')} />
+        <Text weight="semibold"> {title}</Text>
+        <Text wrap={wrap}>{changesSummary(review)}</Text>
+      </Box>
+    )
+  }
+  const line = ` closing: ${title}`
+  if (pressed.phase === 'waiting') {
+    return (
+      <Box key={`review:${review.id}`} flexDirection="row">
+        <Button key={`undo:${review.id}`} label="undo" onPress={() => actions.undo(review.id)} />
+        <Text dimColor wrap={wrap}>
+          {line}
+        </Text>
+      </Box>
+    )
+  }
+  return (
+    <Text key={`review:${review.id}`} dimColor wrap={wrap}>
+      {line}
+    </Text>
+  )
+}
+
+/** `  2 facts changed: Sam, Dana`, or nothing for a review without changes of the facts. */
+export function changesSummary(review: BandReview): string {
+  const changes = review.changes ?? []
+  if (changes.length === 0) {
+    return ''
+  }
+  const topics = [...new Set(changes.map(change => plainLine(change.topic)))]
+  return `  ${changes.length} ${changes.length === 1 ? 'fact' : 'facts'} changed: ${topics.join(', ')}`
 }
 
 function pressedLine(action: BandSettle, title: string): string {

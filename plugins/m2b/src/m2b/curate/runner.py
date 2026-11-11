@@ -736,10 +736,12 @@ class _Run:
     def _report_fact_changes(
         self, step: str, before: memory_guard.Snapshot, after: memory_guard.Snapshot, inbox: InboxBefore
     ) -> None:
-        changes = memory_guard.fact_changes(before, after)
+        changes = memory_guard.fact_change_list(before, after)
         if not changes:
             return
-        self.fact_changes += [report.Finding(step, report.ACTION, change) for change in changes]
+        self.fact_changes += [
+            report.Finding(step, report.ACTION, change.described(), change.as_json()) for change in changes
+        ]
         filed = self._filed(inbox)
         captures = f"; captures filed in this step: {', '.join(filed)}" if filed else ""
         saved = self.memory_copy
@@ -750,6 +752,7 @@ class _Run:
                 step,
                 report.ACTION,
                 f"memory/ as it was before this run is in {saved}; check the changes above{captures}",
+                {"kind": memory_guard.COPY, "path": str(saved), "captures": filed},
             )
         )
 
@@ -881,14 +884,31 @@ def _interrupted_changes(copy: Path, store: Store) -> list[report.Finding]:
         text = f"{run} could not be checked: memory/ could not be compared with its copy {copy}: {error}"
         return [report.Finding(RUN, report.ACTION, text)]
     # The lines are shown as the owner reads them: a character that hides text stays out of the review.
-    changes = [f"{run}: {strip_unsafe(change)}" for change in memory_guard.fact_changes(before, after)]
+    records = memory_guard.fact_change_list(before, after)
+    findings = [
+        report.Finding(RUN, report.ACTION, f"{run}: {strip_unsafe(change.described())}", _without_unsafe(change))
+        for change in records
+    ]
     problem = memory_guard.unsafe_line(before, after)
     if problem is not None:
-        changes.insert(0, f"{run}: {problem}")
-    if not changes:
+        findings.insert(0, report.Finding(RUN, report.ACTION, f"{run}: {problem}"))
+    if not findings:
         return []
     check = f"memory/ as it was before that run is in {copy}; check the changes above"
-    return [report.Finding(RUN, report.ACTION, text) for text in (*changes, check)]
+    return [
+        *findings,
+        report.Finding(RUN, report.ACTION, check, {"kind": memory_guard.COPY, "path": str(copy), "captures": []}),
+    ]
+
+
+def _without_unsafe(change: memory_guard.FactChange) -> dict[str, object]:
+    """The change as data, its lines without the characters that hide text, as the review shows them."""
+    data = change.as_json()
+    for side in ("before", "after"):
+        value = data[side]
+        if isinstance(value, str):
+            data[side] = strip_unsafe(value)
+    return data
 
 
 def _preflight_paths(started: datetime.datetime) -> list[str]:

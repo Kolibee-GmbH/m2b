@@ -31,7 +31,8 @@ but it can:
 Code checks what the step did to `memory/` against a copy taken just before it. Each facts line
 ingest removed or rewrote lands in the review task, with the captures it filed and where the copy is
 kept (`~/.local/state/m2b/memory-before-run/`), and it comes back in every review until you complete
-the review task. A line holding characters that hide or reorder text, such as bidirectional controls
+the review task, in your list or with `ok` in the band; `ok` closes nothing a run added to the
+review after the band drew it. A line holding characters that hide or reorder text, such as bidirectional controls
 or tag characters that spell invisible ASCII, undoes the step; the hooks remove the same characters
 before the distillate reaches a session. Lines a capture adds are not flagged, because adding is
 what ingest is for.

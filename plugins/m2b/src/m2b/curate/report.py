@@ -13,6 +13,7 @@ import json
 import os
 import re
 import secrets
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -43,6 +44,9 @@ class Finding:
     step: str
     kind: str
     text: str
+    # A change of the facts or the copy of ``memory/`` the text describes, as data for the band
+    # (``m2b band --json``); None for every other finding.
+    change: Mapping[str, object] | None = None
 
 
 def runs_dir(machine: MachinePaths) -> Path:

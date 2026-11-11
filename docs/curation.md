@@ -48,7 +48,9 @@ step:
   `MEMORY.md`. Any other change puts `memory/` back and fails the step.
 - **Ingest and lint** keep their edits. Each facts line they removed or rewrote, and each fact file
   they emptied or removed, is listed in the review task, and again in every later review until you
-  complete the task. `memory/` as it was before the run is kept in
+  complete the task, in your task list or with `ok` in [the band](band.md), where `/m2b-review`
+  shows each change with the added and removed words marked. `memory/` as it was before the run is
+  kept in
   `~/.local/state/m2b/memory-before-run/<time of the run>/` as long as such a finding names it, so a
   line can be copied back from there.
 - **Any model step**, sorting included, that writes a line holding characters that hide or reorder

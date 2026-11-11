@@ -168,15 +168,16 @@ your list, such as a review task or a "Remember? ..." candidate.
 ### Capture
 
 In any session, say what you want kept: "remember that Dana's birthday is on 3 March", "note
-this", "remind me to call the plumber on Friday". You type no command: the `capture` skill writes
-one file into `inbox/` with your words verbatim, and with a date it also creates a task that
+this", "remind me to call the plumber on Friday". You type no command: the model's note tool,
+or the `capture` skill where the band does not run, writes one file into `inbox/` with your words
+verbatim, and with a date it also creates a task that
 points back to the note. Say that you want it kept; a sentence on its own, such as "Dana's
 birthday is on 3 March", stays part of the conversation and is not captured.
 
 With Apple Calendar set up, "put it in my calendar" creates an event in the calendar you name,
 never in a default one. Calendar entries are experimental.
 
-![Asked to remember that the shed roof needs 40 screws and to be reminded on Thursday, Claude runs the capture skill, which writes one inbox file and a task due Thursday 12 November; the status line now counts 3 in the inbox](docs/images/capture.png)
+![Asked to remember that the shed roof needs 40 screws and to be reminded on Thursday, Claude calls the m2b note tool with a follow-up date, which writes one inbox file and a task due Thursday 12 November; below the answer the band shows a question and an overdue task, and the status line counts 3 in the inbox](docs/images/capture.png)
 
 From a terminal or a script, without a Claude session, the same goes through the command:
 
@@ -211,7 +212,7 @@ is set up. Rediscover brings one or a few old notes back, each with its reason, 
 did I note last spring?". A file iCloud Drive has not downloaded is named, never read and never
 counted as missing.
 
-!["What's on my list?" runs the todos skill: one overdue task, the screws captured just before and a second task due within seven days, one without a date, and a note that no calendar is set up on this machine](docs/images/todos.png)
+!["What's on my list?" runs the todos skill: one overdue task, the screws captured just before and a second task due within seven days, one without a date, and a note that no calendar is set up on this machine; the band below repeats the overdue task](docs/images/todos.png)
 
 ### The curation run
 
@@ -234,7 +235,8 @@ next run files it; drop it in the band, or delete the task, and it does not come
 
 Above the prompt, [the band](docs/band.md) shows memory candidates and "Still current?" questions,
 each with keep and drop buttons you click with the mouse (a click waits 5 seconds with `undo`
-before it writes), and the open review task with its first findings; below the prompt, a status
+before it writes), and the open review task: the facts a run changed in one row, its other
+findings, and `ok` to close it; below the prompt, a status
 line such as `3 in inbox · curated 18:02`. `/m2b-note <text>` notes a text into the inbox at once,
 without a model turn, also while one is working. `/m2b-review` opens a pane with the whole last
 curation run, and `/m2b-search <text>` shows search hits there. The model notes and searches

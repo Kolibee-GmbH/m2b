@@ -29,11 +29,11 @@ import {
   showPane,
 } from './pane'
 import { plainLine } from './plain-text'
-import { candidateRow } from './rows'
+import { candidateRow, reviewRow } from './rows'
 import type { RowActions } from './rows'
 import { shared } from './shared-cache'
 import { COULD_NOT_LOOK, statusLine } from './status-line'
-import { parseBandTasks } from './tasks'
+import { parseBandTasks, untoldFindings } from './tasks'
 import {
   NOTE_COMMAND_LINE,
   NOTE_TOOL,
@@ -274,7 +274,22 @@ function isReview(value: unknown): value is BandReview {
     typeof value['id'] === 'string' &&
     typeof value['title'] === 'string' &&
     Array.isArray(value['findings']) &&
-    value['findings'].every(finding => typeof finding === 'string')
+    value['findings'].every(finding => typeof finding === 'string') &&
+    (value['changes'] === undefined || (Array.isArray(value['changes']) && value['changes'].every(isFactChange))) &&
+    (value['told'] === undefined || (Array.isArray(value['told']) && value['told'].every(told => typeof told === 'string'))) &&
+    (value['copies'] === undefined ||
+      (Array.isArray(value['copies']) &&
+        value['copies'].every(copy => isObject(copy) && typeof copy['path'] === 'string' && typeof copy['captures'] === 'number')))
+  )
+}
+
+function isFactChange(value: unknown): boolean {
+  return (
+    isObject(value) &&
+    typeof value['topic'] === 'string' &&
+    typeof value['file'] === 'string' &&
+    Array.isArray(value['parts']) &&
+    value['parts'].every(part => isObject(part) && typeof part['text'] === 'string' && typeof part['change'] === 'string')
   )
 }
 
@@ -494,9 +509,18 @@ async function settleNow($: EngineInterface, candidate: BandCandidate, action: B
     return false
   }
   const current = snapshot.candidates
-  if (!current.some(open => open.id === candidate.id)) {
+  const fresh = snapshot.review
+  // `ok` on the review closes it the way keep closes a candidate.
+  if (!current.some(open => open.id === candidate.id) && fresh?.id !== candidate.id) {
     await update($, noticeAtom, () => `Already settled in another session, nothing written: ${candidate.title}`)
-    await update($, snapshotAtom, snapshot => (snapshot === null ? snapshot : { ...snapshot, candidates: current }))
+    await update($, snapshotAtom, old => (old === null ? old : { ...old, candidates: current, review: fresh }))
+    return false
+  }
+  // A run that ended since the review was drawn rewrote it under the same id: what was pressed on
+  // is not what would be closed.
+  if (fresh !== null && fresh.id === candidate.id && isOtherReview(candidate, fresh)) {
+    await update($, noticeAtom, () => `The review changed since it was drawn, nothing written: ${candidate.title}`)
+    await update($, snapshotAtom, old => (old === null ? old : { ...old, candidates: current, review: fresh }))
     return false
   }
   // `--`: with the markdown backend a task id is a file name, and it may start with a dash.
@@ -506,6 +530,12 @@ async function settleNow($: EngineInterface, candidate: BandCandidate, action: B
     return false
   }
   return true
+}
+
+/** Whether the review pressed on holds other findings than the one read now; unknown counts as the same. */
+function isOtherReview(pressed: BandCandidate, fresh: BandReview): boolean {
+  const findings = (pressed as Partial<BandReview>).findings
+  return Array.isArray(findings) && findings.join('\n\n') !== fresh.findings.join('\n\n')
 }
 
 function rowActions($: EngineInterface): RowActions {
@@ -693,7 +723,7 @@ export const register: Register = on => {
     const { Box, Text } = $.ui.resolve(e)
     const moreCandidates = andMore(candidates.length - CANDIDATES_SHOWN, 'candidates')
     const moreDue = andMore(due.length - DUE_SHOWN, 'due')
-    const findings = review?.findings ?? []
+    const findings = review === null ? [] : untoldFindings(review)
     const moreFindings = andMore(findings.length - FINDINGS_SHOWN, 'findings')
     const isWriting = Object.values(presses).some(pressed => pressed.phase === 'writing')
 
@@ -715,11 +745,7 @@ export const register: Register = on => {
           </Text>
         ))}
         {moreDue !== null && <Text dimColor>{moreDue}</Text>}
-        {review !== null && (
-          <Text weight="semibold" wrap="truncate-end">
-            {plainLine(review.title)}
-          </Text>
-        )}
+        {review !== null && reviewRow($, e, review, presses[review.id], actions)}
         {findings.slice(0, FINDINGS_SHOWN).map(finding => (
           <Text wrap="truncate-end">
             {'  '}
@@ -727,6 +753,7 @@ export const register: Register = on => {
           </Text>
         ))}
         {moreFindings !== null && <Text dimColor>{`  ${moreFindings}`}</Text>}
+        {(review?.changes?.length ?? 0) > 0 && <Text dimColor>  the whole review: /m2b-review</Text>}
         {isWriting && <Text dimColor>working…</Text>}
         {notice !== null && (
           <Text color="warning" wrap="truncate-end">

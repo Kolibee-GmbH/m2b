@@ -134,7 +134,15 @@ def load_memory_changes(machine: MachinePaths) -> list[Finding]:
     """The changed facts lines still waiting for the owner; nothing when the file cannot be read."""
     try:
         raw = json.loads((machine.state_dir / MEMORY_CHANGES).read_text(encoding="utf-8"))
-        return [Finding(str(item["step"]), str(item["kind"]), str(item["text"])) for item in raw]
+        return [
+            Finding(
+                str(item["step"]),
+                str(item["kind"]),
+                str(item["text"]),
+                item.get("change") if isinstance(item.get("change"), dict) else None,
+            )
+            for item in raw
+        ]
     except (OSError, ValueError, KeyError, TypeError):
         return []
 
@@ -144,7 +152,11 @@ def save_memory_changes(machine: MachinePaths, findings: list[Finding]) -> None:
     if not findings:
         path.unlink(missing_ok=True)
         return
-    data = [{"step": finding.step, "kind": finding.kind, "text": finding.text} for finding in findings]
+    data = [
+        {"step": finding.step, "kind": finding.kind, "text": finding.text}
+        | ({"change": dict(finding.change)} if finding.change is not None else {})
+        for finding in findings
+    ]
     replace_atomically(path, (json.dumps(data, ensure_ascii=False) + "\n").encode("utf-8"), machine.temp_dir)
 
 

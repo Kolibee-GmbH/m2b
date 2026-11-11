@@ -20,7 +20,7 @@ test('a title with control characters or line breaks is drawn cleaned, and the b
   await start($, on, fake)
 
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(await ui.findAll({ type: 'Button' })).toHaveLength(6)
+  expect(await ui.findAll({ type: 'Button' })).toHaveLength(7) // with ok on the review
   const shown = await texts(ui)
   expect(shown).toContain('Remember? plain again and on')
   expect(shown).toContain('Remember? red alert from the terminal')
