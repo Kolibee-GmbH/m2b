@@ -75,7 +75,8 @@ def _frontmatter(text: str) -> dict[str, str]:
 
 def _time(value: str | None) -> datetime.datetime | None:
     try:
-        moment = datetime.datetime.fromisoformat(value) if value else None
+        # Python before 3.11 refuses a trailing Z, which the core's capture pattern allows.
+        moment = datetime.datetime.fromisoformat(value.replace("Z", "+00:00")) if value else None
     except ValueError:
         return None
     return moment if moment is not None and moment.tzinfo is not None else None

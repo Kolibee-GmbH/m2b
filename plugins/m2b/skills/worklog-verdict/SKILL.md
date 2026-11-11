@@ -9,7 +9,8 @@ allowed-tools: Bash(m2b-worklog facts *)
 The worklog collected the facts of one period: the owner's sessions with their working blocks,
 prompts, commits and state. You judge them; a program writes the note, the ledger and the
 candidates from your verdict. You read through the commands below and the files under
-`<store>/memory/` and `<store>/inbox/`, nothing else, and you write nothing yourself.
+`<store>/memory/` and `<store>/inbox/`, and you write and read one file of your own: the verdict.
+Nothing else.
 
 Run every command as a Bash call of its own, exactly as shown: no `&&`, `;`, `|`, `echo` or
 redirection. The run allows each command by itself and denies anything chained.
@@ -24,7 +25,7 @@ If it fails with "no worklog is being judged", you were asked in an ordinary ses
 the worklog is written once a day by the curation run, before the inbox is filed, and stop.
 
 The answer has `store` (the store's folder), `language` (write every topic, detail and candidate
-in this language) and `facts`. In `facts`:
+in this language), `verdict_file` (where you write the verdict) and `facts`. In `facts`:
 
 - `period`: the start and end of what you judge.
 - `sources`: each source and whether it could be read. A source that could not be read means
@@ -78,15 +79,20 @@ For **every** session in `facts.sessions`, exactly once:
 owner's ways of working, each as `{"text": "<one sentence>", "session": "<key>"}`. At most three,
 none is fine. Never a task, never something already in memory, never a guess.
 
-Hand in the verdict as one JSON argument, in single quotes:
+Every `topic`, `state_detail`, `note`, `project`, `activity` and candidate `text` is one line,
+without a line break.
+
+Write the verdict as one JSON object, `{"version": 1, "sessions": [...], "candidates": [...]}`,
+with the Write tool to the path in `verdict_file`, then hand it in:
 
 ```bash
-m2b-worklog verdict '{"version": 1, "sessions": [...], "candidates": [...]}'
+m2b-worklog verdict
 ```
 
 It answers `verdict accepted`, or lists each problem by its place, such as a customer that is not
-in the list or a session left out. Fix those and hand it in again. A text that needs a single
-quote gets a typographic one (’) instead.
+in the list or a session left out. Fix those in the file (Read it first, then Write it again or
+Edit it) and hand it in again. Keys are copied exactly as the facts give them, apostrophes
+included.
 
 ## 4. When you cannot
 

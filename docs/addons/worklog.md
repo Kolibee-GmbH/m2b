@@ -86,10 +86,30 @@ agent's time is billable depends on your agreement with the customer; the ledger
 you decide. Rows written before m2b 0.3.0 have no `minutes_present`; the exports leave that cell
 empty.
 
+In `ledger.csv`, a cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets a
+leading apostrophe, so a
+spreadsheet shows a topic the model wrote as text instead of running it as a formula; the XLSX
+writes every cell as text and needs none.
+
 The ledger never holds the same minutes twice. A worklog whose period overlaps one the ledger holds
 is refused before anything is written, and the step fails with a message that names the period it
 overlaps (and the span, when one of the same session overlaps too). That happens when
 `watermark.json` was reset or lost, so the worklog reaches back over time it wrote before.
+
+## The note
+
+Every time in the note and the facts is in your machine's local time, in the offset of its own day,
+so a period across a change to or from summer time keeps each day's times on the clock. When the
+blocks of a note fall on more than one date, each block carries its date, and a block that runs to
+midnight ends with the next date:
+
+```text
+- 2026-03-13 23:30-2026-03-14 00:00, 2026-03-14 10:00-10:50
+```
+
+On a single date the times stand alone, as `10:00-10:50`. The model step proposes at most three
+memory candidates, and a topic, detail, note, candidate, project or activity is one line: a
+verdict that breaks either rule is refused and handed back to the model to fix.
 
 ## The period
 
@@ -135,9 +155,18 @@ takes out the timer. The recordings stay until `m2b-worklog recordings delete` r
 ## What it reads
 
 Only while it is on and only on the curating machine: the herdr events its recorder wrote; from your
-Claude Code transcripts for the period, the prompts and the last 500 characters of each session's
-last answer, with credentials and long tokens redacted; your own git commits and the `origin` remote
-in the session folders; and the names of the period's captures in the inbox. Its model step, once a
+Claude Code transcripts for the period, the prompts (240 characters each) and the last 500
+characters of each session's last answer, where a question to you stands; your own git commits and
+the `origin` remote in the session folders; and the names of the period's captures in the inbox. A
+prompt loses the blocks Claude Code adds to it, such as a `<system-reminder>`, before it is cut, and
+the summary Claude Code writes after a context cut counts as no prompt.
+
+Prompts and answers are redacted before the model sees them: the value after a word such as
+password, `pw`, secret or token ("the password for the db is hunter2" becomes "the password for the
+db is [removed]"), a credential after `Bearer` or `Basic`, and long tokens of mixed letters and
+digits, also base64 keys with `/` and `+`. Redaction works on patterns and stays incomplete: a
+secret written in words of its own, or one shorter than a token, goes through. The facts wait in
+`~/.local/state/m2b/worklog-run/`, readable by you only, while the model step runs. Its model step, once a
 day, reads these facts, memory, the inbox notes and your task list, and may search the archive with
 `m2b search` to place a session. The transcripts are read from the `projects/` folder of Claude
 Code's own folder: the one `CLAUDE_CONFIG_DIR` names, or `~/.claude` when that variable is not set.
@@ -149,7 +178,7 @@ Code's own folder: the one `CLAUDE_CONFIG_DIR` names, or `~/.claude` when that v
 | `~/.local/share/m2b/worklog-recorder/` | the recorder copy herdr links, outside the plugin's folder, which an update replaces, with `linked-version`, the version herdr last linked |
 | `~/.local/state/m2b/worklog/` | the recorder's events, one file per workspace, a workspace cache, the switch file `recording` (`on` or `off`), and in `alive/` the signs of life (one file per month), the time of the timer's first run (`first-tick`) and the herdr sockets the events came from (`sockets.json`) |
 | `~/Library/LaunchAgents/m2b.worklog-recorder.tick.plist` (macOS), `~/.config/systemd/user/m2b-worklog-recorder-tick.service` and `.timer` (Linux) | the timer that runs the recorder every five minutes |
-| `~/.local/state/m2b/worklog-run/` | the facts and the verdict while one worklog is being written |
+| `~/.local/state/m2b/worklog-run/` | while one worklog is being written: the facts, `verdict-draft.json`, which the model step writes and `m2b-worklog verdict` checks, and the accepted verdict |
 | `inbox/` in the store | the day's note, with `source: worklog` and `kind: worklog` |
 | `state/addons/worklog/` in the store | `ledger.json` (the record), `ledger.csv` and `ledger.xlsx` (rebuilt every day, not for editing), `watermark.json` (where the next period starts), `intent.json` (only while a worklog is being written, so a rerun after a crash finishes the same plan) |
 | the task list | "Remember? ..." candidates |

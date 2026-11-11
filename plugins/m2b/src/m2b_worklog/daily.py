@@ -49,7 +49,8 @@ DUE_AFTER = datetime.timedelta(hours=20)
 FACTS_FILE = "facts.json"
 VERDICT_FILE = "verdict.json"
 VERDICT_SKILL = "m2b:worklog-verdict"
-# The verdict's fence: its own two commands, read-only core commands, reports, memory and inbox.
+# The verdict's fence: its own two commands, read-only core commands, reports, memory and inbox,
+# and the one file it writes its verdict to.
 VERDICT_RULES = (
     "Bash(m2b-worklog facts *)",
     "Bash(m2b-worklog verdict *)",
@@ -59,6 +60,20 @@ VERDICT_RULES = (
     "Read(<store>/memory/**)",
     "Read(<store>/inbox/**)",
 )
+
+
+def verdict_rules(paths: WorklogPaths) -> tuple[str, ...]:
+    """The fence with the draft's own rules: Write needs an Edit rule, and a Read one to write it again.
+
+    The verdict goes in as a file, not as an argument of the command: a session key holds the
+    folder's path as written, and an apostrophe in it cannot be quoted in a shell argument without
+    changing the key. A permission rule reads ``//path`` as an absolute path.
+    """
+    draft = paths.verdict_draft
+    if not draft.is_absolute():
+        raise DailyError(f"the worklog's run folder {paths.run_dir} is not an absolute path; check M2B_HOME")
+    # The command takes no argument; the rule without " *" holds whether or not " *" covers it bare.
+    return (*VERDICT_RULES, "Bash(m2b-worklog verdict)", f"Read(/{draft})", f"Edit(/{draft})")
 
 
 class DailyError(Exception):
@@ -95,7 +110,7 @@ def run(paths: WorklogPaths, core: Core, now: datetime.datetime, sources: Source
     language = str(profile.get("language") or "en")
     hand_to_model(paths, store, language, collected)
     try:
-        core.model(VERDICT_SKILL, VERDICT_RULES)
+        core.model(VERDICT_SKILL, verdict_rules(paths))
         judged = _read_verdict(paths, collected)
     finally:
         # The facts hold the owner's prompts; once judged, or not, they are not kept on disk.
@@ -197,13 +212,20 @@ def facts_for_model(paths: WorklogPaths) -> dict[str, Any]:
     return dict(handed)
 
 
-def accept_verdict(paths: WorklogPaths, raw: str) -> list[str]:
-    """What ``m2b-worklog verdict`` does: the problems with the verdict, or none once it is stored."""
+def accept_verdict(paths: WorklogPaths) -> list[str]:
+    """What ``m2b-worklog verdict`` does with the draft: the problems with it, or none once it is stored."""
+    handed = facts_for_model(paths)
+    try:
+        raw = paths.verdict_draft.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return [f"no verdict in {paths.verdict_draft}; write it there first"]
+    except (OSError, ValueError) as error:
+        return [f"the verdict in {paths.verdict_draft} cannot be read: {error}"]
     try:
         judged = json.loads(raw)
     except ValueError as error:
         return [f"the verdict is not JSON: {error}"]
-    problems = verdict.problems_of(judged, facts_for_model(paths)["facts"])
+    problems = verdict.problems_of(judged, handed["facts"])
     if not problems:
         replace_file(paths.run_dir / VERDICT_FILE, (json.dumps(judged, ensure_ascii=False, indent=1) + "\n").encode())
     return problems
@@ -211,16 +233,18 @@ def accept_verdict(paths: WorklogPaths, raw: str) -> list[str]:
 
 def hand_to_model(paths: WorklogPaths, store: Path, language: str, collected: Mapping[str, Any]) -> None:
     """The facts for ``m2b-worklog facts``; while they are there, a worklog is being judged."""
-    paths.run_dir.mkdir(parents=True, exist_ok=True)
+    # The facts hold the owner's prompts, and the draft is written with whatever mode the Write tool gives it.
+    paths.run_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    paths.run_dir.chmod(0o700)
     clear_handed(paths)
-    handed = {"store": str(store), "language": language, "facts": collected}
+    handed = {"store": str(store), "language": language, "verdict_file": str(paths.verdict_draft), "facts": collected}
     replace_file(paths.run_dir / FACTS_FILE, (json.dumps(handed, ensure_ascii=False, indent=1) + "\n").encode())
 
 
 def clear_handed(paths: WorklogPaths) -> None:
-    for name in (FACTS_FILE, VERDICT_FILE):
+    for path in (paths.run_dir / FACTS_FILE, paths.run_dir / VERDICT_FILE, paths.verdict_draft):
         with contextlib.suppress(FileNotFoundError):
-            (paths.run_dir / name).unlink()
+            path.unlink()
 
 
 def _read_verdict(paths: WorklogPaths, collected: Mapping[str, Any]) -> dict[str, Any]:

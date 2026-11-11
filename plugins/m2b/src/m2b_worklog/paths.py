@@ -29,6 +29,11 @@ class WorklogPaths:
         return self.home / ".local" / "state" / "m2b" / "worklog-run"
 
     @property
+    def verdict_draft(self) -> Path:
+        """Where the verdict's model step writes its verdict before it hands it in."""
+        return self.run_dir / "verdict-draft.json"
+
+    @property
     def switch(self) -> Path:
         return self.state_dir / SWITCH_FILE
 

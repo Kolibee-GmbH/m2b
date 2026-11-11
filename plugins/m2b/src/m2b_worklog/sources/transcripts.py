@@ -2,8 +2,14 @@
 
 Only transcripts changed since the period's start are opened. A transcript that holds any record
 of a headless run (``entrypoint: sdk-cli``) is left out entirely, so curation runs never report
-themselves. A transcript's folder is the one its session started in. Prompts lose system
-wrappers, keep pasted text, are redacted and cut short.
+themselves. A transcript's folder is the one its session started in. Prompts lose the blocks
+Claude Code wraps around them and the summaries it writes after a context cut, keep pasted text,
+are redacted and cut short. The last answer is the end of the last reply, where a question to the
+owner stands.
+
+Redaction works on patterns: a value after a word such as password or token, a credential after
+``Bearer`` or ``Basic``, and long tokens of mixed letters and digits. It misses what matches none
+of them, so a prompt can still carry a secret in words of its own.
 """
 
 from __future__ import annotations
@@ -25,10 +31,36 @@ ANSWER_LENGTH = 500
 _PASTED = re.compile(r"</?pasted_content[^>]*>")
 _COMMAND = re.compile(r"<command-name>/?([^<]+)</command-name>(?:\s*<command-args>([^<]*)</command-args>)?")
 _WRAPPED = re.compile(r"^\s*<([a-zA-Z][\w-]*)[^>]*>.*</\1>\s*$", re.S)
+# The blocks Claude Code puts into a prompt beside what the owner typed.
+_SYSTEM_TAGS = (
+    "system-reminder",
+    "local-command-caveat",
+    "local-command-stdout",
+    "local-command-stderr",
+    "command-message",
+    "user-prompt-submit-hook",
+    "task-notification",
+)
+_SYSTEM_BLOCK = re.compile(r"<(" + "|".join(_SYSTEM_TAGS) + r")\b[^>]*>.*?</\1>", re.S)
+# What Claude Code writes as the first user message after a context cut, when the record has no flag.
+_SUMMARY_OPENING = "This session is being continued from a previous conversation"
 # Not \b before the keyword: DB_PASSWORD and client_secret have a letter or "_" in front.
-_KEYWORD = r"(?i)(?<![a-z])(secret|client[ _-]?id|password|passwort|kennwort|token|api[ _-]?key)"
-_SECRET = re.compile(_KEYWORD + r"([\"']?\s*(?:[:=]|\bis\b|\bist\b|\blautet\b)\s*)(\S+)")
+_KEYWORD = r"(?i)(?<![a-z])(secret|client[ _-]?id|password|passwort|kennwort|passwd|pwd|pw|token|api[ _-]?key)"
+# Up to four words between the keyword and its value: "the password for the db is hunter2".
+_BETWEEN = r"((?:\s+[\w.-]+){0,4}?[\"']?\s*(?:[:=]|\b(?:is|ist|lautet)\b\s*[:=]?)\s*)"
+_SECRET = re.compile(_KEYWORD + r"\b" + _BETWEEN + r"(\S+)")
+# The scheme as HTTP writes it, followed by a value shaped like a credential, not by a word.
+_SCHEME = re.compile(r"\b(Bearer|Basic)\s+(?=[\w.~+/=-]*[\d+/=])[\w.~+/=-]{6,}")
 _LONG_TOKEN = re.compile(r"\b(?=[A-Za-z0-9_\-]*[A-Za-z])(?=[A-Za-z0-9_\-]*\d)[A-Za-z0-9_\-]{24,}\b")
+# A base64 key holds "/" and "+" too, and upper and lower case letters and digits. It never starts
+# inside a path or a word and never ends before a file extension; one with "/" whose parts include
+# a word in lower case only is a relative path (`apps/Web3Portal/src`), not a key.
+_BASE64_CANDIDATE = re.compile(
+    r"(?<![\w/.~+-])(?=[\w+/=-]*[A-Z])(?=[\w+/=-]*[a-z])(?=[\w+/=-]*\d)[A-Za-z0-9][\w+/=-]{23,}(?![\w/+]|\.\w)"
+)
+_LOWER_WORD = re.compile(r"[a-z]+")
+# Redaction runs before the cut; this much more than the cut keeps its patterns fast on long text.
+_REDACT_MARGIN = 200
 REDACTED = "[removed]"
 
 
@@ -83,25 +115,47 @@ def read_transcripts(
 
 def prompt_text(content: object, limit: int = PROMPT_LENGTH) -> str | None:
     """What the owner typed, redacted and cut at ``limit``; None for system content and tool results."""
-    if isinstance(content, list):
-        parts = [p.get("text") for p in content if isinstance(p, dict) and p.get("type") == "text"]
-        content = "\n".join(part for part in parts if isinstance(part, str))
-    if not isinstance(content, str) or not content.strip():
+    content = _text_of(content)
+    if content is None:
         return None
     command = _COMMAND.search(content)
     if command:
         text = f"{command.group(1).strip()} {(command.group(2) or '').strip()}".strip()
     else:
-        text = _PASTED.sub("", content)
-        if _WRAPPED.match(text):
+        text = _SYSTEM_BLOCK.sub("", _PASTED.sub("", content))
+        if _WRAPPED.match(text) or text.lstrip().startswith(_SUMMARY_OPENING):
             return None
-    text = " ".join(redact(text).split())
+    text = " ".join(redact(text[: limit + _REDACT_MARGIN]).split())
     return text[:limit] or None
 
 
+def answer_text(content: object, limit: int = ANSWER_LENGTH) -> str | None:
+    """The end of a reply, redacted: a question to the owner stands last."""
+    content = _text_of(content)
+    if content is None:
+        return None
+    text = " ".join(redact(content[-(limit + _REDACT_MARGIN) :]).split())
+    return text[-limit:] or None
+
+
+def _text_of(content: object) -> str | None:
+    if isinstance(content, list):
+        parts = [p.get("text") for p in content if isinstance(p, dict) and p.get("type") == "text"]
+        content = "\n".join(part for part in parts if isinstance(part, str))
+    return content if isinstance(content, str) and content.strip() else None
+
+
 def redact(text: str) -> str:
-    """Credentials pasted into a prompt never reach the worklog: the value after a keyword, long mixed tokens."""
-    return _LONG_TOKEN.sub(REDACTED, _SECRET.sub(lambda m: f"{m.group(1)}{m.group(2)}{REDACTED}", text))
+    """Credentials pasted into a prompt never reach the worklog, as far as a pattern finds them."""
+    text = _SCHEME.sub(lambda m: f"{m.group(1)} {REDACTED}", text)
+    text = _SECRET.sub(lambda m: f"{m.group(1)}{m.group(2)}{REDACTED}", text)
+    return _LONG_TOKEN.sub(REDACTED, _BASE64_CANDIDATE.sub(_base64_key, text))
+
+
+def _base64_key(match: re.Match[str]) -> str:
+    token = match.group(0)
+    is_path = "/" in token and any(_LOWER_WORD.fullmatch(part) for part in token.split("/"))
+    return token if is_path else REDACTED
 
 
 def _read(
@@ -134,12 +188,12 @@ def _read(
                 continue
             stamps.append(moment)
             message: dict[str, Any] = record["message"] if isinstance(record.get("message"), dict) else {}
-            if record["type"] == "user" and not record.get("isMeta"):
+            if record["type"] == "user" and not record.get("isMeta") and not record.get("isCompactSummary"):
                 text = prompt_text(message.get("content"))
                 if text is not None:
                     prompts.append(Prompt(moment, text))
             elif record["type"] == "assistant":
-                answer = prompt_text(message.get("content"), ANSWER_LENGTH) or answer
+                answer = answer_text(message.get("content")) or answer
     if cwd is None or not (stamps or earlier):
         return None
     return Transcript(session_id, cwd, prompts, stamps, answer, earlier)

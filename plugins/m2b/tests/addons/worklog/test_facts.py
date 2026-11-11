@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from typing import Any
@@ -15,10 +16,13 @@ from typing import Any
 from m2b_worklog import facts, schema
 from m2b_worklog.facts import FactsError, Inputs
 from m2b_worklog.sources import herdr_events
-from m2b_worklog.sources.transcripts import prompt_text, redact
+from m2b_worklog.sources.inbox import read_inbox
+from m2b_worklog.sources.transcripts import prompt_text, read_transcripts, redact
 from worklog_fixtures import load_recorder
 
 ZONE = datetime.timezone(datetime.timedelta(hours=1))
+# The machine's time zone in every test: one hour east of UTC all year, as ZONE (POSIX names it GMT-1).
+TEST_TZ = "Etc/GMT-1"
 NOW = datetime.datetime(2026, 3, 14, 18, 0, tzinfo=ZONE)
 COMMAND = Path(__file__).resolve().parents[3] / "bin" / "m2b-worklog"
 PROFILE = {
@@ -36,8 +40,25 @@ def at(hour: int, minute: int = 0) -> datetime.datetime:
     return NOW.replace(hour=hour, minute=minute)
 
 
+def use_time_zone(test: unittest.TestCase, name: str) -> None:
+    """Runs the test with the machine's time zone set to ``name``; the zone before comes back after it."""
+    before = os.environ.get("TZ")
+
+    def restore() -> None:
+        if before is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = before
+        time.tzset()
+
+    os.environ["TZ"] = name
+    time.tzset()
+    test.addCleanup(restore)
+
+
 class Fixture(unittest.TestCase):
     def setUp(self) -> None:
+        use_time_zone(self, TEST_TZ)
         self._temp = tempfile.TemporaryDirectory()
         self.addCleanup(self._temp.cleanup)
         self.base = Path(self._temp.name)
@@ -943,3 +964,92 @@ class EvictedFilesTest(Fixture):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+SUMMARY = "This session is being continued from a previous conversation that ran out of context."
+
+
+class WhatLeavesATranscriptTest(Fixture):
+    """What the worklog takes from a transcript, and what it keeps out of it."""
+
+    def one_transcript(self, records: list[dict[str, Any]]) -> Any:
+        self.transcript("s1", self.repo, records)
+        [found] = read_transcripts(self.projects, at(9), NOW).transcripts
+        return found
+
+    def test_the_last_answer_is_its_last_500_characters(self) -> None:
+        """Covers: B97"""
+        answer = "x" * 700 + " Shall I merge the branch?"
+        found = self.one_transcript(
+            [{"type": "assistant", "timestamp": "2026-03-14T09:30:00Z", "message": {"content": answer}}]
+        )
+        self.assertEqual(len(found.last_answer), 500)
+        self.assertTrue(found.last_answer.endswith("Shall I merge the branch?"))
+
+    def test_these_credentials_are_redacted(self) -> None:
+        """Covers: B97"""
+        for text, secret in (
+            ("the password for the db is hunter2", "hunter2"),
+            ("pw=Sommer2026!", "Sommer2026"),
+            ("Authorization: Bearer abc123", "abc123"),
+            ("aws secret wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "K7MDENG"),
+            ("the password is: hunter2", "hunter2"),
+            ("Passwort lautet: Sommer2026", "Sommer2026"),
+            ("token: Bearer abc123xyz", "abc123xyz"),
+        ):
+            with self.subTest(text=text):
+                self.assertNotIn(secret, redact(text))
+                self.assertIn("[removed]", redact(text))
+
+    def test_paths_and_plain_sentences_stay_as_written(self) -> None:
+        """Covers: B97"""
+        for text in (
+            "open /Users/alex/Coding/projects/m2b/README.md and src/m2b_worklog/sources/transcripts.py",
+            "Fix the invoice export for Globex before Friday",
+            "cd apps/Web3Portal/src/components/Header and Coding/projects/WatchApp2Client/ClientKit",
+            "write basic tests for the parser, the Bearer of bad news",
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(redact(text), text)
+
+    def test_a_system_block_before_the_prompt_is_removed_before_the_prompt_is_cut(self) -> None:
+        """Covers: B97"""
+        reminder = "<system-reminder>" + "the file /Users/alex/notes.md changed " * 10 + "</system-reminder>"
+        content = [{"type": "text", "text": reminder + "\nFix the invoice export"}]
+        self.assertEqual(prompt_text(content), "Fix the invoice export")
+
+    def test_a_summary_after_a_context_cut_is_no_prompt(self) -> None:
+        """Covers: B97"""
+        for flag in ({"isCompactSummary": True}, {}):
+            with self.subTest(flag=flag):
+                found = self.one_transcript(
+                    [
+                        {"type": "user", "timestamp": "2026-03-14T09:01:00Z", "message": {"content": "Fix the export"}},
+                        {
+                            "type": "user",
+                            "timestamp": "2026-03-14T09:40:00Z",
+                            **flag,
+                            # Without the flag only this opening tells it apart.
+                            "message": {"content": "Summary for the next session." if flag else SUMMARY},
+                        },
+                    ]
+                )
+                self.assertEqual([prompt.text for prompt in found.prompts], ["Fix the export"])
+
+
+class TimesTest(Fixture):
+    def test_a_capture_stamped_with_z_counts_on_every_python(self) -> None:
+        """Covers: B98"""
+        (self.store / "inbox" / "20260314-100000-mac-ab12.md").write_text(
+            "---\ncreated: 2026-03-14T10:00:00Z\nsource: mac\n---\n\nA note.\n", encoding="utf-8"
+        )
+        captures = read_inbox(self.store, at(9), NOW).captures
+        self.assertEqual([capture.name for capture in captures], ["20260314-100000-mac-ab12.md"])
+
+    def test_each_time_is_written_in_the_offset_of_its_own_day(self) -> None:
+        """Covers: B98"""
+        use_time_zone(self, "Europe/Zurich")
+        before = datetime.datetime(2026, 10, 24, 8, 0, tzinfo=datetime.timezone.utc)
+        after = datetime.datetime(2026, 10, 26, 8, 0, tzinfo=datetime.timezone.utc)
+        self.assertEqual(facts.local_iso(before), "2026-10-24T10:00:00+02:00")
+        self.assertEqual(facts.local_iso(after), "2026-10-26T09:00:00+01:00")

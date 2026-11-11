@@ -3,7 +3,8 @@
 It reads the actions file, checks every tool call against ``--allowedTools`` the way the real run
 would under ``--permission-mode dontAsk``, carries out the allowed ones and denies the rest, and
 writes ``stream-json`` lines with a final ``result`` that lists the denials. ``<store>`` in an
-action stands for the folder in ``M2B_STUB_STORE``, ``<capture:cli>`` for the one inbox capture
+action stands for the folder in ``M2B_STUB_STORE``, ``<m2b-home>`` for ``M2B_HOME``, the folder the
+machine paths lie under, ``<capture:cli>`` for the one inbox capture
 with that source, whose name the scenario cannot know in advance (fixed at its first use).
 
 The rules behave as measured with Claude Code 2.1.319 on 2026-11-07: an ``Edit(...)``
@@ -172,7 +173,13 @@ def _replace_placeholders(value: Any, store: str, captures: dict[str, str]) -> A
             captures[source] = found[0]
         return captures[source]
 
-    return _CAPTURE.sub(capture, value.replace("<store>", store))
+    if "<m2b-home>" in value:
+        home = os.environ.get("M2B_HOME")
+        if not home:
+            raise PlaceholderError("<m2b-home> without M2B_HOME")
+        value = value.replace("<m2b-home>", home)
+    value = value.replace("<store>", store)
+    return _CAPTURE.sub(capture, value)
 
 
 def _script_for_call(skills: dict[str, Any], prompt: str, actions_file: Path) -> dict[str, Any]:

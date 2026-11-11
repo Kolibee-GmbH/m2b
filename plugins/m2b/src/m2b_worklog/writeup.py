@@ -188,8 +188,9 @@ def _note(
     ]
     if not sessions:
         lines += [words["no_sessions"], ""]
+    is_dated = _spans_more_than_one_day(sessions)
     for session in sessions:
-        lines += _session_lines(session, spheres, words)
+        lines += _session_lines(session, spheres, words, is_dated)
     bookings = [span for span in spans if is_booking(span)]
     lines += [f"## {words['bookings']}", ""]
     lines += [_booking_line(span, words) for span in bookings] or [words["no_bookings"]]
@@ -205,7 +206,29 @@ def _note(
     return "\n".join(lines)
 
 
-def _session_lines(session: _Session, spheres: Mapping[str, Mapping[str, Any]], words: Mapping[str, Any]) -> list[str]:
+def _spans_more_than_one_day(sessions: Sequence[_Session]) -> bool:
+    """Whether the blocks of the note start or end on more than one date, so their times need it."""
+    days = set()
+    for session in sessions:
+        for block in session.facts["blocks"]:
+            days.add(_time(block["start"]).date())
+            # A block ending at midnight ends on its own day.
+            days.add((_time(block["end"]) - datetime.timedelta(microseconds=1)).date())
+    return len(days) > 1
+
+
+def _block_time(start: datetime.datetime, end: datetime.datetime, is_dated: bool) -> str:
+    """``10:00-10:40``, with the date in front when the note covers more than one day, and at the end
+    again when the block crosses midnight, so its end never reads as earlier than its start."""
+    if not is_dated:
+        return f"{start:%H:%M}-{end:%H:%M}"
+    shown_end = f"{end:%H:%M}" if end.date() == start.date() else f"{end:%Y-%m-%d %H:%M}"
+    return f"{start:%Y-%m-%d %H:%M}-{shown_end}"
+
+
+def _session_lines(
+    session: _Session, spheres: Mapping[str, Mapping[str, Any]], words: Mapping[str, Any], is_dated: bool
+) -> list[str]:
     facts, verdict = session.facts, session.verdict
     place = facts["repo"] or facts["label"] or facts["folder"] or facts["key"]
     sphere = spheres[session.sphere]["label"] or session.sphere if session.sphere is not None else None
@@ -214,7 +237,7 @@ def _session_lines(session: _Session, spheres: Mapping[str, Mapping[str, Any]], 
     detail = f": {verdict['state_detail']}" if verdict.get("state_detail") else ""
     lines = [f"### {verdict['topic']}", ""]
     lines.append(f"- {place}" + (f" ({sphere})" if sphere else "") + f", {_duration(minutes, words)}, {state}{detail}")
-    times = ", ".join(f"{_time(b['start']):%H:%M}-{_time(b['end']):%H:%M}" for b in facts["blocks"])
+    times = ", ".join(_block_time(_time(b["start"]), _time(b["end"]), is_dated) for b in facts["blocks"])
     if times:
         lines.append(f"- {times}")
     if facts["commits"]:
@@ -227,7 +250,7 @@ def _session_lines(session: _Session, spheres: Mapping[str, Mapping[str, Any]], 
 def _booking_line(span: Mapping[str, Any], words: Mapping[str, Any]) -> str:
     start, end = _time(span["start"]), _time(span["end"])
     what = ", ".join(part for part in (span["customer"], span["project"], span["activity"]) if part)
-    return f"- {start:%Y-%m-%d %H:%M}-{end:%H:%M} ({_duration(span['minutes'], words)}): {what}"
+    return f"- {_block_time(start, end, is_dated=True)} ({_duration(span['minutes'], words)}): {what}"
 
 
 def _unread(facts: Mapping[str, Any]) -> list[str]:

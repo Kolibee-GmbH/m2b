@@ -44,8 +44,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     run.add_argument("--now", help="the period's end, ISO 8601 with an offset (default: now)")
     facts_command = commands.add_parser("facts", help="the facts being judged, for the verdict's model step")
     facts_command.add_argument("--json", action="store_true", help="accepted for symmetry; the output is JSON")
-    verdict_command = commands.add_parser("verdict", help="hand in the verdict: checked, then stored")
-    verdict_command.add_argument("verdict", help="the verdict as one JSON object")
+    commands.add_parser("verdict", help="hand in the verdict written to the file `facts` names: checked, then stored")
     state_command = commands.add_parser(
         "state", help="the watermark, an unfinished worklog and the last period in the ledger"
     )
@@ -74,7 +73,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if arguments.group == "facts":
         return _facts(paths)
     if arguments.group == "verdict":
-        return _verdict(paths, arguments.verdict)
+        return _verdict(paths)
     if arguments.group == "machine":
         return _machine(paths, arguments.json)
     if arguments.group == "state":
@@ -151,9 +150,9 @@ def _facts(paths: WorklogPaths) -> int:
     return EXIT_OK
 
 
-def _verdict(paths: WorklogPaths, raw: str) -> int:
+def _verdict(paths: WorklogPaths) -> int:
     try:
-        problems = daily.accept_verdict(paths, raw)
+        problems = daily.accept_verdict(paths)
     except (OSError, daily.DailyError) as error:
         print(f"m2b-worklog: {error}", file=sys.stderr)
         return EXIT_PROBLEM

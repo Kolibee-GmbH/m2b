@@ -102,6 +102,21 @@ All notable changes to this project are documented here. The format follows
   it after `--`.
 - The folder with the band's shared answer, which holds candidate titles and findings, is kept
   readable by its owner only.
+- The worklog's model step writes its verdict to a file instead of passing it as a shell argument,
+  so a session in a folder with an apostrophe in its name, such as `Bob's project`, no longer fails
+  the step on every run.
+- The worklog redacts more before the model sees a prompt: a value a few words after "password",
+  `pw=`, a credential after `Bearer`, and base64 keys with `/` and `+`. Its page says that redaction
+  over patterns stays incomplete.
+- A `<system-reminder>` in front of a prompt no longer uses up the prompt's 240 characters, and the
+  summary after a context cut no longer counts as a prompt. The last answer is its last 500
+  characters, as the page said, instead of its first.
+- A topic starting with `=`, `+`, `-` or `@` is text in `ledger.csv`, not a formula.
+- A worklog note whose blocks fall on two dates gives each block its date, and every time is in the
+  offset of its own day, also across a change of summer time. Captures stamped with `Z` count on
+  Python 3.9 and 3.10 too.
+- More than three memory candidates, or a line break in a topic or note, make the verdict refused
+  and handed back to the model, instead of reaching the note.
 
 ## [0.2.0] - 2026-11-09
 

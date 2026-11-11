@@ -50,6 +50,8 @@ COLUMNS = (
     "activity",
 )
 ZIP_TIME = (2000, 1, 1, 0, 0, 0)
+# What opens a formula in Excel, LibreOffice and Google Sheets, a tab and a carriage return included.
+FORMULA_STARTS = ("=", "+", "-", "@", "\t", "\r")
 
 
 class LedgerError(Exception):
@@ -140,8 +142,16 @@ def _csv(rows: Sequence[Sequence[str]]) -> bytes:
     text = io.StringIO()
     writer = csv.writer(text, lineterminator="\n")
     writer.writerow(COLUMNS)
-    writer.writerows(rows)
+    writer.writerows([[_as_text(cell) for cell in row] for row in rows])
     return text.getvalue().encode("utf-8")
+
+
+def _as_text(cell: str) -> str:
+    """A cell a spreadsheet would read as a formula gets a leading apostrophe: topics come from a model.
+
+    The XLSX needs none, its cells are written as text.
+    """
+    return f"'{cell}" if cell.startswith(FORMULA_STARTS) else cell
 
 
 def _xlsx(rows: Sequence[Sequence[str]]) -> bytes:
