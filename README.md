@@ -170,12 +170,21 @@ your list, such as a review task or a "Remember? ..." candidate.
 In any session, say what you want kept: "remember that Dana's birthday is on 3 March", "note
 this", "remind me to call the plumber on Friday". You type no command: the model's note tool,
 or the `capture` skill where the band does not run, writes one file into `inbox/` with your words
-verbatim, and with a date it also creates a task that
-points back to the note. Say that you want it kept; a sentence on its own, such as "Dana's
-birthday is on 3 March", stays part of the conversation and is not captured.
+verbatim, and with a date it also creates a task that points back to the note. Say that you want it
+kept; a sentence on its own, such as "Dana's birthday is on 3 March", stays part of the
+conversation and is not captured.
 
-With Apple Calendar set up, "put it in my calendar" creates an event in the calendar you name,
-never in a default one. Calendar entries are experimental.
+A reminder and a to-do are the same thing in m2b: a task in your task list, Apple Reminders or
+Markdown files in the store. Its due date is a day, without a time of day; whether your phone
+alerts for it is up to the Reminders app.
+
+"Put it in my calendar" creates an event in the calendar you name, never in a default one: a
+title, a start and an end, or a whole day. It goes through the `capture` skill, not the note tool.
+It needs macOS, `calendar.backend` set to `apple-calendar` on that machine (setup asks), and full
+access to calendars for the terminal Claude Code runs in (System Settings, Privacy & Security,
+Calendars); `m2b calendar list --writable` names the calendars it can write. A Google or Exchange
+calendar works when Apple Calendar shows it. Calendar entries are experimental: a small extra
+beside a notes product, kept apart from what m2b promises, not a sign of known faults.
 
 ![Asked to remember that the shed roof needs 40 screws and to be reminded on Thursday, Claude calls the m2b note tool with a follow-up date, which writes one inbox file and a task due Thursday 12 November; below the answer the band shows a question and an overdue task, and the status line counts 3 in the inbox](docs/images/capture.png)
 
@@ -357,6 +366,8 @@ whether a run is due.
 - The task titles, notes and worklog m2b writes are in English or German; everything else it
   prints is in English. Your notes can be in any language.
 - On Linux there is no calendar backend, and a schedule is a cron line instead of a Shortcut.
+- An event goes into your own calendar only: no attendees, invitations, place or meeting link. A
+  task is due on a day, not at a time.
 - The worklog needs [herdr](https://herdr.dev) 0.9 or later and records only the curating machine. It never books anything: its
   bookings are proposals for you to enter.
 - Sync is whatever moves the folder. m2b has no sync and no server of its own.
