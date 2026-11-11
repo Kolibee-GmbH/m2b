@@ -147,6 +147,8 @@ the repository has newer commits. What each version changed is in the [changelog
 Your store, config and setup stay as they are. When a version changes a rule for what the store
 holds, the curating machine's next run migrates the store by itself; update that machine first
 ([Several machines](docs/several-machines.md#machines-on-different-versions)).
+Coming from 0.2.0, read [Upgrading from 0.2.0](CHANGELOG.md#upgrading-from-020) first: two
+add-ons are gone and the band is part of m2b.
 
 ### Uninstalling
 

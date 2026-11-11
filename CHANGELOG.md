@@ -7,6 +7,34 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Upgrading from 0.2.0
+
+What goes away: the add-ons `herdr` and `backup`, and the skill `/m2b:band-setup`. The folder the
+backup wrote stays as it was; delete it yourself once you no longer want it.
+
+What happens by itself:
+
+- The band starts wherever m2b is set up, also where it was turned off. Entries `addons.band`,
+  `addons.herdr` and `addons.backup` in `config.json` are ignored.
+- With the worklog on, the next session start updates its recorder, links it again in herdr and
+  sets up the timer for its sign of life. Ledger rows from before keep an empty
+  `minutes_present`.
+- The status line drops its `brain:` in front.
+
+What you do:
+
+1. Update the plugin and restart Claude Code, on the curating machine first when you have several
+   ([Updating](README.md#updating)). A session open during the update keeps the old band until it
+   is started again; it shows a line naming `/reload-plugins`.
+2. Optionally clear the ignored entries: `m2b addons off band`, `m2b addons off herdr`,
+   `m2b addons off backup`.
+3. If you keep permission rules for `Bash(m2b capture:*)` or `Bash(m2b search:*)`, they now hold for
+   the model's tools too. To be asked before every note, or keep the model from noting, see
+   [the band's tools](docs/band.md#noting-and-searching-as-tools-of-the-model).
+4. If the band's rows of due tasks are noise to you: `m2b config set band.due_tasks false`.
+5. With the worklog on: `m2b-worklog recorder check` says whether herdr is at least 0.9 and
+   running, which the worklog now needs.
+
 ### Added
 
 - m2b has a logo: the README shows it, and `docs/images/` holds the mark, an icon and the image
