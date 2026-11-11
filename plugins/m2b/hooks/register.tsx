@@ -24,6 +24,7 @@ import {
   runOf,
   searchLines,
   searchStore,
+  searchRequest,
   searchSummary,
   showPane,
 } from './pane'
@@ -607,14 +608,15 @@ export const register: Register = on => {
     if (await isCurationRun($)) {
       return next(e)
     }
-    if (plainLine(e.args).trim() === '') {
+    const request = searchRequest(e.args)
+    if (plainLine(request.text).trim() === '') {
       return { text: `nothing searched: write what to look for after the command, as in /${SEARCH_COMMAND.name} plywood` }
     }
     const notReady = await notSetUpLine($, 'not searched')
     if (notReady !== null) {
       return { text: notReady }
     }
-    const outcome = await searchStore($, e.args.trim())
+    const outcome = await searchStore($, request.text, request.wholeWords)
     if ('line' in outcome) {
       return { text: outcome.line }
     }

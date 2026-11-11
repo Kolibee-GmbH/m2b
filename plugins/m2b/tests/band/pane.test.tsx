@@ -124,6 +124,30 @@ test('the search command shows each hit with its file and line, without the mode
   await ui.unmount()
 })
 
+test('--word in front of the text searches whole words only', async ($, on) => {
+  // Covers: B101
+  const fake = new FakeM2b()
+  fake.searchHits = [{ path: 'inbox/20261111-velo.md', line: 5, text: 'I service the Velo on Friday.' }]
+  const { commands } = await start($, on, fake)
+
+  const answer = await typed($, 'm2b-search', '--word  Velo ')
+
+  expect(fake.calls.filter(call => call[0] === 'search')).toEqual([['search', '--json', '--word', '--', 'Velo']])
+  expect(answer.text).toBe('1 hit for Velo, whole words only, in the m2b pane')
+  expect(commands.find(command => command.name === 'm2b-search')).toMatchObject({ argumentHint: '[--word] <text>' })
+})
+
+test('--word without a text searches nothing, and a dash elsewhere stays part of the text', async ($, on) => {
+  // Covers: B101
+  const fake = new FakeM2b()
+  await start($, on, fake)
+  expect((await typed($, 'm2b-search', '--word')).text).toBe(
+    'nothing searched: write what to look for after the command, as in /m2b-search plywood',
+  )
+  await typed($, 'm2b-search', '--wordy plywood')
+  expect(fake.calls.filter(call => call[0] === 'search')).toEqual([['search', '--json', '--', '--wordy plywood']])
+})
+
 test('a search without hits, without text, or that fails is one clear line', async ($, on) => {
   // Covers: B101
   const fake = new FakeM2b()

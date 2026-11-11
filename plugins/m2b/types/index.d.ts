@@ -39,8 +39,18 @@ export type BandRun = {
 /** One line of `m2b search` that holds the text. */
 export type SearchHit = { path: string; line: number; text: string }
 
-/** A search the pane shows: the text, its first hits and how many there are, and how many files it could not search. */
-export type PaneSearch = { query: string; hits: SearchHit[]; total: number; evicted: number; unreadable: number }
+/**
+ * A search the pane shows: the text, its first hits and how many there are, and how many files it
+ * could not search; `wholeWords` when only whole words were matched (absent in a search kept before).
+ */
+export type PaneSearch = {
+  query: string
+  hits: SearchHit[]
+  total: number
+  evicted: number
+  unreadable: number
+  wholeWords?: boolean
+}
 
 /** What the m2b pane shows: the last curation run, or a search. */
 export type PaneView = { kind: 'review' } | { kind: 'search'; search: PaneSearch }
