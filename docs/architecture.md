@@ -3,7 +3,9 @@
 m2b is one Claude Code plugin, `plugins/m2b`. Everything the core does goes through one command,
 `m2b`, which skills, hooks, the curation run and outside callers all use; the add-ons have
 their own commands beside it (the worklog's `m2b-worklog`) and reach the core only
-through `m2b`. The one exception is the prompt hook, which runs before every prompt and therefore reads the distillate through its own slim
+through `m2b`; of the core's code the worklog imports two modules that touch no store,
+`redaction` and `claude_code`, so that the patterns that find credentials and the list of what
+Claude Code writes into a prompt exist once. The other exception is the prompt hook, which runs before every prompt and therefore reads the distillate through its own slim
 command instead of loading every command; it never writes to the store. The model never touches the store except
 through a fenced run that may call only the commands its step lists.
 
@@ -24,8 +26,8 @@ flowchart LR
 
 | Folder | What it holds |
 |---|---|
-| `plugins/m2b/src/m2b/` | the core: `cli.py` (every command), `store/`, `tasks/`, `calendar/` (backends behind one interface each), `config/` (`config.json`, `store.json`, `profile.json`), `curate/` (the run, the fenced model step, the run record), `hooks.py` (session start), `prompt_hook.py` (before every prompt, with its own command `bin/m2b-prompt-hook` so it does not load every command), `addons.py` (the add-ons and their steps) |
-| `plugins/m2b/src/m2b_worklog/` | the worklog add-on; it calls the core only through the `m2b` command, as an integration would |
+| `plugins/m2b/src/m2b/` | the core: `cli.py` (every command), `store/`, `tasks/`, `calendar/` (backends behind one interface each), `config/` (`config.json`, `store.json`, `profile.json`), `curate/` (the run, the fenced model step, the run record), `sessions.py` (what the person typed, from Claude Code's transcripts) and `redaction.py` (credentials out of such text), `hooks.py` (session start), `prompt_hook.py` (before every prompt, with its own command `bin/m2b-prompt-hook` so it does not load every command), `addons.py` (the add-ons and their steps) |
+| `plugins/m2b/src/m2b_worklog/` | the worklog add-on; it calls the core only through the `m2b` command, as an integration would, and imports its `redaction` and `claude_code` |
 | `plugins/m2b/skills/` | one folder per skill; the ones a curation run starts (`ingest`, `refresh`, `sort-facts`, `lint`, `worklog-verdict`) say so in their description |
 | `plugins/m2b/hooks/` | `hooks.json` (session-start commands, the prompt hook and the band mod), `register.tsx` and its helpers (the band) |
 | `plugins/m2b/recorder/` | the worklog's herdr recorder, copied out of the plugin when set up |

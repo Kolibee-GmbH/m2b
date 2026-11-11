@@ -7,7 +7,8 @@ Claude Code wraps around them and the summaries it writes after a context cut, k
 are redacted and cut short. The last answer is the end of the last reply, where a question to the
 owner stands.
 
-How they are redacted is in ``redaction``.
+How they are redacted is in the core's ``m2b.redaction``; which blocks are Claude Code's is in its
+``m2b.claude_code``.
 """
 
 from __future__ import annotations
@@ -20,8 +21,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from m2b.claude_code import PROMPT_BLOCK
+from m2b.redaction import redact
+
 from m2b_worklog.sources import SourceState
-from m2b_worklog.sources.redaction import redact
 
 HEADLESS = "sdk-cli"
 PROMPT_LENGTH = 240
@@ -30,17 +33,6 @@ ANSWER_LENGTH = 500
 _PASTED = re.compile(r"</?pasted_content[^>]*>")
 _COMMAND = re.compile(r"<command-name>/?([^<]+)</command-name>(?:\s*<command-args>([^<]*)</command-args>)?")
 _WRAPPED = re.compile(r"^\s*<([a-zA-Z][\w-]*)[^>]*>.*</\1>\s*$", re.S)
-# The blocks Claude Code puts into a prompt beside what the owner typed.
-_SYSTEM_TAGS = (
-    "system-reminder",
-    "local-command-caveat",
-    "local-command-stdout",
-    "local-command-stderr",
-    "command-message",
-    "user-prompt-submit-hook",
-    "task-notification",
-)
-_SYSTEM_BLOCK = re.compile(r"<(" + "|".join(_SYSTEM_TAGS) + r")\b[^>]*>.*?</\1>", re.S)
 # What Claude Code writes as the first user message after a context cut, when the record has no flag.
 _SUMMARY_OPENING = "This session is being continued from a previous conversation"
 # Redaction runs on this much of the text, from the end that is kept, so its patterns stay fast on a
@@ -109,7 +101,7 @@ def prompt_text(content: object, limit: int = PROMPT_LENGTH) -> str | None:
     if command:
         text = f"{command.group(1).strip()} {(command.group(2) or '').strip()}".strip()
     else:
-        text = _SYSTEM_BLOCK.sub("", _PASTED.sub("", content))
+        text = PROMPT_BLOCK.sub("", _PASTED.sub("", content))
         if _WRAPPED.match(text) or text.lstrip().startswith(_SUMMARY_OPENING):
             return None
     if len(text) > _REDACT_WINDOW:

@@ -14,11 +14,11 @@ import unittest
 from pathlib import Path
 from typing import Any
 
+from m2b.redaction import redact
 from m2b_worklog import facts, schema
 from m2b_worklog.facts import FactsError, Inputs
 from m2b_worklog.sources import herdr_events
 from m2b_worklog.sources.inbox import read_inbox
-from m2b_worklog.sources.redaction import redact
 from m2b_worklog.sources.transcripts import answer_text, prompt_text, read_transcripts
 from worklog_fixtures import load_recorder
 

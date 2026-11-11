@@ -12,8 +12,15 @@ beyond that, each with what breaks when it changes:
 - ``enabledPlugins`` in Claude Code's managed settings (``MANAGED_SETTINGS`` in the recorder,
   ``M2B_MANAGED_SETTINGS`` in tests) and in the user's: only the worklog recorder reads them, to
   stop recording when m2b is turned off.
-- Transcript files under ``~/.claude/projects/``: only the worklog add-on reads them, for the facts
-  of a period (``m2b_worklog/sources/transcripts.py``); a source it cannot read is reported as such.
+- Transcript files under ``~/.claude/projects/``, one JSON Lines file per session: ``sessions``
+  reads what the person typed, and relies on the mark Claude Code puts on every prompt of who sent
+  it (``origin``, ``promptSource``); the worklog add-on reads prompts, answers and times for the
+  facts of a period (``m2b_worklog/sources/transcripts.py``). Both take out the blocks Claude Code
+  writes into a prompt beside what was typed (``PROMPT_BLOCK``, the one list of their tags).
+  ``sessions`` reports a transcript that cannot be opened or no longer names its folder as not
+  read, the worklog one that cannot be opened. When the mark goes, ``sessions`` counts every
+  prompt but a slash command as unmarked and gives none of them; a record that changed in another
+  way is not recognised and reads as no prompt.
 - The mod API (``hooks/register.tsx``): the band, early-access API; when it changes, the band
   shows nothing and everything else works.
 
@@ -24,6 +31,7 @@ points at another ``installed_plugins.json`` (tests).
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -31,13 +39,34 @@ MARKETPLACE = "m2b"
 CORE_PLUGIN = "m2b"
 INSTALLED_PLUGINS_VARIABLE = "M2B_INSTALLED_PLUGINS"
 
+# The blocks Claude Code puts into a prompt beside what the person typed: its own reminders, the
+# output of hooks and local commands, notices of finished tasks.
+PROMPT_BLOCK_TAGS = (
+    "system-reminder",
+    "local-command-caveat",
+    "local-command-stdout",
+    "local-command-stderr",
+    "command-message",
+    "user-prompt-submit-hook",
+    "task-notification",
+)
+PROMPT_BLOCK = re.compile(r"<(" + "|".join(PROMPT_BLOCK_TAGS) + r")\b[^>]*>.*?</\1>", re.S)
+
 
 def installed_plugins_file(environ: Mapping[str, str]) -> Path:
     override = environ.get(INSTALLED_PLUGINS_VARIABLE)
     if override:
         return Path(override)
-    claude_dir = environ.get("CLAUDE_CONFIG_DIR") or str(Path(environ.get("HOME") or Path.home()) / ".claude")
-    return Path(claude_dir) / "plugins" / "installed_plugins.json"
+    return _claude_folder(environ) / "plugins" / "installed_plugins.json"
+
+
+def transcripts_folder(environ: Mapping[str, str]) -> Path:
+    """Where Claude Code keeps a folder of transcripts per project folder."""
+    return _claude_folder(environ) / "projects"
+
+
+def _claude_folder(environ: Mapping[str, str]) -> Path:
+    return Path(environ.get("CLAUDE_CONFIG_DIR") or Path(environ.get("HOME") or Path.home()) / ".claude")
 
 
 def resolve_install_path(plugin: str, environ: Mapping[str, str]) -> Path | None:

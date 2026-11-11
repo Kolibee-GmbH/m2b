@@ -16,8 +16,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from m2b.redaction import redact
+
 from m2b_worklog.sources import SourceState
-from m2b_worklog.sources.redaction import redact
 
 GIT_TIMEOUT_SECONDS = 10.0
 _FIELD = "\x1f"

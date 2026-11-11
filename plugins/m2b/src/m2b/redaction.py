@@ -1,12 +1,14 @@
-"""Credentials leave no source of the worklog, as far as a pattern finds them.
+"""Credentials do not leave a session's text or a commit subject, as far as a pattern finds them.
 
-Prompts, answers and commit subjects pass through ``redact`` before they reach the facts, and so
-the model, the note and the archive. It works on patterns: a value after a word such as password
-or token, the value of an assignment whose name holds such a word (``PGPASSWORD=``,
-``SECRET_KEY:``, ``AccountKey=``), the password in a URL and after ``-u`` or ``--user``, a
-credential after ``Bearer`` or ``Basic``, an AWS access key id, and long tokens of mixed letters
-and digits. It misses what matches none of them, so a text can still carry a secret in words of
-its own, or one of several words, of which only the first goes.
+What m2b reads of the owner's work outside the store passes through ``redact`` before it reaches a
+model, a note or the archive: the prompts the core reads from Claude Code's transcripts
+(``sessions``), and the prompts, answers and commit subjects of the worklog add-on. The worklog
+imports this module from the core, so that the patterns exist once. It works on patterns: a value
+after a word such as password or token, the value of an assignment whose name holds such a word
+(``PGPASSWORD=``, ``SECRET_KEY:``, ``AccountKey=``), the password in a URL and after ``-u`` or
+``--user``, a credential after ``Bearer`` or ``Basic``, an AWS access key id, and long tokens of
+mixed letters and digits. It misses what matches none of them, so a text can still carry a secret in
+words of its own, or one of several words, of which only the first goes.
 """
 
 from __future__ import annotations
