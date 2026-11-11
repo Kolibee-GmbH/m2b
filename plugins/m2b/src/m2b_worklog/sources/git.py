@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Callable
 
 from m2b_worklog.sources import SourceState
+from m2b_worklog.sources.redaction import redact
 
 GIT_TIMEOUT_SECONDS = 10.0
 _FIELD = "\x1f"
@@ -80,7 +81,7 @@ def read_git(
         except ValueError:
             continue
         if start <= moment < end:
-            commits.append(Commit(commit_hash, moment, subject.strip(), commit_hash in on_head))
+            commits.append(Commit(commit_hash, moment, redact(subject.strip()), commit_hash in on_head))
     return GitFacts(sorted(commits, key=lambda commit: commit.time), remote, SourceState.read())
 
 

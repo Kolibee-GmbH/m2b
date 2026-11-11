@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -17,7 +18,8 @@ from m2b_worklog import facts, schema
 from m2b_worklog.facts import FactsError, Inputs
 from m2b_worklog.sources import herdr_events
 from m2b_worklog.sources.inbox import read_inbox
-from m2b_worklog.sources.transcripts import answer_text, prompt_text, read_transcripts, redact
+from m2b_worklog.sources.redaction import redact
+from m2b_worklog.sources.transcripts import answer_text, prompt_text, read_transcripts
 from worklog_fixtures import load_recorder
 
 ZONE = datetime.timezone(datetime.timedelta(hours=1))
@@ -132,8 +134,8 @@ class Fixture(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps({"end": moment.isoformat()}), encoding="utf-8")
 
-    def collect(self) -> dict[str, Any]:
-        inputs = Inputs(self.store, self.recordings, self.projects, self.home, PROFILE, NOW)
+    def collect(self, profile: dict[str, Any] = PROFILE) -> dict[str, Any]:
+        inputs = Inputs(self.store, self.recordings, self.projects, self.home, profile, NOW)
         environ_backup = dict(os.environ)
         os.environ.update({"GIT_CONFIG_GLOBAL": str(self.base / "gitconfig"), "GIT_CONFIG_NOSYSTEM": "1"})
         try:
@@ -209,6 +211,81 @@ class CollectTest(Fixture):
         # Blocked since 14:30: an agent waiting for an approval still waits hours later.
         self.assertEqual(session["state"], {"agent": "blocked", "last_answer": "The export now rounds per line."})
         self.assertEqual(session["minutes"]["agent"], 38 + 30)
+
+    def test_a_commits_subject_is_redacted_like_a_prompt(self) -> None:
+        """Covers: B110"""
+        self.a_day_of_work()
+        self.commit("chore(db): migrate with PGPASSWORD=hunter2", at(10, 32))
+
+        [session] = self.collect()["sessions"]
+
+        self.assertEqual(
+            [c["subject"] for c in session["commits"]],
+            ["fix(export): round per line", "chore(db): migrate with PGPASSWORD=[removed]"],
+        )
+
+    def a_second_workspace(self, workspace: str, folder: Path) -> None:
+        folder.mkdir(parents=True, exist_ok=True)
+        cache = json.loads((self.recordings / "workspaces.json").read_text(encoding="utf-8"))
+        cache[workspace] = [{"repo": None, "label": folder.name, "folder": str(folder), "since": at(8).isoformat()}]
+        self.cache(cache)
+        self.events(workspace, (at(11), "agent_working", "p1"), (at(11, 30), "agent_stopped", "p1"), cwd=folder)
+
+    def test_a_session_in_a_folder_the_profile_leaves_out_is_not_in_the_facts(self) -> None:
+        """Covers: B111"""
+        self.a_day_of_work()
+        self.a_second_workspace("w2", self.home / "notes")
+
+        # The setting as ``m2b profile get --json`` prints it, which is what the worklog is handed.
+        # The session ran in a folder below the one named, as a worktree or a package does.
+        found = self.collect({**PROFILE, "worklog_leave_out": {"path_under": ["~/code/acme"]}})
+
+        self.assertEqual([s["workspace"] for s in found["sessions"]], ["w2"])
+        self.assertNotIn("invoice", json.dumps(found))
+        self.assertNotIn("round per line", json.dumps(found))
+        self.assertEqual([s["workspace"] for s in self.collect()["sessions"]], ["w1", "w2"])
+
+    def test_a_folder_left_out_counts_as_written_also_when_it_is_gone(self) -> None:
+        """Covers: B111"""
+        self.a_day_of_work()
+        shutil.rmtree(self.repo)
+
+        found = self.collect({**PROFILE, "worklog_leave_out": {"path_under": ["~/code/acme"]}})
+
+        self.assertEqual(found["sessions"], [])
+        self.assertEqual([s["workspace"] for s in self.collect()["sessions"]], ["w1"])
+
+    def test_a_transcript_from_a_folder_left_out_reaches_no_other_session(self) -> None:
+        """Covers: B111"""
+        # One workspace on the folder above: without the setting it holds the transcript of the repository below.
+        self.watermark(at(9))
+        code = self.home / "code"
+        self.cache({"w1": [{"repo": None, "label": "code", "folder": str(code), "since": at(8).isoformat()}]})
+        self.events("w1", (at(10), "agent_working", "p1"), (at(10, 40), "agent_stopped", "p1"), cwd=code)
+        prompt = {"type": "user", "timestamp": "2026-03-14T09:01:00Z", "message": {"content": "Fix the invoice export"}}
+        answer = {"type": "assistant", "timestamp": "2026-03-14T09:30:00Z", "message": {"content": "It rounds now."}}
+        self.transcript("s1", self.repo, [prompt, answer])
+
+        [kept] = self.collect({**PROFILE, "worklog_leave_out": {"path_under": ["~/code/acme"]}})["sessions"]
+        [whole] = self.collect()["sessions"]
+
+        self.assertEqual(whole["blocks"][0]["prompts"], ["Fix the invoice export"])
+        self.assertEqual(kept["folder"], str(code))
+        self.assertEqual([block["prompts"] for block in kept["blocks"]], [[]])
+        self.assertIsNone(kept["state"]["last_answer"])
+
+    def test_a_commit_made_in_a_session_left_out_is_not_shown_by_another_checkout(self) -> None:
+        """Covers: B111"""
+        self.a_day_of_work()
+        other = self.home / "worktrees" / "invoices-review"
+        other.parent.mkdir()
+        self.git("worktree", "add", "-q", "-b", "review", str(other))
+        self.a_second_workspace("w2", other)
+
+        found = self.collect({**PROFILE, "worklog_leave_out": {"path_under": ["~/code/acme"]}})
+
+        # The other checkout sees every branch, and without the first session it would own the commit.
+        self.assertEqual([(s["workspace"], s["commits"]) for s in found["sessions"]], [("w2", [])])
 
     def test_a_session_seen_for_less_than_two_minutes_is_left_out(self) -> None:
         """Covers: B33"""
@@ -1000,6 +1077,52 @@ class WhatLeavesATranscriptTest(Fixture):
             with self.subTest(text=text):
                 self.assertNotIn(secret, redact(text))
                 self.assertIn("[removed]", redact(text))
+
+    def test_credentials_as_tools_and_environments_write_them_are_redacted(self) -> None:
+        """Covers: B110"""
+        for text, redacted in (
+            ("PGPASSWORD=hunter2 psql -h db", "PGPASSWORD=[removed] psql -h db"),
+            ("export SECRET_KEY=short1", "export SECRET_KEY=[removed]"),
+            ("aws_secret_access_key = abc123", "aws_secret_access_key = [removed]"),
+            ("DB_PASS=winter24", "DB_PASS=[removed]"),
+            ("pass: winter24", "pass: [removed]"),
+            ("AccountName=acme;AccountKey=ab12==;EndpointSuffix=x", "AccountName=acme;AccountKey=[removed]"),
+            ("psql postgres://admin:pw@db.example:5432/app", "psql postgres://admin:[removed]@db.example:5432/app"),
+            ("clone https://alex:hunter2@example.org/repo.git", "clone https://alex:[removed]@example.org/repo.git"),
+            ("redis://:hunter2@cache.example:6379", "redis://:[removed]@cache.example:6379"),
+            ("curl -u admin:pw https://example.org/api", "curl -u admin:[removed] https://example.org/api"),
+            ("curl --user admin:pw https://example.org", "curl --user admin:[removed] https://example.org"),
+            ("curl --user=admin:pw https://example.org", "curl --user=admin:[removed] https://example.org"),
+            ("curl -uadmin:hunter2 https://example.org", "curl -uadmin:[removed] https://example.org"),
+            ("curl -u admin:1234 https://example.org", "curl -u admin:[removed] https://example.org"),
+            ("psql postgres://admin:p@ss@db.example/app", "psql postgres://admin:[removed]@db.example/app"),
+            ("secretKey: short1 and SecretKey=short2", "secretKey: [removed] and SecretKey=[removed]"),
+            # A section's name is a credential's, the value below it belongs to the key on its own line.
+            ("credentials:\n  password: hunter2\n  user: alex", "credentials:\n  password: [removed]\n  user: alex"),
+            ("credentials: password: hunter2", "credentials: password: [removed]"),
+            ("key id AKIAQ7ZQ7ZQ7ZQ7ZQ7ZQ in the config", "key id [removed] in the config"),
+            ("temporary ASIAQ7ZQ7ZQ7ZQ7ZQ7ZQ.", "temporary [removed]."),
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(redact(text), redacted)
+
+    def test_what_only_looks_like_a_credential_stays_as_written(self) -> None:
+        """Covers: B110"""
+        for text in (
+            "open https://example.org/a/b?x=1 and http://localhost:8080/health",
+            "git clone git@github.com:owner/repo.git",
+            "scp report.pdf alex@host.example:/tmp",
+            "git push -u origin feature",
+            "git push -u origin HEAD:main",
+            "docker run -u 1000:1000 image",
+            "curl -u admin https://example.org",
+            "sort -u names.txt",
+            "the street is called AKIASTRAAT and the code AKIA1234",
+            "the secretary: Dana, the tokenizer=bert and bypass=1",
+            "mail alex@example.org at 10:30",
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(redact(text), text)
 
     def test_a_secret_at_the_edge_of_the_kept_part_is_redacted_after_whitespace_shrinks(self) -> None:
         """Covers: B97"""

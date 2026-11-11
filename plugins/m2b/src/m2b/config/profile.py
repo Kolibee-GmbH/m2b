@@ -21,7 +21,12 @@ from m2b.paths import expand
 from m2b.store.base import Store
 
 PROFILE_FILE_NAME = "profile.json"
-KNOWN_PROFILE_VERSION = 1
+KNOWN_PROFILE_VERSION = 2
+# Version 2 added ``worklog_leave_out``. A profile is written as version 2 only once it holds that
+# key: an m2b from before it refuses a version 1 profile with a key it does not know, also when
+# reading, and would stop curating; a version 2 profile it reads without the key and does not write.
+PLAIN_PROFILE_VERSION = 1
+ADDED_IN_VERSION_TWO = "worklog_leave_out"
 
 _SPHERE_ID = re.compile(r"[a-z][a-z0-9-]*\Z")
 
@@ -46,12 +51,24 @@ class Sphere:
 
 
 @dataclass(frozen=True)
+class WorklogLeaveOut:
+    """Folders under the home folder whose sessions the worklog add-on leaves out; the core only checks them.
+
+    It has the shape of the key in the file, because ``m2b profile get --json`` prints the profile
+    from here and the add-on reads that answer.
+    """
+
+    path_under: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class Profile:
     version: int
     owner: str
     language: str
     spheres: tuple[Sphere, ...]
     customers: tuple[str, ...]
+    worklog_leave_out: WorklogLeaveOut = WorklogLeaveOut()
 
 
 def parse_profile(raw: object, for_writing: bool = True) -> Profile:
@@ -76,7 +93,7 @@ def parse_profile(raw: object, for_writing: bool = True) -> Profile:
 
 def _profile(fields: Fields, version: int, strict_keys: bool, strict_language: bool) -> Profile:
     if strict_keys:
-        fields.reject_unknown(("version", "owner", "language", "spheres", "customers"))
+        fields.reject_unknown(("version", "owner", "language", "spheres", "customers", ADDED_IN_VERSION_TWO))
     spheres = tuple(_sphere(sphere, strict_keys) for sphere in fields.items("spheres"))
     _check_spheres(spheres)
     return Profile(
@@ -85,7 +102,14 @@ def _profile(fields: Fields, version: int, strict_keys: bool, strict_language: b
         language=_language(fields, strict_language),
         spheres=spheres,
         customers=fields.strings("customers"),
+        worklog_leave_out=_left_out(fields.section(ADDED_IN_VERSION_TWO, required=False), strict_keys),
     )
+
+
+def _left_out(left_out: Fields, strict_keys: bool) -> WorklogLeaveOut:
+    if strict_keys:
+        left_out.reject_unknown(("path_under",))
+    return WorklogLeaveOut(_paths_under(left_out))
 
 
 def _language(fields: Fields, strict: bool) -> str:
@@ -102,20 +126,28 @@ def _sphere(fields: Fields, strict_keys: bool) -> Sphere:
     sphere_id = fields.string("id")
     if not _SPHERE_ID.match(sphere_id):
         raise fields.error("id", f"is {sphere_id!r}; use lowercase letters, digits and dashes, like acme-ltd")
-    match = fields.section("match", required=False)
-    if strict_keys:
-        match.reject_unknown(("git_remote_contains", "path_under"))
-    path_under = match.strings("path_under")
-    for path in path_under:
-        if path.startswith("/") or (path.startswith("~") and path != "~" and not path.startswith("~/")):
-            raise match.error("path_under", f"holds {path!r}; write it relative to the home folder, like ~/code/acme")
     return Sphere(
         id=sphere_id,
         label=fields.optional_string("label"),
         billable=fields.boolean("billable", default=False),
         default=fields.boolean("default", default=False),
-        match=SphereMatch(git_remote_contains=match.strings("git_remote_contains"), path_under=path_under),
+        match=_match(fields.section("match", required=False), strict_keys),
     )
+
+
+def _match(match: Fields, strict_keys: bool) -> SphereMatch:
+    if strict_keys:
+        match.reject_unknown(("git_remote_contains", "path_under"))
+    return SphereMatch(git_remote_contains=match.strings("git_remote_contains"), path_under=_paths_under(match))
+
+
+def _paths_under(section: Fields) -> tuple[str, ...]:
+    """Folders written relative to the home folder, which each machine sharing the store has its own."""
+    path_under = section.strings("path_under")
+    for path in path_under:
+        if path.startswith("/") or (path.startswith("~") and path != "~" and not path.startswith("~/")):
+            raise section.error("path_under", f"holds {path!r}; write it relative to the home folder, like ~/code/acme")
+    return path_under
 
 
 def _check_spheres(spheres: tuple[Sphere, ...]) -> None:
@@ -133,7 +165,7 @@ def language_for_clients(profile: Profile | None) -> str:
 
 def merge_profile(current: dict[str, Any] | None, patch: dict[str, Any]) -> dict[str, Any]:
     """Spheres merge by id, customers are added once, every other key of ``patch`` replaces."""
-    merged: dict[str, Any] = json.loads(json.dumps(current)) if current else {"version": KNOWN_PROFILE_VERSION}
+    merged: dict[str, Any] = json.loads(json.dumps(current)) if current else {"version": PLAIN_PROFILE_VERSION}
     for key, value in json.loads(json.dumps(patch)).items():
         existing = merged.get(key, [])
         if key in ("spheres", "customers") and not isinstance(existing, list):
@@ -181,6 +213,8 @@ def require_profile(store: Store) -> Profile:
 def save_profile(store: Store, raw: dict[str, Any]) -> None:
     """Writes a validated profile into a store whose format this version knows."""
     require_store_writable(store)
+    if ADDED_IN_VERSION_TWO in raw and raw.get("version") == PLAIN_PROFILE_VERSION:
+        raw = {**raw, "version": KNOWN_PROFILE_VERSION}
     parse_profile(raw)
     write_store_json_object(store, PROFILE_FILE_NAME, raw)
 

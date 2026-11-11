@@ -28,6 +28,37 @@ invented names:
 The spheres live in `profile.json` in the store, beside the list of customers a booking proposal may
 name. The worklog only reads that list; it never adds to it.
 
+## Leaving work out
+
+Work whose prompts and commits must not reach your store at all, such as a customer's under a
+confidentiality agreement, is named in the profile by its folders under your home folder:
+
+```bash
+m2b profile merge '{"worklog_leave_out": {"path_under": ["~/code/globex", "~/worktrees/globex"]}}'
+```
+
+What ran in such a folder, or in any folder below it, is in no worklog: a session there is not in
+the facts the model step reads, not in the note and not in the ledger, and a transcript from there
+is left out also where another session's pane worked in it. Its time is in no time span either, so
+the ledger shows a gap. The worklog still reads these transcripts and recordings to learn where a
+session ran; it keeps nothing of them. What to know:
+
+- **Name every folder the repository is checked out in**: the clone and the folder your worktrees
+  live in. A folder counts as it was recorded, so a worktree that is gone by the time the worklog
+  runs is still left out; no symbolic link is followed and the spelling counts, upper and lower
+  case included.
+- **Commits.** A commit made in a session left out is shown by no other session. One made in the
+  repository while no session there was at work can still appear under another checkout of the
+  same repository that is not left out.
+- **A pane of another workspace** that changes into such a folder keeps adding its time to that
+  workspace's session; its prompts are left out.
+- **Every machine needs this version.** The profile is written as version 2 once it holds the
+  setting. An m2b from before reads it without the setting and says to update when asked to
+  change the profile, so update every machine that shares the store, the curating one first.
+
+The setting holds from the next worklog on; what earlier worklogs wrote stays as it is. To take it
+back, set it to an empty list: `m2b profile set worklog_leave_out '{"path_under": []}'`.
+
 ## Time spans
 
 A time span is when a workspace was in use: an agent at work, the workspace in focus, or messages
@@ -161,11 +192,17 @@ the `origin` remote in the session folders; and the names of the period's captur
 prompt loses the blocks Claude Code adds to it, such as a `<system-reminder>`, before it is cut, and
 the summary Claude Code writes after a context cut counts as no prompt.
 
-Prompts and answers are redacted before the model sees them: the value after a word such as
-password, `pw`, secret or token ("the password for the db is hunter2" becomes "the password for the
-db is [removed]"), a credential after `Bearer` or `Basic`, and long tokens of mixed letters and
-digits, also base64 keys with `/` and `+`. Redaction works on patterns and stays incomplete: a
-secret written in words of its own, or one shorter than a token, goes through. The facts wait in
+Prompts, answers and commit subjects are redacted before the model sees them: the value after a
+word such as password, `pw`, secret or token ("the password for the db is hunter2" becomes "the
+password for the db is [removed]"), the value of an assignment whose name holds such a word
+(`PGPASSWORD=...`, `SECRET_KEY: ...`, `AccountKey=...`), the password in a URL
+(`postgres://admin:[removed]@host`) and after `-u` or `--user`, a credential after `Bearer` or
+`Basic`, an AWS access key id, and long tokens of mixed letters and digits, also base64 keys with
+`/` and `+`. Redaction works on patterns and stays incomplete: a secret written in words of its
+own, a passphrase of several words (only its first word goes), an option such as `-phunter2`, or a
+short value with no such name before it goes through. With the name, the whole value up to the
+next space goes, so the rest of a connection string after `AccountKey=` goes too. For work where
+that is not enough, see "Leaving work out". The facts wait in
 `~/.local/state/m2b/worklog-run/`, readable by you only, while the model step runs. Its model step, once a
 day, reads these facts, memory, the inbox notes and your task list, and may search the archive with
 `m2b search` to place a session. The transcripts are read from the `projects/` folder of Claude

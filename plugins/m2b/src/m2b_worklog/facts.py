@@ -97,13 +97,18 @@ def collect(inputs: Inputs, run: Runner = subprocess.run) -> dict[str, Any]:
     signs_from = period.start - periods.RULES.agent_silence
     transcripts = read_transcripts(inputs.transcripts, period.start, period.end, signs_from)
     inbox = read_inbox(inputs.store, period.start, period.end)
-    drafts = sessions.draft_sessions(
-        recordings.events, recordings.workspaces, transcripts.transcripts, period.start, period.end
-    )
+    # A transcript goes by its own folder: a session in another folder can hold a pane that worked
+    # in one the owner leaves out, and would carry its prompts.
+    left_out = classify.left_out(inputs.profile, inputs.home)
+    read = [transcript for transcript in transcripts.transcripts if not left_out.holds(transcript.cwd)]
+    drafts = sessions.draft_sessions(recordings.events, recordings.workspaces, read, period.start, period.end)
     rules = classify.sphere_rules(inputs.profile, inputs.home)
     gits = {draft.key: _git_facts(draft.folder, period, inputs.git, run) for draft in drafts}
     blocks = {draft.key: sessions.blocks_of(draft) for draft in drafts}
     owners = _commit_owners(drafts, gits, blocks)
+    # A session left out goes only now: until here it takes the commits made in it, which another
+    # session of the same repository would otherwise show as its own.
+    drafts = [draft for draft in drafts if not left_out.holds(draft.folder)]
     # After ownership: a commit another worktree of the repository made keeps no session. Dropping a
     # session that owns nothing changes no owner.
     owning = set(owners.values())

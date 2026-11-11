@@ -154,6 +154,18 @@ class CommandLineTest(unittest.TestCase):
 
         self.assertEqual(json.loads(result.stdout), ["Globex"])
 
+    def test_profile_get_prints_what_the_worklog_leaves_out_in_the_shape_of_the_file(self) -> None:
+        """Covers: B111"""
+        self._set_up(version=1, owner="Alex")
+        merged = self._run("profile", "merge", '{"worklog_leave_out": {"path_under": ["~/code/globex"]}}')
+        self.assertEqual(merged.returncode, 0, merged.stderr)
+
+        # The worklog add-on reads this answer, not the file: an object with ``path_under``.
+        printed = json.loads(self._run("profile", "get", "--json").stdout)
+
+        self.assertEqual(printed["worklog_leave_out"], {"path_under": ["~/code/globex"]})
+        self.assertEqual(printed["version"], 2)
+
     def test_profile_get_without_a_profile_names_setup(self) -> None:
         self._set_up()
 

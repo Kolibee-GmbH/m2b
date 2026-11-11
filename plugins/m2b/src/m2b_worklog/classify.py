@@ -1,6 +1,8 @@
 """A session's sphere from the profile's rules: a git remote it contains, or a folder it lies under.
 
-The first sphere whose rule matches wins; no match leaves the sphere open for the verdict.
+The first sphere whose rule matches wins; no match leaves the sphere open for the verdict. The
+folders the profile's ``worklog_leave_out`` names are read here too: what ran in or below one is
+in no worklog at all.
 """
 
 from __future__ import annotations
@@ -33,6 +35,26 @@ def sphere_rules(profile: Mapping[str, Any], home: Path) -> list[SphereRule]:
         billable, default = sphere.get("billable") is True, sphere.get("default") is True
         rules.append(SphereRule(sphere["id"], label, billable, default, remotes, folders))
     return rules
+
+
+@dataclass(frozen=True)
+class LeftOut:
+    """The folders the owner keeps out of the worklog: work whose prompts and commits must not reach the store.
+
+    A folder counts as written in the recording, with no look at the disk: it holds for a worktree
+    that is gone by the time the worklog runs, and it follows no symbolic link.
+    """
+
+    folders: tuple[Path, ...] = ()
+
+    def holds(self, folder: str | None) -> bool:
+        return folder is not None and any(_is_under(Path(folder), root) for root in self.folders)
+
+
+def left_out(profile: Mapping[str, Any], home: Path) -> LeftOut:
+    named = profile.get("worklog_leave_out")
+    paths = named.get("path_under", []) if isinstance(named, dict) else []
+    return LeftOut(tuple(_expand(p, home) for p in paths if isinstance(p, str) and p))
 
 
 def sphere_of(rules: Sequence[SphereRule], folder: str | None, remote: str | None) -> str | None:

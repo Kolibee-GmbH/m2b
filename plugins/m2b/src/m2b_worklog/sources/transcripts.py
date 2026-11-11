@@ -7,9 +7,7 @@ Claude Code wraps around them and the summaries it writes after a context cut, k
 are redacted and cut short. The last answer is the end of the last reply, where a question to the
 owner stands.
 
-Redaction works on patterns: a value after a word such as password or token, a credential after
-``Bearer`` or ``Basic``, and long tokens of mixed letters and digits. It misses what matches none
-of them, so a prompt can still carry a secret in words of its own.
+How they are redacted is in ``redaction``.
 """
 
 from __future__ import annotations
@@ -23,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from m2b_worklog.sources import SourceState
+from m2b_worklog.sources.redaction import redact
 
 HEADLESS = "sdk-cli"
 PROMPT_LENGTH = 240
@@ -44,28 +43,12 @@ _SYSTEM_TAGS = (
 _SYSTEM_BLOCK = re.compile(r"<(" + "|".join(_SYSTEM_TAGS) + r")\b[^>]*>.*?</\1>", re.S)
 # What Claude Code writes as the first user message after a context cut, when the record has no flag.
 _SUMMARY_OPENING = "This session is being continued from a previous conversation"
-# Not \b before the keyword: DB_PASSWORD and client_secret have a letter or "_" in front.
-_KEYWORD = r"(?i)(?<![a-z])(secret|client[ _-]?id|password|passwort|kennwort|passwd|pwd|pw|token|api[ _-]?key)"
-# Up to four words between the keyword and its value: "the password for the db is hunter2".
-_BETWEEN = r"((?:\s+[\w.-]+){0,4}?[\"']?\s*(?:[:=]|\b(?:is|ist|lautet)\b\s*[:=]?)\s*)"
-_SECRET = re.compile(_KEYWORD + r"\b" + _BETWEEN + r"(\S+)")
-# The scheme as HTTP writes it, followed by a value shaped like a credential, not by a word.
-_SCHEME = re.compile(r"\b(Bearer|Basic)\s+(?=[\w.~+/=-]*[\d+/=])[\w.~+/=-]{6,}")
-_LONG_TOKEN = re.compile(r"\b(?=[A-Za-z0-9_\-]*[A-Za-z])(?=[A-Za-z0-9_\-]*\d)[A-Za-z0-9_\-]{24,}\b")
-# A base64 key holds "/" and "+" too, and upper and lower case letters and digits. It never starts
-# inside a path or a word and never ends before a file extension; one with "/" whose parts include
-# a word in lower case only is a relative path (`apps/Web3Portal/src`), not a key.
-_BASE64_CANDIDATE = re.compile(
-    r"(?<![\w/.~+-])(?=[\w+/=-]*[A-Z])(?=[\w+/=-]*[a-z])(?=[\w+/=-]*\d)[A-Za-z0-9][\w+/=-]{23,}(?![\w/+]|\.\w)"
-)
-_LOWER_WORD = re.compile(r"[a-z]+")
 # Redaction runs on this much of the text, from the end that is kept, so its patterns stay fast on a
 # long paste. Whitespace and redaction shrink the piece before the cut, so the piece reaches well
 # past the kept part, and the word at its far edge, which may be cut, is dropped.
 _REDACT_WINDOW = 8 * 1024
 _FIRST_WORD = re.compile(r"\A\S*")
 _LAST_WORD = re.compile(r"\S*\Z")
-REDACTED = "[removed]"
 
 
 @dataclass(frozen=True)
@@ -151,19 +134,6 @@ def _text_of(content: object) -> str | None:
         parts = [p.get("text") for p in content if isinstance(p, dict) and p.get("type") == "text"]
         content = "\n".join(part for part in parts if isinstance(part, str))
     return content if isinstance(content, str) and content.strip() else None
-
-
-def redact(text: str) -> str:
-    """Credentials pasted into a prompt never reach the worklog, as far as a pattern finds them."""
-    text = _SCHEME.sub(lambda m: f"{m.group(1)} {REDACTED}", text)
-    text = _SECRET.sub(lambda m: f"{m.group(1)}{m.group(2)}{REDACTED}", text)
-    return _LONG_TOKEN.sub(REDACTED, _BASE64_CANDIDATE.sub(_base64_key, text))
-
-
-def _base64_key(match: re.Match[str]) -> str:
-    token = match.group(0)
-    is_path = "/" in token and any(_LOWER_WORD.fullmatch(part) for part in token.split("/"))
-    return token if is_path else REDACTED
 
 
 def _read(

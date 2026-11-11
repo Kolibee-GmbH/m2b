@@ -291,7 +291,8 @@ topic, that topic's facts.
 **What the worklog reads** (only while on, only on the curating machine): the herdr events its
 recorder writes to `~/.local/state/m2b/worklog/`, the prompts and the end of each session's last
 answer from your Claude Code transcripts for the period (with credentials and long tokens
-redacted), your own git commits, and the inbox; its model step may also search the archive. Its
+redacted), your own git commits (their subjects redacted the same way), and the inbox. Of the
+folders you tell it to leave out it keeps nothing; its model step may also search the archive. Its
 ledger with time spans and booking proposals lands in the store under `state/addons/worklog/`.
 A time span is when a workspace was in use: an agent at work (up to 30 minutes past its last sign
 of life, so a machine asleep does not count), the workspace in focus (up to 10 minutes after each of

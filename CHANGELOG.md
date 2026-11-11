@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The worklog leaves out the work you name in the profile: `worklog_leave_out` takes folders under
+  your home folder. What ran there is in no worklog, not in what the model step reads, the note or
+  the ledger. The profile is written as version 2 once it holds the setting, so every machine that
+  shares the store needs this version
+  ([docs/addons/worklog.md](docs/addons/worklog.md#leaving-work-out)).
+
 ### Changed
 
 - The model's note tool runs without asking only for a note in your own words: every word of it
@@ -23,6 +31,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- The worklog's redaction also finds credentials as tools and environments write them: the value
+  of `PGPASSWORD=...`, `SECRET_KEY: ...`, `AccountKey=...` and other names that hold password,
+  secret, token or a kind of key, the password in a URL and after `curl -u name:`, and AWS access
+  key ids. Commit subjects are redacted like prompts; before, they went into the note as written.
+  `curl -u name:pw` no longer loses the URL after it while keeping the password.
 - The worklog finishes an unfinished worklog only when the note's name in `intent.json` is one the
   worklog gives a note. Before, it joined any name to `inbox/`, so a changed `intent.json` in the
   synced store could create a file outside the store on the machine that curates. Such a file now

@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 from m2b.config import profile
 from m2b.config.errors import FormatTooNewError, InvalidConfigError, NotSetUpError
@@ -81,13 +82,34 @@ class ParseTest(unittest.TestCase):
         with self.assertRaises(InvalidConfigError):
             profile.parse_profile(_profile(spheres=[{"id": "Acme Ltd"}]))
 
+    def test_what_the_worklog_leaves_out_is_folders_under_the_home_folder(self) -> None:
+        """Covers: B111"""
+        raw = _profile(worklog_leave_out={"path_under": ["~/code/globex", "~/worktrees/globex"]})
+
+        self.assertEqual(
+            profile.parse_profile(raw).worklog_leave_out.path_under, ("~/code/globex", "~/worktrees/globex")
+        )
+        self.assertEqual(profile.parse_profile(INVENTED_PROFILE).worklog_leave_out.path_under, ())
+
+    def test_what_the_worklog_leaves_out_is_checked_like_a_spheres_folders(self) -> None:
+        """Covers: B111"""
+        for left_out, named in (
+            ({"path_under": ["/Users/alex/code"]}, "worklog_leave_out.path_under"),
+            ({"folders": ["~/code"]}, "folders"),
+            ({"git_remote_contains": ["globex-ag/"]}, "git_remote_contains"),
+            (["~/code"], "worklog_leave_out"),
+        ):
+            with self.subTest(left_out=left_out), self.assertRaises(InvalidConfigError) as caught:
+                profile.parse_profile(_profile(worklog_leave_out=left_out))
+            self.assertIn(named, str(caught.exception))
+
     def test_an_unknown_key_is_refused_and_named(self) -> None:
         with self.assertRaisesRegex(InvalidConfigError, "colour.*is not a known key"):
             profile.parse_profile(_profile(colour="teal"))
 
     def test_a_newer_profile_with_a_new_key_still_says_to_update(self) -> None:
         with self.assertRaises(FormatTooNewError):
-            profile.parse_profile(_profile(version=2, added_in_version_two=True))
+            profile.parse_profile(_profile(version=3, added_in_version_three=True))
 
     def test_a_folder_of_another_user_is_refused(self) -> None:
         raw = _profile(spheres=[{"id": "acme", "match": {"path_under": ["~dana/code"]}}])
@@ -97,7 +119,7 @@ class ParseTest(unittest.TestCase):
 
     def test_a_newer_profile_version_says_to_update(self) -> None:
         with self.assertRaises(FormatTooNewError):
-            profile.parse_profile(_profile(version=2))
+            profile.parse_profile(_profile(version=3))
 
 
 class ReadingAProfileOfANewerMachineTest(unittest.TestCase):
@@ -107,13 +129,13 @@ class ReadingAProfileOfANewerMachineTest(unittest.TestCase):
         self.assertEqual(profile.language_for_clients(read), "en")
 
     def test_a_newer_version_is_read_without_its_new_keys(self) -> None:
-        read = profile.parse_profile(_profile(version=2, added_in_version_two=True), for_writing=False)
+        read = profile.parse_profile(_profile(version=3, added_in_version_three=True), for_writing=False)
 
         self.assertEqual(read.owner, "Alex")
 
     def test_a_newer_version_that_does_not_validate_says_to_update(self) -> None:
         with self.assertRaises(FormatTooNewError):
-            profile.parse_profile(_profile(version=2, owner=["Alex", "Dana"]), for_writing=False)
+            profile.parse_profile(_profile(version=3, owner=["Alex", "Dana"]), for_writing=False)
 
     def test_the_known_version_is_still_checked_when_reading(self) -> None:
         with self.assertRaises(InvalidConfigError):
@@ -222,6 +244,27 @@ class FileTest(unittest.TestCase):
 
         saved = self._saved()
         self.assertEqual((saved["owner"], saved["customers"], saved["spheres"]), ("Alex", ["Globex"], [{"id": "acme"}]))
+
+    def test_a_profile_is_written_as_version_two_only_once_it_holds_what_version_two_added(self) -> None:
+        """Covers: B111"""
+        profile.save_profile(self.files, {"version": 1, "owner": "Alex"})
+        profile.merge_into_profile(self.files, {"customers": ["Globex"]})
+        self.assertEqual(self._saved()["version"], 1)
+
+        profile.merge_into_profile(self.files, {"worklog_leave_out": {"path_under": ["~/code/globex"]}})
+
+        self.assertEqual(self._saved()["version"], 2)
+        self.assertEqual(profile.load_profile(self.files).worklog_leave_out.path_under, ("~/code/globex",))
+
+    def test_a_machine_before_version_two_reads_the_profile_without_what_it_added(self) -> None:
+        """Covers: B111"""
+        # What an m2b that knows version 1 does with the file: it reads a newer version without the
+        # keys it added and refuses to write it, where a version 1 file with the key fails to read.
+        raw = {"version": 2, "owner": "Alex", "worklog_leave_out": {"path_under": ["~/code/globex"]}}
+        with mock.patch.object(profile, "KNOWN_PROFILE_VERSION", 1):
+            self.assertEqual(profile.parse_profile(raw, for_writing=False).owner, "Alex")
+            with self.assertRaises(FormatTooNewError):
+                profile.parse_profile(raw)
 
     def test_set_of_one_key_leaves_the_others(self) -> None:
         profile.save_profile(self.files, INVENTED_PROFILE)

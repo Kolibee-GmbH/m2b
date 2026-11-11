@@ -7,6 +7,13 @@ folder. All of it stays in folders you chose: the store, `~/.config/m2b/` and `~
 on each machine. m2b makes no network calls of its own; the model steps go
 through Claude Code like any session.
 
+With the worklog add-on, the daily note in the store holds topics a model wrote from your prompts,
+and your commit subjects. Credentials in prompts, answers and commit subjects are redacted by
+pattern before the model sees them, which stays incomplete. Work that must not reach the store at
+all, such as a customer's under a confidentiality agreement, can be left out by folder
+([docs/addons/worklog.md](docs/addons/worklog.md#leaving-work-out), with what the setting does not
+cover).
+
 The model runs only fenced: from an empty folder, without your settings or other plugins, with
 exactly the commands and store paths its step lists, and nothing else allowed. A tool call outside
 that list is denied and reported in the run's review task.
