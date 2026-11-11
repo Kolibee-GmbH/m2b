@@ -6,3 +6,6 @@ docs/notes/
 .venv/
 .mypy_cache/
 .ruff_cache/
+
+# Results of claude plugin eval runs
+plugins/m2b/evals/results/
