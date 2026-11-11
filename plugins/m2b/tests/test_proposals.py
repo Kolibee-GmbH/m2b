@@ -54,8 +54,12 @@ class ProposalsFixture(unittest.TestCase):
         return added
 
     def drop(self, proposal_id: str, when: datetime.datetime) -> None:
+        self.settle(proposal_id, proposals.DROPPED, when)
+
+    def settle(self, proposal_id: str, state: str, when: datetime.datetime = NOW) -> None:
+        """Marks a proposal as the curation run does once it has settled the person's answer."""
         raw = self.written()
-        raw["proposals"][proposal_id].update({"state": "dropped", "since": when.isoformat()})
+        raw["proposals"][proposal_id].update({"state": state, "since": when.isoformat()})
         self.write(raw)
 
 
@@ -173,6 +177,39 @@ class RefusingTest(ProposalsFixture):
 
         self.assertEqual((again.added, again.like_an_open_one, again.like_a_dropped_one), (0, 0, 2))
         self.assertEqual(self.written()["proposals"][proposals.proposal_id(DANA)]["state"], "dropped")
+
+    def test_an_entry_under_a_key_that_is_no_id_is_left_out(self) -> None:
+        self.kept(DANA)
+        raw = self.written()
+        entry = raw["proposals"][proposals.proposal_id(DANA)]
+        raw["proposals"].update({"../outside": entry, "\x1b[8mhidden": entry, "ABCDEF012345": entry, "abc": entry})
+        self.write(raw)
+
+        self.assertEqual(list(proposals.load(self.store).entries), [proposals.proposal_id(DANA)])
+
+    def test_a_proposal_kept_within_ninety_days_is_refused_by_its_id_and_by_its_text(self) -> None:
+        """Covers: B118"""
+        self.kept(DANA)
+        self.settle(proposals.proposal_id(DANA), proposals.KEPT)
+        said_again = Proposal("person", "Dana runs IT at Northwind.", "Dana is the one who runs IT there", "trip")
+
+        later = NOW + datetime.timedelta(days=89)
+        again = self.kept(DANA, said_again, now=later)
+
+        self.assertEqual((again.added, again.like_a_kept_one, again.like_a_dropped_one), (0, 2, 0))
+        entry = self.written()["proposals"][proposals.proposal_id(DANA)]
+        self.assertEqual((entry["state"], entry["since"]), ("kept", NOW.isoformat()))
+
+    def test_after_ninety_days_a_kept_proposal_is_forgotten_and_may_come_again(self) -> None:
+        """Covers: B118"""
+        self.kept(DANA)
+        self.settle(proposals.proposal_id(DANA), proposals.KEPT)
+
+        later = NOW + datetime.timedelta(days=90)
+        again = self.kept(DANA, now=later)
+
+        self.assertEqual((again.added, again.like_a_kept_one), (1, 0))
+        self.assertEqual(self.written()["proposals"][proposals.proposal_id(DANA)]["state"], "open")
 
     def test_after_ninety_days_a_dropped_proposal_is_forgotten_and_may_come_again(self) -> None:
         """Covers: B118"""

@@ -5,12 +5,16 @@ although nobody said "remember this". Nothing of it is filed before the person s
 proposals wait here, each with the words it stands on and the day they were said. However many a
 run finds, all are kept: the person answers them together, not one reminder at a time.
 
-The file also holds ``read_until``, the moment up to which the sessions were read, and each dropped
-proposal for 90 days, so the same proposal does not come back with the next reading.
+The person answers with keep or drop (``proposal_answers``), and the run's harvest settles the
+answer here. The file also holds ``read_until``, the moment up to which the sessions were read,
+and each answered proposal for 90 days, so the same proposal does not come back with the next
+reading: a dropped one because the person did not want it, a kept one because its capture holds
+the proposal's text and not the person's words, so a second reading of the period would not know
+it by the capture.
 
 A proposal's id comes from its session and its quote alone. A run that reads a period a second
 time, because the first reading failed after the model had answered, finds the same ids and adds
-nothing. A proposal with the text of an open one, or of one dropped within the 90 days, is refused
+nothing. A proposal with the text of an open one, or of one answered within the 90 days, is refused
 as well: the same fact said in two sessions is one proposal.
 
 Only the curation run writes the file, as it does ``candidates.json``. A file a newer m2b wrote is
@@ -21,11 +25,13 @@ from __future__ import annotations
 
 import datetime
 import hashlib
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from m2b.candidates import REMEMBER_DROPPED, same_text
+from m2b.candidates import REMEMBER_DROPPED as REMEMBER_ANSWERED
+from m2b.candidates import same_text
 from m2b.config.json_file import read_store_json_object, write_store_json_object
 from m2b.glean import KINDS, Proposal
 from m2b.notes.layout import STATE
@@ -34,9 +40,11 @@ from m2b.store.base import Store
 PROPOSALS_FILE = f"{STATE}/core/proposals.json"
 FORMAT = 1
 OPEN = "open"
+KEPT = "kept"
 DROPPED = "dropped"
-STATES = (OPEN, DROPPED)
+STATES = (OPEN, KEPT, DROPPED)
 ID_LENGTH = 12
+_ID = re.compile(rf"[0-9a-f]{{{ID_LENGTH}}}")
 
 
 class ProposalsError(Exception):
@@ -52,7 +60,7 @@ class Entry:
     # The day the person said them, where they are.
     day: datetime.date
     state: str
-    # When the proposal was added, or dropped.
+    # When the proposal was added, or when the run settled the person's answer to it.
     since: datetime.datetime
     topic: str | None = None
     due: datetime.date | None = None
@@ -78,7 +86,13 @@ class Added:
     proposals: Proposals
     added: int
     like_an_open_one: int
+    like_a_kept_one: int
     like_a_dropped_one: int
+
+
+def is_id(text: str) -> bool:
+    """Whether the text has the form of an id: only then may it become a file name or be shown as one."""
+    return _ID.fullmatch(text) is not None
 
 
 def proposal_id(proposal: Proposal) -> str:
@@ -88,7 +102,7 @@ def proposal_id(proposal: Proposal) -> str:
 
 
 def load(store: Store) -> Proposals:
-    """What the store holds; an entry that is not in the form is left out."""
+    """What the store holds; an entry that is not in the form, or under a key that is no id, is left out."""
     raw = read_store_json_object(store, PROPOSALS_FILE)
     if raw is None:
         return Proposals({})
@@ -101,7 +115,7 @@ def load(store: Store) -> Proposals:
     entries = {}
     for key, value in (given if isinstance(given, dict) else {}).items():
         entry = _entry(value)
-        if entry is not None:
+        if entry is not None and is_id(str(key)):
             entries[str(key)] = entry
     return Proposals(entries, _moment(raw.get("read_until")))
 
@@ -121,14 +135,14 @@ def save(store: Store, proposals: Proposals) -> None:
 def add(current: Proposals, found: Sequence[Said], now: datetime.datetime) -> Added:
     """``current`` with the proposals of ``found`` that are new, and how many were refused and why.
 
-    A proposal dropped 90 days ago or longer is forgotten here, so it may come again.
+    A proposal kept or dropped 90 days ago or longer is forgotten here, so it may come again.
     """
     entries = {
         key: entry
         for key, entry in current.entries.items()
-        if entry.state != DROPPED or now - entry.since < REMEMBER_DROPPED
+        if entry.state == OPEN or now - entry.since < REMEMBER_ANSWERED
     }
-    counts = {OPEN: 0, DROPPED: 0}
+    counts = dict.fromkeys(STATES, 0)
     added = 0
     for said in found:
         key = proposal_id(said.proposal)
@@ -143,7 +157,7 @@ def add(current: Proposals, found: Sequence[Said], now: datetime.datetime) -> Ad
             proposal.kind, proposal.text, proposal.quote, said.day, OPEN, now, proposal.topic, proposal.due
         )
         added += 1
-    return Added(Proposals(entries, current.read_until), added, counts[OPEN], counts[DROPPED])
+    return Added(Proposals(entries, current.read_until), added, counts[OPEN], counts[KEPT], counts[DROPPED])
 
 
 def _entry(value: object) -> Entry | None:

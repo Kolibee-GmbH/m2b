@@ -5,13 +5,17 @@ from __future__ import annotations
 import datetime
 import json
 from typing import Any
+from unittest import mock
 
 import test_runner
 import test_sessions
-from m2b import glean, proposals
+from m2b import glean, proposal_answers, proposals
 from m2b.config.profile import save_profile
 from m2b.curate import machine_state, model
 from m2b.run_record import SUCCEEDED, load_run_record
+from m2b.tasks import markers
+from m2b.tasks.base import TasksError
+from m2b.tasks.markdown import MarkdownTasks
 from test_runner import INGEST_FILES_THE_CAPTURE, START
 
 HOUR = datetime.timedelta(hours=1)
@@ -132,7 +136,8 @@ class ReadingTest(GleanStepTest):
             self.info(),
             [
                 f"read 1 session with 2 typed prompts since {START - DAY:%Y-%m-%d %H:%M}: 1 proposal added, "
-                "0 like an open or a dropped one, 0 without the person's words, 0 captured already, 0 not in the form"
+                "0 like one that waits or is answered, 0 without the person's words, 0 captured already, "
+                "0 not in the form"
             ],
         )
         self.assertEqual(self.review_tasks(), [])
@@ -315,7 +320,7 @@ class ChecksTest(GleanStepTest):
 
         self.assertEqual(list(self.kept()["proposals"]), [DANA_ID])
         self.assertIn(
-            "1 proposal added, 0 like an open or a dropped one, 1 without the person's words, 2 captured already, "
+            "1 proposal added, 0 like one that waits or is answered, 1 without the person's words, 2 captured already, "
             "1 not in the form",
             self.info()[0],
         )
@@ -332,7 +337,7 @@ class ChecksTest(GleanStepTest):
 
         self.assertEqual(self.kept()["proposals"], {})
         self.assertIn(
-            "0 proposals added, 0 like an open or a dropped one, 0 without the person's words, 1 captured",
+            "0 proposals added, 0 like one that waits or is answered, 0 without the person's words, 1 captured",
             self.info()[0],
         )
 
@@ -373,7 +378,75 @@ class ChecksTest(GleanStepTest):
         self.run_curate()
 
         self.assertEqual(self.kept(), once)
-        self.assertIn("0 proposals added, 1 like an open or a dropped one", self.info()[0])
+        self.assertIn("0 proposals added, 1 like one that waits or is answered", self.info()[0])
+
+
+class AnsweredTest(GleanStepTest):
+    def test_a_run_files_what_the_person_kept_before_it_reads_and_does_not_propose_it_again(self) -> None:
+        """Covers: B121"""
+        self.reading()
+        self.typed(DANA_SAID, START - HOUR)
+        in_other_words = {**DANA, "text": "Dana is head of IT at Northwind."}
+        self.answers(in_other_words)
+        self.run_curate()
+        proposal_answers.give(self.store, [DANA_ID], proposal_answers.KEEP)
+        self.write(proposals.PROPOSALS_FILE, json.dumps({**self.kept(), "read_until": None}))
+        files_it = [
+            {"tool": "Bash", "command": "m2b ingest list --json"},
+            {"tool": "Bash", "command": "m2b ingest note <capture:proposal> 'filed: fact dana.md'"},
+            {"tool": "Bash", "command": "m2b ingest finish <capture:proposal>"},
+        ]
+        self.answers(in_other_words, skills={"m2b:ingest": files_it})
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        self.assertEqual(self.steps()[:3], [("harvest", "succeeded"), ("glean", "succeeded"), ("ingest", "succeeded")])
+        (filed,) = (self.store_root / "corpus").rglob("*-proposal-*.md")
+        self.assertIn(f"from_proposal: {DANA_ID}\n", filed.read_text(encoding="utf-8"))
+        self.assertIn("\nDana is head of IT at Northwind.\n", filed.read_text(encoding="utf-8"))
+        self.assertEqual(self.kept()["proposals"][DANA_ID]["state"], "kept")
+        self.assertEqual(list((self.store_root / proposal_answers.FOLDER).iterdir()), [])
+        self.assertIn("0 proposals added, 1 like one that waits or is answered", self.info()[0])
+        self.assertEqual(self.review_tasks(), [])
+
+    def test_a_run_settles_the_answers_also_while_it_does_not_read_the_sessions(self) -> None:
+        """Covers: B121"""
+        self.reading()
+        self.typed(DANA_SAID, START - HOUR)
+        self.answers(DANA)
+        self.run_curate()
+        proposal_answers.give(self.store, [DANA_ID], proposal_answers.DROP)
+        self.curating()
+
+        self.run_curate()
+
+        self.assertNotIn("glean", [name for name, _ in self.steps()])
+        self.assertEqual(self.kept()["proposals"][DANA_ID]["state"], "dropped")
+        self.assertEqual(list((self.store_root / proposal_answers.FOLDER).iterdir()), [])
+
+    def test_what_stops_the_answers_is_in_the_review_also_when_the_harvest_fails(self) -> None:
+        """Covers: B121"""
+        self.reading()
+        self.typed(DANA_SAID, START - HOUR)
+        self.answers(DANA)
+        self.run_curate()
+        proposal_answers.give(self.store, [DANA_ID], proposal_answers.KEEP)
+        self.write(proposals.PROPOSALS_FILE, json.dumps({**self.kept(), "format": 2}))
+        real_items = MarkdownTasks.items
+
+        def items(tasks: MarkdownTasks, *arguments: Any, **options: Any) -> Any:
+            if options.get("marker") == markers.CANDIDATE:
+                raise TasksError("the task list does not answer")
+            return real_items(tasks, *arguments, **options)
+
+        with mock.patch.object(MarkdownTasks, "items", items):
+            self.run_curate()
+
+        self.assertEqual(self.steps()[0], ("harvest", "failed"))
+        notes = "\n".join(task.notes for task in self.review_tasks())
+        self.assertIn("the task list does not answer", notes)
+        self.assertIn("the answers to proposals wait for the next run", notes)
 
 
 class FailingReadingTest(GleanStepTest):
@@ -449,6 +522,22 @@ class FailingReadingTest(GleanStepTest):
             review.notes,
         )
         self.assertEqual([call for call in self.calls() if "stdin" in call], [])
+
+    def test_a_period_with_only_the_output_of_a_shell_line_is_one_in_which_nothing_was_typed(self) -> None:
+        """Covers: B119"""
+        self.reading()
+        self.record(test_sessions.unmarked("<bash-input>git status</bash-input>", START - 2 * HOUR))
+        self.record(
+            test_sessions.unmarked("<bash-stdout>On branch main</bash-stdout><bash-stderr></bash-stderr>", START - HOUR)
+        )
+        self.answers()
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        self.assertEqual(self.steps()[1], ("glean", "skipped"))
+        self.assertEqual(self.kept()["read_until"], START.isoformat())
+        self.assertEqual(self.review_tasks(), [])
 
     def test_a_text_without_the_mark_beside_marked_ones_does_not_fail_the_reading(self) -> None:
         self.reading()

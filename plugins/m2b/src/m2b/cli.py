@@ -34,6 +34,7 @@ from m2b.commands import doctor as doctor_command
 from m2b.commands import ingest as ingest_commands
 from m2b.commands import launcher as launcher_commands
 from m2b.commands import lint as lint_commands
+from m2b.commands import proposals as proposals_commands
 from m2b.commands import rediscover as rediscover_commands
 from m2b.commands import refresh as refresh_commands
 from m2b.commands import search as search_commands
@@ -247,6 +248,22 @@ def _parser() -> argparse.ArgumentParser:
     again.add_argument("--today", help="YYYY-MM-DD: the day that counts as today")
     again.add_argument("--month", help="YYYY-MM or YYYY-MM..YYYY-MM: notes from these months only")
 
+    proposed = _command(
+        commands, "proposals", proposals_commands.proposals_command, "what the sessions proposed, to keep or drop", True
+    )
+    # No answer named: the listing. The answers set no handler of their own, the command reads ``action``.
+    answers = proposed.add_subparsers(dest="action")
+    for answer, help_text in (
+        ("keep", "file these proposals with the next curation run"),
+        ("drop", "forget these proposals"),
+    ):
+        given = answers.add_parser(answer, help=help_text)
+        given.add_argument("ids", nargs="*", metavar="id")
+        given.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+        given.set_defaults(all=False)
+        if answer == "keep":
+            given.add_argument("--all", action="store_true", help="every proposal that waits for an answer")
+
     refresh_group = _group(commands, "refresh", "memory lines past their day or gone quiet")
     refresh_due = _command(refresh_group, "due", refresh_commands.refresh_due, "what is due, for the refresh", True)
     refresh_due.add_argument("--today", help="YYYY-MM-DD: the day that counts as today")
@@ -361,7 +378,7 @@ def _parser() -> argparse.ArgumentParser:
         commands,
         "harvest",
         candidate_commands.harvest_command,
-        "ticked candidates into the inbox",
+        "ticked candidates and kept proposals into the inbox",
         True,
         curator=True,
         listed=False,

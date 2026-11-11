@@ -55,6 +55,7 @@ The frontmatter is a block between `---` lines, one `key: value` per line, lists
 | `tasks` | capture, ingest | ids of the tasks created from this note |
 | `refs` | ingest | archive file names or URLs; merged, never replaced |
 | `from_candidate` | harvest | the candidate task a capture came from |
+| `from_proposal` | harvest | the proposal a capture came from, by its id |
 | `facts_filed: true`, `curated: true` | the curator | how far ingest got; a client never writes these |
 
 **The captured text is never rewritten.** The curator appends its notes after a last line

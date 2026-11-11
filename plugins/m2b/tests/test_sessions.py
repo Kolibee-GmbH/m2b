@@ -279,6 +279,35 @@ class NotThePersonTest(SessionsFixture):
         self.assertEqual(session.prompts, ())
         self.assertEqual(session.left_out.suggested, 1)
 
+    def test_the_output_of_a_shell_line_in_several_blocks_is_neither_a_prompt_nor_counted(self) -> None:
+        """Covers: B112"""
+        self.transcript(
+            typed("build the shed door", at(9)),
+            unmarked("<bash-stdout>On branch main</bash-stdout><bash-stderr></bash-stderr>", at(9, 1)),
+            unmarked(
+                "<bash-stdout>a</bash-stdout>\n<bash-stderr>b</bash-stderr>\n<bash-stdout>c</bash-stdout>", at(9, 2)
+            ),
+        )
+
+        session = self.only_session()
+
+        self.assertEqual([prompt.text for prompt in session.prompts], ["build the shed door"])
+        self.assertEqual(session.left_out, NOTHING_LEFT_OUT)
+
+    def test_blocks_with_words_around_them_or_a_block_that_never_closes_are_text_without_the_mark(self) -> None:
+        """Covers: B112"""
+        self.transcript(
+            unmarked("<bash-stdout>a</bash-stdout><bash-stderr>b</bash-stderr> Dana runs IT", at(9)),
+            unmarked("<bash-stdout>a</bash-stdout> Dana runs IT <bash-stderr>b</bash-stderr>", at(9, 1)),
+            unmarked("<bash-stdout>a</bash-stdout><bash-stderr>b", at(9, 2)),
+            unmarked("Dana runs IT <bash-stdout>a</bash-stdout>", at(9, 3)),
+        )
+
+        session = self.only_session()
+
+        self.assertEqual(session.prompts, ())
+        self.assertEqual(session.left_out.unmarked, 4)
+
     def test_text_without_the_mark_of_who_sent_it_is_left_out_and_counted(self) -> None:
         """Covers: B112"""
         self.transcript(unmarked("Dana runs IT at Northwind", at(9)))

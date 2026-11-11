@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import datetime
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePath
 
@@ -56,8 +57,13 @@ def capture(
     tasks: Tasks | None = None,
     now: datetime.datetime | None = None,
     from_candidate: str | None = None,
+    from_proposal: str | None = None,
 ) -> CaptureResult:
-    """Writes the capture; empty text or a bad source raise ``ValueError`` before anything is written."""
+    """Writes the capture; empty text or a bad source raise ``ValueError`` before anything is written.
+
+    ``from_candidate`` and ``from_proposal`` name what harvest made the capture from, so a rerun
+    knows its own capture.
+    """
     if not text.strip():
         raise ValueError("there is nothing to capture: the text is empty")
     if follow_up is not None and tasks is None:
@@ -65,6 +71,7 @@ def capture(
     created = (now or datetime.datetime.now()).astimezone().replace(microsecond=0)
     name = NoteName.for_capture(created, source)
     body = text if text.endswith("\n") else text + "\n"
+    origin = {frontmatter.FROM_CANDIDATE: from_candidate, frontmatter.FROM_PROPOSAL: from_proposal}
 
     task_id: str | None = None
     pending: datetime.date | None = None
@@ -84,7 +91,7 @@ def capture(
         for _ in range(NAME_ATTEMPTS):
             path = f"{layout.INBOX}/{name}"
             try:
-                store.create_exclusive(path, _render(created, source, quiet, task_id, pending, body, from_candidate))
+                store.create_exclusive(path, _render(created, source, quiet, task_id, pending, body, origin))
                 break
             except FileExistsError:
                 name = NoteName.for_capture(created, source)
@@ -171,7 +178,7 @@ def _render(
     task_id: str | None,
     pending: datetime.date | None,
     body: str,
-    from_candidate: str | None = None,
+    origin: Mapping[str, str | None],
 ) -> bytes:
     note = Note.new({}, body)
     assert note.frontmatter is not None
@@ -183,6 +190,7 @@ def _render(
         note.frontmatter.set(frontmatter.TASKS, [task_id])
     if pending is not None:
         note.frontmatter.set(frontmatter.FOLLOW_UP, pending.isoformat())
-    if from_candidate is not None:
-        note.frontmatter.set(frontmatter.FROM_CANDIDATE, from_candidate)
+    for key, value in origin.items():
+        if value is not None:
+            note.frontmatter.set(key, value)
     return note.render().encode("utf-8")

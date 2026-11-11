@@ -55,6 +55,8 @@ _COMMAND = re.compile(
 # A text that is one block from its first to its last character: a local command's output, a shell
 # line typed with "!". Claude Code wrote it, nobody typed it as a prompt.
 _WRAPPED = re.compile(r"^\s*<([a-zA-Z][\w-]*)[^>]*>.*</\1>\s*$", re.S)
+_BLOCK_OPENS = re.compile(r"\s*<([a-zA-Z][\w-]*)[^>]*>")
+_ONLY_SPACE = re.compile(r"\s*\Z")
 # The closing tag repeats the opening tag's id, so a closing tag inside the pasted text ends nothing.
 _PASTED_BLOCK = re.compile(r"<pasted_content\b([^>]*)>.*?</pasted_content\1>", re.S)
 _PASTED_UNCLOSED = re.compile(r"<pasted_content\b[^>]*>.*", re.S)
@@ -181,6 +183,27 @@ def _may_be_a_prompt(record: Mapping[str, Any]) -> bool:
     return record.get("type") == "user" and not any(record.get(flag) for flag in flags)
 
 
+def _is_only_blocks(text: str) -> bool:
+    """Whether the text is blocks one after another and nothing else, as the output of a shell line is.
+
+    A shell line's output comes as its standard output and its standard error, each in a block of
+    its own. Each block ends at the first closing tag of its name: a walk from the front, in one
+    pass however long the text is.
+    """
+    position = 0
+    while True:
+        opening = _BLOCK_OPENS.match(text, position)
+        if opening is None:
+            return False
+        closing = f"</{opening.group(1)}>"
+        end = text.find(closing, opening.end())
+        if end < 0:
+            return False
+        position = end + len(closing)
+        if _ONLY_SPACE.match(text, position):
+            return True
+
+
 def _take(record: Mapping[str, Any], moment: datetime.datetime, reading: _Reading) -> bool:
     """Adds the record to ``reading`` as a prompt or a count; False when it is neither."""
     message = record.get("message")
@@ -197,7 +220,7 @@ def _take(record: Mapping[str, Any], moment: datetime.datetime, reading: _Readin
     elif command is not None:
         reading.prompts.append(Prompt(moment, f"/{command.group(1)}"))
     elif sender is None:
-        if _WRAPPED.match(text) or text.lstrip().startswith(_INTERRUPTED):
+        if _WRAPPED.match(text) or _is_only_blocks(text) or text.lstrip().startswith(_INTERRUPTED):
             return False
         reading.unmarked += 1
     elif source == _SUGGESTION:

@@ -137,7 +137,8 @@ def propose(
     summary = (
         f"read {_count(len(read), 'session')} with {_count(typed, 'typed prompt')} since {start.strftime(_MOMENT)}: "
         f"{_count(added.added, 'proposal')} added, "
-        f"{added.like_an_open_one + added.like_a_dropped_one} like an open or a dropped one, "
+        f"{added.like_an_open_one + added.like_a_kept_one + added.like_a_dropped_one} "
+        "like one that waits or is answered, "
         f"{len(checked.not_quoted)} without the person's words, "
         f"{len(checked.already_captured)} captured already, {answer.malformed} not in the form"
     )

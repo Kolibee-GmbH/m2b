@@ -57,7 +57,7 @@ from m2b.config.store_settings import (
 )
 from m2b.curate import glean_step, machine_state, memory_guard, migrations, model, report
 from m2b.curate.due import check_due
-from m2b.harvest import harvest
+from m2b.harvest import HarvestReport, harvest
 from m2b.journal import write_journal
 from m2b.locale import Locale, load_locale
 from m2b.notes.characters import strip_unsafe
@@ -487,8 +487,12 @@ class _Run:
         self._report_fact_changes(migrations.step_name(migration), before, after, InboxBefore())
 
     def _harvest(self, tasks: Tasks, locale: Locale) -> None:
-        result = harvest(self.store, tasks, locale.text(PREFIX_KEY), self.clock())
-        self.findings += [report.Finding(HARVEST, report.ACTION, problem) for problem in result.problems]
+        result = HarvestReport()
+        try:
+            harvest(self.store, tasks, locale.text(PREFIX_KEY), self.clock(), result)
+        finally:
+            # A harvest that fails has still said what waits and why.
+            self.findings += [report.Finding(HARVEST, report.ACTION, problem) for problem in result.problems]
         current_check.settle(self.store, tasks, self.clock().date(), task_list=self._task_list())
 
     def _glean(self) -> Skipped | None:
