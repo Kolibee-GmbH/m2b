@@ -58,15 +58,21 @@ export function parseReview(list: unknown, details?: unknown): BandReview | null
   if (!isObject(details) || !Array.isArray(details['changes'])) {
     return { id: review.id, title: review.title, findings }
   }
-  const told = new Set(Array.isArray(details['paragraphs']) ? details['paragraphs'].filter(isString) : [])
-  const changes = details['changes'].filter(isObject).map(factChange)
+  const copies = Array.isArray(details['copies']) ? details['copies'].map(copyOf) : []
   return {
     id: review.id,
     title: review.title,
-    findings: findings.filter(paragraph => !told.has(paragraph)),
-    changes,
-    copy: copyOf(details['copy']),
+    findings,
+    told: Array.isArray(details['paragraphs']) ? details['paragraphs'].filter(isString) : [],
+    changes: details['changes'].filter(isObject).map(factChange),
+    copies: copies.filter(copy => copy !== null),
   }
+}
+
+/** The findings the band draws as written: those no change or copy stands for. */
+export function untoldFindings(review: BandReview): string[] {
+  const told = new Set(review.told ?? [])
+  return review.findings.filter(finding => !told.has(finding))
 }
 
 function factChange(change: Record<string, unknown>): BandFactChange {
@@ -83,7 +89,7 @@ function changeOf(value: unknown): BandChangePart['change'] {
   return value === 'added' || value === 'removed' ? value : 'same'
 }
 
-function copyOf(value: unknown): BandReview['copy'] {
+function copyOf(value: unknown): { path: string; captures: number } | null {
   if (!isObject(value) || typeof value['path'] !== 'string') {
     return null
   }

@@ -13,8 +13,10 @@ A task list that cannot be read is named in ``tasks.error``; the status part sti
 unless ``band.due_tasks`` in the machine config is off.
 ``tasks.review`` holds, while a review task is open, the changes of the facts it names as data:
 each with its fact file, a short topic, the whole lines before and after and the words that
-differ, the copy of ``memory/`` from before the run, and the review's paragraphs these stand for,
-so the band can draw them readably and leave the rest of the review as written.
+differ, each copy of ``memory/`` from before a run, and the review's paragraphs these stand for,
+so the band can draw them readably and leave the rest of the review as written. Only changes whose
+paragraph the open review still holds are named: the changes are this machine's, the review is
+shared, and another machine's run may have rewritten it.
 ``version`` is this core's: the launcher always runs the installed one, while a session keeps the
 band it loaded, so the band compares the two and asks for a reload when they differ.
 """
@@ -94,7 +96,7 @@ def _tasks_part(config: MachineConfig, context: Context, moment: datetime.dateti
     if config.band.due_tasks:
         part["due"] = _due(open_tasks, moment)
     if part["reviews"]:
-        part["review"] = _review_changes(context)
+        part["review"] = _review_changes(context, _paragraphs(part["reviews"][0].get("notes")))
     return part, Check("tasks", REACHABLE)
 
 
@@ -106,25 +108,39 @@ _PARTS = re.compile(r"\w+|\s+|[^\w\s]")
 _TOPIC = re.compile(r"^(?P<topic>[^,(\u2014]+?)\s*(?:[,(\u2014]|\Z)")
 
 
-def _review_changes(context: Context) -> dict[str, Any]:
-    """The changes of the facts the open review names, as the last run kept them for it."""
+def _paragraphs(notes: object) -> set[str]:
+    """The paragraphs of a review task's notes, as the review writes them and the band splits them."""
+    if not isinstance(notes, str):
+        return set()
+    return {paragraph.strip() for paragraph in re.split(r"\n\s*\n", notes) if paragraph.strip()}
+
+
+def _review_changes(context: Context, in_review: set[str]) -> dict[str, Any]:
+    """The changes of the facts the open review names, as the last runs kept them for it.
+
+    A review open over several runs names a copy of ``memory/`` for each; the copies are listed in
+    order, the captures of the steps that share one copy together.
+    """
     changes: list[dict[str, Any]] = []
-    copy: dict[str, Any] | None = None
+    copies: dict[str, list[str]] = {}
     paragraphs: list[str] = []
     for finding in machine_state.load_memory_changes(context.machine):
         change = finding.change
-        if change is None:
+        paragraph = f"{finding.step}: {one_line(finding.text)}"
+        if change is None or paragraph not in in_review:
             continue
-        paragraphs.append(f"{finding.step}: {one_line(finding.text)}")
+        paragraphs.append(paragraph)
         if change.get("kind") == memory_guard.COPY:
             captures = change.get("captures")
-            copy = {
-                "path": str(change.get("path", "")),
-                "captures": [str(name) for name in captures] if isinstance(captures, list) else [],
-            }
+            filed = copies.setdefault(str(change.get("path", "")), [])
+            filed += [str(name) for name in captures if str(name) not in filed] if isinstance(captures, list) else []
             continue
         changes.append(_change_json(change))
-    return {"changes": changes, "copy": copy, "paragraphs": paragraphs}
+    return {
+        "changes": changes,
+        "copies": [{"path": path, "captures": captures} for path, captures in copies.items()],
+        "paragraphs": paragraphs,
+    }
 
 
 def _change_json(change: Any) -> dict[str, Any]:

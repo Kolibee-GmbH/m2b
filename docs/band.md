@@ -24,7 +24,8 @@ machine.
   the distillate, one row names them by what they are about (`2 facts changed: Sam, Dana`); the
   other findings follow as written. `ok` closes the review task, with the same 5 seconds and
   `undo` as keep; until then the review comes back after every run, so a changed fact is never
-  missed.
+  missed. A review a run rewrote after the band drew it is not closed: the band says so and shows
+  the new one.
 - **Tasks due today or overdue**: your own tasks, not the curator's, in at most three quiet rows
   below the candidates (`due today: Call Dana`, `overdue: Return the drill`), without buttons;
   today's first, then the overdue ones, the most recent first. `m2b config set band.due_tasks
@@ -89,8 +90,8 @@ last curation run in full: its state and times, every finding of the review task
 included, and every candidate and "Still current?" question with keep and drop, which work as in
 the band, undo included. Each changed fact gets two lines: what it is about with its fact file,
 then the fact as it reads now, the added words in green and the removed ones in red and struck
-through; below them where the copy of the facts from before the run lies, and how many notes the
-run filed.
+through; below them where each copy of the facts from before a run lies, one for every run the
+open review covers, and how many notes it filed.
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
@@ -257,9 +258,11 @@ by then is reported as not reachable. `--tasks-only` leaves `status` out.
 While a review task is open, `tasks.review` names the changes of the facts the last runs made, as
 the curation run kept them for the review: per change its `kind` (`rewrote`, `removed`,
 `file_removed`, `file_emptied`), the fact `file`, a short `topic`, the statement `before` and
-`after`, and `parts`, the statement word by word, each `same`, `added` or `removed`; `copy` names
-the copy of `memory/` from before the run and the notes it filed; `paragraphs` are the review's
-paragraphs these stand for, which the band leaves out of the findings it shows.
+`after`, and `parts`, the statement word by word, each `same`, `added` or `removed`; `copies` names
+each copy of `memory/` from before a run and the notes filed with it; `paragraphs` are the
+review's paragraphs these stand for, which the band leaves out of the findings it draws. Only
+changes whose paragraph the open review task still holds are named, so a review another machine's
+run rewrote is never drawn with this machine's older changes.
 
 ## Where it lives
 

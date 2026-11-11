@@ -2,6 +2,7 @@ import type { CommandSpec, EngineInterface, ResolveInput } from 'claude-code'
 
 import type { BandPress, BandRun, BandSnapshot, PaneSearch, PaneView, SearchHit } from '../types'
 import { runM2b } from './m2b'
+import { untoldFindings } from './tasks'
 import { plainLine } from './plain-text'
 import { candidateRow, changesSummary, reviewRow } from './rows'
 import type { RowActions } from './rows'
@@ -106,7 +107,6 @@ export function runLine(run: BandRun | null): string {
   return `Last curation run: ${state}, ${started} to ${end}`
 }
 
-/** The review part as lines of text, for a surface that cannot show the pane. */
 // After the file, what happened to more than a word or two: a line or a whole fact file gone.
 const KIND_SHOWN: Record<string, string> = {
   removed: ', line removed',
@@ -128,6 +128,8 @@ function changeText(parts: { text: string; change: string }[]): string {
     .join('')
 }
 
+/** The review part as lines of text, for a surface that cannot show the pane. */
+
 export function reviewLines(snapshot: BandSnapshot | null, run: BandRun | null): string[] {
   const lines = [runLine(run)]
   if (run?.message) {
@@ -142,10 +144,8 @@ export function reviewLines(snapshot: BandSnapshot | null, run: BandRun | null):
     for (const change of review.changes ?? []) {
       lines.push(`  ${plainLine(change.topic)} (${plainLine(change.file)}): ${changeText(change.parts)}`)
     }
-    if (review.copy) {
-      lines.push(copyLine(review.copy))
-    }
-    lines.push(...review.findings.map(finding => `  ${plainLine(finding)}`))
+    lines.push(...(review.copies ?? []).map(copyLine))
+    lines.push(...untoldFindings(review).map(finding => `  ${plainLine(finding)}`))
   }
   const candidates = snapshot?.candidates ?? []
   lines.push(
@@ -301,8 +301,12 @@ export function paneTree(
           </Text>
         </Box>
       ))}
-      {review?.copy ? <Text dimColor wrap="wrap">{copyLine(review.copy)}</Text> : null}
-      {(review?.findings ?? []).map(finding => (
+      {(review?.copies ?? []).map(copy => (
+        <Text dimColor wrap="wrap">
+          {copyLine(copy)}
+        </Text>
+      ))}
+      {(review === null ? [] : untoldFindings(review)).map(finding => (
         <Text wrap="wrap">
           {'  '}
           {plainLine(finding)}

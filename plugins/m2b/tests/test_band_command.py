@@ -158,8 +158,8 @@ class BandReviewChangesTest(test_runner.RunnerTest):
     def test_an_open_review_comes_with_its_changes_as_data(self) -> None:
         """Covers: B106"""
         self.curating()
-        self.tasks().add("m2b: review", notes=markers.marker_line(markers.REVIEW) + "\n\ningest: rewrote ...")
         self.keep_changes()
+        self.tasks().add("m2b: review", notes=self.notes())
 
         review = self.run_json("band")["tasks"]["review"]
 
@@ -180,13 +180,67 @@ class BandReviewChangesTest(test_runner.RunnerTest):
                 }
             ],
         )
-        self.assertEqual(review["copy"], {"path": "/home/alex/copy", "captures": ["a.md", "b.md"]})
+        self.assertEqual(review["copies"], [{"path": "/home/alex/copy", "captures": ["a.md", "b.md"]}])
         self.assertEqual(
             review["paragraphs"],
             [
                 f'ingest: rewrote the facts line "{self.BEFORE}" as "{self.AFTER}"',
                 "ingest: memory/ as it was before this run is in /home/alex/copy; check the changes above",
             ],
+        )
+
+    def notes(self, *paragraphs: str) -> str:
+        from m2b.curate import machine_state
+        from m2b.curate.report import one_line
+
+        kept = [f"{f.step}: {one_line(f.text)}" for f in machine_state.load_memory_changes(self.machine)]
+        return "\n\n".join([markers.marker_line(markers.REVIEW), *(paragraphs or kept)])
+
+    def test_changes_the_open_review_no_longer_holds_are_not_named(self) -> None:
+        """Covers: B106"""
+        self.curating()
+        self.keep_changes()
+        self.tasks().add("m2b: review", notes=self.notes("lint: broken link in a.md"))
+
+        review = self.run_json("band")["tasks"]["review"]
+
+        self.assertEqual((review["changes"], review["copies"], review["paragraphs"]), ([], [], []))
+
+    def test_a_review_open_over_two_runs_names_both_copies(self) -> None:
+        """Covers: B106"""
+        from m2b.curate import machine_state, memory_guard
+        from m2b.curate.report import ACTION, Finding
+
+        self.curating()
+        copy = {"kind": memory_guard.COPY}
+        machine_state.save_memory_changes(
+            self.machine,
+            [
+                Finding(
+                    "ingest",
+                    ACTION,
+                    "memory/ ... is in /home/alex/first",
+                    {**copy, "path": "/home/alex/first", "captures": ["a.md"]},
+                ),
+                Finding(
+                    "refresh",
+                    ACTION,
+                    "memory/ ... is in /home/alex/second",
+                    {**copy, "path": "/home/alex/second", "captures": []},
+                ),
+                Finding(
+                    "ingest",
+                    ACTION,
+                    "memory/ ... again in /home/alex/second",
+                    {**copy, "path": "/home/alex/second", "captures": ["b.md"]},
+                ),
+            ],
+        )
+        self.tasks().add("m2b: review", notes=self.notes())
+
+        self.assertEqual(
+            self.run_json("band")["tasks"]["review"]["copies"],
+            [{"path": "/home/alex/first", "captures": ["a.md"]}, {"path": "/home/alex/second", "captures": ["b.md"]}],
         )
 
     def test_without_an_open_review_no_changes_are_named(self) -> None:

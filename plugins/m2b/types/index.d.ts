@@ -7,16 +7,18 @@ export type BandChangePart = { text: string; change: 'same' | 'added' | 'removed
 export type BandFactChange = { kind: string; file: string; topic: string; parts: BandChangePart[] }
 
 /**
- * The open review task: its findings, the paragraphs of its notes, less those `changes` and `copy`
- * stand for. `changes` and `copy` are absent from a core before 0.3.3, and then every paragraph
- * is a finding.
+ * The open review task: its findings, every paragraph of its notes. `told` are the paragraphs
+ * `changes` and `copies` stand for, which the band leaves out when it draws; the findings stay
+ * whole, so a session of an older band that reads this shared answer still shows them. All three
+ * are absent from a core before 0.3.3.
  */
 export type BandReview = {
   id: string
   title: string
   findings: string[]
+  told?: string[]
   changes?: BandFactChange[]
-  copy?: { path: string; captures: number } | null
+  copies?: { path: string; captures: number }[]
 }
 
 /** One of the owner's own tasks due today or overdue. */

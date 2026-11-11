@@ -1,5 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
+import { parseReview } from '../../hooks/tasks'
 import { BAND, FakeM2b, pane, start, texts } from './harness'
 
 const UNDO_MS = 5_000
@@ -24,7 +25,10 @@ function changedFake(): FakeM2b {
       },
       { kind: 'removed', file: 'dana.md', topic: 'Dana likes old maps', parts: [{ text: 'Dana likes old maps', change: 'same' }] },
     ],
-    copy: { path: '/home/alex/copy', captures: ['a.md', 'b.md'] },
+    copies: [
+      { path: '/home/alex/older', captures: [] },
+      { path: '/home/alex/copy', captures: ['a.md', 'b.md'] },
+    ],
     paragraphs: [SAM_PARAGRAPH, 'ingest: removed the facts line "- Dana likes old maps (dana.md)"', COPY_PARAGRAPH],
   }
   return fake
@@ -73,6 +77,7 @@ test('the pane shows each changed fact with its file and the added and removed w
 
   expect(shown).toContain('Sam (sam.md)')
   expect(shown).toContain('Dana likes old maps (dana.md, line removed)')
+  expect(shown).toContain('facts before the run: /home/alex/older')
   expect(shown).toContain('facts before the run: /home/alex/copy; 2 notes filed')
   expect(shown).toContain('lint: broken link in a.md')
   expect(shown).not.toContain('rewrote the facts line')
@@ -93,4 +98,56 @@ test('a core that names no changes leaves every finding as written', async ($, o
   expect(shown).not.toContain('facts changed')
   expect(shown).not.toContain('the whole review')
   await ui.unmount()
+})
+
+test('ok writes nothing when a run rewrote the review since it was drawn, and shows the new one', async ($, on) => {
+  // Covers: B106
+  const fake = changedFake()
+  const { clock } = await start($, on, fake)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+
+  await ui.press({ key: 'ok:r1' })
+  const review = fake.tasks.find(task => task.id === 'r1')
+  if (review === undefined) {
+    throw new Error('the fake has no review')
+  }
+  review.notes = `${review.notes}\n\nlint: broken link in c.md`
+  await clock.advance(UNDO_MS)
+
+  expect(fake.writes()).toEqual([])
+  const shown = await texts(ui)
+  expect(shown).toContain('The review changed since it was drawn, nothing written: m2b: review')
+  expect(shown).toContain('lint: broken link in c.md')
+  await ui.unmount()
+})
+
+test('ok on a review another session closed writes nothing and takes the row away', async ($, on) => {
+  // Covers: B106
+  const fake = changedFake()
+  const { clock } = await start($, on, fake)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+
+  await ui.press({ key: 'ok:r1' })
+  const review = fake.tasks.find(task => task.id === 'r1')
+  if (review !== undefined) {
+    review.completed = true
+  }
+  await clock.advance(UNDO_MS)
+
+  expect(fake.writes()).toEqual([])
+  const shown = (await texts(ui)).join('\n')
+  expect(shown).toContain('Already settled in another session, nothing written: m2b: review')
+  expect(await ui.findAll({ type: 'Button' })).toHaveLength(0)
+  await ui.unmount()
+})
+
+test('the findings a shared answer keeps stay whole, for a band that draws no changes', () => {
+  // Covers: B106
+  const notes = ['m2b:review\nCuration run of 2026-03-14 18:02', SAM_PARAGRAPH, 'lint: broken link in a.md'].join('\n\n')
+  const list = [{ id: 'r1', title: 'm2b: review', notes, completed: false, dropped: false, marker: 'review' }]
+
+  const review = parseReview(list, { changes: [], copies: [], paragraphs: [SAM_PARAGRAPH] })
+
+  expect(review?.findings).toEqual([SAM_PARAGRAPH, 'lint: broken link in a.md'])
+  expect(review?.told).toEqual([SAM_PARAGRAPH])
 })

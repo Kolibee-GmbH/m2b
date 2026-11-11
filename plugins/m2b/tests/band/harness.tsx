@@ -88,7 +88,7 @@ export class FakeM2b {
   /** The tasks due today or overdue as `m2b band --json` answers them; null when `band.due_tasks` is off. */
   dueTasks: { id: string; title: string; due: string; overdue: boolean }[] | null = []
   /** The changes of the facts `m2b band --json` names for an open review; null as a core before 0.3.3 answers. */
-  reviewDetails: { changes: unknown[]; copy: unknown; paragraphs: string[] } | null = null
+  reviewDetails: { changes: unknown[]; copies: unknown[]; paragraphs: string[] } | null = null
   /** Set, a toast is refused, as while the session closes. */
   toastFails = false
   /** The installed core's version, as `m2b band --json` answers it. */
