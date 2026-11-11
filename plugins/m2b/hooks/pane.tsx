@@ -68,7 +68,7 @@ export function isRun(value: unknown): value is BandRun {
 }
 
 /** `2026-03-14 18:00` from a time m2b wrote with its offset: as written, in the offset of the machine that curated. */
-function minute(moment: string): string {
+export function minute(moment: string): string {
   return plainLine(moment.slice(0, 16).replace('T', ' '))
 }
 

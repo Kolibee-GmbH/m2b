@@ -2,10 +2,15 @@ export type BandCandidate = { id: string; title: string }
 
 export type BandReview = { id: string; title: string; findings: string[] }
 
+/** One of the owner's own tasks due today or overdue. */
+export type BandDueTask = { id: string; title: string; overdue: boolean }
+
 export type BandSnapshot = {
   candidates: BandCandidate[]
   review: BandReview | null
   error: string | null
+  /** Absent in an answer of a band before due tasks, and with `band.due_tasks` off: none to show. */
+  due?: BandDueTask[]
 }
 
 /** What a press on keep or drop asks the task list for. */
@@ -53,6 +58,8 @@ declare module 'claude-code' {
       bandRun: BandRun | null
       /** What the m2b pane shows. */
       paneView: PaneView | null
+      /** The start of the last failed run this session was shown, so it is shown once. */
+      bandToastedRun: string | null
     }
   }
 }

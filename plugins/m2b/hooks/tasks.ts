@@ -1,4 +1,4 @@
-import type { BandCandidate, BandReview } from '../types'
+import type { BandCandidate, BandDueTask, BandReview } from '../types'
 
 export class TaskJsonError extends Error {
   constructor() {
@@ -58,8 +58,22 @@ export function parseReview(list: unknown): BandReview | null {
   return { id: review.id, title: review.title, findings }
 }
 
+/** The tasks due today or overdue; none when the part is absent, as with `band.due_tasks` off. */
+export function parseDue(list: unknown): BandDueTask[] {
+  if (list === undefined) {
+    return []
+  }
+  return openTasks(list).map(task => ({ id: task.id, title: task.title, overdue: isOverdue(task) }))
+}
+
+function isOverdue(task: TaskJson): boolean {
+  return (task as Record<string, unknown>)['overdue'] === true
+}
+
 /** The task part of `m2b band --json`: the band's rows, or the reason the task list could not be read. */
-export function parseBandTasks(part: unknown): { candidates: BandCandidate[]; review: BandReview | null } | string {
+export function parseBandTasks(
+  part: unknown,
+): { candidates: BandCandidate[]; review: BandReview | null; due: BandDueTask[] } | string {
   if (typeof part !== 'object' || part === null) {
     throw new TaskJsonError()
   }
@@ -71,5 +85,6 @@ export function parseBandTasks(part: unknown): { candidates: BandCandidate[]; re
     // Whether a current item still holds is answered the same way as a candidate: keep or drop.
     candidates: [...parseCandidates(fields['candidates']), ...parseCandidates(fields['questions'])],
     review: parseReview(fields['reviews']),
+    due: parseDue(fields['due']),
   }
 }

@@ -32,6 +32,10 @@ All notable changes to this project are documented here. The format follows
 - `/m2b-review` opens a pane with the whole last curation run: its state and times, every finding
   whole, and every candidate and question with keep, drop and undo. `/m2b-search <text>` shows the
   hits of a search there, without a model turn.
+- The band shows your tasks due today or overdue in up to three quiet rows below the candidates;
+  `m2b config set band.due_tasks false` turns them off.
+- A failed curation run is shown once in every open session, in a line that says where its review
+  is.
 - A session whose band is older than the installed m2b says so in one line and names
   `/reload-plugins`; `m2b band --json` answers the installed `version` for that.
 

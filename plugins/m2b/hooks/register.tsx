@@ -1,7 +1,16 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { BandCandidate, BandPress, BandReview, BandRun, BandSettle, BandSnapshot, PaneView } from '../types'
+import type {
+  BandCandidate,
+  BandDueTask,
+  BandPress,
+  BandReview,
+  BandRun,
+  BandSettle,
+  BandSnapshot,
+  PaneView,
+} from '../types'
 import { launcherPath, m2bHome, machineConfigPath, runM2b } from './m2b'
 import { NOTE_COMMAND, note } from './note'
 import {
@@ -9,6 +18,7 @@ import {
   REVIEW_COMMAND,
   SEARCH_COMMAND,
   isRun,
+  minute,
   paneTree,
   reviewLines,
   runOf,
@@ -30,6 +40,7 @@ const pressesAtom = atom({ plugin: 'm2b', key: 'bandPresses' } as const, {})
 const versionNoticeAtom = atom({ plugin: 'm2b', key: 'bandVersionNotice' } as const, null)
 const runAtom = atom({ plugin: 'm2b', key: 'bandRun' } as const, null)
 const paneViewAtom = atom({ plugin: 'm2b', key: 'paneView' } as const, null)
+const toastedRunAtom = atom({ plugin: 'm2b', key: 'bandToastedRun' } as const, null)
 
 const REFRESH_EVERY_MS = 60_000
 // `m2b band` reaches and reads the task list (two Apple Reminders calls, 20 seconds each by
@@ -44,6 +55,7 @@ const SEEN_FILE = '.local/state/m2b/band-seen.json'
 const MANIFEST = '.claude-plugin/plugin.json'
 const CANDIDATES_SHOWN = 3
 const FINDINGS_SHOWN = 3
+const DUE_SHOWN = 3
 
 const BAND_ANSWER = ['band', '--json'] as const
 // The second look before a keep or drop needs the tasks alone, not the status and its probes.
@@ -95,7 +107,7 @@ function snapshotOf(part: unknown): BandSnapshot {
     const tasks = parseBandTasks(part)
     return typeof tasks === 'string'
       ? failed(`m2b could not read the tasks: ${tasks}`)
-      : { candidates: tasks.candidates, review: tasks.review, error: null }
+      : { candidates: tasks.candidates, review: tasks.review, error: null, due: tasks.due }
   } catch (error) {
     return failed(String((error as Error).message))
   }
@@ -137,6 +149,33 @@ async function loadNow($: EngineInterface, isForced: boolean): Promise<void> {
   // An answer a session without the pane stored has no run; it leaves the run line as it was.
   await update($, runAtom, current => (view.run === undefined ? current : view.run))
   $.ui.status(plainLine(view.status))
+  await toastFailedRun($, view.run ?? null)
+}
+
+/**
+ * One line when a curation run failed, once per session and run: the run's start is kept in the
+ * session's state, which a reload of the mod keeps too. A run that succeeded says nothing.
+ */
+async function toastFailedRun($: EngineInterface, run: BandRun | null): Promise<void> {
+  if (run?.state !== 'failed' || run.startedAt === null) {
+    return
+  }
+  const startedAt = run.startedAt
+  let isNew = false
+  await update($, toastedRunAtom, shown => {
+    isNew = shown !== startedAt
+    return isNew ? startedAt : shown
+  })
+  if (!isNew) {
+    return
+  }
+  try {
+    $.ui.toast(`m2b: the curation run of ${minute(startedAt)} failed; its review task says why, and /m2b-review shows it`, {
+      timeoutMs: 10_000,
+    })
+  } catch {
+    // The status line says the run failed all the same.
+  }
 }
 
 // The version in the manifest of the plugin this module was loaded from, read at session start.
@@ -204,8 +243,13 @@ function isSnapshot(value: unknown): value is BandSnapshot {
     Array.isArray(value['candidates']) &&
     value['candidates'].every(isCandidate) &&
     (value['review'] === null || isReview(value['review'])) &&
-    (value['error'] === null || typeof value['error'] === 'string')
+    (value['error'] === null || typeof value['error'] === 'string') &&
+    (value['due'] === undefined || (Array.isArray(value['due']) && value['due'].every(isDueTask)))
   )
+}
+
+function isDueTask(value: unknown): value is BandDueTask {
+  return isObject(value) && typeof value['id'] === 'string' && typeof value['title'] === 'string' && typeof value['overdue'] === 'boolean'
 }
 
 function isCandidate(value: unknown): value is BandCandidate {
@@ -464,6 +508,14 @@ function failed(error: string): BandSnapshot {
   return { candidates: [], review: null, error }
 }
 
+/**
+ * Today's tasks first, then the overdue ones, the most recent first: a task left overdue for weeks
+ * would otherwise fill the three rows every day.
+ */
+function dueFirst(due: BandDueTask[]): BandDueTask[] {
+  return [...due.filter(task => !task.overdue), ...due.filter(task => task.overdue).reverse()]
+}
+
 function andMore(hidden: number, what: string): string | null {
   return hidden > 0 ? `and ${hidden} more ${what}` : null
 }
@@ -583,12 +635,15 @@ export const register: Register = on => {
     const candidates = snapshot?.candidates ?? []
     const review = snapshot?.review ?? null
     const error = snapshot?.error ?? null
-    if (candidates.length === 0 && review === null && error === null && notice === null && versionLine === null) {
+    const due = snapshot?.due ?? []
+    const isEmpty = candidates.length === 0 && due.length === 0 && review === null && error === null
+    if (isEmpty && notice === null && versionLine === null) {
       return next(e)
     }
 
     const { Box, Text } = $.ui.resolve(e)
     const moreCandidates = andMore(candidates.length - CANDIDATES_SHOWN, 'candidates')
+    const moreDue = andMore(due.length - DUE_SHOWN, 'due')
     const findings = review?.findings ?? []
     const moreFindings = andMore(findings.length - FINDINGS_SHOWN, 'findings')
     const isWriting = Object.values(presses).some(pressed => pressed.phase === 'writing')
@@ -605,6 +660,12 @@ export const register: Register = on => {
         )}
         {candidates.slice(0, CANDIDATES_SHOWN).map(row)}
         {moreCandidates !== null && <Text dimColor>{moreCandidates}</Text>}
+        {dueFirst(due).slice(0, DUE_SHOWN).map(task => (
+          <Text dimColor wrap="truncate-end">
+            {`${task.overdue ? 'overdue' : 'due today'}: ${plainLine(task.title)}`}
+          </Text>
+        ))}
+        {moreDue !== null && <Text dimColor>{moreDue}</Text>}
         {review !== null && (
           <Text weight="semibold" wrap="truncate-end">
             {plainLine(review.title)}

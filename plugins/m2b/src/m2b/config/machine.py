@@ -66,6 +66,12 @@ class DistillateSettings:
 
 
 @dataclass(frozen=True)
+class BandSettings:
+    # Whether the band shows the tasks due today or overdue below the candidates.
+    due_tasks: bool = True
+
+
+@dataclass(frozen=True)
 class MachineConfig:
     version: int
     machine_id: str
@@ -74,6 +80,7 @@ class MachineConfig:
     executables: Mapping[str, str]
     curation: CurationSettings
     distillate: DistillateSettings = field(default_factory=DistillateSettings)
+    band: BandSettings = field(default_factory=BandSettings)
     # Each add-on's settings as written, ``on`` included; ``m2b.addons.is_on`` reads them.
     addons: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
 
@@ -85,7 +92,7 @@ def parse_machine_config(raw: object, home: Path) -> MachineConfig:
     if version > KNOWN_CONFIG_VERSION:
         raise FormatTooNewError(CONFIG_FILE_NAME, version, KNOWN_CONFIG_VERSION)
     fields.reject_unknown(
-        ("version", "machine_id", "store", "calendar", "executables", "curation", "distillate", "addons")
+        ("version", "machine_id", "store", "calendar", "executables", "curation", "distillate", "band", "addons")
     )
     return MachineConfig(
         version=version,
@@ -95,6 +102,7 @@ def parse_machine_config(raw: object, home: Path) -> MachineConfig:
         executables=_executables(fields.section("executables", required=False)),
         curation=_curation(fields.section("curation", required=False)),
         distillate=_distillate(fields.section("distillate", required=False), home),
+        band=_band(fields.section("band", required=False)),
         addons=_addons(fields.section("addons", required=False)),
     )
 
@@ -149,6 +157,11 @@ def _distillate(fields: Fields, home: Path) -> DistillateSettings:
             raise fields.error("skip_under", f"holds {written!r}; each folder must be absolute or start with ~/")
         folders.append(folder)
     return DistillateSettings(skip_under=tuple(folders))
+
+
+def _band(fields: Fields) -> BandSettings:
+    fields.reject_unknown(("due_tasks",))
+    return BandSettings(due_tasks=fields.boolean("due_tasks", default=True))
 
 
 def _addons(fields: Fields) -> Mapping[str, Mapping[str, Any]]:

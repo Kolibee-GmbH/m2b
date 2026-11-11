@@ -72,6 +72,10 @@ export class FakeM2b {
   searchCut = false
   /** When set, `m2b search` fails with this as its message. */
   searchFails: string | null = null
+  /** The tasks due today or overdue as `m2b band --json` answers them; null when `band.due_tasks` is off. */
+  dueTasks: { id: string; title: string; due: string; overdue: boolean }[] | null = []
+  /** Set, a toast is refused, as while the session closes. */
+  toastFails = false
   /** The installed core's version, as `m2b band --json` answers it. */
   version = '0.3.0'
   /** The version in the manifest of the plugin the band was loaded from; null when it cannot be read. */
@@ -155,7 +159,12 @@ export class FakeM2b {
       : this.failure
     const tasks =
       error === null
-        ? { candidates: open('candidate'), questions: open('current'), reviews: open('review') }
+        ? {
+            candidates: open('candidate'),
+            questions: open('current'),
+            reviews: open('review'),
+            ...(this.dueTasks === null ? {} : { due: this.dueTasks.map(task => ({ ...task, notes: '', completed: false, dropped: false, marker: null })) }),
+          }
         : { error }
     return ok(JSON.stringify({ version: this.version, tasks, status: this.status }))
   }
@@ -180,6 +189,7 @@ export type Registered = { name: string; immediate?: true }
 export type Opened = { id: string; title?: string }
 
 export type World = {
+  toasts: string[]
   clock: MockClock
   statuses: (string | undefined)[]
   commands: Registered[]
@@ -241,6 +251,14 @@ export async function start(
   const commands: Registered[] = []
   const opened: Opened[] = []
   on('ui.close', () => ({ value: undefined }))
+  const toasts: string[] = []
+  on('ui.toast', (_, e) => {
+    if (fake.toastFails) {
+      return { deny: 'the session is closing' }
+    }
+    toasts.push(e.text)
+    return { value: undefined }
+  })
   on('ui.open', (_, e) => {
     opened.push(e)
     return fake.paneWaits === null
@@ -275,7 +293,7 @@ export async function start(
   })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await clock.advance(1)
-  return { clock, statuses, commands, opened }
+  return { clock, statuses, commands, opened, toasts }
 }
 
 export async function texts(ui: { findAll: (q: { type: string }) => Promise<{ text: string }[]> }): Promise<string[]> {

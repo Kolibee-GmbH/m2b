@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import json
 from typing import Any
 from unittest import mock
@@ -62,6 +63,34 @@ class BandCommandTest(test_runner.RunnerTest):
         self.curating()
 
         self.assertEqual(self.band()["version"], launcher.core_version())
+
+    def test_tasks_due_today_or_overdue_come_without_curator_tasks_and_without_later_ones(self) -> None:
+        """Covers: B102"""
+        self.curating()
+        tasks = self.tasks()
+        today = datetime.date.today()
+        tasks.add("Call Dana", due=today)
+        tasks.add("Return the drill", due=today - datetime.timedelta(days=2))
+        tasks.add("Book the trip", due=today + datetime.timedelta(days=1))
+        tasks.add("Buy screws")
+        tasks.add("Remember? Sam moved", notes=markers.marker_line(markers.CANDIDATE), due=today)
+        done = tasks.add("Water the plants", due=today)
+        tasks.complete(done)
+
+        due = self.band()["tasks"]["due"]
+
+        self.assertEqual([task["title"] for task in due], ["Return the drill", "Call Dana"])
+        self.assertEqual([task["overdue"] for task in due], [True, False])
+
+    def test_the_due_tasks_are_left_out_when_band_due_tasks_is_off(self) -> None:
+        """Covers: B102"""
+        self.curating()
+        self.tasks().add("Call Dana", due=datetime.date.today())
+        config = json.loads(self.machine.config_file.read_text(encoding="utf-8"))
+        config["band"] = {"due_tasks": False}
+        self.machine.config_file.write_text(json.dumps(config), encoding="utf-8")
+
+        self.assertNotIn("due", self.band()["tasks"])
 
     def test_tasks_only_leaves_the_status_out(self) -> None:
         """Covers: B93"""

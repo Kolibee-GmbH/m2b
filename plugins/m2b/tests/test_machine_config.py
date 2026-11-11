@@ -128,6 +128,13 @@ class ParseTest(unittest.TestCase):
         with self.assertRaises(InvalidConfigError):
             machine.parse_machine_config(_config(distillate={"skip_under": ["code/acme"]}), HOME)
 
+    def test_the_band_shows_due_tasks_unless_band_due_tasks_is_false(self) -> None:
+        """Covers: B102"""
+        self.assertTrue(machine.parse_machine_config(_config(), HOME).band.due_tasks)
+        self.assertFalse(machine.parse_machine_config(_config(band={"due_tasks": False}), HOME).band.due_tasks)
+        with self.assertRaisesRegex(InvalidConfigError, "due_tasks"):
+            machine.parse_machine_config(_config(band={"due_tasks": "no"}), HOME)
+
     def test_the_old_modules_key_and_curation_steps_are_refused(self) -> None:
         for raw in (_config(modules={}), _config(curation={"steps": {}})):
             with self.subTest(raw=raw), self.assertRaises(InvalidConfigError):

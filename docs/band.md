@@ -20,10 +20,14 @@ machine.
 - **Memory candidates**, "Remember? ...": facts a curation run proposes for the distillate.
 - **"Still current?" questions**: items under "Current" in the distillate that have gone quiet.
 - **The review**: the open review task of the last curation run, with its first findings.
+- **Tasks due today or overdue**: your own tasks, not the curator's, in at most three quiet rows
+  below the candidates (`due today: Call Dana`, `overdue: Return the drill`), without buttons;
+  today's first, then the overdue ones, the most recent first. `m2b config set band.due_tasks
+  false` turns them off on this machine; `true` brings them back.
 
-Candidates and questions share at most three rows, and the review shows at most three findings,
-each followed by "and N more" when there are more. The band is empty, and takes no room, while
-there is nothing to show.
+Candidates and questions share at most three rows, the due tasks have three, and the review shows
+at most three findings, each followed by "and N more" when there are more. The band is empty, and
+takes no room, while there is nothing to show.
 
 **Keep and drop are buttons: click them with the mouse.** Keep completes the task; drop marks it
 dropped and completes it; nothing else changes, and the next curation run reads which one you
@@ -46,6 +50,14 @@ Until the band has read the list after the write, the row offers nothing to clic
 
 The band draws every text as one plain line: escape sequences and control characters a capture
 brought along from terminal output are left out, line breaks and tabs become spaces.
+
+## When a curation run fails
+
+Each open session shows one line for a few seconds, once per failed run: `m2b: the curation run of
+2026-03-14 18:00 failed; its review task says why, and /m2b-review shows it`. A reload of the
+plugins does not show the same run again; a run that succeeds shows nothing, and neither does an
+interrupted one, which the status line names. The status line says
+`last run failed, see review` until the next run succeeds.
 
 ## Noting without the model
 
