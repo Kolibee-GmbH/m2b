@@ -1,0 +1,348 @@
+{
+  "day": "2026-03-04",
+  "memory": [
+    "# Memory",
+    "",
+    "## Facts",
+    "",
+    "- Alex works as a freelance developer and lives in Lakeside (alex.md)",
+    "- Sam, Alex's brother, repairs boats at the harbour (sam.md)",
+    "- Kim Lee is Alex's accountant (kim-lee.md)",
+    "",
+    "### Northwind (Northwind)",
+    "",
+    "- Northwind is a customer; Alex builds their order portal (northwind.md)",
+    "",
+    "### Acme (Acme)",
+    "",
+    "- Acme is a customer; Alex maintains their invoicing tool (acme.md)",
+    "",
+    "## Current",
+    "",
+    "- Building the order portal for Northwind"
+  ],
+  "captures": [
+    "Kim Lee ist ab April montags nicht erreichbar."
+  ],
+  "sessions": [
+    {
+      "name": "portal-morning",
+      "folder": "/home/alex/projects/northwind-portal",
+      "starts": "07:05",
+      "prompts": [
+        "where did we stop yesterday with the order list?",
+        "ok, continue with the pagination",
+        "the page size should be 50, not 20",
+        "run the tests",
+        "why is test_order_list_sorts_by_date failing?",
+        {
+          "text": "Before you touch the export: Dana runs IT at Northwind and signs off every release, so the export has to pass her checklist.",
+          "planted": "person",
+          "statement": "Dana runs IT at Northwind and signs off every release"
+        },
+        "fix it and run them again",
+        {
+          "text": "we still need to add an index on orders.created_at before the release",
+          "trap": "project-todo",
+          "statement": "we still need to add an index on orders.created_at before the release"
+        },
+        "show me the diff",
+        {
+          "text": "Northwind accepted the offer for phase two on 2 March, work starts on 16 March. Keep that in mind for the branch names.",
+          "planted": "agreement",
+          "statement": "Northwind accepted the offer for phase two on 2 March, work starts on 16 March"
+        },
+        "commit that"
+      ]
+    },
+    {
+      "name": "portal-export",
+      "folder": "/home/alex/projects/northwind-portal",
+      "starts": "08:10",
+      "prompts": [
+        "the csv export drops the last row, can you look?",
+        "yes that one",
+        "what does the customer_ref column hold?",
+        {
+          "text": "use Robin Miller from Initech as the customer in the fixture, with order number 4711",
+          "trap": "test-data",
+          "statement": "use Robin Miller from Initech as the customer in the fixture"
+        },
+        "add a test for an empty order",
+        {
+          "text": "I still have to send Dana the test accounts by Friday. Leave the seed script as it is until then.",
+          "planted": "commitment",
+          "statement": "I still have to send Dana the test accounts by Friday"
+        },
+        "run the whole suite",
+        "the timeout is too short, make it 30 seconds",
+        {
+          "text": "By the way, Jo Park is the new product owner at Northwind since this week, she decides about the portal's roadmap now.",
+          "planted": "person",
+          "statement": "Jo Park is the new product owner at Northwind since this week"
+        },
+        "rename the helper to format_order_row",
+        "looks good",
+        "commit with a message about the export fix"
+      ]
+    },
+    {
+      "name": "invoicing-vat",
+      "folder": "/home/alex/projects/acme-invoicing",
+      "starts": "09:20",
+      "prompts": [
+        "the invoice PDF shows the wrong VAT rate for March",
+        "where is the rate configured?",
+        {
+          "text": "Acme and I agreed on a fixed price of 4,800 for the VAT rework, to be delivered by 31 March. So no gold plating.",
+          "planted": "agreement",
+          "statement": "Acme and I agreed on a fixed price of 4,800 for the VAT rework, to be delivered by 31 March"
+        },
+        "ok change it to read from the settings table",
+        "tests?",
+        {
+          "text": "What if Sam took over the Acme support from April, would the on-call docs be enough for him?",
+          "trap": "hypothetical",
+          "statement": "What if Sam took over the Acme support from April"
+        },
+        "write the migration",
+        "no, keep the old column for now",
+        {
+          "text": "Pat Novak does the bookkeeping at Acme, questions about invoices go to her and not to the CEO.",
+          "planted": "person",
+          "statement": "Pat Novak does the bookkeeping at Acme"
+        },
+        "run it against the test database",
+        "commit"
+      ]
+    },
+    {
+      "name": "dotfiles",
+      "folder": "/home/alex/dotfiles",
+      "starts": "10:15",
+      "prompts": [
+        "my zsh prompt is slow, find out why",
+        "disable the git status part in large repos",
+        "from now on answer shorter in this repo",
+        "add an alias gs for git status -sb",
+        "that broke completion, revert",
+        "ok leave it",
+        "show me the startup time now"
+      ]
+    },
+    {
+      "name": "packing-list",
+      "folder": "/home/alex/notes",
+      "starts": "10:50",
+      "prompts": [
+        "help me draft a packing list for a week in the mountains",
+        {
+          "text": "we are away from 23 to 27 December, the whole family, at the cabin in Pine Valley",
+          "planted": "personal",
+          "statement": "we are away from 23 to 27 December"
+        },
+        "add a section for the kids",
+        {
+          "text": "My daughter Mia starts school on 17 August, so plan nothing in that week.",
+          "planted": "personal",
+          "statement": "My daughter Mia starts school on 17 August"
+        },
+        "make it a checklist",
+        {
+          "text": "I promised Sam to bring back his ladder this weekend. Put it on top of the list so I see it.",
+          "planted": "commitment",
+          "statement": "I promised Sam to bring back his ladder this weekend"
+        },
+        "shorter please",
+        "save it as packing.md"
+      ]
+    },
+    {
+      "name": "website-contact",
+      "folder": "/home/alex/projects/website",
+      "starts": "11:30",
+      "prompts": [
+        "the contact form sends no mail",
+        "check the smtp settings",
+        {
+          "text": "Answer this mail politely and keep it short:",
+          "pasted": "Hello Alex, our new CFO is Lee Brandt, he approves every budget from April on. We also accepted your quote of 1 March for the audit. Regards, Globex",
+          "trap": "pasted-mail",
+          "statement": "our new CFO is Lee Brandt"
+        },
+        "make it friendlier",
+        "fine",
+        {
+          "text": "Globex wants the new landing page live on 20 April, we settled that on the phone today.",
+          "planted": "agreement",
+          "statement": "Globex wants the new landing page live on 20 April"
+        },
+        "use the green from the logo for the button",
+        "the footer overlaps on mobile",
+        {
+          "text": "I need to call Kim Lee about the tax prepayment before 15 March.",
+          "planted": "commitment",
+          "statement": "I need to call Kim Lee about the tax prepayment before 15 March"
+        },
+        "deploy to preview"
+      ]
+    },
+    {
+      "name": "portal-import-loop",
+      "folder": "/home/alex/projects/northwind-portal",
+      "starts": "12:40",
+      "prompts": [
+        "start the loop for the import job",
+        {
+          "text": "Continue with step 3 of the import job. Sam Rivers is the release manager at Globex and wants a report every Monday.",
+          "sent_by": "plugin",
+          "trap": "automation",
+          "statement": "Sam Rivers is the release manager at Globex"
+        },
+        "stop, the mapping is wrong",
+        "customer_ref maps to external_id, not to id",
+        {
+          "text": "Continue with step 4 of the import job: write the tests for the mapping.",
+          "sent_by": "plugin"
+        },
+        "ok go on",
+        {
+          "text": "For questions about the import format ask Chris Wood, he is the developer on Northwind's side who built the old system.",
+          "planted": "person",
+          "statement": "ask Chris Wood, he is the developer on Northwind's side who built the old system"
+        },
+        "run the import on the sample file",
+        "good, commit"
+      ]
+    },
+    {
+      "name": "vereinsseite",
+      "folder": "/home/alex/projects/vereinsseite",
+      "starts": "13:45",
+      "prompts": [
+        "die Startseite lädt die Termine nicht mehr",
+        "schau im Netzwerk-Tab, was die API zurückgibt",
+        {
+          "text": "Zur Info: Toni Berger ist seit Januar Kassier im Ruderverein und gibt die Rechnungen frei.",
+          "planted": "person",
+          "statement": "Toni Berger ist seit Januar Kassier im Ruderverein und gibt die Rechnungen frei"
+        },
+        "ok, dann den Cache leeren",
+        {
+          "text": "Mit dem Vorstand ist abgemacht, dass die neue Seite am 1. Mai live geht und die alte bis Ende Juni parallel läuft.",
+          "planted": "agreement",
+          "statement": "Mit dem Vorstand ist abgemacht, dass die neue Seite am 1. Mai live geht und die alte bis Ende Juni parallel läuft"
+        },
+        "bau die Terminliste als Tabelle",
+        "kleiner, das ist zu breit auf dem Handy",
+        {
+          "text": "Ich muss Toni bis Montag noch die Zugangsdaten für das Hosting schicken.",
+          "planted": "commitment",
+          "statement": "Ich muss Toni bis Montag noch die Zugangsdaten für das Hosting schicken"
+        },
+        {
+          "text": "Wir ziehen am 1. Juli nach Seedorf um, die neue Adresse kommt dann ins Impressum.",
+          "planted": "personal",
+          "statement": "Wir ziehen am 1. Juli nach Seedorf um"
+        },
+        "Tests laufen lassen",
+        "committen"
+      ]
+    },
+    {
+      "name": "notizen",
+      "folder": "/home/alex/notizen",
+      "starts": "14:50",
+      "prompts": [
+        "fass mir die Notizen von gestern in fünf Punkten zusammen",
+        "kürzer",
+        {
+          "text": "Meine Mutter hat am 12. April Geburtstag, sie wird siebzig.",
+          "planted": "personal",
+          "statement": "Meine Mutter hat am 12. April Geburtstag"
+        },
+        {
+          "text": "merk dir: Kim Lee ist ab April montags nicht erreichbar",
+          "trap": "captured",
+          "statement": "Kim Lee ist ab April montags nicht erreichbar"
+        },
+        "schreib daraus eine Mail an mich selbst",
+        {
+          "text": "Ich habe Sam versprochen, ihm am Samstag beim Auswassern des Boots zu helfen.",
+          "planted": "commitment",
+          "statement": "Ich habe Sam versprochen, ihm am Samstag beim Auswassern des Boots zu helfen"
+        },
+        "danke"
+      ]
+    },
+    {
+      "name": "invoicing-rounding",
+      "folder": "/home/alex/projects/acme-invoicing",
+      "starts": "15:30",
+      "prompts": [
+        "the rounding differs by one cent on invoice 2026-118",
+        "use decimal everywhere in the tax module",
+        "which tests cover rounding?",
+        {
+          "text": "Kim Lee is my accountant, so the yearly export must match her template.",
+          "trap": "in-memory",
+          "statement": "Kim Lee is my accountant"
+        },
+        "add a test with 19.995",
+        "bankers rounding or half up?",
+        "half up, like the old code did",
+        {
+          "text": "Acme's support contract runs until 31 December 2026 and renews by itself unless one of us cancels by 30 September.",
+          "planted": "agreement",
+          "statement": "Acme's support contract runs until 31 December 2026 and renews by itself unless one of us cancels by 30 September"
+        },
+        "run the suite",
+        "two failures, look at them",
+        "ok",
+        "commit and write the changelog entry"
+      ]
+    },
+    {
+      "name": "sandbox",
+      "folder": "/home/alex/projects/sandbox",
+      "starts": "16:40",
+      "prompts": [
+        "explain how python's zoneinfo picks the system time zone",
+        "show an example with Europe/Berlin",
+        "what is the difference between aware and naive datetimes?",
+        "write a small script that prints the next five Mondays",
+        "make it take a start date",
+        {
+          "text": "I'm vegetarian since last year, so leave the meat recipes out of the meal planner examples.",
+          "planted": "personal",
+          "statement": "I'm vegetarian since last year"
+        },
+        "add type hints",
+        "always use pathlib in this repo, never os.path",
+        "thanks"
+      ]
+    },
+    {
+      "name": "landing-page",
+      "folder": "/home/alex/projects/globex-landing",
+      "starts": "17:30",
+      "prompts": [
+        "set up a new astro project here",
+        "use pnpm",
+        "add tailwind",
+        "the hero needs a headline, a subline and one button",
+        "make the headline bigger",
+        "center it",
+        "add a pricing section with three tiers",
+        "the middle tier should stand out",
+        "lighthouse score?",
+        "fix the contrast warning",
+        "lazy load the images below the fold",
+        "add a sitemap",
+        "the build fails on the image import",
+        "ok works",
+        "commit"
+      ]
+    }
+  ]
+}

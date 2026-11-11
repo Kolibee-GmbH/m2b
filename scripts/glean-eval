@@ -1,0 +1,9 @@
+#!/bin/sh
+# Measures what a model proposes for the memory from an invented day of typed prompts, with the real
+# model and your own Claude login, for example: scripts/glean-eval --model haiku --runs 1
+# With --replay it reads your own last days instead and writes the proposals to a file you name.
+set -eu
+
+repo_root=$(cd "$(dirname "$0")/.." && pwd)
+PYTHONPATH="$repo_root/scripts:$repo_root/plugins/m2b/src${PYTHONPATH:+:$PYTHONPATH}" \
+    exec python3 -m repo_tools.glean_eval "$@"

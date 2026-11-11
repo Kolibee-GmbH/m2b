@@ -131,6 +131,43 @@ Run the evals before a release that changes a skill, a hook, a tool description,
 session starts with, or the distillate's format, and commit the page with it. A release of docs or
 of a fix the model never sees does not need them, and keeps the page of the release before.
 
+## What a model finds in typed prompts
+
+`m2b/sessions.py` reads what you typed in your sessions, and `m2b/glean.py` holds the form and the
+checks for a model that proposes facts and tasks from it, each with the words it stands on. No
+command uses them yet. `scripts/glean-eval` measures whether a model is good enough for that job.
+
+`tests/glean/day.json` is an invented day: twelve sessions with 120 typed prompts, in English and
+German. Twenty of them state something worth keeping, five each of a person, an agreement, a
+commitment and something personal. Seven are traps, one of each class a proposal must never come
+from: a pasted mail, a prompt a plugin sent, a sentence the person captured themselves, a fact the
+memory holds already, a question that only considers something, a name that is test data, and a
+todo of the project at hand. The tool writes the day as transcripts in Claude Code's format, reads
+them back the way a curation step would, and asks the model with `tests/glean/instruction.md`:
+
+```bash
+scripts/glean-eval                          # haiku and sonnet, three answers each
+scripts/glean-eval --model haiku --runs 1
+```
+
+Per answer it prints how many of the twenty were found, how many proposals were right, and each
+miss, wrong proposal and sprung trap by name. A model meets the bar with 0.80 found and 0.80
+right on average and no trap sprung in any answer. Six answers take about a minute each on your
+own login, so this is not part of `scripts/check`; run it after a change to the instruction, to
+`glean.py` or to `sessions.py`. A run has no tool and no plugin and keeps no session on disk.
+
+The invented day is tidier than a real one. To see what a model proposes from your own days:
+
+```bash
+scripts/glean-eval --replay 7 --out ~/glean-replay.md
+```
+
+It reads your last seven days from Claude Code's transcripts, asks the model once for each day
+and writes the proposals with their quotes to the file, which only you can read. It prints counts
+and no word of a prompt. What you typed goes to the model on your own login, as it did when you
+typed it. The model gets neither your memory nor your captures, so it also proposes what your
+second brain knows already. A file inside this repository is refused.
+
 ## Releasing
 
 Claude Code installs a plugin by its version number. `/plugin update` compares the installed

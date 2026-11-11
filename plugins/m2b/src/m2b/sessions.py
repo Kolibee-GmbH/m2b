@@ -222,6 +222,9 @@ def _without_pasted_blocks(text: str) -> tuple[str, int]:
 
 
 def _shown(text: str) -> str:
+    # A transcript can hold half a character (a lone surrogate); as a question mark the text can be
+    # written and sent like any other.
+    text = text.encode("utf-8", errors="replace").decode("utf-8")
     if len(text) > _REDACT_WINDOW:
         text = _LAST_WORD.sub("", text[:_REDACT_WINDOW])
     return " ".join(redact(text).split())[:PROMPT_LENGTH]

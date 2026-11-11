@@ -104,6 +104,14 @@ class TypedPromptsTest(SessionsFixture):
 
         self.assertEqual(self.texts(), ["deploy with PGPASSWORD=[removed] psql -h db.example"])
 
+    def test_half_a_character_in_a_prompt_becomes_a_question_mark_so_the_text_can_be_written(self) -> None:
+        self.transcript(typed("half \ud83d of an emoji", at(9)))
+
+        (text,) = self.texts()
+
+        self.assertEqual(text, "half ? of an emoji")
+        self.assertEqual(text.encode("utf-8").decode("utf-8"), text)
+
     def test_a_prompt_typed_in_the_desktop_app_or_while_claude_was_busy_is_the_persons(self) -> None:
         self.transcript(
             typed("from the desktop app", at(9), promptSource="sdk", entrypoint="claude-desktop"),
