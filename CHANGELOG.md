@@ -7,6 +7,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The worklog finishes an unfinished worklog only when the note's name in `intent.json` is one the
+  worklog gives a note. Before, it joined any name to `inbox/`, so a changed `intent.json` in the
+  synced store could create a file outside the store on the machine that curates. Such a file now
+  counts as unreadable and nothing is written.
+
 ## [0.3.4] - 2026-11-11
 
 ### Fixed

@@ -739,6 +739,58 @@ class RerunTest(DailyFixture):
         with self.assertRaisesRegex(DailyError, "repair it by hand: m2b-worklog state"):
             self.run_daily()
 
+    def an_unfinished_worklog(self) -> Path:
+        self.a_due_day()
+        with self.crash_after(daily, "_write_intent"), self.assertRaises(Crash):
+            self.run_daily()
+        return self.store / STATE / "intent.json"
+
+    def name_the_note(self, intent_file: Path, name: str) -> None:
+        intent = json.loads(intent_file.read_text(encoding="utf-8"))
+        intent["plan"]["note"]["name"] = name
+        intent_file.write_text(json.dumps(intent), encoding="utf-8")
+
+    def files_on_the_machine(self) -> dict[str, bytes]:
+        return {
+            path.relative_to(self.base).as_posix(): path.read_bytes()
+            for path in sorted(self.base.rglob("*"))
+            if path.is_file()
+        }
+
+    def test_an_intent_whose_note_name_is_no_worklog_note_is_unreadable_and_writes_nothing(self) -> None:
+        """Covers: B107"""
+        intent_file = self.an_unfinished_worklog()
+        names = (
+            "../../outside.md",
+            str(self.base / "outside.md"),
+            "sub/20261110T080000Z-worklog-ab12.md",
+            "20261110T080000Z-worklog-ab12.md\n",
+            "20261110T080000Z-cli-ab12.md",
+            "outside.md",
+            "",
+        )
+        for name in names:
+            with self.subTest(name=name):
+                self.name_the_note(intent_file, name)
+                before = self.files_on_the_machine()
+
+                with self.assertRaisesRegex(DailyError, "repair it by hand: m2b-worklog state") as refused:
+                    self.run_daily()
+
+                self.assertEqual(self.files_on_the_machine(), before)
+                self.assertIn("the note's name is not a worklog note's", str(refused.exception))
+                self.assertNotIn("outside", str(refused.exception))
+                self.assertIn("cannot be read", daily.state(self.store)["unfinished"])
+
+    def test_an_intent_with_the_note_name_the_worklog_gave_it_is_carried_out(self) -> None:
+        """Covers: B107"""
+        intent_file = self.an_unfinished_worklog()
+        name = json.loads(intent_file.read_text(encoding="utf-8"))["plan"]["note"]["name"]
+
+        self.run_daily()
+
+        self.assertEqual(self.worklog_notes(), [f"inbox/{name}"])
+
 
 class CommandTest(DailyFixture):
     """``m2b-worklog run`` through a fake launcher: the core's commands as the worklog calls them."""

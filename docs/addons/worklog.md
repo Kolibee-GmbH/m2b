@@ -204,9 +204,11 @@ ledger: 12 periods, the last from 2026-03-13T18:00:00+01:00 to 2026-03-14T18:00:
 
 The watermark belongs at the end of the last period. When a message says `watermark.json` or
 `intent.json` cannot be read, repair the file by hand with what `state` shows; do not delete it,
-because the next worklog then reaches back over time the ledger holds already and is refused. The
-other commands (`facts`, `verdict`, `collect`, `hook`) are for the curation run and the plugin's
-hooks.
+because the next worklog then reaches back over time the ledger holds already and is refused. An
+`intent.json` whose note has another name than the worklog gives one
+(`20260314T170000Z-worklog-1a2b.md`: the period's end in UTC and four characters of the period's
+id) cannot be read either, because the name says where the note is written. The other commands
+(`facts`, `verdict`, `collect`, `hook`) are for the curation run and the plugin's hooks.
 
 ## How you see it runs
 

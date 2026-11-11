@@ -5,15 +5,18 @@ as its intent first and then carries it out piece by piece, so a rerun after a c
 the same plan and never a second one.
 
 The note's name is the period's end in UTC with a suffix from a hash of the period, so a rerun
-finds the note it wrote, in the inbox or already filed into the corpus. A booking proposal comes
-only from a block of a billable sphere with a customer from the list; the owner books,
-because a wrong booking ends up on an invoice (B29).
+finds the note it wrote, in the inbox or already filed into the corpus. A plan read back from the
+intent file is taken only with a name of that form: the name becomes a path below the inbox, and
+the intent file lies in the synced store, where another machine can write it (B107). A booking
+proposal comes only from a block of a billable sphere with a customer from the list; the owner
+books, because a wrong booking ends up on an invoice (B29).
 """
 
 from __future__ import annotations
 
 import datetime
 import hashlib
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -21,6 +24,9 @@ from typing import Any
 SOURCE = "worklog"
 KIND = "worklog"
 ID_CHARACTERS = 12
+NOTE_SUFFIX_CHARACTERS = 4
+# What note_name builds, as a whole name: matched with fullmatch, so a trailing newline does not pass.
+_NOTE_NAME = re.compile(rf"[0-9]{{8}}T[0-9]{{6}}Z-{SOURCE}-[0-9a-f]{{{NOTE_SUFFIX_CHARACTERS}}}\.md")
 
 HEADINGS = {
     "en": {
@@ -81,11 +87,15 @@ class Plan:
     @classmethod
     def from_json(cls, raw: Mapping[str, Any]) -> Plan:
         period, note = raw["period"], raw["note"]
+        name = str(note["name"])
+        if not _NOTE_NAME.fullmatch(name):
+            # Without the name: the message goes into the owner's review task.
+            raise ValueError("the note's name is not a worklog note's")
         return cls(
             str(period["id"]),
             str(period["start"]),
             str(period["end"]),
-            str(note["name"]),
+            name,
             str(note["text"]),
             [dict(span) for span in raw["spans"]],
             [str(text) for text in raw["candidates"]],
@@ -98,7 +108,7 @@ def period_id(start: str, end: str) -> str:
 
 def note_name(end: datetime.datetime, identifier: str) -> str:
     utc = end.astimezone(datetime.timezone.utc)
-    return f"{utc:%Y%m%dT%H%M%S}Z-{SOURCE}-{identifier[:4]}.md"
+    return f"{utc:%Y%m%dT%H%M%S}Z-{SOURCE}-{identifier[:NOTE_SUFFIX_CHARACTERS]}.md"
 
 
 def build(facts: Mapping[str, Any], verdict: Mapping[str, Any], language: str) -> Plan:
