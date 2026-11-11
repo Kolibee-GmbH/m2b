@@ -1,0 +1,1 @@
+{"type": "user", "timestamp": "<an-hour-ago>", "cwd": "/home/alex/projects/shed", "entrypoint": "cli", "promptSource": "typed", "origin": {"kind": "human"}, "message": {"role": "user", "content": "Dana runs IT at Northwind and signs the renewals."}}

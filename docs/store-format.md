@@ -14,7 +14,8 @@ integration needs, generated from `store.json`.
 ├── memory/         MEMORY.md (the distillate) and one file per fact
 ├── tasks/          only with the markdown task backend: one file per task
 └── state/
-    ├── core/       the run record, the memory candidates, the open "Still current?" questions
+    ├── core/       the run record, the memory candidates, the open "Still current?" questions,
+    │               the proposals from your sessions and your answers to them
     ├── addons/<add-on>/
     └── integrations/<integration>/
 ```
@@ -23,7 +24,8 @@ integration needs, generated from `store.json`.
 
 `YYYYMMDDTHHMMSSZ-<source>-<4 hex>.<ext>`, for example `20261107T091500Z-cli-a1b2.md`. The time is
 UTC, so names sort in capture order across time zones and daylight saving. `source` is a lowercase
-token that says who captured: `claude`, `cli`, `candidate`, `worklog`, or an integration's own name.
+token that says who captured: `claude`, `cli`, `candidate`, `proposal`, `worklog`, or an integration's
+own name.
 The name never changes after capture, because links point to it.
 
 A file with any other name may be dropped into `inbox/`; the next run gives it a name of this
@@ -130,14 +132,51 @@ m2b:capture 20261107T091500Z-cli-a1b2.md plumber
 gets its name as id. A task file m2b cannot read (another status, a date it cannot read, not
 UTF-8) is left out of every list and named by lint until it is fixed.
 
+## Proposals from your sessions
+
+A curation run that reads your sessions ([Curation](curation.md#reading-your-sessions)) keeps what
+it proposes in `state/core/proposals.json`:
+
+```json
+{
+  "format": 1,
+  "read_until": "2026-11-07T07:30:00+01:00",
+  "proposals": {
+    "c501eff5fc0e": {
+      "kind": "person",
+      "text": "Dana is head of IT at Northwind.",
+      "quote": "Dana runs IT at Northwind",
+      "topic": null,
+      "due": null,
+      "day": "2026-11-06",
+      "state": "open",
+      "since": "2026-11-07T07:30:01+01:00"
+    }
+  }
+}
+```
+
+`read_until` is the moment up to which the sessions were read. A proposal's id comes from its
+session and its `quote`, your own words; `kind` is `person`, `agreement`, `commitment` or
+`personal`; `day` is the day you said it, `due` the day a commitment names. `state` is `open`,
+`kept` or `dropped`, and `since` the moment it got that state; an answered proposal stays for at
+least 90 days, so the same one is not proposed again; after that, the next reading that asks the
+model removes it. Only the curation run writes the file. A file whose
+`format` this m2b does not know is left as it is: the reading fails alone, and the review says so.
+
+Your answer is an empty file a client adds: `state/core/proposal-answers/<id>.keep` or
+`<id>.drop`. The name is the answer; the file is never opened and never changed. The next run's
+harvest writes the capture of a kept proposal, sets the state in `proposals.json` and removes the
+answer file.
+
 ## Who writes what
 
 | What | Created by | Changed by | Removed by |
 |---|---|---|---|
-| `inbox/` | clients, integrations, harvest, the worklog | the curating machine (name, frontmatter, trailer; never the text) | ingest moves files into the archive; normalize removes conflict copies identical to their original |
+| `inbox/` | clients, integrations, harvest (a ticked candidate, a kept proposal), the worklog | the curating machine (name, frontmatter, trailer; never the text) | ingest moves files into the archive; normalize removes conflict copies identical to their original |
 | `corpus/` | ingest, the journal | the journal (appends to the month's file) | lint, only conflict copies identical to their original |
 | `memory/` | ingest | ingest, refresh, the sorting step, a migration after an update, harvest (only `## Current`, from "Still current?" answers), lint (a broken link it repairs) | nobody |
-| `state/core/` | the curation run | the curating machine | harvest prunes settled candidates |
+| `state/core/` | the curation run; any client adds an answer to a proposal under `proposal-answers/` | the curating machine | harvest prunes settled candidates and removes the answers it settled; a reading of the sessions that asks the model removes the proposals answered 90 days ago or longer |
 | tasks (`tasks/` with the `markdown` backend, or the Reminders list) | you, integrations, capture (a follow-up), ingest, the curation run (review, candidates, "Still current?" questions) | you; the band ticks or drops a curator task; the curation run completes its review task when nothing needs you | harvest and the refresh step, once a curator task is settled or its item is gone; you |
 | `state/addons/<a>/`, `state/integrations/<i>/` | that add-on or integration | the same | the same |
 

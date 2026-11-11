@@ -17,6 +17,20 @@ All notable changes to this project are documented here. The format follows
   the ledger. The profile is written as version 2 once it holds the setting, so every machine that
   shares the store needs this version
   ([docs/addons/worklog.md](docs/addons/worklog.md#leaving-work-out)).
+- A curation run can read what you typed in Claude Code and propose what belongs in your memory
+  although you never said "remember this": a person and their role, an agreement, a commitment
+  with its day, something about your own life. It is off until you say yes: setup asks on the
+  machine that curates, and `curation.read_sessions` in the machine config holds the answer. A run
+  then reads what you typed since the last reading (the last 24 hours the first time, 7 days at
+  most), asks the model once with nothing it can call, and keeps a proposal only when the words it
+  quotes stand in one of your prompts and you did not capture the same thing yourself. Nothing is
+  filed before you say keep: `m2b proposals` lists what waits, each with your own words and the day
+  you said them; `m2b proposals keep <id>...`, `keep --all` and `drop <id>...` answer, and the next
+  run files what you kept as a capture. Only what you typed is read: no answer of Claude, no tool
+  result, no pasted block, nothing another sender put into the session; credentials are redacted.
+  Of a session in a folder of `worklog_leave_out`, or in one where you ran `m2b distillate off`,
+  nothing reaches the model ([docs/curation.md](docs/curation.md#reading-your-sessions)). A new
+  scenario, `E23-proposals-from-sessions`, runs it from setup's yes to the filed capture.
 
 ### Changed
 

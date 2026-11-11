@@ -3,6 +3,9 @@
 A scenario is a folder under ``tests/e2e/`` with:
 
 - ``given/``: the store before the run (optional, invented content);
+- ``transcripts/``: Claude Code's transcripts before the run (optional, invented content), copied to
+  ``projects/`` in the scenario's ``CLAUDE_CONFIG_DIR`` below the model level; ``<an-hour-ago>`` in one
+  stands for that moment, because a step that reads the sessions takes only recent prompts;
 - ``steps.json``: ``{"steps": [{"run": [argv...], "exit": 0, "stdin": "...", "stdout": "<regex>", "env": {...}}]}``;
   ``env`` adds variables for one step, such as ``M2B_CURATION_RUN`` for a curator command the scenario calls
   in the model's place;
@@ -39,6 +42,7 @@ as the memory folder Claude Code reports at a session's start.
 from __future__ import annotations
 
 import argparse
+import datetime
 import fnmatch
 import json
 import os
@@ -74,6 +78,8 @@ MODEL = "model"
 APPLE = "apple"
 INTEGRATION_VARIABLE = "M2B_IT"
 MODEL_FILE = "model.json"
+TRANSCRIPTS = "transcripts"
+AN_HOUR_AGO = "<an-hour-ago>"
 RUN_RECORD_PATH = "state/core/last-run.json"
 
 EXIT_PASSED = 0
@@ -274,6 +280,21 @@ def _save(wanted: Mapping[str, str], stdout: str, saved: dict[str, str]) -> str 
     return None
 
 
+def _given_transcripts(scenario: Path, claude_config: Path) -> None:
+    """Puts the scenario's transcripts where Claude Code keeps them, each ``<an-hour-ago>`` as that moment.
+
+    Without transcripts the folder is not made, as on a machine where Claude Code never ran."""
+    given = scenario / TRANSCRIPTS
+    if not given.is_dir():
+        return
+    moment = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0) - datetime.timedelta(hours=1)
+    written = moment.isoformat().replace("+00:00", "Z")
+    for source in sorted(given.rglob("*.jsonl")):
+        target = claude_config / "projects" / source.relative_to(given)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(source.read_text(encoding="utf-8").replace(AN_HOUR_AGO, written), encoding="utf-8")
+
+
 def _model_stub(sandbox: Path, script: Mapping[str, Any]) -> Path:
     """A ``claude`` for this scenario: the stub with the scenario's model actions."""
     actions = sandbox / "model.json"
@@ -333,6 +354,7 @@ def run_scenario(
         else:
             scenario_steps = _read_json(scenario / "steps.json")
             environment["CLAUDE_CONFIG_DIR"] = str(sandbox / "claude-config")
+            _given_transcripts(scenario, sandbox / "claude-config")
             environment["M2B_HERDR"] = str(sandbox / "no-herdr")
             environment["M2B_LAUNCHCTL"] = str(sandbox / "no-launchctl")
             environment["M2B_SYSTEMCTL"] = str(sandbox / "no-systemctl")

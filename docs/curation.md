@@ -16,14 +16,15 @@ schedule can start it too, for days without a session ([On a schedule](#on-a-sch
 
 ```mermaid
 flowchart LR
-  pre[Preflight] --> migrate[Migrate] --> harvest[Harvest] --> before[before_ingest] --> ingest[Ingest] --> afteri[after_ingest] --> refresh[Refresh] --> sort[Sort] --> lint[Lint] --> journal[Journal] --> after[after_journal] --> review[Review task]
+  pre[Preflight] --> migrate[Migrate] --> harvest[Harvest] --> glean[Glean] --> before[before_ingest] --> ingest[Ingest] --> afteri[after_ingest] --> refresh[Refresh] --> sort[Sort] --> lint[Lint] --> journal[Journal] --> after[after_journal] --> review[Review task]
 ```
 
 | Step | Done by | What it does |
 |---|---|---|
 | Preflight | code | removes leftover temp files, downloads the files the run reads, loads the profile |
 | Migrate | code, only when the store's format is older than this m2b | brings `memory/` up to the rules of this m2b, one format at a time, each checked in code; a failing one puts `memory/` back, keeps the format and ends the run with the review |
-| Harvest | code | settles the memory candidates and "Still current? ..." questions you ticked or dropped |
+| Harvest | code | settles the memory candidates and "Still current? ..." questions you ticked or dropped, and the proposals you kept or dropped |
+| Glean | code and one model call without tools, only with `curation.read_sessions` | reads what you typed in Claude Code since the last reading and keeps what the model proposes for your memory ([Reading your sessions](#reading-your-sessions)) |
 | Ingest | model, only with captures in the inbox | files facts into memory, tasks into your list, each capture into `corpus/YYYY/MM/` |
 | Refresh | model, only when a fact is past its day | rewrites the facts whose `until` has passed |
 | Sort | model, only with `m2b curate --sort-facts` | moves facts lines of an older distillate into topics; code puts the file back if a statement changed |
@@ -33,13 +34,16 @@ flowchart LR
 
 `before_ingest`, `after_ingest` and `after_journal` are where an add-on can hook in; the worklog
 runs before ingest. A step that fails is reported in the review task and the run goes on. When
-only an add-on's step failed, the run still counts as succeeded: the inbox is filed and the next run
-is due at the usual time, so an add-on that keeps failing never holds back the core.
+only an add-on's step or the reading of the sessions failed, the run still counts as succeeded: the
+inbox is filed and the next run is due at the usual time, so neither an add-on that keeps failing
+nor a transcript m2b cannot read holds back the core.
 
 Each model step runs fenced: `claude -p` from an empty folder, with `--setting-sources project`,
 m2b alone as plugin, `--permission-mode dontAsk`, and allowed only the commands and paths of its
 step. It uses `curation.model` (`haiku` by default) and stops after `curation.max_turns` tool
-calls or `curation.model_timeout_minutes`.
+calls or `curation.model_timeout_minutes`. The reading of the sessions asks the same model in
+another form: the instruction as the prompt, the text on standard input, no tool at all and one
+turn, so whatever a prompt says, the model can call nothing.
 
 After each model step that may edit `memory/`, code compares it with a copy taken just before the
 step:
@@ -57,6 +61,56 @@ step:
   text (bidirectional controls, zero-width spaces, tag characters) is undone and fails; a capture
   still in the inbox is marked so the next run files its facts again. The session-start and prompt
   hooks remove the same characters before the distillate reaches a session.
+
+## Reading your sessions
+
+Much of what belongs in a second brain is said in passing: who runs what at a customer, what was
+agreed on the phone, what you promised by Friday. With `curation.read_sessions` set to `true` in
+the machine config, a curation run looks for it in what you typed in Claude Code and proposes it;
+nothing is filed before you say keep. It is off by default. Setup asks on the machine that
+curates, and `m2b config set curation.read_sessions true` or `false` changes the answer later.
+
+**What is read.** Claude Code's transcripts on this machine, and of them only the prompts Claude
+Code marks as typed by a human, in the terminal or the desktop app. Left out: Claude's answers and
+tool results, a pasted block with what it holds, what a plugin, a finished task or another agent
+sent, a suggested prompt you only accepted, and the blocks Claude Code writes into a prompt.
+Credentials are redacted, and a prompt ends after 2,000 characters. A session that started in or
+below a folder of `worklog_leave_out` in the profile, or one where you ran `m2b distillate off`,
+does not reach the model, and neither does a headless run such as a curation run itself.
+
+**When.** The step `glean` runs after harvest and before ingest, so what you captured yourself is
+in the store by then. It covers the time since the last reading ended: the last 24 hours at the
+first reading and never more than 7 days; what lies before is named as not read. Without a typed
+prompt in that time no model starts.
+
+**What is kept.** The model gets the distillate, so it can leave out what is known, and per
+session its folder, its day and its prompts. It answers with proposals of four kinds, a person, an
+agreement, a commitment and something personal, each with the words of yours it stands on. Code
+keeps a proposal only when those words stand in one prompt of the session it names, with at least
+three words, and when you did not capture the same thing in that time. A proposal like one that
+waits, or like one you kept or dropped within 90 days, is not kept a second time, so reading a
+period again adds nothing.
+
+**Your answer.** `m2b proposals` lists what waits, each with its id, its kind, the text, your words
+and the day you said them:
+
+```bash
+m2b proposals                 # what waits for an answer
+m2b proposals keep <id>...    # or: m2b proposals keep --all
+m2b proposals drop <id>...
+```
+
+An answer is filed by the next curation run: harvest writes a capture with the proposal's text
+(source `proposal`, `from_proposal` in its frontmatter), and ingest files it like any capture. A
+commitment that names its day gets its task with the capture. A dropped proposal is remembered for
+90 days and not proposed again. Where a keep and a drop for one proposal meet, from two machines,
+keep stands.
+
+**When it fails.** A transcripts folder m2b cannot look at, a model without an answer or an answer
+it cannot read fails the step alone: the review says so, nothing is saved, and the next run reads
+the same time again. A period with texts of which none carries Claude Code's mark of who sent it
+fails the same way, so a Claude Code too old to write the mark never passes for a day on which
+nothing was typed.
 
 ## What runs when
 

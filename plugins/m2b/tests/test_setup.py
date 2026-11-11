@@ -201,6 +201,63 @@ class NewStoreTest(SetupTest):
         self.assertIn("curation_model", err)
         self.assertFalse(self.machine.config_file.exists())
 
+    def test_a_yes_to_reading_the_sessions_is_recorded_and_a_run_without_the_answer_keeps_it(self) -> None:
+        """Covers: B123"""
+        code, _, err = self.apply(self.answers(read_sessions=True))
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertIs(self.config()["curation"]["read_sessions"], True)
+        self.assertTrue(load_machine_config(self.machine).curation.read_sessions)
+
+        code, result, err = self.apply(self.answers())
+
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertEqual(result["written"], [])
+        self.assertIs(self.config()["curation"]["read_sessions"], True)
+
+    def test_without_an_answer_to_reading_the_sessions_they_are_not_read(self) -> None:
+        """Covers: B123"""
+        self.apply(self.answers())
+
+        self.assertNotIn("curation", self.config())
+        self.assertFalse(load_machine_config(self.machine).curation.read_sessions)
+
+    def test_a_no_to_reading_the_sessions_is_recorded_and_a_later_yes_turns_it_on(self) -> None:
+        """Covers: B123"""
+        self.apply(self.answers(read_sessions=False))
+        self.assertIs(self.config()["curation"]["read_sessions"], False)
+
+        code, _, err = self.apply(self.answers(read_sessions=True))
+
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertIs(self.config()["curation"]["read_sessions"], True)
+
+    def test_the_answer_to_reading_the_sessions_stands_beside_the_curation_model(self) -> None:
+        self.apply(self.answers(curation_model="sonnet"))
+
+        self.apply(self.answers(read_sessions=True))
+
+        self.assertEqual(self.config()["curation"], {"model": "sonnet", "read_sessions": True})
+
+    def test_an_answer_to_reading_the_sessions_that_is_not_true_or_false_is_refused(self) -> None:
+        """Covers: B123"""
+        for answer in ("yes", "true", 1):
+            with self.subTest(answer=answer):
+                code, _, err = self.apply(self.answers(read_sessions=answer))
+
+                self.assertEqual(code, cli.EXIT_USAGE)
+                self.assertIn("read_sessions must be true or false", err)
+                self.assertNotIn("config.json", err, "the mistake is in the answers, not in a file the person wrote")
+                self.assertFalse(self.machine.config_file.exists())
+
+    def test_inspect_shows_whether_the_question_about_the_sessions_was_answered(self) -> None:
+        self.apply(self.answers())
+        self.assertNotIn("curation", self.run_json("setup", "inspect")["machine_config"])
+
+        self.apply(self.answers(read_sessions=False))
+
+        found = self.run_json("setup", "inspect")
+        self.assertIs(found["machine_config"]["curation"]["read_sessions"], False)
+
     def config(self) -> dict[str, Any]:
         raw: dict[str, Any] = json.loads(self.machine.config_file.read_text(encoding="utf-8"))
         return raw
