@@ -100,6 +100,8 @@ the band, undo included.
 
 `/m2b-search <text>` shows the hits of `m2b search` in the same pane, each with its file and line
 and the line itself, without a model turn; a text that starts with a dash is searched as written.
+A word also matches inside longer words, so `Velo` finds `Developer` too; `/m2b-search --word Velo`
+matches whole words only.
 Files not downloaded from iCloud Drive are counted below the hits. Both commands run at once, also
 while a turn is working, and read through `m2b` only; the pane writes nothing but keep and drop.
 Where Claude Code cannot show a pane, for instance with no terminal attached, the command answers

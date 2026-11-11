@@ -24,8 +24,19 @@ export const REVIEW_COMMAND: CommandSpec = {
 export const SEARCH_COMMAND: CommandSpec = {
   name: 'm2b-search',
   description: 'Search your second brain and show the hits in a pane, without asking the model',
-  argumentHint: '<text>',
+  argumentHint: '[--word] <text>',
   immediate: true,
+}
+
+// `--word` in front of the text, then space: only whole words match. Anything else is the text.
+const WORD_FLAG = /^--word(?:\s+|$)/
+
+/** What `/m2b-search` was asked: the text, and whether only whole words match. */
+export function searchRequest(args: string): { text: string; wholeWords: boolean } {
+  const given = args.trim()
+  return WORD_FLAG.test(given)
+    ? { text: given.replace(WORD_FLAG, '').trim(), wholeWords: true }
+    : { text: given, wholeWords: false }
 }
 
 const SEARCH_TIMEOUT_MS = 30_000
@@ -120,9 +131,10 @@ export function reviewLines(snapshot: BandSnapshot | null, run: BandRun | null):
 /** What `/m2b-search` answers: the search, or the one line that says why there is none. */
 export type SearchOutcome = { search: PaneSearch } | { line: string }
 
-export async function searchStore($: EngineInterface, text: string): Promise<SearchOutcome> {
+export async function searchStore($: EngineInterface, text: string, wholeWords = false): Promise<SearchOutcome> {
   // `--`: a text that starts with a dash is what to look for, not an option.
-  const outcome = await runM2b($, ['search', '--json', '--', text], SEARCH_TIMEOUT_MS)
+  const args = ['search', '--json', ...(wholeWords ? ['--word'] : []), '--', text]
+  const outcome = await runM2b($, args, SEARCH_TIMEOUT_MS)
   if (!outcome.ok) {
     return { line: `could not search: ${plainLine(outcome.error)}` }
   }
@@ -147,6 +159,7 @@ export async function searchStore($: EngineInterface, text: string): Promise<Sea
       total: hits.length,
       evicted: Array.isArray(answer['evicted']) ? answer['evicted'].length : 0,
       unreadable: Array.isArray(answer['unreadable']) ? answer['unreadable'].length : 0,
+      ...(wholeWords ? { wholeWords: true } : {}),
     },
   }
 }
@@ -161,7 +174,7 @@ function isHit(value: unknown): value is SearchHit {
 }
 
 export function searchSummary(search: PaneSearch): string {
-  const query = plainLine(search.query)
+  const query = `${plainLine(search.query)}${search.wholeWords === true ? ', whole words only,' : ''}`
   const count = search.total
   return count === 0 ? `no hits for ${query}` : `${count} ${count === 1 ? 'hit' : 'hits'} for ${query}`
 }
