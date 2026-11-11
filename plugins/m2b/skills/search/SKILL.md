@@ -45,8 +45,9 @@ failing exit code by itself.
   a hit. Search for the name, the place or the rare word, not the question.
 - Case does not matter, and a word also matches inside longer words ("map" finds "maps").
   Add `--word` when a short word gives too many hits ("tea" without "steady").
-- No hit: try once more with another spelling or a related word, again in each language, before
-  you say there is nothing.
+- No hit: try once more with another spelling or a related word for the same thing, again in each
+  language, before you say there is nothing. Do not search for other people or topics to have
+  something to say.
 
 The JSON has `hits` (each with `path`, `line` and `text`), `evicted` (files not downloaded to this
 machine, each with its `fetch` command) and `unreadable` (files that could not be read, with the
@@ -61,6 +62,8 @@ reason).
   enough). A hit in `memory/` is the curated distillate; a hit in `inbox/`
   is a fresh capture that is not curated yet.
 - Never add facts the hits do not hold. If the hits do not answer the question, say so.
+- A hit about another person, place or topic does not answer a question about this one: leave it
+  out, and do not offer it as possibly the same.
 - No hits, and `evicted` and `unreadable` are empty: say that the second brain holds nothing on it.
 - `evicted` is not empty: those files were not searched. Say so, and give the user the commands
   from `fetch` (`m2b store fetch <path>`) to download them; after that, search again.

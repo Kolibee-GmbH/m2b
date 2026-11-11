@@ -44,6 +44,8 @@ SHARED_RULES = {
         "Names, places and numbers stay as they are and need no translation.",
         "Answer in the language the question was asked in, not the language of the notes or the distillate",
         "Never add facts the hits do not hold. If the hits do not answer the question, say so.",
+        "A hit about another person, place or topic does not answer a question about this one: leave it out, "
+        "and do not offer it as possibly the same.",
         "say that you could not look, never that there is nothing",
         "so a file that lives only in the cloud is never downloaded or left hanging.",
     ),

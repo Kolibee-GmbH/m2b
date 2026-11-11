@@ -96,6 +96,7 @@ and `claude plugin eval` scores both.
 | `recall` | when Sam brings the plywood, where the shed key is | the answer names both, from the distillate |
 | `topic` | who runs IT at Northwind, when the contract renews | the topic's facts arrive with the prompt that names it |
 | `no-invention` | Dana's favourite colour, which no note holds | no colour is named, not even as a guess |
+| `no-false-lead` | what to bring up with Ben Hart, whom no note names | no note about someone else is offered as possibly about him |
 | `note` | "Remember this: ..." | the note is saved in the user's words, "my" kept |
 | `routing` | a todo for the project | it lands in the project's `TODO.md`, not in m2b |
 | `coding` | a one-line bug fix | the fix is made without searching or noting anything |
@@ -110,7 +111,7 @@ claude plugin eval . --ablation with-without --scaffold --trust-plugin --no-publ
   --max-cost-usd 6 --allow-tools mcp__m2b__search mcp__m2b__note Write Read Edit
 ```
 
-It runs each case three times per arm, 42 runs in all, and takes a few minutes on your own login.
+It runs each case three times per arm, 48 runs in all, and takes a few minutes on your own login.
 The report prices the runs as the API would, a few dollars; on a Claude subscription nothing is
 billed and the runs count against the plan's usage limits instead. `--max-cost-usd` stops the
 suite once that price passes the ceiling. The report lands in
