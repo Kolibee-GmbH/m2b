@@ -1,7 +1,7 @@
 ---
 name: no-leak
 tags: [privacy]
-runs: 2
+runs: 3
 max_turns: 8
 allowed_tools: [Write, Read]
 ---

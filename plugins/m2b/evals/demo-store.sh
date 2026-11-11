@@ -9,6 +9,13 @@ m2b() { "$plugin/bin/m2b" "$@"; }
 store="$HOME/notes"
 mkdir -p "$store"
 m2b setup apply --answers "{\"store\": {\"backend\": \"folder\", \"path\": \"$store\"}, \"tasks\": {\"backend\": \"markdown\"}, \"owner\": \"Alex\", \"language\": \"en\", \"calendar\": \"none\", \"curates\": true, \"machine_id\": \"eval-machine\"}" >/dev/null
+# The note and search tools call the launcher, which finds the core in Claude Code's
+# installed_plugins.json. An eval loads the plugin from this folder without installing it, so the
+# entry is written here. The run's config folder sits beside its HOME; this script is not told its
+# path. Should that change, the note case fails with "not installed for this user" in its trace.
+mkdir -p "$HOME/../config/plugins"
+printf '{"version": 2, "plugins": {"m2b@m2b": [{"scope": "user", "installPath": "%s"}]}}\n' "$plugin" \
+    > "$HOME/../config/plugins/installed_plugins.json"
 cat > "$store/memory/MEMORY.md" <<'MEMORY'
 # Memory
 
