@@ -12,7 +12,8 @@ All notable changes to this project are documented here. The format follows
 ### Added
 
 - `/m2b-search --word <text>` matches whole words only, so a search for `Velo` no longer lists
-  every line with `Developer` in it. Without `--word` a word still matches inside longer words.
+  every line with `Developer` in it. Without `--word` a word still matches inside longer words
+  ([#13](https://github.com/Kolibee-GmbH/m2b/pull/13)).
 
 ## [0.3.1] - 2026-11-11
 
