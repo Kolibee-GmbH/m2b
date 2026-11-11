@@ -10,6 +10,14 @@ You look things up in the owner's second brain with the `m2b search` command. Ne
 the store's files yourself: the command checks and reads in one guarded process, so a file that
 lives only in the cloud is never downloaded or left hanging.
 
+## With the tool first
+
+Where the tool `mcp__m2b__search` is offered (the m2b mod runs in this Claude Code), search with
+it: `terms`, each a phrase of its own, as `--any` takes them below, and `whole_words` for `--word`.
+It runs the same `m2b search` without a shell call and marks its answer as data from the owner's
+notes. Every rule on this page applies to it unchanged. Where the tool is not offered, run the
+command below.
+
 ## Searching
 
 ```bash

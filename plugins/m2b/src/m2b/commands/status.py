@@ -22,7 +22,7 @@ from m2b.addons import ADDONS, is_on
 from m2b.atomic_file import replace_atomically
 from m2b.commands import Context
 from m2b.commands.backends import configured_store, configured_tasks
-from m2b.commands.doctor import calendar_check, probe
+from m2b.commands.doctor import Check, calendar_check, probe
 from m2b.commands.output import print_json
 from m2b.config import store_settings
 from m2b.config.errors import ConfigError
@@ -41,7 +41,17 @@ INTERRUPTED = "interrupted"
 
 
 def status_command(arguments: argparse.Namespace, context: Context) -> int:
-    config = load_machine_config(context.machine)
+    answer = status_answer(load_machine_config(context.machine), context)
+    if arguments.json:
+        print_json(answer)
+    else:
+        _print_text(answer)
+    return 0
+
+
+def status_answer(config: MachineConfig, context: Context, tasks_check: Check | None = None) -> dict[str, Any]:
+    """The answer of ``status --json``; ``tasks_check`` is a probe of the task list the caller just made,
+    used in place of probing it again."""
     store = configured_store(config, context.machine)
     now = datetime.datetime.now().astimezone()
     answer: dict[str, Any] = {"machine_id": config.machine_id}
@@ -68,20 +78,20 @@ def status_command(arguments: argparse.Namespace, context: Context) -> int:
         answer["due"] = {"due": due.due, "reason": due.reason}
     else:
         answer["due"] = None
-    checked_at, backends = _backends(config, context, now)
+    checked_at, backends = _backends(config, context, now, tasks_check)
     answer["backends"] = backends
     answer["backends_checked_at"] = checked_at
-    if arguments.json:
-        print_json(answer)
-    else:
-        _print_text(answer)
-    return 0
+    return answer
 
 
-def probe_backends(config: MachineConfig, context: Context) -> dict[str, dict[str, str]]:
+def probe_backends(
+    config: MachineConfig, context: Context, tasks_check: Check | None = None
+) -> dict[str, dict[str, str]]:
     checks = [
         probe("store", lambda: _check_store(config, context.machine)),
-        probe("tasks", lambda: configured_tasks(config, context.machine).check_reachable()),
+        tasks_check
+        if tasks_check is not None
+        else probe("tasks", lambda: configured_tasks(config, context.machine).check_reachable()),
         calendar_check(config),
     ]
     return {check.name: {"state": check.state, "detail": check.detail} for check in checks}
@@ -132,7 +142,9 @@ def _last_attempt(machine: MachinePaths, run: dict[str, Any]) -> dict[str, str] 
     return {"kind": attempt.kind, "at": _iso(attempt.time), "message": attempt.message}
 
 
-def _backends(config: MachineConfig, context: Context, now: datetime.datetime) -> tuple[str, dict[str, Any]]:
+def _backends(
+    config: MachineConfig, context: Context, now: datetime.datetime, tasks_check: Check | None = None
+) -> tuple[str, dict[str, Any]]:
     cache = context.machine.state_dir / CACHE_FILE
     try:
         raw = json.loads(cache.read_text(encoding="utf-8"))
@@ -141,7 +153,7 @@ def _backends(config: MachineConfig, context: Context, now: datetime.datetime) -
             return raw["checked_at"], raw["backends"]
     except (OSError, ValueError, KeyError, TypeError):
         pass
-    backends = probe_backends(config, context)
+    backends = probe_backends(config, context, tasks_check)
     checked = _iso(now)
     data = json.dumps({"checked_at": checked, "backends": backends}) + "\n"
     # A cache that cannot be written only means probing again next time.

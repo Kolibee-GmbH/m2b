@@ -36,8 +36,8 @@ nor a model. Both end with a first capture, a curation run and a first search.
    It writes the machine config, the store's files (`store.json`, `profile.json`, `STORE.md`,
    `memory/MEMORY.md`), the folders and the launcher `~/.local/bin/m2b`, then runs `m2b doctor`
    and lists anything left for you to do by hand, such as the Reminders permission on macOS.
-   Running it again with the same answers changes nothing. After the core, it offers each
-   add-on, one at a time.
+   Running it again with the same answers changes nothing. After the core, it offers the one
+   add-on, the worklog.
 
    Outside Claude Code, the `m2b` command is that launcher. If `~/.local/bin` is not on your
    `PATH` (it is not by default on macOS), add it, for example in `~/.zshrc`:
@@ -70,8 +70,12 @@ nor a model. Both end with a first capture, a curation run and a first search.
    m2b search -- "spare key"
    ```
 
-The add-ons (band, herdr neighbours, worklog, backup) are off until their own setup skill
-turns them on; [Add-ons](addons.md) describes each one.
+From the next session on, while Claude Code has mods on, [the band](band.md) above the prompt
+shows what curation asks you to keep or drop, and `m2b doctor` says whether it ran. With it come
+`/m2b-note <text>`, which notes a text at once without a model turn, `/m2b-review` and
+`/m2b-search <text>`, which show the last curation run and search hits in a pane, and two tools
+through which the model notes and searches without a shell call. The worklog add-on is off until
+its own setup skill turns it on; [Add-ons](addons.md) describes it.
 
 ## From the command line, without Claude Code
 

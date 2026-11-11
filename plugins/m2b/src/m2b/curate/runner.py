@@ -9,8 +9,9 @@ Preflight downloads what the run will read or write, checks the tasks backend an
 record with ``state: running``; when any of that fails, the run stops with nothing else written,
 records the cause (in the run record, or in the local log when even that cannot be written), and
 the backoff makes the next attempt wait. After preflight every step runs whatever the one before
-did (B13): a failing step is recorded and reported in the review, and the run counts as failed,
-so the last successful run does not move. The one exception is a migration (``migrations``): the
+did (B13): a failing step is recorded and reported in the review, and when it is a core step the
+run counts as failed, so the last successful run does not move; an add-on's failing step leaves the
+run succeeded, so an add-on never holds back the core. The one exception is a migration (``migrations``): the
 due ones run first, and when one fails the run goes straight to the review, because every later
 step follows rules the store does not hold yet. Ingest is skipped when the inbox holds nothing, refresh
 when no fact is past its day.
@@ -260,6 +261,8 @@ class _Run:
     undated: expiry.Undated | None = None
     steps: list[StepResult] = field(default_factory=list)
     failures: list[StepFailure] = field(default_factory=list)
+    # The steps add-ons ran: their failure goes into the review but leaves the run succeeded.
+    addon_steps: set[str] = field(default_factory=set)
     findings: list[report.Finding] = field(default_factory=list)
     last_success: datetime.datetime | None = None
     started: datetime.datetime | None = None
@@ -762,6 +765,7 @@ class _Run:
 
     def _addons(self, slot: str, token: str) -> None:
         for addon in steps_in(slot, self.config.addons):
+            self.addon_steps.add(addon.name)
             self._step(addon.name, functools.partial(self._addon, addon, token))
 
     def _addon(self, addon: Addon, token: str) -> None:
@@ -779,11 +783,18 @@ class _Run:
             raise StepError(end.failure())
 
     def _finish(self, started: datetime.datetime, findings: list[report.Finding]) -> RunOutcome:
+        """A failed core step fails the run (B13, B63); a failed add-on step only reaches the review.
+
+        An add-on's failure that does not clear by itself must not hold back the filing of the inbox
+        with the backoff, nor keep the run due at every session start.
+        """
         failed = [step for step in self.steps if step.result == FAILED]
         message = "; ".join(f"{step.name}: {step.detail}" for step in failed)
-        state = FAILED if failed else SUCCEEDED
+        state = FAILED if any(step.name not in self.addon_steps for step in failed) else SUCCEEDED
         record = self._record(state, started, finished_at=self.clock(), message=message, findings=tuple(findings))
         self._close(record, message or "the run succeeded")
+        if state == SUCCEEDED and message:
+            return RunOutcome(state, f"the curation run succeeded; an add-on failed, see the review: {message}", record)
         return RunOutcome(state, message or "the curation run succeeded", record)
 
     def _close(self, record: RunRecord, message: str) -> None:

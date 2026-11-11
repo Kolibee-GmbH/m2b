@@ -7,6 +7,7 @@ import datetime
 import io
 import json
 import os
+import stat
 import sys
 import tempfile
 import unittest
@@ -116,6 +117,19 @@ class TasksCommandTest(CommandTest):
         self.assertEqual([task["title"] for task in self.run_json("tasks", "list")], ["Merken? Dana prefers tea"])
         (done,) = [task for task in self.run_json("tasks", "list", "--include-completed") if task["id"] == task_id]
         self.assertTrue(done["completed"])
+
+    def test_a_task_id_after_double_dash_is_never_read_as_an_option(self) -> None:
+        """Covers: B94"""
+        self.set_up()
+        task_id = self.run_json("tasks", "add", "Merken? Dana prefers tea", "--notes", "m2b:candidate")["id"]
+
+        self.assertEqual(self.run_command("tasks", "drop", "--", task_id)[0], cli.EXIT_OK)
+        code, out, _ = self.run_command("tasks", "complete", "--", "-h")
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        self.assertNotIn("usage:", out)
+        (dropped,) = self.run_json("tasks", "list", "--include-completed")
+        self.assertTrue(dropped["dropped"])
 
     def test_drop_notes_and_delete_against_apple_reminders(self) -> None:
         self.set_up(tasks={"backend": "apple-reminders", "list": "sb-test-inbox"})
@@ -537,6 +551,78 @@ class DoctorTest(CommandTest):
 
         self.environ["M2B_CORE_ROOT"] = "/sb-test-checkout/plugins/m2b"
         self.assertIn("claude-code: found (the launcher runs m2b from /sb-test-checkout", self.run_command("doctor")[1])
+
+    def seen(self, name: str, moment: str) -> None:
+        path = self.machine.state_dir / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"seenAt": moment}), encoding="utf-8")
+
+    def band_line(self) -> str:
+        code, out, _ = self.run_command("doctor")
+        self.assertEqual(code, cli.EXIT_OK, out)
+        return next(line for line in out.splitlines() if line.startswith("band: "))
+
+    def test_doctor_says_the_band_ran_in_the_latest_session_in_local_time(self) -> None:
+        """Covers: B92"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        self.seen("session-seen.json", "2026-03-14T18:30:00+01:00")
+        self.seen("band-seen.json", "2026-03-14T17:30:01.000Z")
+        local = datetime.datetime(2026, 3, 14, 17, 30, 1, tzinfo=datetime.timezone.utc).astimezone()
+
+        self.assertEqual(self.band_line(), f"band: seen (it ran in the latest session, started {local:%Y-%m-%d %H:%M})")
+
+    def test_a_latest_session_without_the_band_means_mods_are_off(self) -> None:
+        """Covers: B92"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        self.seen("band-seen.json", "2026-03-10T08:00:00.000Z")
+        self.seen("session-seen.json", "2026-03-14T18:30:00+01:00")
+
+        line = self.band_line()
+
+        self.assertTrue(line.startswith("band: not seen (the latest session"), line)
+        self.assertIn("ran m2b's hooks but not the band", line)
+        self.assertIn("rollout switch", line)
+        self.assertIn("the band last ran 2026-03-10", line)
+
+    def test_no_session_with_m2bs_hooks_names_the_cases_that_turn_all_hooks_off(self) -> None:
+        """Covers: B92"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        self.seen("band-seen.json", "not a time")
+
+        line = self.band_line()
+
+        self.assertTrue(line.startswith("band: not seen (no Claude Code session has run m2b's hooks"), line)
+        self.assertIn("--bare", line)
+        self.assertIn("allowManagedHooksOnly", line)
+        self.assertIn("distillate", line)
+
+    def test_the_launcher_hook_notes_the_session_and_removes_the_old_band_caches(self) -> None:
+        """Covers: B92"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        leftovers = [
+            self.machine.state_dir / name for name in ("band-addons.json", "band-snapshot.json", "band-status.json")
+        ]
+        kept = self.machine.state_dir / "band-view.json"
+        kept.parent.mkdir(parents=True, exist_ok=True)
+        for path in [*leftovers, kept]:
+            path.write_text("{}", encoding="utf-8")
+
+        self.run_command("hook", "launcher")
+
+        noted = json.loads((self.machine.state_dir / "session-seen.json").read_text(encoding="utf-8"))
+        self.assertIsNotNone(datetime.datetime.fromisoformat(noted["seenAt"]).tzinfo)
+        self.assertEqual([path.exists() for path in leftovers], [False, False, False])
+        self.assertTrue(kept.exists())
+
+    def test_the_launcher_hook_keeps_the_machine_state_readable_by_the_owner_only(self) -> None:
+        """Covers: B95"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        self.machine.state_dir.mkdir(parents=True, exist_ok=True)
+        self.machine.state_dir.chmod(0o755)
+
+        self.run_command("hook", "launcher")
+
+        self.assertEqual(stat.S_IMODE(self.machine.state_dir.stat().st_mode), 0o700)
 
     def test_a_store_path_the_curation_run_cannot_fence_is_a_problem(self) -> None:
         """Covers: B81"""

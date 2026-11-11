@@ -7,7 +7,8 @@ A curation run files the inbox. It runs on one machine per store, the curating m
 
 At session start on the curating machine, in the background, when a run is due: the inbox holds
 a capture, or the last successful run is more than 20 hours old. So after a capture the next
-session start files it. After a failed run the next attempt waits 1 hour, then 4, then 20. A
+session start files it. After a failed run the next attempt waits 1 hour, then 4, then 20; a run
+in which only an add-on's step failed counts as succeeded and starts no wait. A
 schedule can start it too, for days without a session ([On a schedule](#on-a-schedule)), and
 `m2b curate --force` starts it now; add `--detach` to get your terminal back while it runs.
 
@@ -30,9 +31,10 @@ flowchart LR
 | Journal | code | adds the tasks you completed to the month's `corpus/YYYY/MM/YYYYMM-done.md` |
 | Review task | code | one task in your list when something needs you |
 
-`before_ingest`, `after_ingest` and `after_journal` are where the add-ons hook in: the
-worklog before ingest, the backup after the journal. A step that fails is reported in the review
-task and the run goes on.
+`before_ingest`, `after_ingest` and `after_journal` are where an add-on can hook in; the worklog
+runs before ingest. A step that fails is reported in the review task and the run goes on. When
+only an add-on's step failed, the run still counts as succeeded: the inbox is filed and the next run
+is due at the usual time, so an add-on that keeps failing never holds back the core.
 
 Each model step runs fenced: `claude -p` from an empty folder, with `--setting-sources project`,
 m2b alone as plugin, `--permission-mode dontAsk`, and allowed only the commands and paths of its
@@ -59,9 +61,7 @@ step:
 | | After install, before setup | After its setup |
 |---|---|---|
 | core | nothing: the session-start hooks print nothing and no run starts until `/m2b:m2b setup` | the distillate at session start, a curation run at the next session start after a capture on the curating machine |
-| `band` | draws nothing and starts nothing while there is no launcher; after the core's setup, asks `m2b addons list` about once a minute | the band and the status line |
-| `backup` | nothing | a snapshot after each run |
-| `herdr` | prints nothing | one line per other agent session at session start |
+| band | draws nothing and starts nothing while there is no launcher | the band and the status line, while mods are on in Claude Code |
 | `worklog` | prints nothing, records nothing | herdr events recorded on the curating machine, a daily worklog note |
 
 ## After an update
@@ -141,8 +141,8 @@ is `~/.local/state/m2b/run.log`; a run that could not even write its record leav
 
 ## The status line
 
-With the `band` add-on on, one line below the prompt sums up the brain. It is refreshed about once a
-minute and after each of your turns. Normally it reads `brain: 0 in inbox · curated 17:07`: the
+While [the band](band.md) runs, one line below the prompt sums up the brain. It is refreshed about
+once a minute and after each of your turns. Normally it reads `0 in inbox · curated 17:07`: the
 captures waiting for the next run, and when the last successful run ended (the time today, the date
 on an earlier day), or `not curated yet` while no curation run has succeeded. Claude Code draws a
 ⚠ in front of every plugin's status line; it is not a warning. In place of the pair it can say:
@@ -156,5 +156,5 @@ on an earlier day), or `not curated yet` while no curation run has succeeded. Cl
 
 A problem is added after it, such as `could not read store.json` or `tasks not reachable` (likewise
 for the store and the calendar); the task list, store and calendar are checked every 5 minutes, so
-such a problem can show up or clear that much later. `brain: could not look` means `m2b status` gave no answer at all;
+such a problem can show up or clear that much later. `could not look` means `m2b status` gave no answer at all;
 run it in a terminal to see why.

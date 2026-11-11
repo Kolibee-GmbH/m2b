@@ -32,8 +32,7 @@ An example with invented values:
   "executables": {"python3": "/usr/bin/python3", "claude": "/opt/homebrew/bin/claude", "reminders": "/opt/homebrew/bin/reminders"},
   "curation": {"model_timeout_minutes": 15},
   "addons": {
-    "band": {"on": true},
-    "backup": {"on": true, "target": "~/Backups/m2b", "attic_days": 30}
+    "worklog": {"on": true}
   }
 }
 ```
@@ -50,21 +49,22 @@ An example with invented values:
 | `curation.model` | the model of each fenced model step, any name `claude --model` takes | `haiku` |
 | `curation.max_budget_usd` | a spending cap per model step, from Claude Code's own estimate of API cost; it can differ from the bill and says little on a subscription | none |
 | `curation.max_turns` | the turns one model step may take before it stops and is reported | 100 |
+| `band.due_tasks` | whether the band shows your tasks due today or overdue below the candidates | `true` |
 | `distillate.skip_under` | folders, absolute or starting with `~/`, in and below which sessions get no distillate; `m2b distillate off` and `on` change it | none |
-| `addons.<add-on>.on` | whether an add-on runs on this machine: `band`, `herdr`, `worklog`, `backup` | off |
-| `addons.<add-on>.*` | the add-on's own settings, such as `addons.backup.target`; kept when the add-on is turned off | |
+| `addons.<add-on>.on` | whether an add-on runs on this machine: `worklog` | off |
+| `addons.<add-on>.*` | the add-on's own settings; kept when the add-on is turned off. An entry for `band`, `herdr` or `backup`, which are no longer add-ons, is ignored, and `m2b addons off <name>` removes it | |
 
 An add-on's setup skill turns it on once it is set up; by hand:
 
 ```bash
 m2b addons list
-m2b addons on backup
-m2b addons off backup
+m2b addons on worklog
+m2b addons off worklog
 ```
 
-Two add-ons add a step to each curation run while they are on: the worklog before the inbox is
-filed, the backup after the journal. Both run from the plugin's own folder, so an update needs no
-step, and an add-on that is off has no step and leaves nothing to clean up.
+The worklog adds a step to each curation run while it is on, before the inbox is filed. It runs
+from the plugin's own folder, so an update needs no step, and while it is off it has no step and
+leaves nothing to clean up.
 
 ## store.json, the store
 
@@ -119,12 +119,12 @@ For tests, development and unusual setups; none is needed in normal use.
 
 | Variable | Effect |
 |---|---|
-| `M2B_HOME` | moves every machine path (`~/.config/m2b`, `~/.local/state/m2b`, `~/.local/share/m2b`, the launcher) under this folder |
+| `M2B_HOME` | moves every machine path (`~/.config/m2b`, `~/.local/state/m2b`, `~/.local/share/m2b`, the launcher) under this folder; a leading `~` stands for your home folder |
 | `M2B_CORE_ROOT` | the launcher runs the core from this folder (a checkout) instead of Claude Code's plugin folder |
 | `M2B_INSTALLED_PLUGINS` | another `installed_plugins.json`, read by the launcher and the worklog's recorder |
 | `M2B_MODEL_RUNNER` | an executable used in place of `claude` for model steps, such as `scripts/no-model` |
 | `M2B_PYTHON` | the Python the plugin commands run with |
-| `M2B_HERDR` | the `herdr` executable the herdr and worklog add-ons call |
+| `M2B_HERDR` | the `herdr` executable the worklog add-on calls |
 | `M2B_MANAGED_SETTINGS` | another managed settings file, read by the worklog's recorder for `enabledPlugins` in place of the system one (tests) |
 
 The core sets `M2B_CURATION_RUN` and `M2B_RUN_TOKEN` for the steps of a curation run, and

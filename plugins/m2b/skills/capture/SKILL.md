@@ -9,6 +9,14 @@ allowed-tools: Bash(m2b capture *), Bash(m2b calendar *)
 You write what the user wants to keep into the inbox of their second brain. Curation files it
 later; you only add.
 
+## With the tool first
+
+Where the tool `mcp__m2b__note` is offered (the m2b mod runs in this Claude Code), write the
+capture with it: `text`, and `follow_up` and `quiet` where this page names them. It runs the same
+`m2b capture` without a shell call. Every rule on this page applies to it unchanged, and its answer
+says what was kept as the command does. Where the tool is not offered, or for a calendar entry, run
+the commands below.
+
 ## What goes in, and what does not
 
 - Personal things without a home in a repository: facts, ideas, open questions, tasks.

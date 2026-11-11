@@ -28,7 +28,7 @@ from m2b.store.guard import DatalessGuard
 from m2b.tasks import markers
 from m2b.tasks.base import Task, TasksUnreachableError
 from m2b.tasks.markdown import MarkdownTasks
-from m2b.todos import EVENTS_NOT_CONFIGURED, EVENTS_OK, EVENTS_UNREACHABLE, todos
+from m2b.todos import EVENTS_NOT_CONFIGURED, EVENTS_OK, EVENTS_UNREACHABLE, due_by_today, todos
 from store_contract import FakeEviction
 
 NOW = datetime.datetime(2026, 11, 7, 12, 0).astimezone()
@@ -386,3 +386,41 @@ class TodosSkillTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DueByTodayTest(unittest.TestCase):
+    """What the band shows as due: today, at any time of it, or overdue; read in local time."""
+
+    def due(self, *tasks: Task) -> list[tuple[str, bool]]:
+        return [(task.title, overdue) for task, overdue in due_by_today(list(tasks), NOW)]
+
+    def test_a_time_later_today_is_due_and_one_earlier_today_is_overdue(self) -> None:
+        """Covers: B102"""
+        later = NOW + datetime.timedelta(hours=3)
+        earlier = NOW - datetime.timedelta(hours=3)
+        self.assertEqual(
+            self.due(Task("a", "Later today", due=later), Task("b", "Earlier today", due=earlier)),
+            [("Earlier today", True), ("Later today", False)],
+        )
+
+    def test_a_date_today_is_due_and_yesterday_is_overdue_and_tomorrow_is_left_out(self) -> None:
+        """Covers: B102"""
+        today = NOW.date()
+        tomorrow_early = (NOW + datetime.timedelta(days=1)).replace(hour=0, minute=30)
+        found = self.due(
+            Task("a", "Today", due=today),
+            Task("b", "Yesterday", due=today - datetime.timedelta(days=1)),
+            Task("c", "Tomorrow early", due=tomorrow_early),
+            Task("d", "Tomorrow", due=today + datetime.timedelta(days=1)),
+        )
+        self.assertEqual(found, [("Yesterday", True), ("Today", False)])
+
+    def test_a_time_written_in_utc_is_read_in_local_time(self) -> None:
+        """Covers: B102"""
+        in_utc = (NOW + datetime.timedelta(minutes=30)).astimezone(datetime.timezone.utc)
+        self.assertEqual(self.due(Task("a", "Soon", due=in_utc)), [("Soon", False)])
+
+    def test_curator_tasks_and_tasks_without_a_date_are_left_out(self) -> None:
+        """Covers: B102"""
+        candidate = Task("a", "Remember? Sam moved", notes=markers.marker_line(markers.CANDIDATE), due=NOW.date())
+        self.assertEqual(self.due(candidate, Task("b", "Some day")), [])

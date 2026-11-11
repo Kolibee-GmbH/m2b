@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from m2b_worklog import classify, sessions
+from m2b_worklog import classify, periods, sessions
 from m2b_worklog.sources import READ, SourceState
 from m2b_worklog.sources.git import GitFacts, Runner, read_git
 from m2b_worklog.sources.herdr_events import read_recordings
@@ -25,6 +25,8 @@ from m2b_worklog.sources.transcripts import read_transcripts
 
 FACTS_VERSION = 1
 WATERMARK = "state/addons/worklog/watermark.json"
+# How far before the period the recorder's events are read; everything older is left unread.
+EVENT_REACH = datetime.timedelta(days=3)
 MAX_REACH = datetime.timedelta(days=3)
 WATERMARK_ORIGIN = "watermark"
 FIRST_RUN_ORIGIN = "first run"
@@ -67,7 +69,10 @@ def read_watermark(store: Path) -> datetime.datetime | None:
     try:
         moment = datetime.datetime.fromisoformat(json.loads(path.read_text(encoding="utf-8"))["end"])
     except (OSError, ValueError, KeyError, TypeError) as error:
-        raise FactsError(f"the watermark {WATERMARK} cannot be read ({error}); fix or remove it by hand") from error
+        raise FactsError(
+            f"the watermark {WATERMARK} cannot be read ({error}); write the end of the last worklog into its "
+            '"end" by hand: m2b-worklog state shows it as the end of the last period in the ledger'
+        ) from error
     if moment.tzinfo is None:
         raise FactsError(f"the watermark {WATERMARK} has a time without an offset")
     return moment
@@ -86,14 +91,16 @@ def period_for(watermark: datetime.datetime | None, now: datetime.datetime) -> P
 
 def collect(inputs: Inputs, run: Runner = subprocess.run) -> dict[str, Any]:
     period = period_for(read_watermark(inputs.store), inputs.now)
-    recordings = read_recordings(inputs.recordings)
-    transcripts = read_transcripts(inputs.transcripts, period.start, period.end)
+    # Older events add no time: an agent counts at most 30 minutes past its last sign of life (B87).
+    recordings = read_recordings(inputs.recordings, since=period.start - EVENT_REACH)
+    # Stamps just before the period keep an agent that was at work across the last cut counting (B84).
+    signs_from = period.start - periods.RULES.agent_silence
+    transcripts = read_transcripts(inputs.transcripts, period.start, period.end, signs_from)
     inbox = read_inbox(inputs.store, period.start, period.end)
     drafts = sessions.draft_sessions(
         recordings.events, recordings.workspaces, transcripts.transcripts, period.start, period.end
     )
     rules = classify.sphere_rules(inputs.profile, inputs.home)
-    zone = period.end.tzinfo
     gits = {draft.key: _git_facts(draft.folder, period, inputs.git, run) for draft in drafts}
     blocks = {draft.key: sessions.blocks_of(draft) for draft in drafts}
     owners = _commit_owners(drafts, gits, blocks)
@@ -111,7 +118,7 @@ def collect(inputs: Inputs, run: Runner = subprocess.run) -> dict[str, Any]:
     ]
     return {
         "version": FACTS_VERSION,
-        "period": {"start": _iso(period.start, zone), "end": _iso(period.end, zone), "origin": period.origin},
+        "period": {"start": local_iso(period.start), "end": local_iso(period.end), "origin": period.origin},
         "sources": {
             "recorder": _state(recordings.state),
             "herdr": _state(inputs.herdr),
@@ -120,8 +127,21 @@ def collect(inputs: Inputs, run: Runner = subprocess.run) -> dict[str, Any]:
         },
         "spheres": [{"id": r.sphere_id, "label": r.label, "billable": r.billable, "default": r.default} for r in rules],
         "customers": [c for c in inputs.profile.get("customers", []) if isinstance(c, str)],
-        "sessions": [_session(draft, gits[draft.key], blocks[draft.key], owners, rules, zone) for draft in drafts],
-        "captures": [{"name": c.name, "created": _iso(c.created, zone), "source": c.source} for c in inbox.captures],
+        "sessions": [_session(draft, gits[draft.key], blocks[draft.key], owners, rules) for draft in drafts],
+        "captures": [{"name": c.name, "created": local_iso(c.created), "source": c.source} for c in inbox.captures],
+        "not_recorded": [
+            {
+                "start": local_iso(b.start),
+                "end": local_iso(b.end),
+                "minutes": round((b.end - b.start) / periods.MINUTE),
+            }
+            for b in periods.not_recorded(
+                [*recordings.alive, *(e.time for e in recordings.events)],
+                recordings.recording_since,
+                period.start,
+                period.end,
+            )
+        ],
     }
 
 
@@ -164,7 +184,6 @@ def _session(
     blocks: list[sessions.SessionBlock],
     owners: Mapping[str, str],
     rules: list[classify.SphereRule],
-    zone: datetime.tzinfo | None,
 ) -> dict[str, Any]:
     workspace = draft.workspace
     return {
@@ -178,16 +197,17 @@ def _session(
         "blocks": [
             {
                 "id": b.block_id,
-                "start": _iso(b.start, zone),
-                "end": _iso(b.end, zone),
+                "start": local_iso(b.start),
+                "end": local_iso(b.end),
                 "minutes": b.minutes,
+                "minutes_present": b.minutes_present,
                 "prompts": b.prompts,
             }
             for b in blocks
         ],
         "git": _state(facts.state),
         "commits": [
-            {"time": _iso(c.time, zone), "subject": c.subject}
+            {"time": local_iso(c.time), "subject": c.subject}
             for c in facts.commits
             if owners.get(c.commit_hash) == draft.key
         ],
@@ -207,6 +227,10 @@ def _state(state: SourceState) -> dict[str, str]:
     return {"state": state.state, "detail": state.detail}
 
 
-def _iso(moment: datetime.datetime, zone: datetime.tzinfo | None) -> str:
-    """Every time in one offset, the period end's: transcript stamps come in UTC."""
-    return moment.astimezone(zone).isoformat(timespec="seconds")
+def local_iso(moment: datetime.datetime) -> str:
+    """The moment in the machine's local time, in the offset of its own day.
+
+    Transcript stamps come in UTC, and a period can cross a change to or from summer time, where
+    one fixed offset would put the other day's times an hour off the clock on the wall.
+    """
+    return moment.astimezone().isoformat(timespec="seconds")

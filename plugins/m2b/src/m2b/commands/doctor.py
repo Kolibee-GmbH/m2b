@@ -1,23 +1,26 @@
-"""``doctor``: one line per backend, the reminders-cli version, the recorded executables, and
-whether the launcher finds m2b in Claude Code's plugin list.
+"""``doctor``: one line per backend, the reminders-cli version, the recorded executables,
+whether the launcher finds m2b in Claude Code's plugin list, and whether a session ran the band.
 
 The reminders-cli line appears only when the store's tasks live in Apple Reminders. A ``claude``
 that setup could not find is named with the command that records it; it is needed only on the
 machine that curates, so it is not counted as a problem.
 
 Every check runs even when an earlier one failed, so one answer shows everything that needs
-fixing. "Not configured" (no calendar backend) is a state, not a problem. Exit 1 when anything
-cannot be reached or is missing.
+fixing. "Not configured" (no calendar backend) and a band no session has run yet are states, not
+problems. Exit 1 when anything cannot be reached or is missing.
 """
 
 from __future__ import annotations
 
 import argparse
+import datetime
+import json
 import os
 import re
 import shutil
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 
 from m2b import claude_code, launcher
 from m2b.calendar.base import CalendarError, CalendarNotConfigured
@@ -28,6 +31,7 @@ from m2b.config import store_path
 from m2b.config.errors import ConfigError, StoreUnreachableError
 from m2b.config.machine import MachineConfig, load_machine_config
 from m2b.config.store_settings import NEWER, describe_format, format_state, load_store_settings
+from m2b.paths import MachinePaths
 from m2b.store.base import StoreError
 from m2b.tasks.base import TasksError
 
@@ -38,7 +42,21 @@ UNUSABLE = "not usable for curation"
 APPLE_REMINDERS = "apple-reminders"
 PROBLEMS = (NOT_REACHABLE, MISSING, NEWER, UNUSABLE)
 _HOMEBREW_VERSION = re.compile(r"/reminders-cli/([^/]+)/")
-_FAILURES = (ConfigError, StoreUnreachableError, StoreError, TasksError, CalendarError, OSError)
+PROBE_FAILURES = (ConfigError, StoreUnreachableError, StoreError, TasksError, CalendarError, OSError)
+SEEN, NOT_SEEN = "seen", "not seen"
+# The band and the launcher hook start within moments of each other in one session.
+SAME_SESSION = datetime.timedelta(minutes=5)
+BAND_PAGE = "https://github.com/Kolibee-GmbH/m2b/blob/main/docs/band.md"
+MODS_OFF = (
+    "ran m2b's hooks but not the band: Claude Code loaded no mods there, most often because an earlier "
+    "session saved its rollout switch off without network access; start claude once with network access, "
+    "then a new session. Everything else in m2b works without the band"
+)
+NO_HOOKS = (
+    "no Claude Code session has run m2b's hooks on this machine since setup: Claude Code runs no plugin "
+    "hooks under --bare, or with allowManagedHooksOnly or disableAllHooks in managed settings, and then "
+    "neither the band nor the distillate at session start; right after setup, start a new session first"
+)
 
 
 @dataclass(frozen=True)
@@ -60,6 +78,7 @@ def doctor(arguments: argparse.Namespace, context: Context) -> int:
         *[_executable(name, path) for name, path in sorted(config.executables.items())],
         *([] if "claude" in config.executables else [_claude_not_recorded()]),
         claude_code_check(context.environ),
+        band_check(context.machine),
     ]
     if arguments.json:
         print_json({"checks": [check.__dict__ for check in checks]})
@@ -87,11 +106,42 @@ def claude_code_check(environ: Mapping[str, str]) -> Check:
     )
 
 
+def band_check(machine: MachinePaths) -> Check:
+    """Whether the latest session that ran m2b's own hooks also started the band, the one mod of m2b.
+
+    Python cannot ask Claude Code whether it loaded the mod, so the launcher hook and the band each
+    note when a session started them, and the two times are compared.
+    """
+    session, band = _seen_at(machine.session_seen_file), _seen_at(machine.band_seen_file)
+    last_ran = f" (the band last ran {_local(band)})" if band is not None else ""
+    if band is not None and (session is None or band >= session - SAME_SESSION):
+        return Check("band", SEEN, f"it ran in the latest session, started {_local(band)}")
+    if session is not None:
+        return Check(
+            "band", NOT_SEEN, f"the latest session, started {_local(session)}, {MODS_OFF}{last_ran}; {BAND_PAGE}"
+        )
+    return Check("band", NOT_SEEN, f"{NO_HOOKS}{last_ran}; {BAND_PAGE}")
+
+
+def _seen_at(path: Path) -> datetime.datetime | None:
+    try:
+        text = json.loads(path.read_text(encoding="utf-8"))["seenAt"]
+        # The band writes JavaScript's UTC form with a "Z", which Python 3.9 does not read.
+        moment = datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
+    return moment if moment.tzinfo is not None else None
+
+
+def _local(moment: datetime.datetime) -> str:
+    return f"{moment.astimezone():%Y-%m-%d %H:%M}"
+
+
 def _store_format_check(config: MachineConfig, context: Context) -> list[Check]:
     """The store's format against this m2b; nothing when the store cannot be read, which ``store`` reports."""
     try:
         settings = load_store_settings(configured_store(config, context.machine))
-    except _FAILURES:
+    except PROBE_FAILURES:
         return []
     return [Check("store-format", format_state(settings), describe_format(settings))]
 
@@ -104,7 +154,7 @@ def _store_path_check(config: MachineConfig, context: Context) -> list[Check]:
         return []
     try:
         curates = load_store_settings(configured_store(config, context.machine)).curating_machine == config.machine_id
-    except _FAILURES:
+    except PROBE_FAILURES:
         return []
     return [Check("store-path", UNUSABLE, unusable)] if curates else []
 
@@ -116,7 +166,7 @@ def _check_store(config: MachineConfig, context: Context) -> None:
 def probe(name: str, call: Callable[[], None]) -> Check:
     try:
         call()
-    except _FAILURES as error:
+    except PROBE_FAILURES as error:
         return Check(name, NOT_REACHABLE, str(error))
     return Check(name, REACHABLE)
 
@@ -126,7 +176,7 @@ def calendar_check(config: MachineConfig) -> Check:
         configured_calendar(config).check_access()
     except CalendarNotConfigured:
         return Check("calendar", NOT_CONFIGURED)
-    except _FAILURES as error:
+    except PROBE_FAILURES as error:
         return Check("calendar", NOT_REACHABLE, str(error))
     return Check("calendar", REACHABLE, config.calendar.backend)
 
@@ -135,7 +185,7 @@ def _uses_reminders(config: MachineConfig, context: Context) -> bool:
     """True unless the store says otherwise: a store that cannot be read keeps the line."""
     try:
         return load_store_settings(configured_store(config, context.machine)).tasks.backend == APPLE_REMINDERS
-    except _FAILURES:
+    except PROBE_FAILURES:
         return True
 
 

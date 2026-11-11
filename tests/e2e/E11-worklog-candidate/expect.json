@@ -4,7 +4,7 @@
     "profile.json": "{\n  \"version\": 1,\n  \"owner\": \"Alex\",\n  \"language\": \"en\",\n  \"spheres\": [\n    {\"id\": \"acme\", \"label\": \"Acme Ltd\", \"billable\": true, \"match\": {\"path_under\": [\"~/code/acme\"]}},\n    {\"id\": \"private\", \"default\": true}\n  ],\n  \"customers\": [\"Globex\"]\n}\n",
     "memory/MEMORY.md": "# Memory\n\n## Facts\n\n## Current\n\n- Planning the trip to Porto\n",
     "state/core/candidates.json": "{\n  \"format\": 1,\n  \"candidates\": {}\n}\n",
-    "state/addons/worklog/ledger.csv": "period,start,end,minutes,sphere,billable,topic,customer,project,activity\n"
+    "state/addons/worklog/ledger.csv": "period,start,end,minutes,minutes_present,sphere,billable,topic,customer,project,activity\n"
   },
   "store_patterns": [
     {

@@ -36,11 +36,12 @@ export async function shared<T>(
     }
   }
   // Stamped with when the load started: an answer another session began later, after a keep or
-  // drop, is never replaced by this older one, however long this load took.
+  // drop, is never replaced by this older one, however long this load took. A stamp later than
+  // now came from a clock that was set back since, and would keep every session from sharing.
   const startedAtMs = await $.clock.now()
   const value = await load()
   const latest = await readEntry($, path)
-  if (latest !== undefined && latest.writtenAtMs > startedAtMs) {
+  if (latest !== undefined && latest.writtenAtMs > startedAtMs && latest.writtenAtMs <= (await $.clock.now())) {
     return value
   }
   try {

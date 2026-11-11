@@ -713,7 +713,6 @@ class HooksManifestTest(unittest.TestCase):
                 '"${CLAUDE_PLUGIN_ROOT}"/bin/m2b hook distillate',
                 '"${CLAUDE_PLUGIN_ROOT}"/bin/m2b hook nudge',
                 '"${CLAUDE_PLUGIN_ROOT}"/bin/m2b hook launcher',
-                '"${CLAUDE_PLUGIN_ROOT}"/bin/m2b-herdr neighbours',
                 '"${CLAUDE_PLUGIN_ROOT}"/bin/m2b-worklog hook session-start',
             ],
         )

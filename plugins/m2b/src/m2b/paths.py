@@ -29,6 +29,16 @@ class MachinePaths:
         return self.home / ".local" / "state" / PRODUCT_FOLDER
 
     @property
+    def session_seen_file(self) -> Path:
+        """When a session last ran m2b's own hooks; the launcher hook writes it."""
+        return self.state_dir / "session-seen.json"
+
+    @property
+    def band_seen_file(self) -> Path:
+        """When a session last started the band; the band, a mod in TypeScript, writes it."""
+        return self.state_dir / "band-seen.json"
+
+    @property
     def temp_dir(self) -> Path:
         return self.state_dir / "tmp"
 

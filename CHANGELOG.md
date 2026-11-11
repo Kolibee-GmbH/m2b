@@ -7,13 +7,67 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-11
+
 ### Added
 
 - m2b has a logo: the README shows it, and `docs/images/` holds the mark, an icon and the image
   for link previews ([#9](https://github.com/Kolibee-GmbH/m2b/pull/9)).
+- `m2b band --json` answers everything the band shows in one call: the open candidates, questions
+  and review tasks from one look at the task list, and the status. A refresh of the band is one
+  `m2b` call instead of four, and the list is read once instead of three times (with Apple
+  Reminders, two calls instead of six) ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- `m2b-worklog state` shows the watermark, an unfinished worklog and the last period in the ledger,
+  and names a file it cannot read ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- The worklog's recorder writes a sign of life at herdr's start and, run by a timer of the operating
+  system (a launch agent on macOS, a systemd user timer on Linux), every five minutes while herdr
+  runs. A silence of more than 10 minutes appears in the note under "Not recorded" with its times,
+  instead of reading as a time without work. The next session start updates the recorder, links it
+  again in herdr and sets up the timer; `m2b-worklog recorder remove` takes the timer out too
+  ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- `m2b-worklog recorder check` says whether herdr is installed, at least 0.9.0 and running. The
+  worklog setup asks it first and stops before any question when herdr is missing, too old or not
+  running ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- Undo in the band: keep and drop wait 5 seconds, while the row offers `undo`, and write only then.
+  A click taken back, or a session closed within those seconds, leaves the task as it was
+  ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- `/m2b-note <text>` writes the text into the inbox at once, without a model turn, also while a turn
+  is working, and answers with one line showing how the note begins
+  ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- `/m2b-review` opens a pane with the whole last curation run: its state and times, every finding
+  whole, and every candidate and question with keep, drop and undo. `/m2b-search <text>` shows the
+  hits of a search there, without a model turn ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- The band shows your tasks due today or overdue in up to three quiet rows below the candidates;
+  `m2b config set band.due_tasks false` turns them off
+  ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- A failed curation run is shown once in every open session, in a line that says where its review
+  is ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- A session whose band is older than the installed m2b says so in one line and names
+  `/reload-plugins`; `m2b band --json` answers the installed `version` for that
+  ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- The model notes and searches through two tools of the mod, `mcp__m2b__note` and
+  `mcp__m2b__search`, instead of a shell call. They follow the rules of the skills `capture` and
+  `search`, which name them first and work as before where the mod does not run; a search answer
+  is marked as data from your notes. Your permission rules for these names, and for
+  `Bash(m2b capture:*)` and `Bash(m2b search:*)`, apply; where none decides, the tools run without
+  asking, as the skills' commands do ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
 
 ### Changed
 
+- The band is part of m2b instead of an add-on: it starts wherever m2b is set up, with no switch
+  and no setup skill (`/m2b:band-setup` is gone), also where it was turned off; `addons.band` in
+  `config.json` is ignored and `m2b addons off band` removes it. It needs mods on in Claude Code.
+  `m2b doctor` has a line `band` that says whether the latest session ran it, and if not, whether
+  only mods or all plugin hooks were off. Its page moved to `docs/band.md`
+  ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- The status line reads `2 in inbox · curated 18:02` without its own `brain:`, since Claude Code
+  already puts the plugin's name in front ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- Every row of the worklog's ledger carries two numbers: `minutes`, the work in the span, and
+  `minutes_present`, the part with the workspace in focus, in `ledger.json`, the CSV and the XLSX.
+  Rows from before have the second cell empty ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- The worklog reads only the recorder's files written in the three days before its period, instead
+  of the whole history at every run. An agent that asked for an approval longer ago is no longer
+  reported as waiting ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
 - Each add-on has its own page under `docs/addons/`, and `docs/addons.md` is the overview that
   links them ([#6](https://github.com/Kolibee-GmbH/m2b/pull/6)).
 - CI runs two jobs, macOS on the current Python and Ubuntu on 3.9, instead of four
@@ -22,11 +76,78 @@ All notable changes to this project are documented here. The format follows
   `/plugin marketplace add Kolibee-GmbH/m2b`. An install from the old address keeps updating,
   because GitHub forwards it ([#8](https://github.com/Kolibee-GmbH/m2b/pull/8)).
 
+### Removed
+
+- The `herdr` add-on, which listed the other agent sessions open in herdr at session start. It
+  never read or wrote the store; herdr shows those sessions itself
+  ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- The `backup` add-on, until a backup with a way back replaces it: it kept only a mirror of the
+  store, had no restore, and could miss files iCloud Drive had not downloaded. The folder it wrote
+  is left as it was. A `config.json` that still names either add-on loads as before, and
+  `m2b addons off herdr` or `m2b addons off backup` removes the entry
+  ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+
 ### Fixed
 
+- A failing add-on step no longer makes the curation run fail. It is still a finding in the review
+  task, but the run counts as succeeded, so the inbox keeps being filed and no wait of 1, 4 or 20
+  hours starts; before, a worklog that kept failing held back curation to once every 20 hours
+  ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- The worklog no longer counts time nobody worked. Focus on a workspace counts up to 10 minutes
+  after that workspace's own last event, also while agents in other workspaces keep sending events.
+  An agent counts up to 30 minutes past its last sign of life, an event of its pane or a message in
+  its transcript, so a machine asleep with an agent left working no longer becomes a night of agent
+  time; an agent still at work when the worklog is written counts up to that moment instead of
+  being dropped ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- The worklog ledger refuses a worklog whose period overlaps one it holds, before anything is
+  written, so a reset watermark no longer books days twice. Its messages about an
+  unreadable watermark or unfinished worklog point to `m2b-worklog state` instead of advising to
+  delete the file ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- The worklog counts the same minutes once. A workspace closed and opened again on the same folder
+  continues its session instead of starting a second one that held the same evening, and a
+  transcript of a workspace without a folder of its own, or of a pane in another folder, goes to
+  that workspace instead of a session of its own
+  ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
 - The worklog page no longer names `~/.claude/projects/` as the fixed place of the transcripts: it
   says that `CLAUDE_CONFIG_DIR` moves it, and that `M2B_HERDR` names the `herdr` executable for the
   worklog's commands too ([#10](https://github.com/Kolibee-GmbH/m2b/pull/10)).
+- One control character in a title or a finding, such as an escape sequence pasted from terminal
+  output, made Claude Code refuse the band's drawing, and the band vanished in every session. Every
+  text is now drawn as one plain line ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- A failure inside the band's timers left the status line at its old state; it now says
+  `could not look` ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- After a keep or drop, a second click on the same row during the reload claimed that another
+  session had settled it. The row now stays locked until that reload has landed
+  ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- Turns ending while `m2b` was slow queued one reload each, so the band could lag minutes behind;
+  at most one reload waits now ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- A shared answer of another shape, or one stamped later than now after the clock was set back,
+  could break the band or stop sessions from sharing; such an answer is loaded again
+  ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- `M2B_HOME` starting with `~` left the band empty; it resolves under the home folder, as for the
+  rest of m2b ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- A task id that starts with a dash reached `m2b tasks complete` as an option; the band now passes
+  it after `--` ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- The folder with the band's shared answer, which holds candidate titles and findings, is kept
+  readable by its owner only ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- The worklog's model step writes its verdict to a file instead of passing it as a shell argument,
+  so a session in a folder with an apostrophe in its name, such as `Bob's project`, no longer fails
+  the step on every run ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- The worklog redacts more before the model sees a prompt: a value a few words after "password",
+  `pw=`, a credential after `Bearer`, and base64 keys with `/` and `+`. Its page says that redaction
+  over patterns stays incomplete ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- A `<system-reminder>` in front of a prompt no longer uses up the prompt's 240 characters, and the
+  summary after a context cut no longer counts as a prompt. The last answer is its last 500
+  characters, as the page said, instead of its first
+  ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- A topic starting with `=`, `+`, `-` or `@` is text in `ledger.csv`, not a formula
+  ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- A worklog note whose blocks fall on two dates gives each block its date, and every time is in the
+  offset of its own day, also across a change of summer time. Captures stamped with `Z` count on
+  Python 3.9 and 3.10 too ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
+- More than three memory candidates, or a line break in a topic or note, make the verdict refused
+  and handed back to the model, instead of reaching the note
+  ([#11](https://github.com/Kolibee-GmbH/m2b/pull/11)).
 
 ## [0.2.0] - 2026-11-09
 

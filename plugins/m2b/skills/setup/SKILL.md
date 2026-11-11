@@ -96,7 +96,11 @@ m2b doctor
 Report each line whose state is `not reachable`, `missing`, `not installed`, `newer` (the store format: update m2b
 on this machine) or `not usable for curation` (the store path: move the store to a folder the line
 allows and set `store.path` to it), with what to do; `not recorded` only on
-the curating machine, where the model steps need that program.
+the curating machine, where the model steps need that program. The line `band` says whether the
+latest session that ran m2b's hooks also started the band above the prompt. Right after setup it
+can say `not seen`, because m2b's hooks only begin with the next session. Say that the band appears
+in the next session, and that if `m2b doctor` still says `not seen` after one, pass on the reason
+its line gives.
 
 ## 5. What the owner does by hand
 
@@ -112,10 +116,9 @@ List only the steps that apply, as a numbered list, each with where to click or 
 
 Each entry in `addons` is an add-on of m2b with a `summary` of what it does; all are off
 until their own setup turns them on. For each one that is `on: false`, one at a time: say in one
-line what it does, and ask whether to turn it on. herdr and the worklog need
-herdr, and the worklog runs only on the curating machine; say so before asking. On a yes, run that
-add-on's setup skill with the Skill tool: `m2b:band-setup`, `m2b:herdr-setup`, `m2b:worklog-setup`
-or `m2b:backup-setup`. Never run one unasked.
+line what it does, and ask whether to turn it on. The worklog needs herdr and runs only on the
+curating machine; say so before asking. On a yes, run that add-on's setup skill with the Skill
+tool: `m2b:worklog-setup`. Never run one unasked.
 
 ## Answer
 

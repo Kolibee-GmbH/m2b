@@ -24,6 +24,7 @@ from m2b.calendar.base import (
 from m2b.capture import NotSavedError
 from m2b.commands import Context, ProblemError, UsageError, settings, store, tasks
 from m2b.commands import addons as addons_commands
+from m2b.commands import band as band_commands
 from m2b.commands import calendar as calendar_commands
 from m2b.commands import candidates as candidate_commands
 from m2b.commands import capture as capture_commands
@@ -66,7 +67,7 @@ Hook = Callable[[MachineConfig, MachinePaths, Mapping[str, str], HookInput], Non
 Handler = Callable[[argparse.Namespace, Context], int]
 
 # Session-start hooks by name.
-HOOKS: Mapping[str, Hook] = {"distillate": hooks.distillate, "nudge": hooks.nudge, "launcher": hooks.launcher_check}
+HOOKS: Mapping[str, Hook] = {"distillate": hooks.distillate, "nudge": hooks.nudge, "launcher": hooks.launcher_hook}
 # Set on the curation run's model runs: hooks run in ``claude -p`` too, and without it a model step
 # would load the distillate again or start a second run.
 CURATION_RUN_VARIABLE = model.CURATION_RUN_VARIABLE
@@ -396,6 +397,10 @@ def _parser() -> argparse.ArgumentParser:
     )
     _command(commands, "doctor", doctor_command.doctor, "check every backend", json_flag=True)
     _command(commands, "status", status_commands.status_command, "inbox, curation run, backends", json_flag=True)
+    band_command = _command(
+        commands, "band", band_commands.band_command, "what the band above the prompt shows, as JSON", json_flag=True
+    )
+    band_command.add_argument("--tasks-only", action="store_true", help="only the curator tasks, without the status")
 
     launcher = _group(commands, "launcher", "the launcher in ~/.local/bin")
     _command(launcher, "install", launcher_commands.launcher_install, "write or refresh the launcher")

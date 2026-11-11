@@ -20,9 +20,11 @@ from m2b_worklog import daily, ledger, writeup
 from m2b_worklog.daily import DailyError, Sources
 from m2b_worklog.paths import WorklogPaths
 from m2b_worklog.sources import SourceState
-from test_facts import NOW, PROFILE, Fixture, at
+from test_facts import NOW, PROFILE, TEST_TZ, Fixture, at
 
-COMMAND = Path(__file__).resolve().parents[3] / "bin" / "m2b-worklog"
+PLUGIN_ROOT = Path(__file__).resolve().parents[3]
+COMMAND = PLUGIN_ROOT / "bin" / "m2b-worklog"
+FAKE_CLAUDE = PLUGIN_ROOT / "tests" / "fakes" / "fake_claude.py"
 DAY_BEFORE = at(9) - datetime.timedelta(days=1)
 STATE = Path("state") / "addons" / "worklog"
 
@@ -56,6 +58,12 @@ def judged(found: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def hand_in(paths: WorklogPaths, verdict: Any) -> None:
+    """Writes the verdict where the skill writes it, with its Write tool."""
+    draft = Path(daily.facts_for_model(paths)["verdict_file"])
+    draft.write_text(verdict if isinstance(verdict, str) else json.dumps(verdict), encoding="utf-8")
+
+
 class FakeCore:
     """The core as the worklog sees it; its model step hands in a verdict the way the skill does."""
 
@@ -78,7 +86,8 @@ class FakeCore:
             self._accept(verdict)
 
     def _accept(self, verdict: dict[str, Any]) -> None:
-        problems = daily.accept_verdict(self.paths, json.dumps(verdict))
+        hand_in(self.paths, verdict)
+        problems = daily.accept_verdict(self.paths)
         if problems:
             raise AssertionError(problems)
 
@@ -196,6 +205,9 @@ class WriteTest(DailyFixture):
                 "Bash(m2b curate report *)",
                 "Read(<store>/memory/**)",
                 "Read(<store>/inbox/**)",
+                "Bash(m2b-worklog verdict)",
+                f"Read(/{self.paths.run_dir / 'verdict-draft.json'})",
+                f"Edit(/{self.paths.run_dir / 'verdict-draft.json'})",
             ),
         )
 
@@ -231,13 +243,141 @@ class WriteTest(DailyFixture):
         self.assertEqual(((folder / "ledger.csv").read_bytes(), (folder / "ledger.xlsx").read_bytes()), first)
         rows = list(csv.DictReader(io.StringIO(first[0].decode("utf-8"))))
         self.assertEqual(
-            (rows[0]["start"], rows[0]["minutes"], rows[0]["customer"]), (at(10).isoformat(), "50", "Globex")
+            (rows[0]["start"], rows[0]["minutes"], rows[0]["minutes_present"], rows[0]["customer"]),
+            (at(10).isoformat(), "50", "22", "Globex"),
         )
         with zipfile.ZipFile(io.BytesIO(first[1])) as workbook:
             self.assertIn("xl/workbook.xml", workbook.namelist())
             sheet = workbook.read("xl/worksheets/sheet1.xml").decode("utf-8")
         self.assertIn("<t>Globex</t>", sheet)
         self.assertIn('<c r="D2"><v>50</v></c>', sheet)
+        self.assertIn('<c r="E2"><v>22</v></c>', sheet)
+
+    def test_a_span_carries_its_minutes_and_the_minutes_the_owner_was_there(self) -> None:
+        """Covers: B86"""
+        self.a_due_day()
+
+        self.run_daily()
+
+        [period] = self.ledger_periods().values()
+        # b1 is 10:00 to 10:50: 50 minutes of work, 22 of them with the workspace in focus.
+        self.assertEqual([(s["minutes"], s["minutes_present"]) for s in period["spans"]], [(50, 22), (40, 20)])
+
+    def test_a_ledger_written_before_the_second_column_still_exports(self) -> None:
+        """Covers: B86"""
+        folder = self.store / STATE
+        folder.mkdir(parents=True)
+        old_span = {"period": "p0", "session": "workspace:w1:", "block": "b1", "start": at(10).isoformat()}
+        old_span.update({"end": at(11).isoformat(), "minutes": 60, "sphere": "acme", "billable": False})
+        old_span.update({"topic": "Invoices", "customer": None, "project": None, "activity": None})
+        old = {
+            "version": 1,
+            "periods": {"p0": {"start": at(9).isoformat(), "end": at(12).isoformat(), "spans": [old_span]}},
+        }
+        (folder / "ledger.json").write_text(json.dumps(old), encoding="utf-8")
+
+        ledger.export(folder)
+
+        [row] = list(csv.DictReader(io.StringIO((folder / "ledger.csv").read_text(encoding="utf-8"))))
+        self.assertEqual((row["minutes"], row["minutes_present"]), ("60", ""))
+
+
+class LedgerOverlapTest(DailyFixture):
+    def span(self, session: str, start: datetime.datetime, end: datetime.datetime) -> dict[str, Any]:
+        return {"session": session, "block": "b1", "start": start.isoformat(), "end": end.isoformat(), "minutes": 1}
+
+    def test_a_span_overlapping_one_of_the_same_session_is_refused_and_nothing_is_added(self) -> None:
+        """Covers: B87"""
+        folder = self.store / STATE
+        ledger.add(folder, "p1", at(9).isoformat(), at(12).isoformat(), [self.span("s1", at(10), at(11))])
+        before = (folder / "ledger.json").read_bytes()
+
+        with self.assertRaises(ledger.LedgerError) as caught:
+            ledger.add(folder, "p2", at(9).isoformat(), at(13).isoformat(), [self.span("s1", at(10, 30), at(12))])
+
+        self.assertIn("s1", str(caught.exception))
+        self.assertIn(at(10).isoformat(), str(caught.exception))
+        self.assertIn("m2b-worklog state", str(caught.exception))
+        self.assertEqual((folder / "ledger.json").read_bytes(), before)
+
+    def test_a_period_that_only_touches_the_last_one_is_added(self) -> None:
+        """Covers: B87"""
+        folder = self.store / STATE
+        ledger.add(folder, "p1", at(9).isoformat(), at(11).isoformat(), [self.span("s1", at(10), at(11))])
+
+        added = ledger.add(
+            folder,
+            "p2",
+            at(11).isoformat(),
+            at(13).isoformat(),
+            [self.span("s2", at(11), at(12)), self.span("s1", at(11), at(12))],
+        )
+
+        self.assertTrue(added)
+
+    def test_a_period_overlapping_a_held_one_is_refused_whatever_its_sessions_are_called(self) -> None:
+        """Covers: B87"""
+        # A workspace reopened under a new id: the same minutes come back under another session key.
+        folder = self.store / STATE
+        held = [self.span("workspace:w2:", at(10), at(11))]
+        ledger.add(folder, "p1", at(9).isoformat(), at(12).isoformat(), held)
+
+        with self.assertRaises(ledger.LedgerError) as caught:
+            again = [self.span("workspace:w1:", at(10), at(11))]
+            ledger.add(folder, "p2", at(8).isoformat(), at(13).isoformat(), again)
+
+        self.assertIn(f"the period from {at(9).isoformat()} to {at(12).isoformat()}", str(caught.exception))
+
+    def test_a_worklog_after_a_reset_watermark_writes_nothing_and_says_how_to_look(self) -> None:
+        """Covers: B87"""
+        self.a_due_day()
+        self.run_daily()
+        (self.store / STATE / "watermark.json").unlink()
+        notes_before = self.worklog_notes()
+
+        with self.assertRaises(ledger.LedgerError) as caught:
+            self.run_daily(NOW + datetime.timedelta(hours=1))
+
+        self.assertIn("m2b-worklog state", str(caught.exception))
+        self.assertEqual(self.worklog_notes(), notes_before)
+        self.assertEqual(len(self.ledger_periods()), 1)
+        self.assertFalse((self.store / STATE / "intent.json").exists())
+
+
+class StateTest(DailyFixture):
+    def test_the_state_names_the_watermark_an_unfinished_worklog_and_the_last_period(self) -> None:
+        """Covers: B87"""
+        self.a_due_day()
+        self.run_daily()
+
+        shown = daily.state(self.store)
+
+        period = writeup.period_id(DAY_BEFORE.isoformat(), NOW.isoformat())
+        self.assertEqual(shown["watermark"], NOW.isoformat())
+        self.assertIsNone(shown["unfinished"])
+        self.assertEqual(
+            shown["ledger"],
+            {"periods": 1, "last": {"id": period, "start": DAY_BEFORE.isoformat(), "end": NOW.isoformat()}},
+        )
+
+    def test_the_messages_about_broken_state_name_the_state_command_and_never_say_remove(self) -> None:
+        """Covers: B87"""
+        self.a_due_day()
+        folder = self.store / STATE
+        (folder / "watermark.json").write_text("{", encoding="utf-8")
+        (folder / "intent.json").write_text("{", encoding="utf-8")
+
+        with self.assertRaises(DailyError) as intent:
+            daily.read_intent(folder)
+        from m2b_worklog import facts
+
+        with self.assertRaises(facts.FactsError) as watermark:
+            facts.read_watermark(self.store)
+
+        for message in (str(intent.exception), str(watermark.exception)):
+            with self.subTest(message=message):
+                self.assertIn("m2b-worklog state", message)
+                self.assertNotIn("remove", message)
 
     def test_a_sphere_without_billable_gets_no_booking_proposal(self) -> None:
         """Covers: B29"""
@@ -300,6 +440,98 @@ class WriteTest(DailyFixture):
             "## Could not read\n\n- herdr: herdr did not answer", (self.store / note).read_text(encoding="utf-8")
         )
 
+    def test_a_stretch_the_recorder_did_not_record_is_named_in_the_note(self) -> None:
+        """Covers: B89"""
+        self.a_due_day()
+        self.alive(at(9), at(10, 50))
+        self.alive(at(13), at(18))
+
+        self.run_daily()
+
+        [note] = self.worklog_notes()
+        text = (self.store / note).read_text(encoding="utf-8")
+        self.assertIn(
+            "## Not recorded\n\nherdr was not running, the machine was asleep, recording was off or the recorder's "
+            "timer did not run:\n\n"
+            "- 2026-03-14 10:55 to 13:00\n",
+            text,
+        )
+        self.assertNotIn("## Could not read", text)
+
+    def test_a_stretch_over_midnight_carries_both_dates(self) -> None:
+        """Covers: B89"""
+        self.a_due_day()
+        self.alive(DAY_BEFORE, DAY_BEFORE + datetime.timedelta(hours=10))
+        self.alive(at(8, 30), at(18))
+
+        self.run_daily()
+
+        [note] = self.worklog_notes()
+        self.assertIn("- 2026-03-13 19:05 to 2026-03-14 08:30\n", (self.store / note).read_text("utf-8"))
+
+    def test_a_csv_cell_that_starts_like_a_formula_is_written_as_text(self) -> None:
+        """Covers: B99"""
+        self.a_due_day()
+
+        def formula(found: dict[str, Any]) -> dict[str, Any]:
+            verdict = judged(found)
+            verdict["sessions"][0]["topic"] = '=HYPERLINK("http://example.invalid")'
+            verdict["sessions"][0]["blocks"]["b1"]["activity"] = "@sum"
+            return verdict
+
+        self.core = FakeCore(self.paths, self.store, self.profile, formula)
+        self.run_daily()
+
+        rows = list(csv.reader(io.StringIO((self.store / STATE / "ledger.csv").read_text(encoding="utf-8"))))
+        header, row = rows[0], rows[1]
+        self.assertEqual(row[header.index("topic")], '\'=HYPERLINK("http://example.invalid")')
+        self.assertEqual(row[header.index("activity")], "'@sum")
+        self.assertEqual(row[header.index("minutes")].isdigit(), True)
+
+    def test_a_note_whose_blocks_fall_on_two_days_dates_its_times_and_a_block_over_midnight_reads_right(self) -> None:
+        """Covers: B98"""
+        self.a_due_day()
+        self.cache(
+            {
+                "w1": [
+                    {"repo": "invoices", "label": "invoices", "folder": str(self.repo), "since": DAY_BEFORE.isoformat()}
+                ]
+            }
+        )
+        late = at(23, 30) - datetime.timedelta(days=1)
+        self.events("w1", (late, "agent_working", "p1"), (late + datetime.timedelta(minutes=50), "agent_stopped", "p1"))
+
+        self.run_daily()
+
+        [note] = self.worklog_notes()
+        text = (self.store / note).read_text("utf-8")
+        # Blocks end at midnight; the one before it ends with its date.
+        self.assertIn("2026-03-13 23:30-2026-03-14 00:00", text)
+        self.assertIn("2026-03-14 10:00-", text)
+
+    def test_a_note_whose_blocks_fall_on_one_day_gives_times_only(self) -> None:
+        """Covers: B98"""
+        self.a_due_day()
+
+        self.run_daily()
+
+        [note] = self.worklog_notes()
+        [times] = [line for line in (self.store / note).read_text("utf-8").splitlines() if line.startswith("- 10:")]
+        self.assertNotIn("2026-", times)
+
+    def test_the_heading_of_stretches_not_recorded_follows_the_language(self) -> None:
+        self.profile["language"] = "de"
+        self.a_due_day()
+        self.alive(at(9), at(10, 50))
+        self.alive(at(13), at(18))
+
+        self.run_daily()
+
+        [note] = self.worklog_notes()
+        text = (self.store / note).read_text("utf-8")
+        self.assertIn("## Nicht aufgezeichnet\n\nherdr lief nicht", text)
+        self.assertIn("- 2026-03-14 10:55 bis 13:00\n", text)
+
     def test_the_note_follows_the_profiles_language(self) -> None:
         self.profile["language"] = "de"
         self.a_due_day()
@@ -339,15 +571,50 @@ class VerdictTest(DailyFixture):
         wrong_block = json.loads(json.dumps(good))
         wrong_block["sessions"][0]["blocks"]["b9"] = None
 
-        self.assertIn(
-            "'Hooli' is not in the customer list", daily.accept_verdict(self.paths, json.dumps(unknown_customer))[0]
-        )
-        self.assertIn("is not a session of the facts", daily.accept_verdict(self.paths, json.dumps(invented))[0])
-        self.assertEqual(daily.accept_verdict(self.paths, json.dumps(unjudged)), [f"$.sessions: {key!r} is not judged"])
-        self.assertIn("'b9' is not a block", daily.accept_verdict(self.paths, json.dumps(wrong_block))[0])
-        self.assertIn("is not JSON", daily.accept_verdict(self.paths, "{")[0])
+        self.assertIn("'Hooli' is not in the customer list", self.problems(unknown_customer)[0])
+        self.assertIn("is not a session of the facts", self.problems(invented)[0])
+        self.assertEqual(self.problems(unjudged), [f"$.sessions: {key!r} is not judged"])
+        self.assertIn("'b9' is not a block", self.problems(wrong_block)[0])
+        self.assertIn("is not JSON", self.problems("{")[0])
         self.assertFalse((self.paths.run_dir / "verdict.json").exists())
-        self.assertEqual(daily.accept_verdict(self.paths, json.dumps(good)), [])
+        self.assertEqual(self.problems(good), [])
+
+    def problems(self, verdict: Any) -> list[str]:
+        hand_in(self.paths, verdict)
+        return daily.accept_verdict(self.paths)
+
+    def handed_facts(self) -> dict[str, Any]:
+        """The facts of a due day, handed to the model as the run does, with no verdict yet."""
+        handed: list[dict[str, Any]] = []
+        self.core = FakeCore(self.paths, self.store, self.profile, lambda found: handed.append(found))
+        with self.assertRaises(DailyError):
+            self.run_daily()
+        [found] = handed
+        daily.hand_to_model(self.paths, self.store, "en", found)
+        return found
+
+    def test_more_than_three_candidates_are_refused(self) -> None:
+        """Covers: B99"""
+        self.a_due_day()
+        good = judged(self.handed_facts())
+        four = {**good, "candidates": [{"text": f"Dana likes tea number {n}"} for n in range(4)]}
+
+        self.assertEqual(self.problems(four), ["$.candidates: 4 candidates, at most 3"])
+
+    def test_a_line_break_in_a_topic_a_detail_a_note_or_a_candidate_is_refused(self) -> None:
+        """Covers: B99"""
+        self.a_due_day()
+        good = judged(self.handed_facts())
+        for field in ("topic", "state_detail", "note"):
+            broken = json.loads(json.dumps(good))
+            broken["sessions"][0][field] = "Invoice export\n## Not a heading"
+            with self.subTest(field=field):
+                self.assertEqual(self.problems(broken), [f"$.sessions[0].{field}: holds a line break"])
+        candidate = {**good, "candidates": [{"text": "Dana reviews\nthe export"}]}
+        self.assertEqual(self.problems(candidate), ["$.candidates[0].text: holds a line break"])
+        booking = json.loads(json.dumps(good))
+        booking["sessions"][0]["blocks"]["b1"]["activity"] = "Review\x0b## Not a heading"
+        self.assertEqual(self.problems(booking), ["$.sessions[0].blocks.b1.activity: holds a line break"])
 
 
 class RerunTest(DailyFixture):
@@ -469,7 +736,7 @@ class RerunTest(DailyFixture):
         (self.store / STATE).mkdir(parents=True)
         (self.store / STATE / "intent.json").write_text("{", encoding="utf-8")
 
-        with self.assertRaisesRegex(DailyError, "fix or remove it by hand"):
+        with self.assertRaisesRegex(DailyError, "repair it by hand: m2b-worklog state"):
             self.run_daily()
 
 
@@ -491,8 +758,12 @@ if arguments == ["config", "get", "store.path", "--json"]:
 elif arguments == ["profile", "get", "--json"]:
     print({json.dumps(self.profile)!r})
 elif arguments[:2] == ["curate", "model"]:
-    # The model may hand in a verdict that is refused; the step itself still ends well.
-    subprocess.run([{str(COMMAND)!r}, "verdict", open({str(verdict)!r}).read()])
+    # The model writes its verdict to the file the facts name, then hands it in; a refused one still
+    # ends the step well.
+    facts = json.loads(subprocess.run([{str(COMMAND)!r}, "facts", "--json"], capture_output=True, text=True).stdout)
+    with open(facts["verdict_file"], "w", encoding="utf-8") as draft:
+        draft.write(open({str(verdict)!r}).read())
+    subprocess.run([{str(COMMAND)!r}, "verdict"])
 elif arguments[:3] == ["tasks", "add", "--candidate"]:
     print("aaaa00000001")
 else:
@@ -503,7 +774,12 @@ else:
         return calls
 
     def command(self, *arguments: str) -> subprocess.CompletedProcess[str]:
-        environ = {
+        return subprocess.run(
+            [str(COMMAND), *arguments], capture_output=True, text=True, env=self.environ(), timeout=60
+        )
+
+    def environ(self) -> dict[str, str]:
+        return {
             "PATH": os.environ.get("PATH", ""),
             "M2B_HOME": str(self.home),
             "HOME": str(self.home),
@@ -511,8 +787,8 @@ else:
             "M2B_HERDR": str(self.base / "no-herdr"),
             "GIT_CONFIG_GLOBAL": str(self.base / "gitconfig"),
             "GIT_CONFIG_NOSYSTEM": "1",
+            "TZ": TEST_TZ,
         }
-        return subprocess.run([str(COMMAND), *arguments], capture_output=True, text=True, env=environ, timeout=60)
 
     def test_run_asks_the_core_for_the_model_step_and_the_candidates(self) -> None:
         calls = self.launcher()
@@ -532,6 +808,25 @@ else:
         [note] = self.worklog_notes()
         self.assertIn("- herdr: herdr did not answer", (self.store / note).read_text(encoding="utf-8"))
 
+    def test_state_shows_the_watermark_and_the_last_period_and_names_a_broken_file(self) -> None:
+        """Covers: B87"""
+        self.launcher()
+        self.a_due_day()
+        self.run_daily()
+        (self.store / STATE / "intent.json").write_text("{", encoding="utf-8")
+
+        shown = self.command("state")
+
+        self.assertEqual(shown.returncode, 0, shown.stderr)
+        self.assertIn(f"watermark: {NOW.isoformat()}", shown.stdout)
+        self.assertIn("unfinished worklog: cannot be read", shown.stdout)
+        self.assertIn(f"ledger: 1 period, the last from {DAY_BEFORE.isoformat()} to {NOW.isoformat()}", shown.stdout)
+
+        (self.store / STATE / "watermark.json").unlink()
+        missing = self.command("state")
+
+        self.assertIn(f"watermark: missing; it belongs at {NOW.isoformat()}", missing.stdout)
+
     def test_facts_and_verdict_are_what_the_model_step_calls(self) -> None:
         self.launcher()
         (self.base / "verdict.json").write_text("{}", encoding="utf-8")
@@ -542,8 +837,10 @@ else:
         collected = self.command("collect", "--now", NOW.isoformat())
         daily.hand_to_model(self.paths, self.store, "en", json.loads(collected.stdout))
         handed = self.command("facts", "--json")
-        refused = self.command("verdict", "{}")
-        accepted = self.command("verdict", json.dumps(judged(json.loads(handed.stdout)["facts"])))
+        hand_in(self.paths, {})
+        refused = self.command("verdict")
+        hand_in(self.paths, judged(json.loads(handed.stdout)["facts"]))
+        accepted = self.command("verdict")
 
         self.assertEqual(failed.returncode, 1)
         self.assertIn("handed in no verdict", failed.stderr)
@@ -554,6 +851,65 @@ else:
         self.assertEqual(refused.returncode, 1)
         self.assertIn("- $: version is missing", refused.stderr)
         self.assertEqual((accepted.returncode, accepted.stdout), (0, "verdict accepted\n"))
+
+    def test_a_folder_with_an_apostrophe_is_judged_and_accepted(self) -> None:
+        """Covers: B99"""
+        self.launcher()
+        # A transcript and no workspace of herdr's: the session is keyed by the folder as written.
+        self.watermark(DAY_BEFORE)
+        folder = self.home / "code" / "Bob's project"
+        folder.mkdir(parents=True)
+        self.transcript(
+            "s2",
+            folder,
+            [
+                {"type": "user", "timestamp": "2026-03-14T15:00:00Z", "message": {"content": "Sketch the shelf plan"}},
+                {"type": "user", "timestamp": "2026-03-14T15:10:00Z", "message": {"content": "Shorter please"}},
+            ],
+        )
+        collected = self.command("collect", "--now", NOW.isoformat())
+        self.assertEqual(collected.returncode, 0, collected.stderr)
+        found = json.loads(collected.stdout)
+        self.assertIn(f"folder:{folder}", [session["key"] for session in found["sessions"]])
+        daily.hand_to_model(self.paths, self.store, "en", found)
+
+        hand_in(self.paths, judged(found))
+        accepted = self.command("verdict")
+
+        self.assertEqual((accepted.returncode, accepted.stdout), (0, "verdict accepted\n"), accepted.stderr)
+
+    def test_the_model_step_hands_a_key_with_an_apostrophe_in_through_its_fence(self) -> None:
+        """Covers: B99"""
+        self.launcher()
+        self.watermark(DAY_BEFORE)
+        folder = self.home / "code" / "Bob's project"
+        folder.mkdir(parents=True)
+        self.transcript(
+            "s2",
+            folder,
+            [
+                {"type": "user", "timestamp": "2026-03-14T15:00:00Z", "message": {"content": "Sketch the shelf plan"}},
+                {"type": "user", "timestamp": "2026-03-14T15:10:00Z", "message": {"content": "Shorter please"}},
+            ],
+        )
+        found = json.loads(self.command("collect", "--now", NOW.isoformat()).stdout)
+        daily.hand_to_model(self.paths, self.store, "en", found)
+        # The model's own calls, replayed by the fake under the step's fence as Claude Code would.
+        actions = self.base / "actions.json"
+        draft = json.loads(self.command("facts", "--json").stdout)["verdict_file"]
+        write = {"tool": "Write", "file_path": draft, "content": json.dumps(judged(found))}
+        actions.write_text(json.dumps({"actions": [write, {"tool": "Bash", "command": "m2b-worklog verdict"}]}))
+        rules = list(daily.verdict_rules(self.paths))
+        environ = {**self.environ(), "M2B_STUB_STORE": str(self.store)}
+        command = [sys.executable, str(FAKE_CLAUDE), str(actions), "-p", "/m2b:worklog-verdict"]
+        command += ["--plugin-dir", str(PLUGIN_ROOT), "--permission-mode", "dontAsk", "--allowedTools", *rules]
+
+        ran = subprocess.run(command, capture_output=True, text=True, env=environ, timeout=60)
+
+        [result] = [json.loads(line) for line in ran.stdout.splitlines() if '"type": "result"' in line]
+        self.assertEqual(result["permission_denials"], [])
+        stored = json.loads((self.paths.run_dir / "verdict.json").read_text(encoding="utf-8"))
+        self.assertEqual([session["key"] for session in stored["sessions"]], [f"folder:{folder}"])
 
     def test_recordings_delete_removes_what_the_recorder_wrote_and_any_facts_handed_over(self) -> None:
         self.events("w1", (at(10), "focus", None))

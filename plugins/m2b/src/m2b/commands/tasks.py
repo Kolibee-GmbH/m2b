@@ -30,7 +30,7 @@ def tasks_list(arguments: argparse.Namespace, context: Context) -> int:
     for _, problem in configured.unreadable():
         print(f"m2b: {problem}; this task is left out until the file is fixed", file=sys.stderr)
     if arguments.json:
-        print_json([_task_json(task) for task in found])
+        print_json([task_json(task) for task in found])
         return 0
     for task in found:
         due = f"  (due {iso(task.due)})" if task.due is not None else ""
@@ -107,7 +107,7 @@ def tasks_notes(arguments: argparse.Namespace, context: Context) -> int:
     return 0
 
 
-def _task_json(task: Task) -> dict[str, Any]:
+def task_json(task: Task) -> dict[str, Any]:
     return {
         "id": task.id,
         "title": task.title,

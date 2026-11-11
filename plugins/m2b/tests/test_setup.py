@@ -272,9 +272,9 @@ class NewStoreTest(SetupTest):
     def test_each_addon_is_listed_with_whether_it_is_on(self) -> None:
         _, result, _ = self.apply(self.answers())
 
-        self.assertEqual([(addon["name"], addon["on"]) for addon in result["addons"]], [
-            ("band", False), ("herdr", False), ("worklog", False), ("backup", False),
-        ])  # fmt: skip
+        listed = [(addon["name"], addon["on"]) for addon in result["addons"]]
+
+        self.assertEqual(listed, [("worklog", False)])
 
 
 class JoinTest(SetupTest):
@@ -399,7 +399,7 @@ class JoinTest(SetupTest):
         self.machine.config_file.write_text(json.dumps({
             "version": 1, "machine_id": "sb-test-m1", "store": {"backend": "folder", "path": "/elsewhere"},
             "curation": {"model_timeout_minutes": 20},
-            "addons": {"backup": {"on": True, "target": "~/sb-test-backup"}},
+            "addons": {"worklog": {"on": True, "default_sphere": "own"}},
         }), encoding="utf-8")  # fmt: skip
 
         code, result, err = self.apply(
@@ -411,8 +411,8 @@ class JoinTest(SetupTest):
         self.assertEqual(raw["machine_id"], "sb-test-m1")
         self.assertEqual(raw["store"]["path"], str(self.store_root))
         self.assertEqual(raw["curation"], {"model_timeout_minutes": 20})
-        self.assertEqual(raw["addons"], {"backup": {"on": True, "target": "~/sb-test-backup"}})
-        self.assertEqual([addon["name"] for addon in result["addons"] if addon["on"]], ["backup"])
+        self.assertEqual(raw["addons"], {"worklog": {"on": True, "default_sphere": "own"}})
+        self.assertEqual([addon["name"] for addon in result["addons"] if addon["on"]], ["worklog"])
 
 
 class InspectTest(SetupTest):

@@ -14,9 +14,23 @@ Run each `m2b` command in a Bash call of its own, as shown: nothing chained befo
 no `echo $?`. This skill may run the command alone without asking, and Claude Code reports a
 failing exit code by itself.
 
-If the owner asked to remove the worklog, go to section 6.
+If the owner asked to remove the worklog, go to section 7.
 
-## 1. Only on the curating machine
+## 1. herdr first
+
+The worklog sees work through herdr, so ask before anything else:
+
+```bash
+m2b-worklog recorder check --json
+```
+
+- `ready: true`: go on.
+- `ready: false`: tell the owner the worklog needs herdr 0.9 or later, running, and pass on
+  `problem` in its own words (herdr missing, too old, or not running). Stop here, before any
+  question: a profile with spheres is of no use without herdr. Running this setup again once herdr
+  runs finishes it.
+
+## 2. Only on the curating machine
 
 ```bash
 m2b-worklog machine --json
@@ -29,7 +43,7 @@ m2b-worklog machine --json
   the other machine), then this setup runs again. Stop.
 - `this_machine_curates: true`: go on.
 
-## 2. What the profile holds
+## 3. What the profile holds
 
 ```bash
 m2b profile get --json
@@ -41,7 +55,7 @@ Show the owner the `spheres` and `customers` it holds, if any. A sphere looks li
 {"id": "acme", "label": "Acme Ltd", "billable": true, "match": {"git_remote_contains": ["github.com/acme-ltd/"], "path_under": ["~/code/acme"]}}
 ```
 
-## 3. Ask
+## 4. Ask
 
 Ask, one question at a time, and only what is missing or what the owner wants to change:
 
@@ -57,7 +71,7 @@ Ask, one question at a time, and only what is missing or what the owner wants to
 4. **Customers**: the names booking proposals may use, as the owner writes them on a timesheet.
    The worklog only reads this list; it never adds to it.
 
-## 4. Write
+## 5. Write
 
 All answers in one object. A sphere replaces the one with its `id` and a sphere not named stays
 as it is, so send a changed sphere whole; customers are added, and a name already there stays
@@ -73,15 +87,15 @@ Only to take a customer off the list, set the complete list instead:
 m2b profile set customers '["<name>", "<name>"]'
 ```
 
-Then the recorder, which
-copies itself to `~/.local/share/m2b/worklog-recorder/` and links that copy in herdr:
+Then the recorder, a plugin it hooks into herdr: it copies itself to
+`~/.local/share/m2b/worklog-recorder/` and links that copy in herdr:
 
 ```bash
 m2b-worklog recorder install
 ```
 
-If it says herdr was not found or did not answer, tell the owner the worklog needs herdr running
-and stop here; running this setup again later finishes it. Then turn the add-on on, so each
+If it fails, pass the one line on and stop here; running this setup again finishes it. Then turn
+the add-on on, so each
 curation run writes the daily worklog before it files the inbox:
 
 ```bash
@@ -94,15 +108,19 @@ And turn recording on now instead of at the next session:
 m2b-worklog hook session-start
 ```
 
-## 5. Tell the owner
+## 6. Tell the owner
 
-In two or three sentences: herdr now records when agents work and which workspace has focus,
-into `~/.local/state/m2b/worklog/` on this machine only. The first worklog is written by the next
+In three or four sentences: herdr now records when agents work and which workspace has focus,
+into `~/.local/state/m2b/worklog/` on this machine only, through the plugin
+`m2b.worklog-recorder` this setup hooked into herdr; `/m2b:worklog-setup remove` takes it out
+again. A timer of the operating system runs the recorder every five minutes; while herdr runs it
+writes a sign of life, so a stretch it did not record shows in the note as not recorded instead of
+as a time without work. If the install line says the timer could not be set up, pass that on. The first worklog is written by the next
 curation run, covering at most the last three days, and then once a day. The note lands in the
 archive like any capture; the time spans are in `state/addons/worklog/ledger.csv` and
 `ledger.xlsx` in the store, regenerated every day and not for editing.
 
-## 6. Remove
+## 7. Remove
 
 One command after the other:
 

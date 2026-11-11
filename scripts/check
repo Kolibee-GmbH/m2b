@@ -1,13 +1,13 @@
 #!/bin/sh
 # The repository's proof.
 #
-#   scripts/check --quick <suite>    one suite with python3 on PATH: m2b (the core), worklog, backup,
-#                                    herdr, or band (the mod's tests)
+#   scripts/check --quick <suite>    one suite with python3 on PATH: m2b (the core's Python), band
+#                                    (the core's mod, in Claude Code's test kit) or worklog
 #   scripts/check                    everything; exits 1 when any stage fails
 #
 # The full run covers the unit tests of the core, of each add-on and of the repository tools (with
 # python3, and on macOS also with /usr/bin/python3 when that is Python 3.9), ruff, mypy,
-# the shell linter, the plugin manifest, the tests of the band mod, the B/X coverage report and
+# the shell linter, the plugin manifest, the tests of the band (the core's mod), the B/X coverage report and
 # the end-to-end scenarios at the stub level.
 #
 # The add-ons' tests sit in plugins/m2b/tests/addons/<add-on>/ under a folder without __init__.py, so
@@ -28,7 +28,7 @@ failed_stages=""
 # and give every variable they set a name no other function uses.
 
 usage() {
-    echo "usage: scripts/check [--quick m2b|worklog|backup|herdr|band]" >&2
+    echo "usage: scripts/check [--quick m2b|worklog|band]" >&2
     exit 2
 }
 
@@ -134,7 +134,7 @@ shell_checks() {
         return 0
     fi
     shellcheck scripts/check scripts/e2e scripts/e2e-shortcut-setup scripts/no-model scripts/readme-images \
-        "$PLUGIN"/bin/m2b "$PLUGIN"/bin/m2b-herdr "$PLUGIN"/bin/m2b-worklog "$PLUGIN"/bin/m2b-backup
+        "$PLUGIN"/bin/m2b "$PLUGIN"/bin/m2b-worklog
 }
 
 manifest_checks() {

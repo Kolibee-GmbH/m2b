@@ -123,11 +123,11 @@ class LauncherTest(unittest.TestCase):
         self.record({"worklog@m2b": [{"scope": "user", "installPath": "/plugins/worklog/0.1.0"}]})
 
         found = self.main("launcher", "resolve", "worklog")
-        missing = self.main("launcher", "resolve", "backup")
+        missing = self.main("launcher", "resolve", "garden")
 
         self.assertEqual(found[:2], (cli.EXIT_OK, "/plugins/worklog/0.1.0\n"))
         self.assertEqual(missing[0], 3)
-        self.assertIn("backup@m2b", missing[2])
+        self.assertIn("garden@m2b", missing[2])
 
     def test_the_launcher_uses_the_recorded_python(self) -> None:
         machine.save_machine_config(

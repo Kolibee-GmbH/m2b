@@ -1,5 +1,6 @@
 """The ``m2b-worklog`` command.
 
+``recorder check`` says whether herdr is there, new enough and running, which setup asks first.
 ``recorder install`` and ``recorder remove`` copy the recorder and link it in herdr, or unlink it;
 both run twice without harm. ``recordings delete`` deletes what the recorder wrote. ``collect``
 prints the facts of the period since the watermark. ``run`` is the daily worklog, the module's
@@ -32,6 +33,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="group", required=True)
     recorder_group = commands.add_parser("recorder", help="the activity recorder in herdr")
     recorder_commands = recorder_group.add_subparsers(dest="command", required=True)
+    check_command = recorder_commands.add_parser("check", help="whether herdr is installed, new enough and running")
+    check_command.add_argument("--json", action="store_true", help="answer as JSON")
     recorder_commands.add_parser("install", help="copy the recorder and link it in herdr")
     recorder_commands.add_parser("remove", help="unlink the recorder and delete its copy; recordings stay")
     recordings = commands.add_parser("recordings", help="what the recorder wrote on this machine")
@@ -41,8 +44,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     run.add_argument("--now", help="the period's end, ISO 8601 with an offset (default: now)")
     facts_command = commands.add_parser("facts", help="the facts being judged, for the verdict's model step")
     facts_command.add_argument("--json", action="store_true", help="accepted for symmetry; the output is JSON")
-    verdict_command = commands.add_parser("verdict", help="hand in the verdict: checked, then stored")
-    verdict_command.add_argument("verdict", help="the verdict as one JSON object")
+    commands.add_parser("verdict", help="hand in the verdict written to the file `facts` names: checked, then stored")
+    state_command = commands.add_parser(
+        "state", help="the watermark, an unfinished worklog and the last period in the ledger"
+    )
+    state_command.add_argument("--json", action="store_true", help="answer as JSON")
     machine = commands.add_parser("machine", help="whether this machine curates, so it may record")
     machine.add_argument("--json", action="store_true", help="answer as JSON")
     collect = commands.add_parser("collect", help="the facts of the period since the watermark, as JSON")
@@ -67,20 +73,35 @@ def main(argv: Sequence[str] | None = None) -> int:
     if arguments.group == "facts":
         return _facts(paths)
     if arguments.group == "verdict":
-        return _verdict(paths, arguments.verdict)
+        return _verdict(paths)
     if arguments.group == "machine":
         return _machine(paths, arguments.json)
+    if arguments.group == "state":
+        return _state(paths, arguments.json)
     if arguments.group == "recordings":
         shutil.rmtree(paths.state_dir, ignore_errors=True)
         shutil.rmtree(paths.run_dir, ignore_errors=True)
         print(f"recordings deleted: {paths.state_dir}, {paths.run_dir}")
         return EXIT_OK
+    if arguments.command == "check":
+        return _check(arguments.json)
     action = recorder.install if arguments.command == "install" else recorder.remove
     try:
         print(action(paths, os.environ))
     except (recorder.HerdrError, OSError) as error:
         print(f"m2b-worklog: {error}", file=sys.stderr)
         return EXIT_PROBLEM
+    return EXIT_OK
+
+
+def _check(as_json: bool) -> int:
+    answer = recorder.check(os.environ)
+    if as_json:
+        print(json.dumps(answer))
+    elif answer["ready"]:
+        print(f"herdr {answer['herdr']} is running")
+    else:
+        print(answer["problem"])
     return EXIT_OK
 
 
@@ -129,9 +150,9 @@ def _facts(paths: WorklogPaths) -> int:
     return EXIT_OK
 
 
-def _verdict(paths: WorklogPaths, raw: str) -> int:
+def _verdict(paths: WorklogPaths) -> int:
     try:
-        problems = daily.accept_verdict(paths, raw)
+        problems = daily.accept_verdict(paths)
     except (OSError, daily.DailyError) as error:
         print(f"m2b-worklog: {error}", file=sys.stderr)
         return EXIT_PROBLEM
@@ -141,6 +162,37 @@ def _verdict(paths: WorklogPaths, raw: str) -> int:
             print(f"- {problem}", file=sys.stderr)
         return EXIT_PROBLEM
     print("verdict accepted")
+    return EXIT_OK
+
+
+def _state(paths: WorklogPaths, as_json: bool) -> int:
+    try:
+        store = Path(core.ask(paths, ["config", "get", "store.path"]))
+    except core.CoreError as error:
+        print(f"m2b-worklog: {error}", file=sys.stderr)
+        return EXIT_PROBLEM
+    shown = daily.state(store)
+    if as_json:
+        print(json.dumps(shown, indent=1))
+        return EXIT_OK
+    last = shown["ledger"]["last"] if isinstance(shown["ledger"], dict) else None
+    unfinished = shown["unfinished"]
+    if shown["watermark"]:
+        print(f"watermark: {shown['watermark']}")
+    elif last:
+        print(f"watermark: missing; it belongs at {last['end']}, the end of the last period in the ledger")
+    else:
+        print("watermark: none yet, the first worklog reaches three days back")
+    if isinstance(unfinished, dict):
+        print(f"unfinished worklog: {unfinished['start']} to {unfinished['end']}; the next run finishes it")
+    else:
+        print(f"unfinished worklog: {unfinished or 'none'}")
+    if isinstance(shown["ledger"], dict):
+        count = shown["ledger"]["periods"]
+        held = f"{count} period{'' if count == 1 else 's'}"
+        print(f"ledger: {held}" + (f", the last from {last['start']} to {last['end']}" if last else ""))
+    else:
+        print(f"ledger: {shown['ledger']}")
     return EXIT_OK
 
 

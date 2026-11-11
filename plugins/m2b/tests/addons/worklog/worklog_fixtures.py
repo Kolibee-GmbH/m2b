@@ -1,4 +1,4 @@
-"""Shared test setup: a temporary home, a fake herdr, a fake installed_plugins.json, the recorder module."""
+"""Shared test setup: a temporary home, a fake herdr and timer, a fake installed_plugins.json, the recorder module."""
 
 from __future__ import annotations
 
@@ -26,8 +26,9 @@ def load_recorder() -> ModuleType:
     return module
 
 
-def executable(path: Path, script: Path) -> Path:
-    path.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{script}" "$@"\n', encoding="utf-8")
+def executable(path: Path, script: Path, name: str = "") -> Path:
+    named = f"FAKE_COMMAND_NAME={name} " if name else ""
+    path.write_text(f'#!/bin/sh\n{named}exec "{sys.executable}" "{script}" "$@"\n', encoding="utf-8")
     path.chmod(0o755)
     return path
 
@@ -51,6 +52,9 @@ class WorklogFixture(unittest.TestCase):
         self.herdr_calls = self.base / "herdr-calls.txt"
         self.herdr_reply = self.base / "snapshot.json"
         self.herdr = executable(self.base / "herdr", FAKES / "fake_herdr.py")
+        self.timer_calls = self.base / "timer-calls.txt"
+        self.launchctl = executable(self.base / "launchctl", FAKES / "fake_timer.py", name="launchctl")
+        self.systemctl = executable(self.base / "systemctl", FAKES / "fake_timer.py", name="systemctl")
         self.environ = {
             "HOME": str(self.base / "not-the-home"),
             "M2B_HOME": str(self.home),
@@ -61,6 +65,11 @@ class WorklogFixture(unittest.TestCase):
             "FAKE_HERDR_REPLY": str(self.herdr_reply),
             "CLAUDE_CONFIG_DIR": str(self.base / "claude-config"),
             "M2B_MANAGED_SETTINGS": str(self.base / "no-managed-settings.json"),
+            "M2B_LAUNCHCTL": str(self.launchctl),
+            "M2B_SYSTEMCTL": str(self.systemctl),
+            "FAKE_TIMER_CALLS": str(self.timer_calls),
+            "XDG_CONFIG_HOME": str(self.home / ".config"),
+            "M2B_TIMER_PLATFORM": "darwin",
         }
 
     def install_plugins(self, *keys: str) -> None:
@@ -83,6 +92,15 @@ class WorklogFixture(unittest.TestCase):
             return {}
         linked: dict[str, str] = json.loads(self.herdr_state.read_text(encoding="utf-8"))["linked"]
         return linked
+
+    def herdr_holds_version(self, version: str) -> None:
+        """As herdr does for a recorder linked by an older m2b: the registration from back then."""
+        state = json.loads(self.herdr_state.read_text(encoding="utf-8"))
+        state["versions"] = {key: version for key in state["linked"]}
+        self.herdr_state.write_text(json.dumps(state), encoding="utf-8")
+
+    def timer_calls_made(self) -> list[str]:
+        return self.timer_calls.read_text(encoding="utf-8").splitlines() if self.timer_calls.exists() else []
 
     def herdr_calls_made(self) -> list[str]:
         return self.herdr_calls.read_text(encoding="utf-8").splitlines() if self.herdr_calls.exists() else []

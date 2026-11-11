@@ -22,8 +22,9 @@ A scenario is a folder under ``tests/e2e/`` with:
 Steps run with ``M2B_HOME`` pointing at a fresh temporary folder that holds a
 test config, with the core plugin's ``bin/`` first on ``PATH``, and with ``M2B_MODEL_RUNNER``
 pointing at the stub, so no scenario starts the real model at this level. At this level
-``CLAUDE_CONFIG_DIR`` and ``M2B_HERDR`` point into the scenario's folder too, so an add-on never
-reads the user's own transcripts or asks the user's herdr.
+``CLAUDE_CONFIG_DIR``, ``M2B_HERDR``, ``M2B_LAUNCHCTL`` and ``M2B_SYSTEMCTL`` point into the
+scenario's folder too, so an add-on never reads the user's own transcripts, asks the user's herdr
+or changes the user's timers.
 
 At ``--level model`` only scenarios with a ``model.json`` run: ``{"steps": [...], "invariants":
 [...]}``, the steps in the same form but with the real fenced ``claude`` and the user's own login,
@@ -314,6 +315,8 @@ def run_scenario(
             scenario_steps = _read_json(scenario / "steps.json")
             environment["CLAUDE_CONFIG_DIR"] = str(sandbox / "claude-config")
             environment["M2B_HERDR"] = str(sandbox / "no-herdr")
+            environment["M2B_LAUNCHCTL"] = str(sandbox / "no-launchctl")
+            environment["M2B_SYSTEMCTL"] = str(sandbox / "no-systemctl")
             stub = _model_stub(sandbox, scenario_steps.get("model", {"actions": []}))
             environment[MODEL_RUNNER_VARIABLE] = str(stub)
             environment[MODEL_STUB_STORE_VARIABLE] = str(store)

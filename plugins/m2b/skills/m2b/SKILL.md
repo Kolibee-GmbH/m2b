@@ -1,6 +1,6 @@
 ---
 name: m2b
-description: The entry point of m2b, the owner's second brain - says what it is and what to type, and with an argument guides through setup, shows the status or checks the machine. Use when the user types /m2b:m2b, asks "what is m2b", "how do I use my second brain", "what can m2b do", "is my second brain working", or wants the add-ons (band, herdr, worklog, backup) explained or turned on.
+description: The entry point of m2b, the owner's second brain - says what it is and what to type, and with an argument guides through setup, shows the status or checks the machine. Use when the user types /m2b:m2b, asks "what is m2b", "how do I use my second brain", "what can m2b do", "is my second brain working", says "the band is empty", "the band says could not look", "das Band zeigt nichts", "the status line is missing", or wants the worklog add-on explained or turned on.
 argument-hint: "[setup | status | doctor | addons]"
 allowed-tools: Bash(m2b status), Bash(m2b status *), Bash(m2b doctor), Bash(m2b doctor *), Bash(m2b addons *)
 ---
@@ -40,8 +40,8 @@ m2b addons list --json
 
 For each add-on, say in one line what it does (its `summary`) and whether it is on. For each
 add-on that is off, ask whether to turn it on, one at a time; on a yes, run that add-on's setup
-skill, `m2b:<add-on>-setup`, with the Skill tool. herdr and the
-worklog need herdr; say so before asking. Turning an add-on off is
+skill, `m2b:<add-on>-setup`, with the Skill tool. The worklog
+needs herdr; say so before asking. Turning an add-on off is
 `m2b addons off <add-on>`; its settings stay.
 
 ## `status`
@@ -64,7 +64,10 @@ m2b doctor
 Report each line whose state is `not reachable`, `missing`, `not installed`, `newer` (the store format: update
 m2b on this machine) or `not usable for curation` (the store path: move the store to a folder the line
 allows and set `store.path` to it), with what to do. Report `not recorded`
-too, and say that it matters only on the machine that curates, where the model steps need that program. When all are fine, say so in one line.
+too, and say that it matters only on the machine that curates, where the model steps need that program. Report
+`band: not seen` with the reason its line gives: the band above the prompt and the status line are
+missing because Claude Code loads no mods, or no plugin hooks at all, in the latest session. When all
+are fine, say so in one line.
 
 ## Any other argument
 

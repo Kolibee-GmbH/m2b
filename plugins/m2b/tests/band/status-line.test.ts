@@ -32,46 +32,46 @@ function answer(fields: Record<string, unknown>): Record<string, unknown> {
 
 describe('the status line', () => {
   test('names the inbox and the time of the last run today', () => {
-    expect(statusLine(answer({}), NOW)).toBe('brain: 3 in inbox · curated 18:02')
+    expect(statusLine(answer({}), NOW)).toBe('3 in inbox · curated 18:02')
   })
 
   test('names the day of a last run before today, read in its own offset', () => {
     const run = { state: 'succeeded', last_succeeded_at: '2026-03-13T23:50:00+01:00' }
-    expect(statusLine(answer({ run }), NOW)).toBe('brain: 3 in inbox · curated 2026-03-13')
+    expect(statusLine(answer({ run }), NOW)).toBe('3 in inbox · curated 2026-03-13')
   })
 
   test('says a run is in progress', () => {
-    expect(statusLine(answer({ run: { state: 'running' } }), NOW)).toBe('brain: curating')
+    expect(statusLine(answer({ run: { state: 'running' } }), NOW)).toBe('curating')
   })
 
   test('says the last run failed', () => {
-    expect(statusLine(answer({ run: { state: 'failed' } }), NOW)).toBe('brain: last run failed, see review')
+    expect(statusLine(answer({ run: { state: 'failed' } }), NOW)).toBe('last run failed, see review')
   })
 
   test('says the last run was interrupted', () => {
-    expect(statusLine(answer({ run: { state: 'interrupted' } }), NOW)).toBe('brain: last run interrupted')
+    expect(statusLine(answer({ run: { state: 'interrupted' } }), NOW)).toBe('last run interrupted')
   })
 
   test('says when nothing has been curated yet', () => {
     expect(statusLine(answer({ inbox: { count: 0 }, run: { state: 'none' } }), NOW)).toBe(
-      'brain: 0 in inbox · not curated yet',
+      '0 in inbox · not curated yet',
     )
   })
 
   test('names a backend that cannot be reached', () => {
     const backends = { ...REACHABLE, tasks: { state: 'not reachable', detail: 'no grant' } }
     expect(statusLine(answer({ backends, run: { state: 'running' } }), NOW)).toBe(
-      'brain: curating · tasks not reachable',
+      'curating · tasks not reachable',
     )
   })
 
   test('says which part it could not read', () => {
-    expect(statusLine(answer({ run: { error: 'bad record' } }), NOW)).toBe('brain: could not read the last run')
+    expect(statusLine(answer({ run: { error: 'bad record' } }), NOW)).toBe('could not read the last run')
     expect(statusLine(answer({ inbox: { error: 'gone' } }), NOW)).toBe(
-      'brain: could not read the inbox · curated 18:02',
+      'could not read the inbox · curated 18:02',
     )
     expect(statusLine(answer({ store_error: 'bad json' }), NOW)).toBe(
-      'brain: 3 in inbox · curated 18:02 · could not read store.json',
+      '3 in inbox · curated 18:02 · could not read store.json',
     )
   })
 

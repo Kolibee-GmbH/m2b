@@ -150,9 +150,8 @@ class RunnerTest(test_commands.CommandTest):
         script.write_text(ADDON_STEP.format(python=sys.executable), encoding="utf-8")
         script.chmod(0o755)
         fake = addons.Addon(name, "a fake add-on", addons.AddonStep(slot, (str(script), "run")))
-        patcher = mock.patch.object(
-            addons, "ADDONS", tuple(fake if addon.name == name else addon for addon in addons.ADDONS)
-        )
+        others = tuple(addon for addon in addons.ADDONS if addon.name != name)
+        patcher = mock.patch.object(addons, "ADDONS", (*others, fake))
         patcher.start()
         self.addCleanup(patcher.stop)
         machine.set_addon_on(self.machine, name, True)
@@ -841,7 +840,7 @@ class AddonStepTest(RunnerTest):
         self.capture()
         self.model({"m2b:ingest": INGEST_FILES_THE_CAPTURE})
         before = self.addon("worklog", "before_ingest")
-        after = self.addon("backup", "after_journal")
+        after = self.addon("sample", "after_journal")
 
         outcome = self.run_curate()
 
@@ -850,7 +849,7 @@ class AddonStepTest(RunnerTest):
         assert record is not None
         self.assertEqual(
             [step.name for step in record.steps],
-            ["harvest", "worklog", "ingest", "refresh", "lint", "journal", "backup", "review"],
+            ["harvest", "worklog", "ingest", "refresh", "lint", "journal", "sample", "review"],
         )
         (seen,) = [json.loads(line) for line in before.read_text(encoding="utf-8").splitlines()]
         self.assertEqual((seen["argv"], seen["cwd_entries"], seen["curation_run"]), (["run"], [], "1"))
@@ -862,21 +861,31 @@ class AddonStepTest(RunnerTest):
         fetch = 2 * datetime.timedelta(seconds=5)
         self.assertEqual(deadline - START, fetch + supervised + runner.CODE_STEPS_MARGIN)
         self.assertTrue(after.exists())
-        self.assertEqual(record.addons, ("worklog", "backup"))
+        self.assertEqual(record.addons, ("worklog", "sample"))
 
-    def test_a_failing_addon_step_is_reported_and_the_run_goes_on(self) -> None:
+    def test_a_failing_addon_step_is_reported_but_neither_fails_the_run_nor_starts_the_backoff(self) -> None:
+        """Covers: B13, B63"""
         self.curating()
+        self.capture()
+        self.model({"m2b:ingest": INGEST_FILES_THE_CAPTURE})
         self.addon("worklog", "before_ingest")
         self.environ["SB_TEST_ADDON_EXIT"] = "4"
 
         outcome = self.run_curate()
 
-        self.assertEqual(outcome.state, FAILED)
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        self.assertIn("worklog", outcome.message)
         record = load_run_record(self.store)
         assert record is not None
         self.assertEqual([(step.name, step.result) for step in record.steps][1], ("worklog", "failed"))
         self.assertEqual(record.steps[-1].name, "review")
         self.assertIn("exit 4", record.steps[1].detail)
+        self.assertEqual(record.last_success, record.finished_at)
+        self.assertIsNone(machine_state.load_backoff(self.machine))
+        self.assertEqual(list((self.store_root / "inbox").iterdir()), [])
+        (review,) = self.review_tasks()
+        self.assertIn("worklog", review.notes)
+        self.assertIn("exit 4", review.notes)
 
     def test_an_addon_turned_off_has_no_step_and_leaves_nothing_to_clear(self) -> None:
         """Covers: B64"""
@@ -896,7 +905,7 @@ class AddonStepTest(RunnerTest):
 
     def test_the_real_addon_steps_are_this_plugins_own_commands(self) -> None:
         steps = {addon.name: addon.step for addon in addons.ADDONS if addon.step}
-        self.assertEqual(set(steps), {"worklog", "backup"})
+        self.assertEqual(set(steps), {"worklog"})
         for step in steps.values():
             assert step is not None
             self.assertTrue((launcher.PLUGIN_ROOT / step.command[0]).is_file(), step.command)

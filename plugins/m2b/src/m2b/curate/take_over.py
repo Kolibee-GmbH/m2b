@@ -5,7 +5,8 @@ lock; moving curation is this explicit step.
 
 It writes this machine's id into ``store.json``; the old machine stops at its next preflight,
 because it is no longer named. The add-ons that were on in the old machine's last run come from
-the run record, so the owner can set those add-ons up here. While the run record says a run is in
+the run record, so the owner can set those add-ons up here; an add-on m2b no longer has is left
+out, because it has no setup to run. While the run record says a run is in
 progress on another machine and that run is not past its deadline, the take-over is refused: that
 run passed its preflight already and would curate alongside the first run here.
 """
@@ -15,6 +16,7 @@ from __future__ import annotations
 import datetime
 from dataclasses import dataclass
 
+from m2b.addons import addon_names
 from m2b.config import store_path
 from m2b.config.errors import InvalidConfigError
 from m2b.config.json_file import read_store_json_object
@@ -56,7 +58,7 @@ def take_over(
     except RunRecordError as error:
         # The next run's preflight rewrites it; an unreadable record must not keep curation where it is.
         record, problem = None, str(error)
-    addons = record.addons if record else ()
+    addons = tuple(name for name in record.addons if name in addon_names()) if record else ()
     if settings.curating_machine == config.machine_id:
         return TakeOver(config.machine_id, None, addons, problem)
     if (

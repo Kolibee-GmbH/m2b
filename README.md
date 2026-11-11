@@ -36,11 +36,12 @@
   step needs, never in your session. Everything else is plain code: standard library Python, no
   network calls of its own, no server, no database.
 
-![A Claude Code session in an unrelated project answers when Sam brings the plywood and where the shed key is, straight from the distillate, without a tool call; above the prompt the band asks whether planning the trip to Porto is still current, with keep and drop, below it the status line reads "brain: 2 in inbox · curated 21:36"](docs/images/session-start.png)
+![A Claude Code session in an unrelated project answers when Sam brings the plywood and where the shed key is, straight from the distillate, without a tool call; above the prompt the band asks whether planning the trip to Porto is still current, with keep and drop, and lists an overdue task to return Sam's ladder, below it the status line reads "2 in inbox · curated 08:15"](docs/images/session-start.png)
 
 <sub>A new session in an unrelated repository already knows. The band above the prompt and the
-status line below it are the optional `band` add-on; Claude Code draws the ⚠ in front of every
-plugin's status line, it is not a warning. All names and notes are invented.</sub>
+status line below it are [the band](docs/band.md), where m2b asks you to keep or drop; Claude Code
+draws the ⚠ in front of every plugin's status line, it is not a warning. All names and notes are
+invented.</sub>
 
 **Platform.** macOS 14 or newer, or Linux. Not Windows. Apple Reminders, Calendar and iCloud Drive
 are optional; on Linux, and on a Mac if you like, the store is a plain folder and tasks are
@@ -61,7 +62,8 @@ expiring, no memory link to repair) uses no model.
 | curation run | the background run that files the inbox, on one machine per store, the curating machine |
 | distillate | `memory/MEMORY.md`: lasting facts, each pointing to its fact file in `memory/`, and under "Current" what is going on now |
 | topic | a heading in the distillate for one subject, such as a customer or a club, whose facts come in only when a session is about it |
-| add-on | an optional piece of m2b, off until its own setup: `band`, `backup`, `herdr`, `worklog` |
+| band | the rows above the prompt where you keep or drop what curation proposes, and the status line below it |
+| add-on | an optional piece of m2b, off until its own setup: `worklog` |
 
 ## Who it is for
 
@@ -228,24 +230,33 @@ current? ...": tick it and it stays; drop it in the band, or delete the task, an
 distillate. The worklog add-on may propose a fact the same way, as "Remember? ...": tick it and the
 next run files it; drop it in the band, or delete the task, and it does not come back for 90 days.
 
+## The band
+
+Above the prompt, [the band](docs/band.md) shows memory candidates and "Still current?" questions,
+each with keep and drop buttons you click with the mouse (a click waits 5 seconds with `undo`
+before it writes), and the open review task with its first findings; below the prompt, a status
+line such as `3 in inbox · curated 18:02`. `/m2b-note <text>` notes a text into the inbox at once,
+without a model turn, also while one is working. `/m2b-review` opens a pane with the whole last
+curation run, and `/m2b-search <text>` shows search hits there. The model notes and searches
+through two tools of the mod, `mcp__m2b__note` and `mcp__m2b__search`, without a shell call. The
+band is part of m2b and starts once m2b is set up. It is a mod, so it needs mods on in Claude Code; `m2b doctor` says
+whether the latest session ran it, and why not.
+
 ## Add-ons
 
-m2b is one plugin. Four add-ons in it are off until you set them up; each has its own setup skill,
-and `m2b addons list` shows which are on.
+m2b is one plugin. One add-on in it is off until you set it up with its own setup skill, and
+`m2b addons list` shows whether it is on.
 
 | Add-on | What it adds | Needs | Setup |
 |---|---|---|---|
-| [`band`](docs/addons/band.md) | A band above the prompt with memory candidates and "Still current?" questions to keep or drop in place and the review task with its findings, and a status line such as `brain: 3 in inbox · curated 18:02` | mods turned on in Claude Code | `/m2b:band-setup` |
-| [`backup`](docs/addons/backup.md) | After each run, a local snapshot: a mirror of the store, a dated attic of replaced files, a dump of the task list | a folder for the snapshot, outside the store; the curating machine | `/m2b:backup-setup` |
-| [`herdr`](docs/addons/herdr.md) | At session start, the other agent sessions open in [herdr](https://herdr.dev), the terminal workspace manager for agents, so overlapping work is noticed before it starts | herdr 0.9 or later, sessions started in a herdr pane | `/m2b:herdr-setup` |
-| [`worklog`](docs/addons/worklog.md) | A daily worklog of your sessions in herdr: topics, time spans per sphere of work, booking proposals for billable spheres, a ledger with CSV and XLSX exports | herdr 0.9 or later; the curating machine, which alone records; your spheres of work and customers, which its setup asks for | `/m2b:worklog-setup` |
+| [`worklog`](docs/addons/worklog.md) | A daily worklog of your sessions in herdr: topics, time spans per sphere of work, booking proposals for billable spheres, a ledger with CSV and XLSX exports | [herdr](https://herdr.dev) 0.9 or later, running; the curating machine, which alone records; your spheres of work and customers, which its setup asks for | `/m2b:worklog-setup` |
 
-Each add-on has its own page, linked in the table: what it reads and writes on the machine and in
-the store, its commands, and how you see that it runs. [Add-ons](docs/addons.md) is the overview.
-To turn an add-on off again, keeping its settings:
+Its page, linked in the table, says what it reads and writes on the machine and in the store, its
+commands, and how you see that it runs. [Add-ons](docs/addons.md) is the overview. To turn it off
+again, keeping its settings:
 
 ```bash
-m2b addons off band
+m2b addons off worklog
 ```
 
 ## Cost and privacy
@@ -264,19 +275,22 @@ due and any archive file; sorting reads memory. Ingest, lint, `--refresh-all` an
 also get `m2b search` results over inbox, archive and memory. With the worklog add-on, its step sees
 the period's prompts and last answers, commits and session folders, the inbox, memory and your task list (below). In every session:
 the distillate, the routing rule and the notices at session start; before a prompt that names a
-topic, that topic's facts; with the herdr add-on, the titles and folders of your other agent
-sessions.
+topic, that topic's facts.
 
 **What the worklog reads** (only while on, only on the curating machine): the herdr events its
 recorder writes to `~/.local/state/m2b/worklog/`, the prompts and the end of each session's last
 answer from your Claude Code transcripts for the period (with credentials and long tokens
 redacted), your own git commits, and the inbox; its model step may also search the archive. Its
 ledger with time spans and booking proposals lands in the store under `state/addons/worklog/`.
-A time span is when a workspace was in use: an agent at work, the workspace in focus (herdr cannot
-tell typing from looking, so focus counts for a limited time after each event), or messages in its
-transcript at most 15 minutes apart, merged across gaps of up to 15 minutes; waiting for an
-approval does not count. An agent left working on its own, a loop through
-the night for one, counts as well, so check a booking proposal before you enter it.
+A time span is when a workspace was in use: an agent at work (up to 30 minutes past its last sign
+of life, so a machine asleep does not count), the workspace in focus (up to 10 minutes after each of
+its own events, because herdr cannot tell typing from looking), or messages in its transcript at most
+15 minutes apart, merged across gaps of up to 15 minutes; waiting for an approval does not count.
+The same minutes count once, also when a workspace is closed and opened again. An agent left working
+on its own, a loop through the night for one, counts as well, so check a booking proposal before you
+enter it. A stretch the recorder did not record, because herdr was not running or the machine slept,
+is named in the note as not recorded, never read as a time without work. The
+[worklog page](docs/addons/worklog.md#time-spans) has the rules.
 
 ## Configure
 
@@ -341,17 +355,16 @@ whether a run is due.
 - The task titles, notes and worklog m2b writes are in English or German; everything else it
   prints is in English. Your notes can be in any language.
 - On Linux there is no calendar backend, and a schedule is a cron line instead of a Shortcut.
-- The worklog needs [herdr](https://herdr.dev) and records only the curating machine. It never books anything: its
+- The worklog needs [herdr](https://herdr.dev) 0.9 or later and records only the curating machine. It never books anything: its
   bookings are proposals for you to enter.
 - Sync is whatever moves the folder. m2b has no sync and no server of its own.
 - Nothing captured is deleted automatically. What does get deleted: conflict copies identical
-  to their original, the product's own leftover temp files, settled candidate tasks, and in the
-  backup the expired attic.
+  to their original, the product's own leftover temp files and settled candidate tasks.
 
 ## Develop
 
 ```bash
-scripts/check --quick m2b   # unit tests of the core (or worklog, backup, herdr, band)
+scripts/check --quick m2b   # unit tests of the core (or worklog, band)
 scripts/check               # everything, must end with "check: passed"
 scripts/e2e --level stub    # end-to-end scenarios without a model
 ```

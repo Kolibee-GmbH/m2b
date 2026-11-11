@@ -94,6 +94,20 @@ def _local(due: Due | None) -> Due | None:
     return due.astimezone() if isinstance(due, datetime.datetime) else due
 
 
+def due_by_today(found: list[Task], now: datetime.datetime) -> list[tuple[Task, bool]]:
+    """The owner's own tasks due today, at any time of it, or overdue, the earliest first, each
+    with whether it is overdue; due times in local time, as the report gives them."""
+    due = []
+    for task in found:
+        if task.marker in CURATOR_MARKERS or task.due is None:
+            continue
+        task = dataclasses.replace(task, due=_local(task.due))
+        assert task.due is not None
+        if _is_overdue(task.due, now) or _day_of(task.due) <= now.date():
+            due.append(task)
+    return [(task, _is_overdue(task.due, now)) for task in _by_due(due) if task.due is not None]
+
+
 def _is_overdue(due: Due, now: datetime.datetime) -> bool:
     if isinstance(due, datetime.datetime):
         return due < now
