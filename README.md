@@ -168,15 +168,16 @@ your list, such as a review task or a "Remember? ..." candidate.
 ### Capture
 
 In any session, say what you want kept: "remember that Dana's birthday is on 3 March", "note
-this", "remind me to call the plumber on Friday". You type no command: the `capture` skill writes
-one file into `inbox/` with your words verbatim, and with a date it also creates a task that
+this", "remind me to call the plumber on Friday". You type no command: the model's note tool,
+or the `capture` skill where the band does not run, writes one file into `inbox/` with your words
+verbatim, and with a date it also creates a task that
 points back to the note. Say that you want it kept; a sentence on its own, such as "Dana's
 birthday is on 3 March", stays part of the conversation and is not captured.
 
 With Apple Calendar set up, "put it in my calendar" creates an event in the calendar you name,
 never in a default one. Calendar entries are experimental.
 
-![Asked to remember that the shed roof needs 40 screws and to be reminded on Thursday, Claude runs the capture skill, which writes one inbox file and a task due Thursday 12 November; the status line now counts 3 in the inbox](docs/images/capture.png)
+![Asked to remember that the shed roof needs 40 screws and to be reminded on Thursday, Claude calls the m2b note tool with a follow-up date, which writes one inbox file and a task due Thursday 12 November; below the answer the band shows a question and an overdue task, and the status line counts 3 in the inbox](docs/images/capture.png)
 
 From a terminal or a script, without a Claude session, the same goes through the command:
 
@@ -211,7 +212,7 @@ is set up. Rediscover brings one or a few old notes back, each with its reason, 
 did I note last spring?". A file iCloud Drive has not downloaded is named, never read and never
 counted as missing.
 
-!["What's on my list?" runs the todos skill: one overdue task, the screws captured just before and a second task due within seven days, one without a date, and a note that no calendar is set up on this machine](docs/images/todos.png)
+!["What's on my list?" runs the todos skill: one overdue task, the screws captured just before and a second task due within seven days, one without a date, and a note that no calendar is set up on this machine; the band below repeats the overdue task](docs/images/todos.png)
 
 ### The curation run
 
