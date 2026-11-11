@@ -10,6 +10,9 @@ A scenario is a folder under ``tests/e2e/`` with:
   ``"save": {"task": "<regex with one group>"}`` keeps the group from the step's output, and a later
   step's ``{task}`` in its arguments is replaced by it (a generated id, for example). ``{core_plugin}``
   is always the core plugin's folder, for a step that starts a Claude Code session with it.
+  ``"cwd": "<name>"`` runs the step in a folder of that name beside the scenario's working folder,
+  made on first use, so two sessions can stand for two projects; without it a step runs in the
+  working folder.
   An optional ``"model": {"actions": [...], "outcome": "success"}`` scripts the model: every model
   run of the scenario replays these actions in the stub ``tests/fakes/fake_claude.py``, which
   denies what the step's rules do not allow (the action format is in the stub);
@@ -207,10 +210,14 @@ def _run_steps(
     for number, step in enumerate(steps, 1):
         argv = [_with_saved(str(argument), saved) for argument in step["run"]]
         expected_exit = step.get("exit", 0)
+        folder = _step_folder(step, work)
+        if folder is None:
+            problems.append(f"step {number} {argv[0]}: cwd must be a plain folder name, got {step['cwd']!r}")
+            break
         try:
             result = subprocess.run(
                 argv,
-                cwd=work,
+                cwd=folder,
                 env={**environment, **step.get("env", {})},
                 input=step.get("stdin", ""),
                 capture_output=True,
@@ -237,6 +244,18 @@ def _run_steps(
             problems.append(f"step {number} {argv[0]}: cannot save {unsaved}; got {result.stdout[:400]!r}")
             break
     return problems
+
+
+def _step_folder(step: Mapping[str, Any], work: Path) -> Path | None:
+    """The folder a step runs in; None when its ``cwd`` would leave the scenario's sandbox."""
+    name = step.get("cwd")
+    if name is None:
+        return work
+    if not isinstance(name, str) or name in ("", ".", "..") or "/" in name or "\\" in name:
+        return None
+    folder = work.parent / name
+    folder.mkdir(exist_ok=True)
+    return folder
 
 
 def _with_saved(argument: str, saved: Mapping[str, str]) -> str:

@@ -1,0 +1,4 @@
+{
+  "description": "E22 recall across projects: a scenario for the model level, where a fact told in one project's session is asked for in another's, once with m2b and once with only Claude Code's own memory. At the stub level there is no session to run, so the store stays as given.",
+  "steps": []
+}

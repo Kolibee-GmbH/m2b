@@ -1,0 +1,133 @@
+{
+  "description": "E22 at the model level: is a fact told in one project there when another project asks for it? With m2b, a session in project A is told where the spare shed key is, and a session in project B is asked: it answers from m2b. With only Claude Code's own memory, the same is told in project A: a session in project B does not know it, and a second session in project A does, which shows the memory worked and stayed in its project. The answers are the model's; run it after each Claude Code minor update, beside E18.",
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ]
+    },
+    {
+      "run": [
+        "claude",
+        "-p",
+        "Remember that the spare key for the shed is under the blue pot by the back door.",
+        "--setting-sources",
+        "project",
+        "--plugin-dir",
+        "{core_plugin}",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Skill,Read,Write,Edit,mcp__m2b__note,mcp__m2b__search",
+        "--max-turns",
+        "10",
+        "--model",
+        "sonnet",
+        "--output-format",
+        "stream-json",
+        "--verbose"
+      ],
+      "cwd": "with-m2b-a",
+      "save": {
+        "memory_with_m2b": "\"auto\":\"([^\"]+)\""
+      }
+    },
+    {
+      "run": [
+        "claude",
+        "-p",
+        "Where is the spare key for the shed?",
+        "--setting-sources",
+        "project",
+        "--plugin-dir",
+        "{core_plugin}",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Skill,Read,Write,Edit,mcp__m2b__note,mcp__m2b__search",
+        "--max-turns",
+        "10",
+        "--model",
+        "sonnet",
+        "--output-format",
+        "json"
+      ],
+      "cwd": "with-m2b-b",
+      "stdout": "\"result\":\"(?:[^\"\\\\]|\\\\.)*blue pot"
+    },
+    {
+      "run": [
+        "claude",
+        "-p",
+        "Remember that the spare key for the shed is under the blue pot by the back door.",
+        "--setting-sources",
+        "project",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Skill,Read,Write,Edit,mcp__m2b__note,mcp__m2b__search",
+        "--max-turns",
+        "10",
+        "--model",
+        "sonnet",
+        "--output-format",
+        "json"
+      ],
+      "cwd": "alone-a"
+    },
+    {
+      "run": [
+        "claude",
+        "-p",
+        "Where is the spare key for the shed?",
+        "--setting-sources",
+        "project",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Skill,Read,Write,Edit,mcp__m2b__note,mcp__m2b__search",
+        "--max-turns",
+        "10",
+        "--model",
+        "sonnet",
+        "--output-format",
+        "json"
+      ],
+      "cwd": "alone-b",
+      "stdout": "^(?![\\s\\S]*blue pot)"
+    },
+    {
+      "run": [
+        "claude",
+        "-p",
+        "Where is the spare key for the shed?",
+        "--setting-sources",
+        "project",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Skill,Read,Write,Edit,mcp__m2b__note,mcp__m2b__search",
+        "--max-turns",
+        "10",
+        "--model",
+        "sonnet",
+        "--output-format",
+        "json"
+      ],
+      "cwd": "alone-a",
+      "stdout": "\"result\":\"(?:[^\"\\\\]|\\\\.)*blue pot"
+    }
+  ],
+  "invariants": [
+    {
+      "count": 1,
+      "glob": "inbox/*-claude-*.md",
+      "content": "blue pot"
+    },
+    {
+      "empty_folder": "{memory_with_m2b}"
+    }
+  ]
+}
