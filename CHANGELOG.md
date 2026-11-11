@@ -38,6 +38,12 @@ All notable changes to this project are documented here. The format follows
   is.
 - A session whose band is older than the installed m2b says so in one line and names
   `/reload-plugins`; `m2b band --json` answers the installed `version` for that.
+- The model notes and searches through two tools of the mod, `mcp__m2b__note` and
+  `mcp__m2b__search`, instead of a shell call. They follow the rules of the skills `capture` and
+  `search`, which name them first and work as before where the mod does not run; a search answer
+  is marked as data from your notes. Your permission rules for these names, and for
+  `Bash(m2b capture:*)` and `Bash(m2b search:*)`, apply; where none decides, the tools run without
+  asking, as the skills' commands do.
 
 ### Changed
 

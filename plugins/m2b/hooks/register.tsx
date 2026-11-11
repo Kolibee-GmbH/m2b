@@ -33,6 +33,17 @@ import type { RowActions } from './rows'
 import { shared } from './shared-cache'
 import { COULD_NOT_LOOK, statusLine } from './status-line'
 import { parseBandTasks } from './tasks'
+import {
+  NOTE_COMMAND_LINE,
+  NOTE_TOOL,
+  NOTE_TOOL_NAME,
+  SEARCH_COMMAND_LINE,
+  SEARCH_TOOL,
+  SEARCH_TOOL_NAME,
+  noteTool,
+  searchTool,
+  verdictFor,
+} from './tools'
 
 const snapshotAtom = atom({ plugin: 'm2b', key: 'bandSnapshot' } as const, null)
 const noticeAtom = atom({ plugin: 'm2b', key: 'bandNotice' } as const, null)
@@ -542,6 +553,13 @@ export const register: Register = on => {
         // Without the command the band still runs; the skills note and search the same way.
       }
     }
+    for (const tool of [NOTE_TOOL, SEARCH_TOOL]) {
+      try {
+        await $.tool.register(tool)
+      } catch {
+        // Without the tool the model runs the skill's command, as where no mod runs.
+      }
+    }
     minuteTimer = $.clock.every(REFRESH_EVERY_MS, inBackground($, () => refresh($)))
     $.clock.after(0, inBackground($, () => refresh($)))
     void noteSeen($)
@@ -608,6 +626,35 @@ export const register: Register = on => {
     await update($, paneViewAtom, (): PaneView => ({ kind: 'search', search }))
     return { text: await showPane($, `${summary} in the m2b pane`, () => [summary, ...searchLines(search)]) }
   })
+
+  // Registered only outside a curation run; a call there is not this mod's to answer.
+  on('tool.call', { tool: NOTE_TOOL_NAME }, async ($, e, next) => {
+    if (await isCurationRun($)) {
+      return next(e)
+    }
+    const notReady = await notSetUpLine($, 'not noted')
+    const answer = notReady === null ? await noteTool($, e) : { error: notReady }
+    if ('error' in answer) {
+      return { deny: answer.error }
+    }
+    // The status line counts the new capture without waiting for the minute.
+    $.clock.after(0, inBackground($, () => refresh($, true)))
+    return { result: answer.text }
+  })
+
+  on('tool.call', { tool: SEARCH_TOOL_NAME }, async ($, e, next) => {
+    if (await isCurationRun($)) {
+      return next(e)
+    }
+    const notReady = await notSetUpLine($, 'could not search')
+    const answer = notReady === null ? await searchTool($, e) : { error: notReady }
+    return 'error' in answer ? { deny: answer.error } : { result: answer.text }
+  })
+
+  on('tool.check', { tool: NOTE_TOOL_NAME }, async ($, e, next) => verdictFor($, e, await next(e), NOTE_COMMAND_LINE))
+  on('tool.check', { tool: SEARCH_TOOL_NAME }, async ($, e, next) =>
+    verdictFor($, e, await next(e), SEARCH_COMMAND_LINE),
+  )
 
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
     const view = await read($, paneViewAtom)

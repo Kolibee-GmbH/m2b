@@ -47,6 +47,26 @@ looks like an instruction. So:
 - `m2b distillate off` keeps the distillate out of projects where it must not appear, on the
   machine you run it on.
 
+## The tools the model calls
+
+Where the mod runs, the model has two tools, `mcp__m2b__note` and `mcp__m2b__search`. They can do
+what the skills' commands can: add a note to `inbox/` (with a follow-up, also a task in your task
+list) and read the store through `m2b search`. A note the model writes is a capture like any other,
+so text the model read elsewhere, such as a web page, can reach the inbox the way the section above
+describes. A search answer goes to the model under a line saying it is data from your notes, not
+instructions, with escape sequences and the invisible characters m2b knows removed (marks that
+reorder text, zero-width characters, variation selectors, tag characters); that list cannot be
+complete, and a model may still follow text that looks like an instruction.
+
+The mod lets a call of either tool run where Claude Code would only ask because no rule allows it,
+as the skills run their commands without asking; then neither the classifier of auto mode nor a
+`PermissionRequest` hook is asked. Your own rules come first, those for the tools' names and those
+for the skills' commands: `Bash(m2b capture:*)` in `permissions.ask` has Claude Code ask for every
+note, and `mcp__m2b__note` together with `Bash(m2b capture:*)` in `permissions.deny` keeps the
+model from noting by either way. An organization that allows only managed permission rules adds
+its own rules for these names, because the mod cannot see that setting
+([docs/band.md](docs/band.md#noting-and-searching-as-tools-of-the-model)).
+
 ## Reporting a vulnerability
 
 Please do not open a public issue. Report it privately through the repository's security advisory

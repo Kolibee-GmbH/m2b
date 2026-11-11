@@ -237,8 +237,9 @@ each with keep and drop buttons you click with the mouse (a click waits 5 second
 before it writes), and the open review task with its first findings; below the prompt, a status
 line such as `3 in inbox · curated 18:02`. `/m2b-note <text>` notes a text into the inbox at once,
 without a model turn, also while one is working. `/m2b-review` opens a pane with the whole last
-curation run, and `/m2b-search <text>` shows search hits there. The band is part of m2b and
-starts once m2b is set up. It is a mod, so it needs mods on in Claude Code; `m2b doctor` says
+curation run, and `/m2b-search <text>` shows search hits there. The model notes and searches
+through two tools of the mod, `mcp__m2b__note` and `mcp__m2b__search`, without a shell call. The
+band is part of m2b and starts once m2b is set up. It is a mod, so it needs mods on in Claude Code; `m2b doctor` says
 whether the latest session ran it, and why not.
 
 ## Add-ons

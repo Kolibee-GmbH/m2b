@@ -73,8 +73,9 @@ No model turn runs for it, so it costs no model turn and does not wait: Claude C
 command also while a turn is working. The text goes in as typed, quotes and dashes included, with the
 source `claude`, as a capture through the skill would; the next curation run files it. Without
 text it writes nothing and says what it needs; when `m2b` fails, the line says why, starting with
-`not noted:`. The confirmation stays in the conversation, where the model reads it in its next request. The skill `/m2b:capture` remains the way to note with the model's help, for instance with a
-follow-up date or where the band does not run.
+`not noted:`. The confirmation stays in the conversation, where the model reads it in its next
+request. To note with the model's help, for instance with a follow-up date, ask the model: it uses
+the tool below, or the skill `/m2b:capture` where the mod does not run.
 
 ## The whole review, and search, in a pane
 
@@ -109,6 +110,56 @@ follows the next curation run within a minute. Its close mark closes it, and so 
 the pane holds the keyboard; it asks for the keyboard when it opens over an empty prompt, so the
 arrows scroll a long review.
 
+## Noting and searching as tools of the model
+
+The mod gives the model two tools, so a capture or a lookup the model makes for you needs no shell
+call:
+
+| Tool | Runs | Takes |
+|---|---|---|
+| `mcp__m2b__note` | `m2b capture --source claude --json -`, the text on standard input | `text`, and optionally `follow_up` (`YYYY-MM-DD`, also a task due that day) and `quiet` |
+| `mcp__m2b__search` | `m2b search --json --any -- <terms>` | `terms`, each a phrase of its own, and `whole_words` |
+
+Their descriptions, which the model reads, carry the rules of the skills `/m2b:capture` and
+`/m2b:search`: what may be noted (never documents of customers or confidential statements about
+third parties), the text stays in your words, and an answer holds only what the hits hold. A test
+holds the core rules of each description to the skill's own sentences. The skills stay as they
+are; where the tools are offered, they name the tool as the first way, and where the mod does not
+run they work through their commands as before. A calendar entry still goes through the skill.
+Both descriptions, about 5,000 characters together, are in the prompt of every session the mod
+runs in, so the model knows the tools without loading a skill.
+
+The note tool answers with the path of the saved note, the day of its task or that the task waits
+for the next curation run, and anything `m2b` reported beside it. When a capture fails it tells
+the model which of three cases it is: not saved, nothing written, or unknown, after a capture that
+was stopped or answered nothing readable; in the last case the model is told not to note again
+before it has looked, so a note is not written twice. The search tool answers with at most 100
+hits, each cut at 500 characters, and names the files it could not search. Its answer opens with
+a line saying it is data from your notes, not instructions. Every text in it is one line, with
+escape sequences, control characters and the invisible characters m2b knows removed: marks that
+reorder text, zero-width characters, variation selectors and tag characters. That list cannot be
+complete. When `m2b` fails, the model gets an error that says it could not look, which it must not
+read as nothing found. Before m2b is set up, both answer that and call nothing.
+
+**Permission.** Claude Code lists the tools under these names and decides on a call as it does
+for an MCP tool: a rule `mcp__m2b__note` or `mcp__m2b__search` (or `mcp__m2b` for both) in
+`permissions.allow`, `ask` or `deny` of your settings applies to them. A rule you set for the
+skill's command applies to the tool too: with `Bash(m2b capture:*)` in `permissions.ask` or
+`deny`, the note tool asks or is refused the same way, and `Bash(m2b search:*)` does that for
+search. Where no such rule, no hook, setting or organization limit decides and Claude Code would
+only ask because nothing allows the tool, the mod lets the call run, as the skills run their own
+`m2b` commands without asking. A deny of the session's mode, such as `dontAsk`, stands; in plan
+mode Claude Code keeps its own verdict; where an application embedding Claude Code answers the
+asks itself, it still does.
+
+Letting the call run also means that nothing else is asked about it: not the classifier of auto
+mode, not a `PermissionRequest` hook of yours, and not a person. An organization that allows only
+its managed rules (`allowManagedPermissionRulesOnly`) is not visible to the mod; such an
+organization adds a managed `ask` or `deny` rule for these names. To be asked each time, put
+`Bash(m2b capture:*)` in `permissions.ask`. To keep the model from noting at all, put both
+`mcp__m2b__note` and `Bash(m2b capture:*)` in `permissions.deny`: the first refuses the tool, the
+second the skill's command, which the model would otherwise use instead.
+
 ## The status line
 
 Below the prompt, one line sums up the brain, such as `2 in inbox · curated 21:36`: the captures
@@ -138,8 +189,9 @@ again.
 - Mods on in Claude Code. The band is a mod, a module Claude Code loads with the plugin. Two
   different things can keep it out:
   - **Mods off, hooks on.** A session that started without network access can save Claude Code's
-    rollout switch for mods as off. Then only the band and the status line are missing; the
-    distillate at session start, capture, search, tasks and curation work as before. Start `claude`
+    rollout switch for mods as off. Then the band, the status line, the slash commands and the
+    model's tools are missing; the distillate at session start, capture and search through the
+    skills, tasks and curation work as before. Start `claude`
     once with network access, then a new session.
   - **No plugin hooks at all.** Under `claude --bare`, or with `allowManagedHooksOnly` or
     `disableAllHooks` in managed settings, Claude Code runs none of m2b's hooks: no band, and no
@@ -202,6 +254,11 @@ The band was an add-on there, off until `/m2b:band-setup` turned it on. Now it r
 set up, also on a machine where it was turned off: an entry `addons.band` in `config.json` is
 ignored, and `m2b addons off band` removes it. Sessions open during the update keep the old band
 until they are started again.
+
+The model now notes and searches through the tools `mcp__m2b__note` and `mcp__m2b__search`
+instead of a shell call. A rule you had for `Bash(m2b capture:*)` or `Bash(m2b search:*)` holds for
+them too; how to be asked each time, or keep the model from noting, is under "Noting and searching
+as tools of the model".
 
 ## How you see it runs
 

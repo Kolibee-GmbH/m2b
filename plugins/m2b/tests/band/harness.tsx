@@ -1,7 +1,7 @@
 /** The band's test world: a fake `m2b` launcher answered from memory and a session started against it. */
 import { expect, mock } from 'claude-code/testing'
 import type { Engine, MockClock } from 'claude-code/testing'
-import type { On, ProcessRunResult } from 'claude-code'
+import type { EngineResultOf, On, ProcessRunResult } from 'claude-code'
 
 export const HOME = '/home/alex'
 export const NOW = Date.parse('2026-03-14T17:30:00Z')
@@ -63,9 +63,22 @@ export class FakeM2b {
   readonly captured: string[] = []
   /** When set, `m2b capture` fails with this as its message. */
   captureFails: string | null = null
+  /** What `m2b capture` reports on standard error beside a saved note, as a follow-up that waits for the next run. */
+  captureNotice: string | null = null
+  /** What `m2b capture` was called with besides the text, one entry per call. */
+  readonly captureArgs: string[][] = []
+  /** The exit code of a failing `m2b capture`. */
+  captureExit = 1
+  /** The verdict Claude Code's own permission decision reaches for a call of a tool of the mod. */
+  coreVerdict: EngineResultOf['tool.check'] = { decision: 'ask' }
+  /** Its verdict for the skill's Bash command, which the mod asks about. */
+  shellVerdict: EngineResultOf['tool.check'] = { decision: 'ask' }
+  /** The Bash commands the mod asked Claude Code's verdict on. */
+  readonly shellQuestions: string[] = []
   /** What `m2b search --json` answers: its hits, and the files it could not read. */
   searchHits: { path: string; line: number; text: string }[] = []
   searchEvicted: string[] = []
+  searchUnreadable: { path: string; reason: string }[] = []
   /** When set, the surface leaves a pane undrawn, with this as the reason. */
   paneWaits: string | null = null
   /** Set, `m2b search`'s answer is cut as `$.process.run` cuts one past 4 MiB. */
@@ -120,15 +133,30 @@ export class FakeM2b {
         return fail(this.searchFails)
       }
       const evicted = this.searchEvicted.map(path => ({ path, fetch: `m2b fetch ${path}` }))
-      const answer = JSON.stringify({ terms: [args.at(-1)], hits: this.searchHits, evicted, unreadable: [] })
+      const answer = JSON.stringify({ terms: [args.at(-1)], hits: this.searchHits, evicted, unreadable: this.searchUnreadable })
       return this.searchCut ? { ...ok(answer.slice(0, 40)), isStdoutTruncated: true } : ok(answer)
     }
     if (args[0] === 'capture') {
       if (this.captureFails !== null) {
-        return fail(this.captureFails)
+        return { ...fail(this.captureFails), exitCode: this.captureExit }
       }
       this.captured.push(stdin ?? '')
-      return ok('/home/alex/Notes/inbox/20260314-173000-claude-ab12.md\n')
+      this.captureArgs.push(args)
+      const path = 'inbox/20260314-173000-claude-ab12.md'
+      const dayAt = args.indexOf('--follow-up')
+      const followUp = dayAt === -1 ? null : (args[dayAt + 1] ?? null)
+      const stdout = args.includes('--json')
+        ? // As the core answers: `follow_up` only for a follow-up that waits, once its task is made only `task_id`.
+          JSON.stringify(
+            followUp === null
+              ? { path, task_id: null, follow_up: null }
+              : this.captureNotice === null
+                ? { path, task_id: 'T-7', follow_up: null }
+                : { path, task_id: null, follow_up: followUp },
+          )
+        : `/home/alex/Notes/${path}`
+      const result = ok(`${stdout}\n`)
+      return this.captureNotice === null ? result : { ...result, stderr: `m2b: ${this.captureNotice}\n` }
     }
     if (this.failure !== null) {
       return fail(this.failure)
@@ -185,6 +213,9 @@ export function fail(message: string): ProcessRunResult {
 /** A slash command the mod registered, as `$.command.register` was handed it. */
 export type Registered = { name: string; immediate?: true }
 
+/** A tool the mod registered for the model, as `$.tool.register` was handed it. */
+export type RegisteredTool = { name: string; description: string; inputSchema: Record<string, unknown>; isDeferred?: boolean }
+
 /** A pane the mod asked to open, and whether the surface placed it. */
 export type Opened = { id: string; title?: string }
 
@@ -193,6 +224,7 @@ export type World = {
   clock: MockClock
   statuses: (string | undefined)[]
   commands: Registered[]
+  tools: RegisteredTool[]
   opened: Opened[]
 }
 
@@ -269,6 +301,19 @@ export async function start(
     commands.push(e)
     return { value: { command: e.name } }
   })
+  const tools: RegisteredTool[] = []
+  on('tool.register', (_, e) => {
+    tools.push(e)
+    return { value: { tool: `mcp__m2b__${e.name}` } }
+  })
+  // Stands for Claude Code's own permission decision, which the kit does not have.
+  on('tool.check', (_, e) => {
+    if (e.tool !== 'Bash') {
+      return fake.coreVerdict
+    }
+    fake.shellQuestions.push(String((e.input as { command?: unknown }).command))
+    return fake.shellVerdict
+  })
   on('process.run', async (_, e) => {
     if (fake.runFails !== null) {
       return { deny: fake.runFails }
@@ -293,7 +338,7 @@ export async function start(
   })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await clock.advance(1)
-  return { clock, statuses, commands, opened, toasts }
+  return { clock, statuses, commands, tools, opened, toasts }
 }
 
 export async function texts(ui: { findAll: (q: { type: string }) => Promise<{ text: string }[]> }): Promise<string[]> {

@@ -1,7 +1,13 @@
 import type { EngineInterface } from 'claude-code'
 
-/** `isCut`: the answer passed what `$.process.run` keeps of standard output (4 MiB) and was cut. */
-export type M2bOutcome = { ok: true; stdout: string; isCut: boolean } | { ok: false; error: string }
+/**
+ * `isCut`: the answer passed what `$.process.run` keeps of standard output (4 MiB) and was cut.
+ * `stderr` on success holds what the command reported beside its answer, such as a capture whose
+ * follow-up task waits for the next curation run.
+ */
+export type M2bOutcome =
+  | { ok: true; stdout: string; stderr: string; isCut: boolean }
+  | { ok: false; error: string; exitCode?: number }
 
 const LAUNCHER = '.local/bin/m2b'
 
@@ -54,10 +60,10 @@ export async function runM2b(
     const init = stdin === undefined ? { timeoutMs } : { timeoutMs, stdin }
     const { exitCode, stdout, stderr, isStdoutTruncated } = await $.process.run([launcher, ...args], init)
     if (exitCode === 0) {
-      return { ok: true, stdout, isCut: isStdoutTruncated }
+      return { ok: true, stdout, stderr, isCut: isStdoutTruncated }
     }
     const reason = firstLine(stderr)?.replace(/^m2b: /, '')
-    return { ok: false, error: reason ?? `m2b ${args.join(' ')} ended with exit ${exitCode}` }
+    return { ok: false, error: reason ?? `m2b ${args.join(' ')} ended with exit ${exitCode}`, exitCode }
   } catch (error) {
     return { ok: false, error: `could not run ${launcher}: ${firstLine(String(error)) ?? 'no reason given'}` }
   }
