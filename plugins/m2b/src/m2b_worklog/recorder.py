@@ -3,8 +3,10 @@
 herdr keeps the absolute path of a linked plugin's manifest, so it links the copy in
 ``~/.local/share/m2b/worklog-recorder/``, never this plugin's versioned folder. herdr also takes the
 manifest's events and startup commands when it links the plugin, so a copy with a new version is
-linked again. Install and remove each run twice without harm: herdr is asked what it has linked
-before linking or unlinking, so a second run makes no call that changes herdr. The timer that runs
+linked again. herdr's plugin list names the version in the manifest as it reads now, not the one it
+registered, so the version last linked is noted beside the copy (``linked-version``) and decides.
+Install and remove each run twice without harm: herdr is asked what it has linked before linking
+or unlinking, so a second run makes no call that changes herdr. The timer that runs
 the recorder's tick (``timer``) is set up and taken out with it. ``check`` is what setup asks before
 anything else: whether herdr is there, at least ``MIN_HERDR_VERSION`` and running.
 """
@@ -170,13 +172,14 @@ def remove(paths: WorklogPaths, environ: Mapping[str, str], run: Runner = subpro
 
 
 def _link(paths: WorklogPaths, environ: Mapping[str, str], run: Runner) -> str:
-    """Links the copy, again when herdr holds another version, since herdr reads events and startup at link.
+    """Links the copy, again when another version was linked, since herdr reads events and startup at link.
 
-    The version linked is noted beside the copy, so a refresh knows without asking herdr.
+    The version linked is noted beside the copy; no note, as a copy an older m2b linked has, means
+    another version. herdr's own list cannot tell, it shows the manifest's version as it is now.
     """
     version = manifest_version(paths.recorder_copy)
     linked = linked_recorder(environ, run)
-    if linked is not None and linked.get("version") == version:
+    if linked is not None and _linked_version(paths) == version:
         message = f"recorder up to date in {paths.recorder_copy}, already linked in herdr"
     else:
         _herdr(environ, ["plugin", "link", str(paths.recorder_copy)], run)
