@@ -15,8 +15,10 @@ All notable changes to this project are documented here. The format follows
   Dana`, with `ok` to close the review task (5 seconds with `undo`, as keep), the other findings
   as before and a line naming `/m2b-review`. The pane shows each changed fact with its file and
   the added words green and the removed ones red, instead of the old and new line as two cut
-  sentences. The curation run keeps each change with its whole lines, and `m2b band --json` names
-  them under `tasks.review` ([#14](https://github.com/Kolibee-GmbH/m2b/pull/14)).
+  sentences, and names every copy of the facts from before a run the review covers. `ok` writes
+  nothing when a run rewrote the review after the band drew it. The curation run keeps each change
+  with its whole lines, and `m2b band --json` names those the open review holds under
+  `tasks.review` ([#14](https://github.com/Kolibee-GmbH/m2b/pull/14)).
 
 ## [0.3.2] - 2026-11-11
 

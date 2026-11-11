@@ -234,7 +234,8 @@ next run files it; drop it in the band, or delete the task, and it does not come
 
 Above the prompt, [the band](docs/band.md) shows memory candidates and "Still current?" questions,
 each with keep and drop buttons you click with the mouse (a click waits 5 seconds with `undo`
-before it writes), and the open review task with its first findings; below the prompt, a status
+before it writes), and the open review task: the facts a run changed in one row, its other
+findings, and `ok` to close it; below the prompt, a status
 line such as `3 in inbox · curated 18:02`. `/m2b-note <text>` notes a text into the inbox at once,
 without a model turn, also while one is working. `/m2b-review` opens a pane with the whole last
 curation run, and `/m2b-search <text>` shows search hits there. The model notes and searches
