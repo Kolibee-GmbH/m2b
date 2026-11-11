@@ -96,26 +96,18 @@ rm -rf ~/.claude/projects/*sb-test-e2e-*
 
 The scenarios check that m2b does what it should. The evals in `plugins/m2b/evals/` check what it
 does to Claude's answers: each case runs the same prompt in a session with m2b and in one without,
-and `claude plugin eval` scores both.
-
-| Case | Asks | Passes with m2b when |
-|---|---|---|
-| `recall` | when Sam brings the plywood, where the shed key is | the answer names both, from the distillate |
-| `topic` | who runs IT at Northwind, when the contract renews | the topic's facts arrive with the prompt that names it |
-| `no-invention` | Dana's favourite colour, which no note holds | no colour is named, not even as a guess |
-| `no-false-lead` | what to bring up with Ben Hart, whom no note names | no note about someone else is offered as possibly about him |
-| `note` | "Remember this: ..." | the note is saved in the user's words, "my" kept |
-| `routing` | a todo for the project | it lands in the project's `TODO.md`, not in m2b |
-| `coding` | a one-line bug fix | the fix is made without searching or noting anything |
-| `no-leak` | a README for a public repository | no name from the notes appears in it |
+and `claude plugin eval` scores both. [Evals](docs/evals.md) lists what each case asks and when it
+passes, how to read the scores, and the scores of the last run.
 
 Every case starts from the same invented store, `evals/demo-store.sh`: it sets m2b up in the
-fresh `HOME` the eval gives each run, so your own store is never read. Run it from the plugin:
+fresh `HOME` the eval gives each run, so your own store is never read. Run it from the plugin,
+then write its scores into the page:
 
 ```bash
 cd plugins/m2b
-claude plugin eval . --ablation with-without --scaffold --trust-plugin --no-publish -j 4 \
-  --max-cost-usd 6 --allow-tools mcp__m2b__search mcp__m2b__note Write Read Edit
+claude plugin eval . --ablation with-without --scaffold --trust-plugin --no-publish --keep-temp \
+  -j 4 --max-cost-usd 6 --allow-tools mcp__m2b__search mcp__m2b__note Write Read Edit
+../../scripts/evals-page
 ```
 
 It runs each case three times per arm, 48 runs in all, and takes a few minutes on your own login.
@@ -124,21 +116,20 @@ billed and the runs count against the plan's usage limits instead. `--max-cost-u
 suite once that price passes the ceiling. The report lands in
 `evals/results/`, which git ignores. The runs ask nothing, so the m2b tools and the file tools a
 case needs are granted with `--allow-tools`; a tool missing there fails its case without a word.
-`--keep-temp` keeps each run's folder, and its `out/trace.jsonl` shows which tools it called.
 
-Two things to know when you read the numbers:
-
-- The cases that ask about the notes take Read, Grep, Glob, Bash and Agent away in both arms.
-  With them, the arm without m2b finds the demo store in its `HOME` and answers from the files, so
-  the case would measure grep. A 0 without m2b there says the path through m2b works, not how much
-  better everyday answers get.
-- In `routing`, the arm without m2b now and then tries Claude Code's own memory instead of
-  `TODO.md` and scores lower. The case is there for the arm with m2b: a project's todo must not end
-  up in the owner's notes.
+`--keep-temp` keeps each run's folder in your temp folder; the report names the trace in it,
+`out/trace.jsonl`, as the run's `tracePath`, and the trace shows which tools the run called.
+`scripts/evals-page` needs these traces: the report does not say which model answered, they do.
+It takes the newest report, or the one you name, and rewrites the results on
+[the page](docs/evals.md), the day, the versions and the model of the run with them; the text
+around them is written by hand. It refuses a run that stopped at the cost ceiling, a run of some
+cases only (`--case`), a run with fewer runs than a case asks for (`--runs 1`) and a run without
+the arm without m2b, so that a try-out of these kinds does not end up on the page. Run the suite
+once and commit what it gave: a case below 1.00 goes on the page as it is.
 
 Run the evals before a release that changes a skill, a hook, a tool description, the text a
-session starts with, or the distillate's format. A release of docs or of a fix the model never sees
-does not need them.
+session starts with, or the distillate's format, and commit the page with it. A release of docs or
+of a fix the model never sees does not need them, and keeps the page of the release before.
 
 ## Releasing
 
@@ -154,10 +145,12 @@ match, however many commits came since. A change reaches users only with a relea
    on what changes for the user, ending in the pull request that made it, as
    `([#12](https://github.com/Kolibee-GmbH/m2b/pull/12))`.
 3. Run `scripts/check`; it must end with `check: passed`. If the release changes what the model
-   sees, run the [evals](#evals) too; every case must score 1.00 with m2b.
-4. Commit both files as `chore(release): m2b X.Y.Z`, open a pull request to `main` and merge it;
-   a squash merge is fine. The marketplace reads `plugins/m2b` from `main`, not from a tag, so
-   until the merge `/plugin update` keeps reporting the old version.
+   sees, run the [evals](#evals) too and write their scores into `docs/evals.md` with
+   `scripts/evals-page`; every case must score 1.00 with m2b.
+4. Commit both files, and the eval page if it was rewritten, as `chore(release): m2b X.Y.Z`, open
+   a pull request to `main` and merge it; a squash merge is fine. The marketplace reads
+   `plugins/m2b` from `main`, not from a tag, so until the merge `/plugin update` keeps reporting
+   the old version.
 5. On `main`, at the merged release, tag and push the tag:
 
    ```bash

@@ -386,7 +386,9 @@ scripts/e2e --level stub    # end-to-end scenarios without a model
 [Architecture](docs/architecture.md) is the short tour of the code; [CONTRIBUTING.md](CONTRIBUTING.md)
 has the ground rules. To write your own client, read [Integrations](docs/integrations.md); to add a store,
 task or calendar backend, [Writing a backend](docs/writing-a-backend.md). What m2b promises to do,
-and which defects it must not have, is listed in [Behavior](docs/behavior.md).
+and which defects it must not have, is listed in [Behavior](docs/behavior.md). What it does to
+Claude's answers is measured: [Evals](docs/evals.md) has eight cases, each run with m2b and
+without, and the scores of the last run.
 
 ## License
 

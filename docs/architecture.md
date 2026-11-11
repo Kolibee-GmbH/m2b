@@ -31,7 +31,7 @@ flowchart LR
 | `plugins/m2b/recorder/` | the worklog's herdr recorder, copied out of the plugin when set up |
 | `plugins/m2b/tests/` | core tests, with `tests/band/` the band's; `tests/addons/<add-on>/` the add-ons' |
 | `tests/e2e/` | end-to-end scenarios against a temporary store |
-| `scripts/` | `check` (the whole proof), `e2e`, `trigger-check`, `no-model`, `readme-images` |
+| `scripts/` | `check` (the whole proof), `e2e`, `trigger-check`, `no-model`, `readme-images`, `evals-page` |
 
 ## Three rules the code keeps
 

@@ -9,6 +9,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- [Evals](docs/evals.md) shows what m2b does to Claude's answers, measured: the score of each of
+  the eight eval cases with m2b and without, and the model, the Claude Code version and the day of
+  the run. Until now the scores a release was checked with were written down nowhere.
 - The worklog leaves out the work you name in the profile: `worklog_leave_out` takes folders under
   your home folder. What ran there is in no worklog, not in what the model step reads, the note or
   the ledger. The profile is written as version 2 once it holds the setting, so every machine that

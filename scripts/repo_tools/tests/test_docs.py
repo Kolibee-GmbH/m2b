@@ -8,6 +8,8 @@ from pathlib import Path
 
 from m2b.addons import addon_names
 
+from repo_tools import evals_page
+
 REPO = Path(__file__).resolve().parents[3]
 ADDONS_PAGE = REPO / "docs" / "addons.md"
 ADDON_PAGES = REPO / "docs" / "addons"
@@ -36,6 +38,32 @@ class AddonsPageTest(unittest.TestCase):
         readme = (REPO / "README.md").read_text(encoding="utf-8")
 
         self.assertTrue("](docs/addons.md)" in readme, "README.md does not link docs/addons.md")
+
+
+class EvalsPageTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.page = evals_page.PAGE.read_text(encoding="utf-8")
+        self.cases = sorted(evals_page.suite_cases(evals_page.EVALS))
+
+    def test_the_results_have_a_row_for_every_case_of_the_suite_and_no_other(self) -> None:
+        results = self.page.partition(evals_page.BLOCK_START)[2].partition(evals_page.BLOCK_END)[0]
+
+        self.assertEqual(re.findall(r"^\| `([a-z-]+)` \|", results, re.MULTILINE), self.cases)
+
+    def test_the_page_says_what_every_case_asks(self) -> None:
+        described = self.page.partition(evals_page.BLOCK_END)[2]
+
+        self.assertEqual(sorted(re.findall(r"^\| `([a-z-]+)` \|", described, re.MULTILINE)), self.cases)
+
+    def test_the_results_name_the_run_they_come_from(self) -> None:
+        for fact in ("Day", "m2b", "Claude Code", "Model", "Runs"):
+            with self.subTest(fact=fact):
+                self.assertRegex(self.page, rf"(?m)^\| {fact} \| \S.* \|$")
+
+    def test_the_readme_links_the_page(self) -> None:
+        readme = (REPO / "README.md").read_text(encoding="utf-8")
+
+        self.assertTrue("](docs/evals.md)" in readme, "README.md does not link docs/evals.md")
 
 
 class LinkTest(unittest.TestCase):

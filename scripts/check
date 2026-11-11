@@ -133,7 +133,8 @@ shell_checks() {
         echo "shellcheck not installed; skipped"
         return 0
     fi
-    shellcheck scripts/check scripts/e2e scripts/e2e-shortcut-setup scripts/no-model scripts/readme-images \
+    shellcheck scripts/check scripts/e2e scripts/e2e-shortcut-setup scripts/evals-page scripts/no-model \
+        scripts/readme-images \
         "$PLUGIN"/bin/m2b "$PLUGIN"/bin/m2b-worklog
 }
 
