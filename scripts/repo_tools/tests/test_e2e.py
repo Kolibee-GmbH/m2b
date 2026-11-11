@@ -176,6 +176,38 @@ class ScenarioTest(unittest.TestCase):
 
         self.assertTrue(result.passed, result.problems)
 
+    def test_a_step_with_a_cwd_runs_in_its_own_folder_beside_the_working_folder(self) -> None:
+        self._given_steps(
+            [
+                self._python_step("import os; print(os.getcwd())", save={"plain": "(.+)"}),
+                self._python_step("import os; print(os.getcwd())", cwd="project-b", save={"other": "(.+)"}),
+                self._python_step("import os; print(os.getcwd())", cwd="project-b", save={"again": "(.+)"}),
+            ]
+        )
+        self._expect({"inbox/note.md": "Dana likes maps.\n"})
+        folders: dict[str, str] = {}
+
+        with mock.patch.object(e2e, "_save", wraps=e2e._save) as save:
+            result = e2e.run_scenario(self.scenario, self.environ)
+            for call in save.call_args_list:
+                folders.update(call.args[2])
+
+        self.assertTrue(result.passed, result.problems)
+        plain, other = Path(folders["plain"]), Path(folders["other"])
+        self.assertEqual(plain.name, "work")
+        self.assertEqual(other, plain.parent / "project-b")
+        self.assertEqual(folders["again"], folders["other"])
+
+    def test_a_cwd_that_would_leave_the_sandbox_fails_the_scenario(self) -> None:
+        for name in ("..", "../outside", "a/b", ""):
+            with self.subTest(cwd=name):
+                self._given_steps([self._python_step("print('ran')", cwd=name)])
+                self._expect({"inbox/note.md": "Dana likes maps.\n"})
+
+                result = e2e.run_scenario(self.scenario, self.environ)
+
+                self.assertIn("cwd must be a plain folder name", result.problems[0])
+
     def test_a_value_that_cannot_be_saved_fails_the_scenario(self) -> None:
         self._given_steps([self._python_step("print('nothing here')", save={"task": "id is (\\w+)"})])
         self._expect({"inbox/note.md": "Dana likes maps.\n"})

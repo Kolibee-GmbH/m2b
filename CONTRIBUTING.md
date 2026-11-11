@@ -63,12 +63,27 @@ costs model runs, so it is not part of `scripts/check`; run it on purpose:
 ```bash
 scripts/e2e --level model                                   # every scenario with a model.json
 scripts/e2e --level model E18-remember-beside-auto-memory   # after each Claude Code minor update
+scripts/e2e --level model E22-recall-across-projects        # the same
 ```
 
 `E18-remember-beside-auto-memory` starts a session with m2b and Claude Code's own memory both on
 and checks that "remember that ..." about a person lands in m2b's inbox and not in Claude Code's
-memory. Claude Code's memory needs your login, so this scenario leaves one session folder under
-`~/.claude/projects/`, as every model run does.
+memory.
+
+`E22-recall-across-projects` compares m2b with Claude Code's own memory, the alternative a user
+has without it. A fact is told in one project's session and asked for in another's. With m2b,
+the second project's session answers from m2b. With Claude Code alone, it does not know, and a
+second session in the first project does, which shows that Claude Code's memory kept the fact and
+keeps it to that project. A step's `cwd` gives each session its own project folder. Five sessions
+on Sonnet, a few minutes.
+
+Claude Code's memory needs your login, so these scenarios leave session folders under
+`~/.claude/projects/`, one per project folder a session ran in, as every model run does; E22 also
+leaves the fact Claude Code saved there. They all carry `sb-test-e2e-` in their name:
+
+```bash
+rm -rf ~/.claude/projects/*sb-test-e2e-*
+```
 
 ## Evals
 
