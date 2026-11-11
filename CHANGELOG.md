@@ -29,6 +29,9 @@ All notable changes to this project are documented here. The format follows
   A click taken back, or a session closed within those seconds, leaves the task as it was.
 - `/m2b-note <text>` writes the text into the inbox at once, without a model turn, also while a turn
   is working, and answers with one line showing how the note begins.
+- `/m2b-review` opens a pane with the whole last curation run: its state and times, every finding
+  whole, and every candidate and question with keep, drop and undo. `/m2b-search <text>` shows the
+  hits of a search there, without a model turn.
 - A session whose band is older than the installed m2b says so in one line and names
   `/reload-plugins`; `m2b band --json` answers the installed `version` for that.
 

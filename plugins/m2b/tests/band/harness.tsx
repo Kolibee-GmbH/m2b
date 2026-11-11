@@ -63,6 +63,15 @@ export class FakeM2b {
   readonly captured: string[] = []
   /** When set, `m2b capture` fails with this as its message. */
   captureFails: string | null = null
+  /** What `m2b search --json` answers: its hits, and the files it could not read. */
+  searchHits: { path: string; line: number; text: string }[] = []
+  searchEvicted: string[] = []
+  /** When set, the surface leaves a pane undrawn, with this as the reason. */
+  paneWaits: string | null = null
+  /** Set, `m2b search`'s answer is cut as `$.process.run` cuts one past 4 MiB. */
+  searchCut = false
+  /** When set, `m2b search` fails with this as its message. */
+  searchFails: string | null = null
   /** The installed core's version, as `m2b band --json` answers it. */
   version = '0.3.0'
   /** The version in the manifest of the plugin the band was loaded from; null when it cannot be read. */
@@ -101,6 +110,14 @@ export class FakeM2b {
     }
     if (args[0] === 'band') {
       return this.bandAnswer()
+    }
+    if (args[0] === 'search') {
+      if (this.searchFails !== null) {
+        return fail(this.searchFails)
+      }
+      const evicted = this.searchEvicted.map(path => ({ path, fetch: `m2b fetch ${path}` }))
+      const answer = JSON.stringify({ terms: [args.at(-1)], hits: this.searchHits, evicted, unreadable: [] })
+      return this.searchCut ? { ...ok(answer.slice(0, 40)), isStdoutTruncated: true } : ok(answer)
     }
     if (args[0] === 'capture') {
       if (this.captureFails !== null) {
@@ -159,7 +176,32 @@ export function fail(message: string): ProcessRunResult {
 /** A slash command the mod registered, as `$.command.register` was handed it. */
 export type Registered = { name: string; immediate?: true }
 
-export type World = { clock: MockClock; statuses: (string | undefined)[]; commands: Registered[] }
+/** A pane the mod asked to open, and whether the surface placed it. */
+export type Opened = { id: string; title?: string }
+
+export type World = {
+  clock: MockClock
+  statuses: (string | undefined)[]
+  commands: Registered[]
+  opened: Opened[]
+}
+
+/** The pane as Claude Code hands it to the render hook, at a width the test chooses. */
+export function pane(id: string, bodyColumns = 80) {
+  return {
+    plugin: 'm2b',
+    component: 'Pane',
+    requestId: id,
+    props: {
+      title: id,
+      isFocused: false,
+      bodyColumns,
+      placement: 'dock',
+      scroll: { offset: 0, bodyRows: 40 },
+      view: {},
+    },
+  } as const
+}
 
 /** Files under the home folder, shared by the sessions of one test: what `$.fs` reads and writes. */
 export type Files = Map<string, string>
@@ -197,6 +239,14 @@ export async function start(
   }
   const statuses: (string | undefined)[] = []
   const commands: Registered[] = []
+  const opened: Opened[] = []
+  on('ui.close', () => ({ value: undefined }))
+  on('ui.open', (_, e) => {
+    opened.push(e)
+    return fake.paneWaits === null
+      ? { value: { isPlaced: true } }
+      : { value: { isPlaced: false, reason: fake.paneWaits } }
+  })
   on('command.register', (_, e) => {
     commands.push(e)
     return { value: { command: e.name } }
@@ -225,7 +275,7 @@ export async function start(
   })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await clock.advance(1)
-  return { clock, statuses, commands }
+  return { clock, statuses, commands, opened }
 }
 
 export async function texts(ui: { findAll: (q: { type: string }) => Promise<{ text: string }[]> }): Promise<string[]> {

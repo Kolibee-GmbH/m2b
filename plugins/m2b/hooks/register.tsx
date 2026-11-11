@@ -1,10 +1,25 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { BandCandidate, BandPress, BandReview, BandSettle, BandSnapshot } from '../types'
+import type { BandCandidate, BandPress, BandReview, BandRun, BandSettle, BandSnapshot, PaneView } from '../types'
 import { launcherPath, m2bHome, machineConfigPath, runM2b } from './m2b'
 import { NOTE_COMMAND, note } from './note'
+import {
+  PANE_ID,
+  REVIEW_COMMAND,
+  SEARCH_COMMAND,
+  isRun,
+  paneTree,
+  reviewLines,
+  runOf,
+  searchLines,
+  searchStore,
+  searchSummary,
+  showPane,
+} from './pane'
 import { plainLine } from './plain-text'
+import { candidateRow } from './rows'
+import type { RowActions } from './rows'
 import { shared } from './shared-cache'
 import { COULD_NOT_LOOK, statusLine } from './status-line'
 import { parseBandTasks } from './tasks'
@@ -13,6 +28,8 @@ const snapshotAtom = atom({ plugin: 'm2b', key: 'bandSnapshot' } as const, null)
 const noticeAtom = atom({ plugin: 'm2b', key: 'bandNotice' } as const, null)
 const pressesAtom = atom({ plugin: 'm2b', key: 'bandPresses' } as const, {})
 const versionNoticeAtom = atom({ plugin: 'm2b', key: 'bandVersionNotice' } as const, null)
+const runAtom = atom({ plugin: 'm2b', key: 'bandRun' } as const, null)
+const paneViewAtom = atom({ plugin: 'm2b', key: 'paneView' } as const, null)
 
 const REFRESH_EVERY_MS = 60_000
 // `m2b band` reaches and reads the task list (two Apple Reminders calls, 20 seconds each by
@@ -36,7 +53,7 @@ const TASKS_ANSWER = ['band', '--json', '--tasks-only'] as const
  * What one answer of `m2b band --json` draws: the band's rows, the status line, and the version of
  * the installed core, which is the version the launcher runs.
  */
-type BandView = { snapshot: BandSnapshot; status: string; version: string | null }
+type BandView = { snapshot: BandSnapshot; status: string; version: string | null; run?: BandRun | null }
 
 /** Runs jobs one after another, in the order they were queued. */
 function serialQueue(): <T>(job: () => Promise<T>) => Promise<T> {
@@ -69,6 +86,7 @@ async function loadView($: EngineInterface, answer: readonly string[] = BAND_ANS
     snapshot: snapshotOf(fields['tasks']),
     status: statusLine(fields['status'], await $.clock.now()),
     version: typeof fields['version'] === 'string' ? fields['version'] : null,
+    run: runOf(fields['status']),
   }
 }
 
@@ -116,6 +134,8 @@ async function loadNow($: EngineInterface, isForced: boolean): Promise<void> {
   }
   await update($, snapshotAtom, () => view.snapshot)
   await update($, versionNoticeAtom, () => versionNotice(view.version))
+  // An answer a session without the pane stored has no run; it leaves the run line as it was.
+  await update($, runAtom, current => (view.run === undefined ? current : view.run))
   $.ui.status(plainLine(view.status))
 }
 
@@ -171,7 +191,9 @@ function isView(value: unknown): value is BandView {
     isObject(value) &&
     isSnapshot(value['snapshot']) &&
     typeof value['status'] === 'string' &&
-    (value['version'] === null || typeof value['version'] === 'string')
+    (value['version'] === null || typeof value['version'] === 'string') &&
+    // Absent in an answer a session without the pane stored: no run to show, like null.
+    (value['run'] === undefined || value['run'] === null || isRun(value['run']))
   )
 }
 
@@ -204,6 +226,8 @@ async function clearBand($: EngineInterface): Promise<void> {
   await update($, snapshotAtom, () => null)
   await update($, noticeAtom, () => null)
   await update($, versionNoticeAtom, () => null)
+  await update($, runAtom, () => null)
+  await update($, paneViewAtom, () => null)
   $.ui.status(undefined)
 }
 
@@ -247,6 +271,15 @@ async function isSetUp($: EngineInterface): Promise<boolean> {
   return (
     launcher !== undefined && config !== undefined && (await $.fs.exists(config)) && (await $.fs.exists(launcher))
   )
+}
+
+/** The line a command answers when it cannot run yet, or null when m2b is set up here. */
+async function notSetUpLine($: EngineInterface, what: string): Promise<string | null> {
+  try {
+    return (await isSetUp($)) ? null : `${what}: m2b is not set up on this machine; /m2b:m2b sets it up`
+  } catch (error) {
+    return `${what}: could not look whether m2b is set up: ${plainLine(String(error))}`
+  }
 }
 
 /** Notes that this session runs the band, which `m2b doctor` reports; a failed write changes nothing. */
@@ -419,12 +452,12 @@ async function settleNow($: EngineInterface, candidate: BandCandidate, action: B
   return true
 }
 
-function verbOf(action: BandSettle): string {
-  return action === 'complete' ? 'keep' : 'drop'
+function rowActions($: EngineInterface): RowActions {
+  return { press: (candidate, action) => press($, candidate, action), undo: id => undo($, id) }
 }
 
-function pressedLine(action: BandSettle, title: string): string {
-  return ` ${action === 'complete' ? 'keeping' : 'dropping'}: ${plainLine(title)}`
+function verbOf(action: BandSettle): string {
+  return action === 'complete' ? 'keep' : 'drop'
 }
 
 function failed(error: string): BandSnapshot {
@@ -450,10 +483,12 @@ export const register: Register = on => {
     lockTimers.clear()
     await carryPressesOver($)
     loadedVersion = await readLoadedVersion($)
-    try {
-      await $.command.register(NOTE_COMMAND)
-    } catch {
-      // Without the command the band still runs; the skill m2b:capture notes the same way.
+    for (const command of [NOTE_COMMAND, REVIEW_COMMAND, SEARCH_COMMAND]) {
+      try {
+        await $.command.register(command)
+      } catch {
+        // Without the command the band still runs; the skills note and search the same way.
+      }
     }
     minuteTimer = $.clock.every(REFRESH_EVERY_MS, inBackground($, () => refresh($)))
     $.clock.after(0, inBackground($, () => refresh($)))
@@ -482,6 +517,54 @@ export const register: Register = on => {
     return { text: outcome.line }
   })
 
+  on('command.run', { command: REVIEW_COMMAND.name }, async ($, e, next) => {
+    if (await isCurationRun($)) {
+      return next(e)
+    }
+    const notReady = await notSetUpLine($, 'not shown')
+    if (notReady !== null) {
+      return { text: notReady }
+    }
+    await update($, paneViewAtom, (): PaneView => ({ kind: 'review' }))
+    // Opens with what the band holds and reads the run again behind it.
+    $.clock.after(0, inBackground($, () => refresh($, true)))
+    const [snapshot, run] = [await read($, snapshotAtom), await read($, runAtom)]
+    const text = await showPane($, 'the last curation run is in the m2b pane', () => reviewLines(snapshot, run))
+    return { text }
+  })
+
+  on('command.run', { command: SEARCH_COMMAND.name }, async ($, e, next) => {
+    if (await isCurationRun($)) {
+      return next(e)
+    }
+    if (plainLine(e.args).trim() === '') {
+      return { text: `nothing searched: write what to look for after the command, as in /${SEARCH_COMMAND.name} plywood` }
+    }
+    const notReady = await notSetUpLine($, 'not searched')
+    if (notReady !== null) {
+      return { text: notReady }
+    }
+    const outcome = await searchStore($, e.args.trim())
+    if ('line' in outcome) {
+      return { text: outcome.line }
+    }
+    const { search } = outcome
+    const summary = searchSummary(search)
+    if (search.total === 0) {
+      return { text: summary }
+    }
+    await update($, paneViewAtom, (): PaneView => ({ kind: 'search', search }))
+    return { text: await showPane($, `${summary} in the m2b pane`, () => [summary, ...searchLines(search)]) }
+  })
+
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
+    const view = await read($, paneViewAtom)
+    const snapshot = await read($, snapshotAtom)
+    const run = await read($, runAtom)
+    const presses = await read($, pressesAtom)
+    return paneTree($, e, view, snapshot, run, presses, rowActions($))
+  })
+
   // The band only clears its notice here; when that throws or overruns, the prompt still enters
   // as typed, through the catch instead of an engine report naming m2b as the failed hook.
   on('prompt.submit', async ($, e, next) => {
@@ -504,40 +587,14 @@ export const register: Register = on => {
       return next(e)
     }
 
-    const { Box, Button, Text } = $.ui.resolve(e)
+    const { Box, Text } = $.ui.resolve(e)
     const moreCandidates = andMore(candidates.length - CANDIDATES_SHOWN, 'candidates')
     const findings = review?.findings ?? []
     const moreFindings = andMore(findings.length - FINDINGS_SHOWN, 'findings')
     const isWriting = Object.values(presses).some(pressed => pressed.phase === 'writing')
 
-    const row = (candidate: BandCandidate) => {
-      const pressed = presses[candidate.id]
-      if (pressed === undefined) {
-        return (
-          <Box key={`row:${candidate.id}`} flexDirection="row">
-            <Button key={`keep:${candidate.id}`} label="keep" onPress={() => press($, candidate, 'complete')} />
-            <Text> </Text>
-            <Button key={`drop:${candidate.id}`} label="drop" onPress={() => press($, candidate, 'drop')} />
-            <Text wrap="truncate-end"> {plainLine(candidate.title)}</Text>
-          </Box>
-        )
-      }
-      if (pressed.phase === 'waiting') {
-        return (
-          <Box key={`row:${candidate.id}`} flexDirection="row">
-            <Button key={`undo:${candidate.id}`} label="undo" onPress={() => undo($, candidate.id)} />
-            <Text dimColor wrap="truncate-end">
-              {pressedLine(pressed.action, candidate.title)}
-            </Text>
-          </Box>
-        )
-      }
-      return (
-        <Text key={`row:${candidate.id}`} dimColor wrap="truncate-end">
-          {pressedLine(pressed.action, candidate.title)}
-        </Text>
-      )
-    }
+    const actions = rowActions($)
+    const row = (candidate: BandCandidate) => candidateRow($, e, candidate, presses[candidate.id], actions)
 
     return (
       <Box flexDirection="column">

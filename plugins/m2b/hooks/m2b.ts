@@ -1,6 +1,7 @@
 import type { EngineInterface } from 'claude-code'
 
-export type M2bOutcome = { ok: true; stdout: string } | { ok: false; error: string }
+/** `isCut`: the answer passed what `$.process.run` keeps of standard output (4 MiB) and was cut. */
+export type M2bOutcome = { ok: true; stdout: string; isCut: boolean } | { ok: false; error: string }
 
 const LAUNCHER = '.local/bin/m2b'
 
@@ -51,9 +52,9 @@ export async function runM2b(
   }
   try {
     const init = stdin === undefined ? { timeoutMs } : { timeoutMs, stdin }
-    const { exitCode, stdout, stderr } = await $.process.run([launcher, ...args], init)
+    const { exitCode, stdout, stderr, isStdoutTruncated } = await $.process.run([launcher, ...args], init)
     if (exitCode === 0) {
-      return { ok: true, stdout }
+      return { ok: true, stdout, isCut: isStdoutTruncated }
     }
     const reason = firstLine(stderr)?.replace(/^m2b: /, '')
     return { ok: false, error: reason ?? `m2b ${args.join(' ')} ended with exit ${exitCode}` }

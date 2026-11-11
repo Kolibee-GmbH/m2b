@@ -64,6 +64,39 @@ text it writes nothing and says what it needs; when `m2b` fails, the line says w
 `not noted:`. The confirmation stays in the conversation, where the model reads it in its next request. The skill `/m2b:capture` remains the way to note with the model's help, for instance with a
 follow-up date or where the band does not run.
 
+## The whole review, and search, in a pane
+
+The band keeps to a few rows. `/m2b-review` opens the m2b pane beside the conversation with the
+last curation run in full: its state and times, every finding of the review task whole, paths
+included, and every candidate and "Still current?" question with keep and drop, which work as in
+the band, undo included.
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│ Last curation run: succeeded, 2026-03-14 18:00 to 18:02      │
+│ m2b: review                                                  │
+│   lint: broken link in people/sam.md                         │
+│   ingest: eleven captures were not filed because their photos│
+│ are not downloaded; a copy of the run log is at ~/.local/stat│
+│ e/m2b/runs/20260314T170200Z.jsonl                            │
+│ [ keep ] [ drop ] Remember? Sam brings the plywood           │
+│ [ undo ] dropping: Remember? Dana prefers tea                │
+│ [ keep ] [ drop ] Still current? Planning the trip to Porto  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+`/m2b-search <text>` shows the hits of `m2b search` in the same pane, each with its file and line
+and the line itself, without a model turn; a text that starts with a dash is searched as written.
+Files not downloaded from iCloud Drive are counted below the hits. Both commands run at once, also
+while a turn is working, and read through `m2b` only; the pane writes nothing but keep and drop.
+Where Claude Code cannot show a pane, for instance with no terminal attached, the command answers
+with the content as text instead, its first 20 lines, each cut at 200 characters; that text stays
+in the conversation the model reads. A search without hits answers in one line and opens no pane,
+and one with more hits than `m2b` can hand over asks for a narrower search. The pane takes its data from the same refresh as the band, so it
+follows the next curation run within a minute. Its close mark closes it, and so does Escape while
+the pane holds the keyboard; it asks for the keyboard when it opens over an empty prompt, so the
+arrows scroll a long review.
+
 ## The status line
 
 Below the prompt, one line sums up the brain, such as `2 in inbox · curated 21:36`: the captures
