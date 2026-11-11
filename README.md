@@ -36,7 +36,7 @@
   step needs, never in your session. Everything else is plain code: standard library Python, no
   network calls of its own, no server, no database.
 
-![A Claude Code session in an unrelated project answers when Sam brings the plywood and where the shed key is, straight from the distillate, without a tool call; above the prompt the band asks whether planning the trip to Porto is still current, with keep and drop, below it the status line reads "brain: 2 in inbox · curated 21:36"](docs/images/session-start.png)
+![A Claude Code session in an unrelated project answers when Sam brings the plywood and where the shed key is, straight from the distillate, without a tool call; above the prompt the band asks whether planning the trip to Porto is still current, with keep and drop, and lists an overdue task to return Sam's ladder, below it the status line reads "2 in inbox · curated 08:15"](docs/images/session-start.png)
 
 <sub>A new session in an unrelated repository already knows. The band above the prompt and the
 status line below it are [the band](docs/band.md), where m2b asks you to keep or drop; Claude Code
