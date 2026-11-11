@@ -7,10 +7,13 @@ import json
 from typing import Any
 from unittest import mock
 
+import test_proposals_command
 import test_runner
-from m2b import launcher
+from m2b import launcher, proposals
 from m2b.commands import band, doctor
 from m2b.tasks import markers
+from test_proposal_answers import DANA_ID, LADDER_ID
+from test_proposals import DANA, LADDER
 
 
 class BandCommandTest(test_runner.RunnerTest):
@@ -127,6 +130,80 @@ class BandCommandTest(test_runner.RunnerTest):
 
         self.assertIn("sb-test-missing", answer["tasks"]["error"])
         self.assertEqual(answer["status"]["backends"]["tasks"]["state"], "not reachable")
+
+
+class BandProposalsTest(test_proposals_command.ProposalsCommandTest):
+    def band(self, *options: str) -> dict[str, Any]:
+        result: dict[str, Any] = self.run_json("band", *options)
+        return result
+
+    def test_the_answer_names_what_waits_as_the_proposals_command_does(self) -> None:
+        """Covers: B126"""
+        self.proposed(DANA, LADDER)
+        self.run_command("proposals", "drop", LADDER_ID)
+
+        part = self.band()["proposals"]
+
+        self.assertEqual(part, self.run_json("proposals"))
+        self.assertEqual([waiting["id"] for waiting in part["proposals"]], [DANA_ID])
+        self.assertEqual(
+            {field: part["proposals"][0][field] for field in ("kind", "text", "quote", "day", "topic")},
+            {
+                "kind": "person",
+                "text": "Dana runs IT at Northwind.",
+                "quote": "Dana runs IT at Northwind",
+                "day": "2026-03-04",
+                "topic": "Northwind",
+            },
+        )
+        self.assertEqual(part["answered"], 1)
+
+    def test_a_store_without_proposals_answers_an_empty_list(self) -> None:
+        """Covers: B126"""
+        self.assertEqual(self.band()["proposals"], {"proposals": [], "answered": 0})
+
+    def test_answers_that_are_not_downloaded_are_named_in_this_part_and_the_rest_still_answers(self) -> None:
+        """Covers: B6, B126"""
+        self.proposed(DANA, LADDER)
+        self.run_command("proposals", "drop", LADDER_ID)
+
+        with self.not_downloaded("proposal-answers"):
+            answer = self.band()
+
+        self.assertEqual(list(answer["proposals"]), ["error"])
+        self.assertIn("m2b store fetch state/core/proposal-answers", answer["proposals"]["error"])
+        self.assertEqual(answer["tasks"]["candidates"], [])
+        self.assertEqual(answer["status"]["backends"]["tasks"]["state"], "reachable")
+
+    def test_a_proposals_file_a_newer_m2b_wrote_is_named_in_this_part(self) -> None:
+        """Covers: B126"""
+        target = self.store_root / proposals.PROPOSALS_FILE
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps({"format": 2, "proposals": {}}), encoding="utf-8")
+
+        answer = self.band()
+
+        self.assertIn("update m2b on this machine", answer["proposals"]["error"])
+        self.assertIn("candidates", answer["tasks"])
+
+    def test_a_stored_proposal_with_half_a_character_does_not_cost_the_band_its_answer(self) -> None:
+        """Covers: B126"""
+        self.proposed(DANA)
+        target = self.store_root / proposals.PROPOSALS_FILE
+        raw = json.loads(target.read_text(encoding="utf-8"))
+        raw["proposals"]["aaaaaaaaaaaa"] = {**raw["proposals"][DANA_ID], "text": "Dana \ud800 runs IT"}
+        target.write_text(json.dumps(raw), encoding="utf-8")
+
+        answer = self.band()
+
+        self.assertEqual([waiting["id"] for waiting in answer["proposals"]["proposals"]], [DANA_ID])
+        self.assertIn("candidates", answer["tasks"])
+
+    def test_tasks_only_leaves_the_proposals_out(self) -> None:
+        """Covers: B126"""
+        self.proposed(DANA)
+
+        self.assertEqual(list(self.band("--tasks-only")), ["tasks"])
 
 
 if __name__ == "__main__":

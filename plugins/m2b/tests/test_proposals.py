@@ -248,6 +248,23 @@ class UnreadableFileTest(ProposalsFixture):
         self.assertEqual(list(loaded.entries), [proposals.proposal_id(DANA)])
         self.assertIsNone(loaded.read_until)
 
+    def test_an_entry_with_half_a_character_is_left_out_since_no_answer_could_carry_it(self) -> None:
+        self.kept(DANA)
+        raw = self.written()
+        half = "Dana \ud800 runs IT"
+        raw["proposals"].update(
+            {
+                "aaaaaaaaaaaa": {**_entry(), "text": half},
+                "bbbbbbbbbbbb": {**_entry(), "quote": half},
+                "cccccccccccc": {**_entry(), "topic": half},
+            }
+        )
+        self.write(raw)
+
+        loaded = proposals.load(self.store)
+
+        self.assertEqual(list(loaded.entries), [proposals.proposal_id(DANA)])
+
     def test_a_time_without_an_offset_counts_as_utc(self) -> None:
         self.write({"format": 1, "read_until": "2026-03-04T03:00:00", "proposals": {"aaaaaaaaaaaa": _entry()}})
 

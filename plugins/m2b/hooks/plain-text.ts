@@ -17,3 +17,32 @@ const INVISIBLE_CONTROLS = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-
 export function plainLine(text: string): string {
   return text.replace(ESCAPE_SEQUENCE, '').replace(LINE_BREAKS_AND_TABS, ' ').replace(INVISIBLE_CONTROLS, '')
 }
+
+// Every control and format character, and whatever else a terminal draws with no width: the marks
+// that reorder text, the zero-width characters, the byte order mark, soft hyphens, variation
+// selectors and tag characters. By Unicode property, so the list cannot fall behind.
+const NEVER_DRAWN = /[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}]/gu
+// White space as `\s` knows it, without the byte order mark, which is written out instead.
+const WHITE_SPACE = /[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+/g
+
+/**
+ * A text the person is asked to keep, as one line: white space as single spaces, and every control
+ * character and every mark that reorders or hides text written out (`\x1b`, `\u202e`) where
+ * `plainLine` leaves it out. Keeping keeps the text as it is stored, so a part the drawing left out
+ * would be kept unseen.
+ */
+export function writtenOut(text: string): string {
+  return text
+    .replace(WHITE_SPACE, ' ')
+    .replace(/^ | $/g, '')
+    .replace(NEVER_DRAWN, written)
+}
+
+function written(character: string): string {
+  const code = character.codePointAt(0) ?? 0
+  const digits = code.toString(16)
+  if (code <= 0xff) {
+    return `\\x${digits.padStart(2, '0')}`
+  }
+  return code <= 0xffff ? `\\u${digits.padStart(4, '0')}` : `\\u{${digits}}`
+}

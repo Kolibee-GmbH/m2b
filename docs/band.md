@@ -26,13 +26,19 @@ machine.
   `undo` as keep; until then the review comes back after every run, so a changed fact is never
   missed. A review a run rewrote after the band drew it is not closed: the band says so and shows
   the new one.
+- **Proposals from your sessions**: while a curation run's reading of your sessions has proposed
+  something you have not answered ([curation](curation.md#reading-your-sessions)), one row says
+  how many, `3 proposals from your sessions`, however many there are. `show` on it opens them in
+  the m2b pane, where you keep or drop each ([below](#the-proposals-from-your-sessions-in-the-pane)).
 - **Tasks due today or overdue**: your own tasks, not the curator's, in at most three quiet rows
   below the candidates (`due today: Call Dana`, `overdue: Return the drill`), without buttons;
   today's first, then the overdue ones, the most recent first. `m2b config set band.due_tasks
   false` turns them off on this machine; `true` brings them back.
 
 Candidates and questions share at most three rows, the due tasks have three, and the review shows
-at most three findings, each followed by "and N more" when there are more. The band is empty, and
+at most three findings, each followed by "and N more" when there are more; the proposals are one
+row, between the candidates and the due tasks: what asks for keep or drop stands together, above
+what only tells. The band is empty, and
 takes no room, while there is nothing to show.
 
 **Keep and drop are buttons: click them with the mouse.** Keep completes the task; drop marks it
@@ -55,7 +61,11 @@ Until the band has read the list after the write, the row offers nothing to clic
 3 minutes.
 
 The band draws every text as one plain line: escape sequences and control characters a capture
-brought along from terminal output are left out, line breaks and tabs become spaces.
+brought along from terminal output are left out, line breaks and tabs become spaces. The texts of
+a proposal are the exception: there each such character is written out (`\x1b`, `\u202e`) instead
+of left out, and so is every other character a terminal draws with no width (zero-width
+characters, soft hyphens, variation selectors, tag characters), because keep keeps the text as it
+is stored, and a part the pane left out would be kept unseen.
 
 ## When a curation run fails
 
@@ -124,6 +134,50 @@ and one with more hits than `m2b` can hand over asks for a narrower search. The 
 follows the next curation run within a minute. Its close mark closes it, and so does Escape while
 the pane holds the keyboard; it asks for the keyboard when it opens over an empty prompt, so the
 arrows scroll a long review.
+
+## The proposals from your sessions, in the pane
+
+`/m2b-proposals`, or `show` on the band's row, opens the m2b pane with what waits for your answer:
+each proposal with its text, what kind of thing it is (with the due day of a commitment and the
+topic, where it has one), your own words it was taken from and the day you said them.
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│ 3 proposals from your sessions                               │
+│ [ keep all ]                                                 │
+│ [ keep ] [ drop ] Dana is head of IT at Northwind.           │
+│   person, topic Northwind                                    │
+│   said on 2026-03-04: "Dana runs IT at Northwind"            │
+│ [ undo ] dropping: Call Sam about the ladder.                │
+│   commitment, due 2026-03-06                                 │
+│   said on 2026-03-04: "I still have to call Sam"             │
+│ [ keep ] [ drop ] The spare key is in the shed.              │
+│   personal                                                   │
+│   said on 2026-03-05: "the spare key is in the shed"         │
+│ 1 answer waits for the next curation run, which files what   │
+│ you kept                                                     │
+└──────────────────────────────────────────────────────────────┘
+```
+
+Keep and drop work as on a candidate: a click writes nothing for 5 seconds and offers `undo`, then
+the band runs `m2b proposals keep <id>` or `m2b proposals drop <id>`, which adds your answer to
+the store. `keep all` keeps the proposals the pane showed when you clicked it, without those you
+clicked on their own; one a curation run added a moment before is not kept unseen. Nothing is
+filed by the click: the next curation run writes a capture for each proposal you kept and files
+it, and the last line says how many answers wait for it. The row in the band and the pane follow
+at once.
+
+When `m2b` refuses an answer, because another machine answered that proposal the other way first,
+or cannot write it, what it says stands in the pane and in the band until your next prompt. After
+`keep all`, where another answer already stands, it names the first such proposal by its text, and
+what could be kept is kept. When the proposals
+cannot be looked at, for instance because the answers folder is not downloaded from iCloud Drive,
+both say that in one line with the command that fetches it, and show no proposal: could not look
+is never "nothing waits". For the same reason the pane says that m2b has not looked yet until the
+band's first answer has arrived. Where Claude Code cannot show a pane, `/m2b-proposals` answers as
+text: how many wait, how to list and answer them with `m2b proposals`, then the proposals, each
+with its id, as far as the 20 lines of such an answer reach. That text stays in the conversation
+the model reads.
 
 ## Noting and searching as tools of the model
 
@@ -236,18 +290,23 @@ with the second case when no session has run m2b's hooks since setup. Right afte
 
 It runs only while `~/.config/m2b/config.json` and the launcher exist. Each refresh is one `m2b`
 call, `m2b band --json`; keep and drop call `m2b tasks complete` and `m2b tasks drop`, after
-reading the list again with `m2b band --json --tasks-only`. Every open session asks about once a
+reading the list again with `m2b band --json --tasks-only`; keep and drop on a proposal call
+`m2b proposals keep` and `m2b proposals drop`, which refuse an answer themselves where another
+one stands. Every open session asks about once a
 minute and after each of your turns, so the answer is shared between sessions for 55 seconds in
 `~/.local/state/m2b/band-view.json`; an answer of a shape the band does not know, or stamped later
 than now, is not used. However many turns end while `m2b` is slow, at most one more refresh waits.
-That folder holds titles and findings, so m2b keeps it readable by you only. At each session start
+That folder holds titles, findings and the proposals with your words, so m2b keeps it readable by
+you only. At each session start
 it writes `~/.local/state/m2b/band-seen.json`, which `m2b doctor` reads. Apart from keep and drop, which
 change that one task in your task list (with the `markdown` backend, its file in `tasks/` of the
-store), it writes nothing in the store.
+store) or add your answer to a proposal as an empty file in `state/core/proposal-answers/`, it
+writes nothing in the store.
 
 `m2b band --json` reaches and reads the task list once (with Apple Reminders, two calls to
-`reminders`) and sorts the open tasks by their marker, and adds the answer of `m2b status --json`,
-reusing that one look at the task list for its check of the backends. With invented tasks:
+`reminders`) and sorts the open tasks by their marker, adds the answer of `m2b proposals --json`,
+and adds the answer of `m2b status --json`, reusing that one look at the task list for its check
+of the backends. With invented tasks:
 
 ```json
 {
@@ -256,6 +315,10 @@ reusing that one look at the task list for its check of the backends. With inven
     "candidates": [{"id": "c1", "title": "Remember? Sam brings the plywood", "notes": "m2b:candidate", "due": null, "completed": false, "completed_at": null, "dropped": false, "marker": "candidate"}],
     "questions": [],
     "reviews": []
+  },
+  "proposals": {
+    "proposals": [{"id": "0c1d2e3f4a5b", "kind": "person", "text": "Dana is head of IT at Northwind.", "quote": "Dana runs IT at Northwind", "day": "2026-03-04", "topic": "Northwind", "due": null}],
+    "answered": 0
   },
   "status": {"machine_id": "alex-laptop", "inbox": {"count": 2, "evicted": 0}, "run": {"state": "succeeded", "last_succeeded_at": "2026-03-14T21:36:00+01:00"}, "backends": {"store": {"state": "reachable", "detail": ""}, "tasks": {"state": "reachable", "detail": ""}, "calendar": {"state": "not configured", "detail": ""}}}
 }
@@ -266,7 +329,14 @@ fields than shown, as `m2b status --json` does. When the task list cannot be
 read, `tasks` is `{"error": "<why>"}` and `status` still answers. The checks of the backends are
 kept for five minutes, so at most every five minutes the answer waits for the calendar too, here
 for at most 10 seconds whatever `calendar.timeout_seconds` says; a calendar that does not answer
-by then is reported as not reachable. `--tasks-only` leaves `status` out.
+by then is reported as not reachable. `--tasks-only` leaves `proposals` and `status` out.
+
+`proposals` lists what a reading of your sessions proposed and you have not answered, the
+earliest said first, and in `answered` how many answers wait for the next curation run. When
+that cannot be looked at (the proposals file or the answers folder is not downloaded, a newer m2b
+wrote the proposals file, the store is out of reach), `proposals` is `{"error": "<why>"}` and the
+other parts still answer. An entry of the proposals file that is not in the form, or holds half a
+character, is left out.
 
 While a review task is open, `tasks.review` names the changes of the facts the last runs made, as
 the curation run kept them for the review: per change its `kind` (`rewrote`, `removed`,

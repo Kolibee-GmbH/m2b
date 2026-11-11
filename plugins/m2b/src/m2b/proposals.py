@@ -181,7 +181,22 @@ def _entry(value: object) -> Entry | None:
         return None
     if not isinstance(text, str) or not isinstance(quote, str) or not (topic is None or isinstance(topic, str)):
         return None
+    if not all(_can_be_written(part) for part in (text, quote, topic or "")):
+        return None
     return Entry(kind, text, quote, day, state, since, topic, due)
+
+
+def _can_be_written(text: str) -> bool:
+    """False for half a character (a lone surrogate), which an escape in the file can hold.
+
+    No listing and no answer for the band could print it, and no capture could carry it: one such
+    entry would otherwise end every command that reads the proposals.
+    """
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
 
 
 def _as_json(entry: Entry) -> dict[str, Any]:

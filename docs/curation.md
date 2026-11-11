@@ -102,6 +102,10 @@ m2b proposals keep <id>...    # or: m2b proposals keep --all
 m2b proposals drop <id>...
 ```
 
+With the band, one row above the prompt says how many wait, and `/m2b-proposals` opens them in a
+pane where keep, drop and keep all are buttons ([the band](band.md#the-proposals-from-your-sessions-in-the-pane));
+they add the same answers as the commands.
+
 An answer is filed by the next curation run: harvest writes a capture with the proposal's text
 (source `proposal`, `from_proposal` in its frontmatter), and ingest files it like any capture. A
 commitment that names its day gets its task with the capture. A dropped proposal is remembered for

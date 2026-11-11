@@ -5,6 +5,8 @@ import type {
   BandCandidate,
   BandDueTask,
   BandPress,
+  BandProposal,
+  BandProposals,
   BandReview,
   BandRun,
   BandSettle,
@@ -30,6 +32,20 @@ import {
   showPane,
 } from './pane'
 import { plainLine } from './plain-text'
+import {
+  KEEP_ALL,
+  PROPOSALS_COMMAND,
+  PROPOSALS_PLACED,
+  couldNotLookLine,
+  isProposals,
+  refusedLine,
+  parseProposals,
+  pressKey,
+  proposalLines,
+  proposalsPane,
+  proposalsRow,
+} from './proposals'
+import type { ProposalActions } from './proposals'
 import { candidateRow, reviewRow } from './rows'
 import type { RowActions } from './rows'
 import { shared } from './shared-cache'
@@ -53,6 +69,9 @@ const noticeAtom = atom({ plugin: 'm2b', key: 'bandNotice' } as const, null)
 const pressesAtom = atom({ plugin: 'm2b', key: 'bandPresses' } as const, {})
 const versionNoticeAtom = atom({ plugin: 'm2b', key: 'bandVersionNotice' } as const, null)
 const runAtom = atom({ plugin: 'm2b', key: 'bandRun' } as const, null)
+const proposalsAtom = atom({ plugin: 'm2b', key: 'bandProposals' } as const, null)
+// Apart from the band's notice, which is about tasks: the proposals pane draws this one alone.
+const proposalsNoticeAtom = atom({ plugin: 'm2b', key: 'bandProposalsNotice' } as const, null)
 const paneViewAtom = atom({ plugin: 'm2b', key: 'paneView' } as const, null)
 const toastedRunAtom = atom({ plugin: 'm2b', key: 'bandToastedRun' } as const, null)
 const ownPromptsAtom = atom({ plugin: 'm2b', key: 'ownPrompts' } as const, [])
@@ -80,7 +99,13 @@ const TASKS_ANSWER = ['band', '--json', '--tasks-only'] as const
  * What one answer of `m2b band --json` draws: the band's rows, the status line, and the version of
  * the installed core, which is the version the launcher runs.
  */
-type BandView = { snapshot: BandSnapshot; status: string; version: string | null; run?: BandRun | null }
+type BandView = {
+  snapshot: BandSnapshot
+  status: string
+  version: string | null
+  run?: BandRun | null
+  proposals?: BandProposals
+}
 
 /** Runs jobs one after another, in the order they were queued. */
 function serialQueue(): <T>(job: () => Promise<T>) => Promise<T> {
@@ -114,6 +139,7 @@ async function loadView($: EngineInterface, answer: readonly string[] = BAND_ANS
     status: statusLine(fields['status'], await $.clock.now()),
     version: typeof fields['version'] === 'string' ? fields['version'] : null,
     run: runOf(fields['status']),
+    proposals: parseProposals(fields['proposals']),
   }
 }
 
@@ -163,6 +189,8 @@ async function loadNow($: EngineInterface, isForced: boolean): Promise<void> {
   await update($, versionNoticeAtom, () => versionNotice(view.version))
   // An answer a session without the pane stored has no run; it leaves the run line as it was.
   await update($, runAtom, current => (view.run === undefined ? current : view.run))
+  // Nor has an answer a session without proposals stored, or one m2b could not give, a word on them.
+  await update($, proposalsAtom, current => view.proposals ?? current)
   $.ui.status(plainLine(view.status))
   await toastFailedRun($, view.run ?? null)
 }
@@ -247,7 +275,8 @@ function isView(value: unknown): value is BandView {
     typeof value['status'] === 'string' &&
     (value['version'] === null || typeof value['version'] === 'string') &&
     // Absent in an answer a session without the pane stored: no run to show, like null.
-    (value['run'] === undefined || value['run'] === null || isRun(value['run']))
+    (value['run'] === undefined || value['run'] === null || isRun(value['run'])) &&
+    (value['proposals'] === undefined || isProposals(value['proposals']))
   )
 }
 
@@ -301,6 +330,8 @@ async function clearBand($: EngineInterface): Promise<void> {
   await update($, noticeAtom, () => null)
   await update($, versionNoticeAtom, () => null)
   await update($, runAtom, () => null)
+  await update($, proposalsAtom, () => null)
+  await update($, proposalsNoticeAtom, () => null)
   await update($, paneViewAtom, () => null)
   $.ui.status(undefined)
 }
@@ -432,25 +463,36 @@ async function carryPressesOver($: EngineInterface): Promise<void> {
   }
 }
 
+/** What a press writes once its undo window is over. It never rejects, and answers whether the band reads again. */
+type PressWrite = () => Promise<boolean>
+
 /**
  * A press on keep or drop writes nothing yet: the row offers undo for a few seconds, and only then
- * is the task completed or dropped. Taking a press back is forgetting it, so a crash, a closed
- * session or a reload of the mod during those seconds leaves the task as it was, and an item
- * another session settles meanwhile is caught by the second look before the write.
+ * is the task completed or dropped, or the proposal answered. Taking a press back is forgetting it,
+ * so a crash, a closed session or a reload of the mod during those seconds leaves everything as it
+ * was, and an item another session settles meanwhile is caught when the write comes. `ids` are the
+ * proposals a press on keep all stands for.
  */
-async function press($: EngineInterface, candidate: BandCandidate, action: BandSettle): Promise<void> {
+async function press(
+  $: EngineInterface,
+  id: string,
+  action: BandSettle,
+  write: PressWrite,
+  ids?: string[],
+): Promise<void> {
   const token = await newPressToken($)
+  const pressed: BandPress = { action, phase: 'waiting', token, ...(ids === undefined ? {} : { ids }) }
   let isClaimed = false
   await update($, pressesAtom, presses => {
-    isClaimed = presses[candidate.id] === undefined
-    return isClaimed ? { ...presses, [candidate.id]: { action, phase: 'waiting', token } satisfies BandPress } : presses
+    isClaimed = presses[id] === undefined
+    return isClaimed ? { ...presses, [id]: pressed } : presses
   })
   if (isClaimed) {
     undoTimers.set(
-      candidate.id,
+      id,
       $.clock.after(
         UNDO_WINDOW_MS,
-        inBackground($, () => settle($, candidate, action, token)),
+        inBackground($, () => settle($, id, token, write)),
       ),
     )
   }
@@ -470,37 +512,45 @@ async function undo($: EngineInterface, id: string): Promise<void> {
 }
 
 /**
- * Completes or drops a candidate once its undo window is over, after reading the list again: a
- * candidate another session settled meanwhile is left alone, and the band says so. The row stays
- * locked until the reload after the write has landed, so a second press cannot meet the old row.
+ * Writes a press once its undo window is over. The row stays locked until the reload after the
+ * write has landed, so a second press cannot meet the old row.
  */
-async function settle($: EngineInterface, candidate: BandCandidate, action: BandSettle, token: string): Promise<void> {
-  undoTimers.delete(candidate.id)
+async function settle($: EngineInterface, id: string, token: string, write: PressWrite): Promise<void> {
+  undoTimers.delete(id)
   const deadlineMs = (await $.clock.now()) + WRITE_LOCK_MS
   let isStillPressed = false
   await update($, pressesAtom, presses => {
-    isStillPressed = presses[candidate.id]?.token === token && presses[candidate.id]?.phase === 'waiting'
-    return isStillPressed
-      ? { ...presses, [candidate.id]: { action, phase: 'writing', token, deadlineMs } satisfies BandPress }
+    const pressed = presses[id]
+    isStillPressed = pressed?.token === token && pressed.phase === 'waiting'
+    return pressed !== undefined && isStillPressed
+      ? { ...presses, [id]: { ...pressed, phase: 'writing', deadlineMs } satisfies BandPress }
       : presses
   })
   if (!isStillPressed) {
     return
   }
   try {
-    let isWritten = false
-    try {
-      isWritten = await bandJobs(() => settleNow($, candidate, action))
-    } catch (error) {
-      await update($, snapshotAtom, () => failed(`m2b could not ${verbOf(action)} "${candidate.title}": ${String(error)}`))
-      return
-    }
     // Written: whatever the reload does, the band no longer says the write failed.
-    if (isWritten) {
+    if (await bandJobs(write)) {
       await reload($, true)
     }
   } finally {
-    await update($, pressesAtom, presses => withoutPress(presses, candidate.id, token))
+    await update($, pressesAtom, presses => withoutPress(presses, id, token))
+  }
+}
+
+/**
+ * Completes or drops a candidate after reading the list again: a candidate another session settled
+ * meanwhile is left alone, and the band says so.
+ */
+function taskWrite($: EngineInterface, candidate: BandCandidate, action: BandSettle): PressWrite {
+  return async () => {
+    try {
+      return await settleNow($, candidate, action)
+    } catch (error) {
+      await update($, snapshotAtom, () => failed(`m2b could not ${verbOf(action)} "${candidate.title}": ${String(error)}`))
+      return false
+    }
   }
 }
 
@@ -542,7 +592,64 @@ function isOtherReview(pressed: BandCandidate, fresh: BandReview): boolean {
 }
 
 function rowActions($: EngineInterface): RowActions {
-  return { press: (candidate, action) => press($, candidate, action), undo: id => undo($, id) }
+  return {
+    press: (candidate, action) => press($, candidate.id, action, taskWrite($, candidate, action)),
+    undo: id => undo($, id),
+  }
+}
+
+/**
+ * Answers proposals with `m2b proposals keep` or `drop`, which adds the answers and leaves the
+ * filing to the next curation run. No second look comes first: the command itself refuses an
+ * answer where another one stands, from another session or machine, and what it says to that stays
+ * as the notice. Whatever it answered, the band reads again, so the rows are those that still wait.
+ */
+function proposalWrite($: EngineInterface, proposals: BandProposal[], action: BandSettle): PressWrite {
+  return async () => {
+    const verb = verbOf(action)
+    try {
+      const ids = proposals.map(proposal => proposal.id)
+      const outcome = await runM2b($, ['proposals', verb, ...ids], WRITE_TIMEOUT_MS)
+      if (!outcome.ok) {
+        await update($, proposalsNoticeAtom, () => refusedLine(proposals, verb, outcome.error))
+      }
+    } catch (error) {
+      await update($, proposalsNoticeAtom, () => refusedLine(proposals, verb, String(error)))
+    }
+    return true
+  }
+}
+
+function proposalActions($: EngineInterface): ProposalActions {
+  return {
+    answer: (proposal, action) => press($, pressKey(proposal.id), action, proposalWrite($, [proposal], action)),
+    keepAll: proposals =>
+      press(
+        $,
+        KEEP_ALL,
+        'complete',
+        proposalWrite($, proposals, 'complete'),
+        proposals.map(proposal => proposal.id),
+      ),
+    undo: key => undo($, key),
+  }
+}
+
+/** Turns the pane to the proposals and opens it; where it cannot be shown, the answer holds them as text. */
+async function showProposals($: EngineInterface): Promise<string> {
+  await update($, paneViewAtom, (): PaneView => ({ kind: 'proposals' }))
+  // Opens with what the band holds and reads the proposals again behind it.
+  $.clock.after(0, inBackground($, () => refresh($, true)))
+  const proposals = await read($, proposalsAtom)
+  return showPane($, PROPOSALS_PLACED, () => proposalLines(proposals))
+}
+
+/** `show` in the band: a button has no answer to put the proposals in, so the band says where they are listed. */
+async function showFromBand($: EngineInterface): Promise<void> {
+  const [answer] = (await showProposals($)).split('\n')
+  if (answer !== undefined && answer !== PROPOSALS_PLACED) {
+    await update($, noticeAtom, () => `${answer}; m2b proposals lists them in a shell`)
+  }
 }
 
 function verbOf(action: BandSettle): string {
@@ -580,7 +687,7 @@ export const register: Register = on => {
     lockTimers.clear()
     await carryPressesOver($)
     loadedVersion = await readLoadedVersion($)
-    for (const command of [NOTE_COMMAND, REVIEW_COMMAND, SEARCH_COMMAND]) {
+    for (const command of [NOTE_COMMAND, REVIEW_COMMAND, SEARCH_COMMAND, PROPOSALS_COMMAND]) {
       try {
         await $.command.register(command)
       } catch {
@@ -635,6 +742,14 @@ export const register: Register = on => {
     const [snapshot, run] = [await read($, snapshotAtom), await read($, runAtom)]
     const text = await showPane($, 'the last curation run is in the m2b pane', () => reviewLines(snapshot, run))
     return { text }
+  })
+
+  on('command.run', { command: PROPOSALS_COMMAND.name }, async ($, e, next) => {
+    if (await isCurationRun($)) {
+      return next(e)
+    }
+    const notReady = await notSetUpLine($, 'not shown')
+    return { text: notReady ?? (await showProposals($)) }
   })
 
   on('command.run', { command: SEARCH_COMMAND.name }, async ($, e, next) => {
@@ -697,9 +812,13 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
     const view = await read($, paneViewAtom)
+    const presses = await read($, pressesAtom)
+    if (view?.kind === 'proposals') {
+      const [proposals, notice] = [await read($, proposalsAtom), await read($, proposalsNoticeAtom)]
+      return proposalsPane($, e, proposals, presses, notice, proposalActions($))
+    }
     const snapshot = await read($, snapshotAtom)
     const run = await read($, runAtom)
-    const presses = await read($, pressesAtom)
     return paneTree($, e, view, snapshot, run, presses, rowActions($))
   })
 
@@ -708,6 +827,7 @@ export const register: Register = on => {
   // of an engine report naming m2b as the failed hook. A prompt not kept only makes a note ask.
   on('prompt.submit', async ($, e, next) => {
     await update($, noticeAtom, () => null)
+    await update($, proposalsNoticeAtom, () => null)
     if (isOwnPrompt(e)) {
       await update($, ownPromptsAtom, prompts => withPrompt(prompts ?? [], e.text))
     }
@@ -721,13 +841,19 @@ export const register: Register = on => {
     const snapshot = await read($, snapshotAtom)
     const notice = await read($, noticeAtom)
     const versionLine = await read($, versionNoticeAtom)
+    const proposalsNotice = await read($, proposalsNoticeAtom)
     const presses = await read($, pressesAtom)
     const candidates = snapshot?.candidates ?? []
     const review = snapshot?.review ?? null
     const error = snapshot?.error ?? null
     const due = snapshot?.due ?? []
-    const isEmpty = candidates.length === 0 && due.length === 0 && review === null && error === null
-    if (isEmpty && notice === null && versionLine === null) {
+    const proposals = await read($, proposalsAtom)
+    const waiting = proposals?.waiting.length ?? 0
+    // Beside a task list that could not be read, the store is most often the same reason: one line.
+    const proposalsError = error === null ? (proposals?.error ?? null) : null
+    const isEmpty =
+      candidates.length === 0 && due.length === 0 && review === null && error === null && waiting === 0 && proposalsError === null
+    if (isEmpty && notice === null && proposalsNotice === null && versionLine === null) {
       return next(e)
     }
 
@@ -750,6 +876,12 @@ export const register: Register = on => {
         )}
         {candidates.slice(0, CANDIDATES_SHOWN).map(row)}
         {moreCandidates !== null && <Text dimColor>{moreCandidates}</Text>}
+        {waiting > 0 && proposalsRow($, e, waiting, () => showFromBand($))}
+        {proposalsError !== null && (
+          <Text color="error" wrap="truncate-end">
+            {couldNotLookLine(proposalsError)}
+          </Text>
+        )}
         {dueFirst(due).slice(0, DUE_SHOWN).map(task => (
           <Text dimColor wrap="truncate-end">
             {`${task.overdue ? 'overdue' : 'due today'}: ${plainLine(task.title)}`}
@@ -769,6 +901,11 @@ export const register: Register = on => {
         {notice !== null && (
           <Text color="warning" wrap="truncate-end">
             {plainLine(notice)}
+          </Text>
+        )}
+        {proposalsNotice !== null && (
+          <Text color="warning" wrap="truncate-end">
+            {plainLine(proposalsNotice)}
           </Text>
         )}
         {versionLine !== null && (

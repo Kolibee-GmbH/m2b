@@ -27,7 +27,10 @@ All notable changes to this project are documented here. The format follows
   filed before you say keep: `m2b proposals` lists what waits, each with your own words and the day
   you said them; `m2b proposals keep <id>...`, `keep --all` and `drop <id>...` answer, and the next
   run files what you kept as a capture. While proposals wait, your task list holds one task that
-  says how many, so a phone shows it too; completing it answers nothing. Only what you typed is
+  says how many, so a phone shows it too; completing it answers nothing. With the band, one row
+  says how many wait, and `show` on it or `/m2b-proposals` opens them in the m2b pane, each with
+  your words, keep and drop with the same 5 seconds of undo as a candidate, and keep all
+  ([docs/band.md](docs/band.md#the-proposals-from-your-sessions-in-the-pane)). Only what you typed is
   read: no answer of Claude, no tool result, no pasted block, nothing another sender put into the
   session; credentials are redacted.
   Of a session in a folder of `worklog_leave_out`, or in one where you ran `m2b distillate off`,

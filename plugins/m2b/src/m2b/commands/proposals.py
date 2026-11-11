@@ -20,7 +20,7 @@ from m2b.commands.backends import configured_store
 from m2b.commands.output import print_json
 from m2b.config.machine import load_machine_config
 from m2b.config.store_settings import require_store_writable
-from m2b.proposal_answers import KEEP, Given
+from m2b.proposal_answers import KEEP, Given, Waiting
 from m2b.proposals import Entry
 from m2b.store.base import Store
 
@@ -42,12 +42,7 @@ def proposals_command(arguments: argparse.Namespace, context: Context) -> int:
 def _list(store: Store, as_json: bool) -> int:
     waiting = proposal_answers.waiting(store)
     if as_json:
-        print_json(
-            {
-                "proposals": [_as_json(key, entry) for key, entry in waiting.proposals],
-                "answered": waiting.answered,
-            }
-        )
+        print_json(_waiting_json(waiting))
         return 0
     if waiting.proposals:
         one = len(waiting.proposals) == 1
@@ -62,6 +57,18 @@ def _list(store: Store, as_json: bool) -> int:
         one = waiting.answered == 1
         print(f"{waiting.answered} {'answer waits' if one else 'answers wait'} for the next curation run")
     return 0
+
+
+def waiting_answer(store: Store) -> dict[str, Any]:
+    """What ``proposals --json`` answers: the proposals that wait, and how many answers wait for a run."""
+    return _waiting_json(proposal_answers.waiting(store))
+
+
+def _waiting_json(waiting: Waiting) -> dict[str, Any]:
+    return {
+        "proposals": [_as_json(key, entry) for key, entry in waiting.proposals],
+        "answered": waiting.answered,
+    }
 
 
 def _answer(store: Store, answer: str, named: list[str], every: bool, as_json: bool) -> int:

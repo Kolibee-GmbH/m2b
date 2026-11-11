@@ -1,5 +1,5 @@
 {
-  "description": "E23 proposals from sessions (stub level): setup records the yes to reading the sessions; a curation run reads what was typed an hour ago and keeps what the scripted model proposes from it, with the person's words; `m2b proposals` shows the proposal, and the task list holds one open task that says it waits; the person keeps it; the next run writes its capture, the scripted ingest moves it into the archive, no proposal waits any more and the task is completed. What a real model proposes from a day of prompts is measured by `scripts/glean-eval`.",
+  "description": "E23 proposals from sessions (stub level): setup records the yes to reading the sessions; a curation run reads what was typed an hour ago and keeps what the scripted model proposes from it, with the person's words; `m2b proposals` shows the proposal, `m2b band --json` names it for the band, and the task list holds one open task that says it waits; the person keeps it, and the band's answer then counts one answer that waits; the next run writes its capture, the scripted ingest moves it into the archive, no proposal waits any more and the task is completed. What a real model proposes from a day of prompts is measured by `scripts/glean-eval`.",
   "model": {
     "text": {
       "answer": "{\"proposals\": [{\"kind\": \"person\", \"text\": \"Dana is head of IT at Northwind.\", \"quote\": \"Dana runs IT at Northwind\", \"session\": 1, \"topic\": null, \"due\": null}]}"
@@ -94,6 +94,14 @@
     {
       "run": [
         "m2b",
+        "band",
+        "--json"
+      ],
+      "stdout": "\"proposals\": \\{\\s*\"proposals\": \\[\\s*\\{\\s*\"id\": \"[0-9a-f]{12}\",\\s*\"kind\": \"person\",\\s*\"text\": \"Dana is head of IT at Northwind\\.\",\\s*\"quote\": \"Dana runs IT at Northwind\",\\s*\"day\": \"\\d{4}-\\d{2}-\\d{2}\",\\s*\"topic\": null,\\s*\"due\": null\\s*\\}\\s*\\],\\s*\"answered\": 0\\s*\\}"
+    },
+    {
+      "run": [
+        "m2b",
         "proposals",
         "keep",
         "--all"
@@ -106,6 +114,14 @@
         "proposals"
       ],
       "stdout": "\\Ano proposal waits for an answer\\n1 answer waits for the next curation run\\n\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "band",
+        "--json"
+      ],
+      "stdout": "\"proposals\": \\{\\s*\"proposals\": \\[\\],\\s*\"answered\": 1\\s*\\}"
     },
     {
       "run": [

@@ -417,7 +417,7 @@ def _parser() -> argparse.ArgumentParser:
     band_command = _command(
         commands, "band", band_commands.band_command, "what the band above the prompt shows, as JSON", json_flag=True
     )
-    band_command.add_argument("--tasks-only", action="store_true", help="only the curator tasks, without the status")
+    band_command.add_argument("--tasks-only", action="store_true", help="only the curator tasks, nothing else")
 
     launcher = _group(commands, "launcher", "the launcher in ~/.local/bin")
     _command(launcher, "install", launcher_commands.launcher_install, "write or refresh the launcher")
