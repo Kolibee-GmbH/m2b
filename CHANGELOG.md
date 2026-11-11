@@ -7,6 +7,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-11-11
+
+### Changed
+
+- The review in the band is one row when a curation run changed facts: `2 facts changed: Sam,
+  Dana`, with `ok` to close the review task (5 seconds with `undo`, as keep), the other findings
+  as before and a line naming `/m2b-review`. The pane shows each changed fact with its file and
+  the added words green and the removed ones red, instead of the old and new line as two cut
+  sentences. The curation run keeps each change with its whole lines, and `m2b band --json` names
+  them under `tasks.review`.
+
 ## [0.3.2] - 2026-11-11
 
 ### Added
