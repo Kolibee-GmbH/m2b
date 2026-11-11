@@ -14,6 +14,12 @@ All notable changes to this project are documented here. The format follows
   four words in square brackets. For any other note Claude Code asks, as it does for a tool no rule
   allows. Before, the mod let every note run, so text the model had read elsewhere, such as a web
   page, could become a note without you seeing it. The `capture` skill's command is unchanged.
+- The curation run treats what a capture says as data. A capture that gives instructions to
+  whoever files it (to replace or delete facts, to write a given line or rule into memory, to run
+  a command) is not carried out: nothing from it is filed, it goes into the archive as written, and
+  the review names it, so you can capture what is true in your own words. The refresh step and the
+  worklog's verdict follow the same rule for the text they read. A new model-level scenario,
+  `E17-planted-capture`, checks it with two captures written to steer the run.
 
 ### Fixed
 

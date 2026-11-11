@@ -37,6 +37,13 @@ or tag characters that spell invisible ASCII, undoes the step; the hooks remove 
 before the distillate reaches a session. Lines a capture adds are not flagged, because adding is
 what ingest is for.
 
+The skills of the run tell the model that captured text is data: a capture that gives instructions
+to whoever files it (to replace or delete facts, to write a given line or rule, to run a command)
+is filed without any fact, current line, task or ref, kept in the archive as written and named in
+the review task; only a follow-up the capture already carried from its capture still becomes its
+task. That is a rule a model follows, not a check in code: a capture worded as an ordinary fact
+("Dana moved to Lisbon") or as your own wish is filed as one, whoever wrote it.
+
 The distillate is printed at session start under a header saying it is data from your notes, not
 instructions, and it is cut at 8 KB; a model reading it is still a model and may follow text that
 looks like an instruction. So:
