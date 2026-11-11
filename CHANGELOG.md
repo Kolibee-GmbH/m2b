@@ -15,7 +15,7 @@ All notable changes to this project are documented here. The format follows
   link it again in herdr, so herdr runs the new version's events and startup command. Before, the
   check asked herdr's plugin list, which shows the manifest's version as it is now instead of the
   one herdr registered, so a recorder linked by m2b 0.2.0 or earlier never wrote its sign of life
-  at herdr's start.
+  at herdr's start ([#12](https://github.com/Kolibee-GmbH/m2b/pull/12)).
 
 ## [0.3.0] - 2026-11-11
 
