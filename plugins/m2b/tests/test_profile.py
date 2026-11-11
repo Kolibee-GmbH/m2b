@@ -91,6 +91,14 @@ class ParseTest(unittest.TestCase):
         )
         self.assertEqual(profile.parse_profile(INVENTED_PROFILE).worklog_leave_out.path_under, ())
 
+    def test_the_folders_left_out_are_under_each_machines_home_however_they_are_written(self) -> None:
+        raw = _profile(worklog_leave_out={"path_under": ["~/code/globex", "worktrees/globex"]})
+
+        self.assertEqual(
+            profile.parse_profile(raw).worklog_leave_out.folders(Path("/home/alex")),
+            (Path("/home/alex/code/globex"), Path("/home/alex/worktrees/globex")),
+        )
+
     def test_what_the_worklog_leaves_out_is_checked_like_a_spheres_folders(self) -> None:
         """Covers: B111"""
         for left_out, named in (

@@ -31,6 +31,10 @@ ADDED_IN_VERSION_TWO = "worklog_leave_out"
 _SPHERE_ID = re.compile(r"[a-z][a-z0-9-]*\Z")
 
 
+def _under_home(paths: tuple[str, ...], home: Path) -> tuple[Path, ...]:
+    return tuple(expand(path if path.startswith("~") else f"~/{path}", home) for path in paths)
+
+
 @dataclass(frozen=True)
 class SphereMatch:
     git_remote_contains: tuple[str, ...] = ()
@@ -38,7 +42,7 @@ class SphereMatch:
 
     def folders(self, home: Path) -> tuple[Path, ...]:
         """The sphere's folders on a machine whose home folder is ``home``."""
-        return tuple(expand(path if path.startswith("~") else f"~/{path}", home) for path in self.path_under)
+        return _under_home(self.path_under, home)
 
 
 @dataclass(frozen=True)
@@ -52,13 +56,18 @@ class Sphere:
 
 @dataclass(frozen=True)
 class WorklogLeaveOut:
-    """Folders under the home folder whose sessions the worklog add-on leaves out; the core only checks them.
+    """Folders under the home folder whose sessions m2b reads nowhere: the worklog add-on leaves them
+    out of the worklog, and a curation run that reads the sessions leaves them out too.
 
     It has the shape of the key in the file, because ``m2b profile get --json`` prints the profile
     from here and the add-on reads that answer.
     """
 
     path_under: tuple[str, ...] = ()
+
+    def folders(self, home: Path) -> tuple[Path, ...]:
+        """The folders on a machine whose home folder is ``home``."""
+        return _under_home(self.path_under, home)
 
 
 @dataclass(frozen=True)

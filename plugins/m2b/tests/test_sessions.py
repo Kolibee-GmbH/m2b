@@ -71,6 +71,7 @@ class SessionsFixture(unittest.TestCase):
 
 class TypedPromptsTest(SessionsFixture):
     def test_a_session_gives_what_was_typed_with_its_time_its_id_and_its_folder(self) -> None:
+        """Covers: B112"""
         self.transcript(
             typed("Dana runs IT at Northwind\nand signs   the renewals.", at(9)),
             {"type": "assistant", "timestamp": "2026-03-04T09:00:05Z", "message": {"content": "Noted."}},
@@ -92,6 +93,7 @@ class TypedPromptsTest(SessionsFixture):
         self.assertEqual(session.left_out, NOTHING_LEFT_OUT)
 
     def test_a_long_prompt_is_kept_up_to_its_first_two_thousand_characters(self) -> None:
+        """Covers: B113"""
         self.transcript(typed("word " * 1000, at(9)))
 
         (text,) = self.texts()
@@ -100,6 +102,7 @@ class TypedPromptsTest(SessionsFixture):
         self.assertTrue(text.startswith("word word "))
 
     def test_a_credential_in_a_prompt_is_redacted(self) -> None:
+        """Covers: B113"""
         self.transcript(typed("deploy with PGPASSWORD=hunter2 psql -h db.example", at(9)))
 
         self.assertEqual(self.texts(), ["deploy with PGPASSWORD=[removed] psql -h db.example"])
@@ -113,6 +116,7 @@ class TypedPromptsTest(SessionsFixture):
         self.assertEqual(text.encode("utf-8").decode("utf-8"), text)
 
     def test_a_prompt_typed_in_the_desktop_app_or_while_claude_was_busy_is_the_persons(self) -> None:
+        """Covers: B112"""
         self.transcript(
             typed("from the desktop app", at(9), promptSource="sdk", entrypoint="claude-desktop"),
             typed("typed while it worked", at(10), promptSource="queued"),
@@ -128,6 +132,7 @@ class TypedPromptsTest(SessionsFixture):
 
 class PastedTextTest(SessionsFixture):
     def test_a_pasted_block_is_left_out_with_what_it_holds_and_counted(self) -> None:
+        """Covers: B113"""
         mail = '<pasted_content id="4ce7">From Kim Lee: the contract ends on 30 June.</pasted_content id="4ce7">'
         self.transcript(typed(f"Answer this mail politely: {mail} and keep it short.", at(9)))
 
@@ -137,12 +142,14 @@ class PastedTextTest(SessionsFixture):
         self.assertEqual(session.left_out.pasted_blocks, 1)
 
     def test_a_closing_tag_inside_the_paste_does_not_end_it(self) -> None:
+        """Covers: B113"""
         paste = '<pasted_content id="ab12">one</pasted_content> Sam owes 40 euros</pasted_content id="ab12">'
         self.transcript(typed(f"see {paste} done", at(9)))
 
         self.assertEqual(self.texts(), ["see done"])
 
     def test_a_paste_that_never_closes_takes_the_rest_of_the_prompt_with_it(self) -> None:
+        """Covers: B113"""
         self.transcript(typed('before <pasted_content id="ab12">a mail without an end, Sam owes 40 euros', at(9)))
 
         session = self.only_session()
@@ -151,6 +158,7 @@ class PastedTextTest(SessionsFixture):
         self.assertEqual(session.left_out.pasted_blocks, 1)
 
     def test_a_prompt_that_is_only_a_paste_is_no_prompt(self) -> None:
+        """Covers: B113"""
         self.transcript(typed('<pasted_content id="ab12">a whole document</pasted_content id="ab12">', at(9)))
 
         session = self.only_session()
@@ -159,6 +167,7 @@ class PastedTextTest(SessionsFixture):
         self.assertEqual(session.left_out.pasted_blocks, 1)
 
     def test_two_pastes_in_one_prompt_both_go(self) -> None:
+        """Covers: B113"""
         first = '<pasted_content id="aa11">first</pasted_content id="aa11">'
         second = '<pasted_content id="bb22">second</pasted_content id="bb22">'
         self.transcript(typed(f"compare {first} with {second} please", at(9)))
@@ -171,6 +180,7 @@ class PastedTextTest(SessionsFixture):
 
 class ClaudeCodesBlocksTest(SessionsFixture):
     def test_what_claude_code_writes_into_a_typed_prompt_is_taken_out(self) -> None:
+        """Covers: B113"""
         reminder = "<system-reminder>The file notes.md changed: Kim Lee moved to Globex.</system-reminder>"
         hook = "<user-prompt-submit-hook>Northwind: Dana signs the renewals</user-prompt-submit-hook>"
         self.transcript(
@@ -194,6 +204,7 @@ class ClaudeCodesBlocksTest(SessionsFixture):
 
 class LongPromptTest(SessionsFixture):
     def test_a_credential_at_the_edge_of_what_is_redacted_does_not_come_through_in_part(self) -> None:
+        """Covers: B113"""
         filler = "word " * 1636
         prompt = f"{filler}PGPASSWORD=hunter2hunter2hunter2 psql"
         self.assertLess(len(filler), 8 * 1024)
@@ -213,6 +224,7 @@ class LongPromptTest(SessionsFixture):
 
 class SlashCommandTest(SessionsFixture):
     def test_a_slash_command_is_only_its_name(self) -> None:
+        """Covers: B113"""
         command = (
             "<command-message>m2b:capture</command-message>\n<command-name>/m2b:capture</command-name>\n"
             "<command-args>Dana's birthday is 3 May</command-args>"
@@ -233,6 +245,7 @@ class SlashCommandTest(SessionsFixture):
         self.assertEqual(session.left_out.unmarked, 1)
 
     def test_a_command_a_plugin_ran_is_not_the_persons(self) -> None:
+        """Covers: B112"""
         self.transcript(unmarked("<command-name>/catchup</command-name>", at(9), origin={"kind": "plugin"}))
 
         session = self.only_session()
@@ -243,6 +256,7 @@ class SlashCommandTest(SessionsFixture):
 
 class NotThePersonTest(SessionsFixture):
     def test_what_a_sender_other_than_a_human_sent_is_left_out_and_counted(self) -> None:
+        """Covers: B112"""
         self.transcript(
             typed("build the shed door", at(9)),
             sent_by("plugin", "The loop plugin sent a message: build step 5, Dana signs the renewals", at(10)),
@@ -257,6 +271,7 @@ class NotThePersonTest(SessionsFixture):
         self.assertEqual(session.left_out, LeftOut(pasted_blocks=0, sent_by_others=4, suggested=0, unmarked=0))
 
     def test_a_suggestion_the_person_only_accepted_is_left_out_and_counted(self) -> None:
+        """Covers: B112"""
         self.transcript(typed("yes, commit it", at(9), promptSource="suggestion_accepted"))
 
         session = self.only_session()
@@ -265,6 +280,7 @@ class NotThePersonTest(SessionsFixture):
         self.assertEqual(session.left_out.suggested, 1)
 
     def test_text_without_the_mark_of_who_sent_it_is_left_out_and_counted(self) -> None:
+        """Covers: B112"""
         self.transcript(unmarked("Dana runs IT at Northwind", at(9)))
 
         session = self.only_session()
@@ -273,6 +289,7 @@ class NotThePersonTest(SessionsFixture):
         self.assertEqual(session.left_out.unmarked, 1)
 
     def test_what_claude_code_writes_around_a_prompt_is_neither_a_prompt_nor_counted(self) -> None:
+        """Covers: B112"""
         self.transcript(
             typed("build the shed door", at(9)),
             unmarked("<local-command-stdout>Set model to haiku</local-command-stdout>", at(9, 1)),
@@ -297,6 +314,7 @@ class NotThePersonTest(SessionsFixture):
 
 class WhichSessionsTest(SessionsFixture):
     def test_only_prompts_of_the_period_count_and_a_session_without_any_is_not_there(self) -> None:
+        """Covers: B114"""
         self.transcript(
             typed("the evening before", DAY - datetime.timedelta(minutes=1)),
             typed("first of the day", DAY),
@@ -318,6 +336,7 @@ class WhichSessionsTest(SessionsFixture):
         self.assertEqual((session.prompts, session.left_out.sent_by_others), ((), 1))
 
     def test_a_headless_run_is_left_out_whole(self) -> None:
+        """Covers: B114"""
         self.transcript(
             typed("file the inbox", at(9)),
             typed("and the next step", at(9, 1), entrypoint="sdk-cli"),
@@ -349,12 +368,14 @@ class WhichSessionsTest(SessionsFixture):
 
 class CouldNotLookTest(SessionsFixture):
     def test_a_missing_folder_is_an_error_not_an_empty_day(self) -> None:
+        """Covers: B114"""
         with self.assertRaises(sessions.SessionsError) as failed:
             sessions.read_sessions(self.projects / "gone", DAY, NEXT_DAY)
 
         self.assertIn("gone", str(failed.exception))
 
     def test_a_transcript_with_prompts_that_names_no_folder_is_named_as_not_read(self) -> None:
+        """Covers: B114"""
         self.transcript(typed("first of the day", at(9), cwd=None), session="no-folder")
         self.transcript(typed("the day after", NEXT_DAY, cwd=None), session="nothing-of-the-period")
 
@@ -364,6 +385,7 @@ class CouldNotLookTest(SessionsFixture):
         self.assertEqual(found.unreadable, ("-shed/no-folder.jsonl",))
 
     def test_a_transcript_that_cannot_be_read_is_named_and_the_others_are_read(self) -> None:
+        """Covers: B114"""
         self.transcript(typed("first of the day", at(9)), session="readable")
         (self.projects / "-shed" / "broken.jsonl").mkdir()
 

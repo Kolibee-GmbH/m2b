@@ -11,10 +11,11 @@ records the cause (in the run record, or in the local log when even that cannot 
 the backoff makes the next attempt wait. After preflight every step runs whatever the one before
 did (B13): a failing step is recorded and reported in the review, and when it is a core step the
 run counts as failed, so the last successful run does not move; an add-on's failing step leaves the
-run succeeded, so an add-on never holds back the core. The one exception is a migration (``migrations``): the
-due ones run first, and when one fails the run goes straight to the review, because every later
-step follows rules the store does not hold yet. Ingest is skipped when the inbox holds nothing, refresh
-when no fact is past its day.
+run succeeded, so an add-on never holds back the core, and so does the reading of the sessions
+(``glean_step``), which is in the run only while ``curation.read_sessions`` is on. The one
+exception is a migration (``migrations``): the due ones run first, and when one fails the run goes
+straight to the review, because every later step follows rules the store does not hold yet. Ingest
+is skipped when the inbox holds nothing, refresh when no fact is past its day.
 
 ``refresh_all`` is the one-time backfill for lines written before ingest dated them: the run starts
 whether due or not, and the refresh step also gets the fact files without ``until`` and the current
@@ -54,7 +55,7 @@ from m2b.config.store_settings import (
     load_store_settings,
     write_store_format,
 )
-from m2b.curate import machine_state, memory_guard, migrations, model, report
+from m2b.curate import glean_step, machine_state, memory_guard, migrations, model, report
 from m2b.curate.due import check_due
 from m2b.harvest import harvest
 from m2b.journal import write_journal
@@ -96,6 +97,7 @@ __all__ = ["NotSetUpError", "RunOutcome", "RunRecordWriteError", "StoreError", "
 
 PREFLIGHT = "preflight"
 HARVEST = "harvest"
+GLEAN = "glean"
 INGEST = "ingest"
 REFRESH = "refresh"
 SORT = "sort"
@@ -261,8 +263,9 @@ class _Run:
     undated: expiry.Undated | None = None
     steps: list[StepResult] = field(default_factory=list)
     failures: list[StepFailure] = field(default_factory=list)
-    # The steps add-ons ran: their failure goes into the review but leaves the run succeeded.
-    addon_steps: set[str] = field(default_factory=set)
+    # The steps whose failure goes into the review but leaves the run succeeded: the add-ons' and
+    # the reading of the sessions.
+    forgiven_steps: set[str] = field(default_factory=set)
     findings: list[report.Finding] = field(default_factory=list)
     last_success: datetime.datetime | None = None
     started: datetime.datetime | None = None
@@ -403,6 +406,9 @@ class _Run:
             # The undated lines preflight read for ``--refresh-all`` are from before the migration.
             self.undated = None
         self._step(HARVEST, lambda: self._harvest(tasks, locale))
+        if self.config.curation.read_sessions:
+            self.forgiven_steps.add(GLEAN)
+            self._step(GLEAN, self._glean)
         self._addons("before_ingest", token)
         self._step(INGEST, lambda: self._ingest(token))
         self._addons("after_ingest", token)
@@ -484,6 +490,22 @@ class _Run:
         result = harvest(self.store, tasks, locale.text(PREFIX_KEY), self.clock())
         self.findings += [report.Finding(HARVEST, report.ACTION, problem) for problem in result.problems]
         current_check.settle(self.store, tasks, self.clock().date(), task_list=self._task_list())
+
+    def _glean(self) -> Skipped | None:
+        """What the person typed since the last reading; the model only when a session has a prompt."""
+        started = self.started or self.clock()
+        try:
+            reading = glean_step.propose(
+                self.store, self.config, self.machine, self.environ, started, self.lock.pass_fds
+            )
+        # Whatever stopped the reading, the review says what the step was for and that nothing is lost.
+        except Exception as error:
+            text = str(error) or type(error).__name__
+            raise StepError(
+                f"the sessions were not read for proposals ({text}); the next run reads them again"
+            ) from error
+        self.findings += [report.Finding(GLEAN, report.INFO, note) for note in reading.notes]
+        return Skipped(reading.skipped) if reading.skipped is not None else None
 
     def _journal(self, tasks: Tasks) -> None:
         result = write_journal(
@@ -768,7 +790,7 @@ class _Run:
 
     def _addons(self, slot: str, token: str) -> None:
         for addon in steps_in(slot, self.config.addons):
-            self.addon_steps.add(addon.name)
+            self.forgiven_steps.add(addon.name)
             self._step(addon.name, functools.partial(self._addon, addon, token))
 
     def _addon(self, addon: Addon, token: str) -> None:
@@ -786,18 +808,20 @@ class _Run:
             raise StepError(end.failure())
 
     def _finish(self, started: datetime.datetime, findings: list[report.Finding]) -> RunOutcome:
-        """A failed core step fails the run (B13, B63); a failed add-on step only reaches the review.
+        """A failed core step fails the run (B13, B63); a failed add-on step and a failed reading of
+        the sessions only reach the review.
 
-        An add-on's failure that does not clear by itself must not hold back the filing of the inbox
+        Such a failure that does not clear by itself must not hold back the filing of the inbox
         with the backoff, nor keep the run due at every session start.
         """
         failed = [step for step in self.steps if step.result == FAILED]
         message = "; ".join(f"{step.name}: {step.detail}" for step in failed)
-        state = FAILED if any(step.name not in self.addon_steps for step in failed) else SUCCEEDED
+        state = FAILED if any(step.name not in self.forgiven_steps for step in failed) else SUCCEEDED
         record = self._record(state, started, finished_at=self.clock(), message=message, findings=tuple(findings))
         self._close(record, message or "the run succeeded")
         if state == SUCCEEDED and message:
-            return RunOutcome(state, f"the curation run succeeded; an add-on failed, see the review: {message}", record)
+            forgiven = f"the curation run succeeded; a step that does not fail it failed, see the review: {message}"
+            return RunOutcome(state, forgiven, record)
         return RunOutcome(state, message or "the curation run succeeded", record)
 
     def _close(self, record: RunRecord, message: str) -> None:
@@ -854,7 +878,8 @@ class _Run:
         # Preflight fetches once, the journal once more for older month files.
         fetch = 2 * datetime.timedelta(seconds=self.fetch_timeout_seconds)
         backfill = len(expiry.batches(self.undated, BACKFILL_BATCH)) - 1 if self.undated is not None else 0
-        model_steps = MODEL_STEPS + max(backfill, 0) + addon_steps + (1 if self.sort_facts else 0)
+        optional = (1 if self.sort_facts else 0) + (1 if self.config.curation.read_sessions else 0)
+        model_steps = MODEL_STEPS + max(backfill, 0) + addon_steps + optional
         return fetch + step * model_steps + CODE_STEPS_MARGIN
 
 

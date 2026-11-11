@@ -50,6 +50,9 @@ class CurationSettings:
     # Claude Code's own estimate of API spend per model step; unset, no cap. On a subscription the
     # estimate says little, so it is off unless the user sets it.
     max_budget_usd: float | None = None
+    # Whether a run reads what the person typed in Claude Code on this machine and proposes from it
+    # (``curate.glean_step``). Off until setup asked: the transcripts hold every project's sessions.
+    read_sessions: bool = False
 
 
 @dataclass(frozen=True)
@@ -130,12 +133,13 @@ def _executables(fields: Fields) -> Mapping[str, str]:
 
 
 def _curation(fields: Fields) -> CurationSettings:
-    fields.reject_unknown(("model_timeout_minutes", "model", "max_turns", "max_budget_usd"))
+    fields.reject_unknown(("model_timeout_minutes", "model", "max_turns", "max_budget_usd", "read_sessions"))
     return CurationSettings(
         model_timeout_minutes=fields.integer("model_timeout_minutes", default=DEFAULT_MODEL_TIMEOUT_MINUTES),
         model=fields.string("model", default=DEFAULT_CURATION_MODEL),
         max_turns=fields.integer("max_turns", default=DEFAULT_MAX_TURNS),
         max_budget_usd=_budget(fields),
+        read_sessions=fields.boolean("read_sessions", default=False),
     )
 
 

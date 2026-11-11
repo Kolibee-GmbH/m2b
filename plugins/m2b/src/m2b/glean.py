@@ -95,6 +95,8 @@ class Checked:
     kept: tuple[Proposal, ...]
     not_quoted: tuple[Proposal, ...]
     already_captured: tuple[Proposal, ...]
+    # When the first prompt that holds its quote was typed, for each kept proposal in their order.
+    kept_at: tuple[datetime.datetime, ...] = ()
 
 
 def instruction() -> str:
@@ -132,22 +134,27 @@ def parse_answer(answer: str, sessions: Sequence[Session]) -> Answer:
 
 def check(proposals: Sequence[Proposal], sessions: Sequence[Session], captures: Sequence[str]) -> Checked:
     """Sorts the proposals by the two checks; ``captures`` are the texts captured in the period."""
-    typed = {session.session_id: [_collapsed(prompt.text) for prompt in session.prompts] for session in sessions}
+    typed = {
+        session.session_id: [(_collapsed(prompt.text), prompt.time) for prompt in session.prompts]
+        for session in sessions
+    }
     # Only a capture adds in brackets; what the person typed in brackets are words of their prompt.
     captured = [(_bare(capture), _words(_ADDITION.sub(" ", capture))) for capture in captures]
     kept: list[Proposal] = []
+    kept_at: list[datetime.datetime] = []
     not_quoted: list[Proposal] = []
     already_captured: list[Proposal] = []
     for proposal in proposals:
         quote = _collapsed(proposal.quote)
-        quoted_from = [prompt for prompt in typed.get(proposal.session, ()) if quote in prompt]
+        quoted_from = [(prompt, time) for prompt, time in typed.get(proposal.session, ()) if quote in prompt]
         if len(quote.split()) < QUOTE_WORDS or not quoted_from:
             not_quoted.append(proposal)
-        elif _is_captured(quote, quoted_from, captured):
+        elif _is_captured(quote, [prompt for prompt, _ in quoted_from], captured):
             already_captured.append(proposal)
         else:
             kept.append(proposal)
-    return Checked(tuple(kept), tuple(not_quoted), tuple(already_captured))
+            kept_at.append(quoted_from[0][1])
+    return Checked(tuple(kept), tuple(not_quoted), tuple(already_captured), tuple(kept_at))
 
 
 def _entries(answer: str) -> list[Any]:

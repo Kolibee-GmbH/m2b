@@ -104,6 +104,14 @@ class ParseTest(unittest.TestCase):
             with self.subTest(addon=addon), self.assertRaises(InvalidConfigError):
                 machine.parse_machine_config(_config(addons={"worklog": addon}), HOME)
 
+    def test_reading_the_sessions_is_off_until_the_config_turns_it_on(self) -> None:
+        """Covers: B115"""
+        self.assertFalse(machine.parse_machine_config(_config(), HOME).curation.read_sessions)
+        config = machine.parse_machine_config(_config(curation={"read_sessions": True}), HOME)
+        self.assertTrue(config.curation.read_sessions)
+        with self.assertRaises(InvalidConfigError):
+            machine.parse_machine_config(_config(curation={"read_sessions": "yes"}), HOME)
+
     def test_the_curation_model_and_turn_limit_default_to_a_small_model_and_100(self) -> None:
         config = machine.parse_machine_config(_config(), HOME)
         self.assertEqual((config.curation.model, config.curation.max_turns), ("haiku", 100))

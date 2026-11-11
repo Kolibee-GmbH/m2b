@@ -150,12 +150,14 @@ class ParseAnswerTest(unittest.TestCase):
         self.assertEqual((read.proposals, read.malformed), ((), 0))
 
     def test_an_answer_that_names_no_proposals_is_an_error_not_an_empty_answer(self) -> None:
+        """Covers: B117"""
         unreadable = ("", "I found nothing worth keeping.", "[]", '{"found": []}', '{"proposals": "none"}')
         for text in unreadable:
             with self.subTest(text=text), self.assertRaises(glean.GleanError):
                 glean.parse_answer(text, [SHED])
 
     def test_a_proposal_that_is_not_in_the_form_is_left_out_and_counted(self) -> None:
+        """Covers: B117"""
         not_in_the_form: dict[str, object] = {
             "not an object": "Dana runs IT",
             "an unknown kind": entry(kind="rule"),
@@ -206,17 +208,36 @@ class CheckTest(unittest.TestCase):
     def check(self, *proposals: Proposal, captures: tuple[str, ...] = ()) -> glean.Checked:
         return glean.check(proposals, [SHED, TRIP], captures)
 
+    def test_each_kept_proposal_comes_with_the_time_the_prompt_with_its_quote_was_typed(self) -> None:
+        said_later = session(
+            "shed",
+            "run the tests again",
+            "Dana runs  IT at Northwind, by the way",
+            "as I said, Dana runs IT at Northwind",
+        )
+        invented = proposal("Dana signs every contract")
+
+        checked = glean.check(
+            [proposal("we are away", "trip"), invented, proposal("Dana runs IT\nat Northwind")], [TRIP, said_later], ()
+        )
+
+        self.assertEqual([kept.session for kept in checked.kept], ["trip", "shed"])
+        self.assertEqual(checked.kept_at, (MORNING, MORNING + datetime.timedelta(minutes=1)))
+
     def test_a_proposal_whose_quote_stands_in_a_prompt_of_its_session_is_kept(self) -> None:
+        """Covers: B117"""
         quoted = proposal("Dana runs IT at Northwind")
 
         checked = self.check(quoted)
 
-        self.assertEqual(checked, glean.Checked(kept=(quoted,), not_quoted=(), already_captured=()))
+        self.assertEqual(checked, glean.Checked(kept=(quoted,), not_quoted=(), already_captured=(), kept_at=(MORNING,)))
 
     def test_white_space_in_a_quote_does_not_matter(self) -> None:
+        """Covers: B117"""
         self.assertEqual(len(self.check(proposal("Dana runs  IT\nat Northwind ")).kept), 1)
 
     def test_a_quote_that_is_not_what_the_person_typed_is_not_quoted(self) -> None:
+        """Covers: B117"""
         not_typed = {
             "another word": proposal("Dana runs HR at Northwind"),
             "another case": proposal("dana runs it at northwind"),
@@ -231,12 +252,14 @@ class CheckTest(unittest.TestCase):
                 self.assertEqual((checked.kept, checked.not_quoted), ((), (invented,)))
 
     def test_a_quote_of_fewer_than_three_words_shows_nothing_and_is_not_quoted(self) -> None:
+        """Covers: B117"""
         checked = self.check(proposal("Dana runs"), proposal("Dana runs IT"))
 
         self.assertEqual([kept.quote for kept in checked.kept], ["Dana runs IT"])
         self.assertEqual([dropped.quote for dropped in checked.not_quoted], ["Dana runs"])
 
     def test_a_proposal_the_person_captured_themselves_is_already_captured(self) -> None:
+        """Covers: B117"""
         captured = {
             "the quote stands in the capture": ("Dana runs IT at Northwind and signs the renewals, since May.",),
             "the capture stands in the quote": ("Runs IT at Northwind.",),
@@ -273,11 +296,13 @@ class WordedAnewTest(unittest.TestCase):
         return glean.check([proposal(quote, given.session_id)], [given], captures)
 
     def test_a_capture_in_another_order_than_its_prompt_is_already_captured(self) -> None:
+        """Covers: B117"""
         checked = self.checked(self.WINDOW, "dass ich lieber am Fenster sitze", "Ich sitze lieber am Fenster.\n")
 
         self.assertEqual((len(checked.kept), len(checked.already_captured)), (0, 1))
 
     def test_what_a_capture_adds_in_square_brackets_does_not_count(self) -> None:
+        """Covers: B117"""
         given = session("ladder", "he brings the ladder back on Friday, remember that")
 
         checked = self.checked(given, "he brings the ladder back", "He [Sam] brings the ladder back on Friday.")
@@ -301,16 +326,19 @@ class WordedAnewTest(unittest.TestCase):
         self.assertEqual((len(checked.kept), len(checked.already_captured)), (0, 1))
 
     def test_a_capture_of_the_prompts_other_sentence_takes_nothing_away(self) -> None:
+        """Covers: B117"""
         checked = self.checked(self.TWO, "Sam bringt am Freitag das Sperrholz vorbei", "Dana leitet die IT.")
 
         self.assertEqual((len(checked.kept), len(checked.already_captured)), (1, 0))
 
     def test_a_capture_with_a_word_the_prompt_does_not_hold_did_not_come_from_it(self) -> None:
+        """Covers: B117"""
         checked = self.checked(SHED, "Dana runs IT at Northwind", "Dana runs IT at Southwind")
 
         self.assertEqual((len(checked.kept), len(checked.already_captured)), (1, 0))
 
     def test_a_capture_of_fewer_than_three_different_words_shows_nothing(self) -> None:
+        """Covers: B117"""
         checked = self.checked(SHED, "Dana runs IT at Northwind", "Dana, Dana: IT")
 
         self.assertEqual((len(checked.kept), len(checked.already_captured)), (1, 0))

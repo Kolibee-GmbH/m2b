@@ -27,8 +27,8 @@ class CatalogTest(unittest.TestCase):
     def test_the_real_catalog_is_read_with_every_testable_behavior(self) -> None:
         catalog = coverage_check.catalogued_ids(coverage_check.BEHAVIOR_CATALOG.read_text(encoding="utf-8"))
 
-        self.assertEqual(len(catalog), 130)
-        self.assertEqual(sum(i.startswith("B") for i in catalog), 109)
+        self.assertEqual(len(catalog), 138)
+        self.assertEqual(sum(i.startswith("B") for i in catalog), 117)
         self.assertNotIn("X15", catalog)
         self.assertEqual(len(set(catalog)), len(catalog))
 

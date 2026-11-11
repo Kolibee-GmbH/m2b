@@ -49,6 +49,7 @@ An example with invented values:
 | `curation.model` | the model of each fenced model step, any name `claude --model` takes | `haiku` |
 | `curation.max_budget_usd` | a spending cap per model step, from Claude Code's own estimate of API cost; it can differ from the bill and says little on a subscription | none |
 | `curation.max_turns` | the turns one model step may take before it stops and is reported | 100 |
+| `curation.read_sessions` | whether a curation run on this machine reads what you typed in Claude Code since the last reading and keeps what a model proposes from it for your memory; sessions in a folder of `worklog_leave_out` in the profile or of `distillate.skip_under` are not read | `false` |
 | `band.due_tasks` | whether the band shows your tasks due today or overdue below the candidates | `true` |
 | `distillate.skip_under` | folders, absolute or starting with `~/`, in and below which sessions get no distillate; `m2b distillate off` and `on` change it | none |
 | `addons.<add-on>.on` | whether an add-on runs on this machine: `worklog` | off |
