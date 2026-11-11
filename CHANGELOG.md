@@ -7,6 +7,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-11-11
+
 ### Fixed
 
 - A search that finds nothing about the person or topic asked for no longer offers a hit about
