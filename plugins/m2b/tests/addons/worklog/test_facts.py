@@ -17,7 +17,7 @@ from m2b_worklog import facts, schema
 from m2b_worklog.facts import FactsError, Inputs
 from m2b_worklog.sources import herdr_events
 from m2b_worklog.sources.inbox import read_inbox
-from m2b_worklog.sources.transcripts import prompt_text, read_transcripts, redact
+from m2b_worklog.sources.transcripts import answer_text, prompt_text, read_transcripts, redact
 from worklog_fixtures import load_recorder
 
 ZONE = datetime.timezone(datetime.timedelta(hours=1))
@@ -1000,6 +1000,29 @@ class WhatLeavesATranscriptTest(Fixture):
             with self.subTest(text=text):
                 self.assertNotIn(secret, redact(text))
                 self.assertIn("[removed]", redact(text))
+
+    def test_a_secret_at_the_edge_of_the_kept_part_is_redacted_after_whitespace_shrinks(self) -> None:
+        """Covers: B97"""
+        # The last 700 characters of the answer start right after "password: ", and the indented
+        # code shrinks to a few words, so the bare value would land inside the 500 kept.
+        tail = "hunter2pass and then:\n" + "\n".join(" " * 40 + f"v{i:02d} = f(x)" for i in range(13))
+        answer = "Use the password: " + (tail + " " * 700)[:700]
+        self.assertNotIn("hunter2pass", answer_text(answer) or "")
+        # The key straddles character 440, where only its first 21 characters would be read.
+        key = "AKIAQ7zQ7zQ7zQ7zQ7zZzQ7zQ7zQ7zQ7zQ7"
+        lines = "\n".join(" " * 40 + "line" for _ in range(9))
+        prompt = lines + " " * (419 - len(lines)) + key + " and more"
+        self.assertNotIn(key[:12], prompt_text(prompt) or "")
+
+    def test_a_key_cut_at_the_edge_of_a_long_paste_is_left_out(self) -> None:
+        """Covers: B97"""
+        key = "AKIAQ7zQ7zQ7zQ7zQ7zZzQ7zQ7zQ7zQ7zQ7"
+        # Past 8 KiB only a piece is redacted; mostly whitespace, it shrinks to the cut key.
+        prompt = "Fix this" + " " * (8 * 1024 - 8 - 21) + key + " and more"
+        self.assertEqual(prompt_text(prompt), "Fix this")
+        # The last 8 KiB start six characters before the end of the key.
+        answer = "Before " + key + " " * (8 * 1024 - 15 - 6) + "Shall I deploy?"
+        self.assertEqual(answer_text(answer), "Shall I deploy?")
 
     def test_paths_and_plain_sentences_stay_as_written(self) -> None:
         """Covers: B97"""

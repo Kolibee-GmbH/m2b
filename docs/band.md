@@ -252,8 +252,9 @@ In `plugins/m2b/hooks/`: `register.tsx` and its helpers, loaded through `"module
 
 The band was an add-on there, off until `/m2b:band-setup` turned it on. Now it runs wherever m2b is
 set up, also on a machine where it was turned off: an entry `addons.band` in `config.json` is
-ignored, and `m2b addons off band` removes it. Sessions open during the update keep the old band
-until they are started again.
+ignored, and `m2b addons off band` removes it. Sessions open during the update lose the band and
+the status line, because the 0.2.0 band no longer finds itself among the add-ons, until they are
+started again or run `/reload-plugins`.
 
 The model now notes and searches through the tools `mcp__m2b__note` and `mcp__m2b__search`
 instead of a shell call. A rule you had for `Bash(m2b capture:*)` or `Bash(m2b search:*)` holds for

@@ -149,7 +149,7 @@ def _csv(rows: Sequence[Sequence[str]]) -> bytes:
 def _as_text(cell: str) -> str:
     """A cell a spreadsheet would read as a formula gets a leading apostrophe: topics come from a model.
 
-    The XLSX needs none, its cells are written as text.
+    The XLSX needs none: its text cells are written as text, the minute columns as numbers.
     """
     return f"'{cell}" if cell.startswith(FORMULA_STARTS) else cell
 

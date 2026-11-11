@@ -89,7 +89,7 @@ empty.
 In `ledger.csv`, a cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets a
 leading apostrophe, so a
 spreadsheet shows a topic the model wrote as text instead of running it as a formula; the XLSX
-writes every cell as text and needs none.
+writes every text cell as text and the two minute columns as numbers, so it needs none.
 
 The ledger never holds the same minutes twice. A worklog whose period overlaps one the ledger holds
 is refused before anything is written, and the step fails with a message that names the period it

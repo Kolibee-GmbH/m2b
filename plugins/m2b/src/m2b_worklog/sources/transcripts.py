@@ -59,8 +59,12 @@ _BASE64_CANDIDATE = re.compile(
     r"(?<![\w/.~+-])(?=[\w+/=-]*[A-Z])(?=[\w+/=-]*[a-z])(?=[\w+/=-]*\d)[A-Za-z0-9][\w+/=-]{23,}(?![\w/+]|\.\w)"
 )
 _LOWER_WORD = re.compile(r"[a-z]+")
-# Redaction runs before the cut; this much more than the cut keeps its patterns fast on long text.
-_REDACT_MARGIN = 200
+# Redaction runs on this much of the text, from the end that is kept, so its patterns stay fast on a
+# long paste. Whitespace and redaction shrink the piece before the cut, so the piece reaches well
+# past the kept part, and the word at its far edge, which may be cut, is dropped.
+_REDACT_WINDOW = 8 * 1024
+_FIRST_WORD = re.compile(r"\A\S*")
+_LAST_WORD = re.compile(r"\S*\Z")
 REDACTED = "[removed]"
 
 
@@ -125,7 +129,9 @@ def prompt_text(content: object, limit: int = PROMPT_LENGTH) -> str | None:
         text = _SYSTEM_BLOCK.sub("", _PASTED.sub("", content))
         if _WRAPPED.match(text) or text.lstrip().startswith(_SUMMARY_OPENING):
             return None
-    text = " ".join(redact(text[: limit + _REDACT_MARGIN]).split())
+    if len(text) > _REDACT_WINDOW:
+        text = _LAST_WORD.sub("", text[:_REDACT_WINDOW])
+    text = " ".join(redact(text).split())
     return text[:limit] or None
 
 
@@ -134,7 +140,9 @@ def answer_text(content: object, limit: int = ANSWER_LENGTH) -> str | None:
     content = _text_of(content)
     if content is None:
         return None
-    text = " ".join(redact(content[-(limit + _REDACT_MARGIN) :]).split())
+    if len(content) > _REDACT_WINDOW:
+        content = _FIRST_WORD.sub("", content[-_REDACT_WINDOW:])
+    text = " ".join(redact(content).split())
     return text[-limit:] or None
 
 
