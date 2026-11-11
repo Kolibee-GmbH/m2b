@@ -7,6 +7,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-11
+
 ### Upgrading from 0.2.0
 
 What goes away: the add-ons `herdr` and `backup`, and the skill `/m2b:band-setup`. The folder the
@@ -24,8 +26,9 @@ What happens by itself:
 What you do:
 
 1. Update the plugin and restart Claude Code, on the curating machine first when you have several
-   ([Updating](README.md#updating)). A session open during the update keeps the old band until it
-   is started again; it shows a line naming `/reload-plugins`.
+   ([Updating](README.md#updating)). A session open during the update loses its band and status
+   line, because the 0.2.0 band no longer finds itself among the add-ons; start it again or run
+   `/reload-plugins`. From 0.3.0 on, an older band names `/reload-plugins` itself.
 2. Optionally clear the ignored entries: `m2b addons off band`, `m2b addons off herdr`,
    `m2b addons off backup`.
 3. If you keep permission rules for `Bash(m2b capture:*)` or `Bash(m2b search:*)`, they now hold for
@@ -80,7 +83,8 @@ What you do:
   `config.json` is ignored and `m2b addons off band` removes it. It needs mods on in Claude Code.
   `m2b doctor` has a line `band` that says whether the latest session ran it, and if not, whether
   only mods or all plugin hooks were off. Its page moved to `docs/band.md`. Sessions open during
-  the update keep the old band until they are started again.
+  the update lose the band and the status line until they are started again or run
+  `/reload-plugins`.
 - The status line reads `2 in inbox · curated 18:02` without its own `brain:`, since Claude Code
   already puts the plugin's name in front.
 - Every row of the worklog's ledger carries two numbers: `minutes`, the work in the span, and
