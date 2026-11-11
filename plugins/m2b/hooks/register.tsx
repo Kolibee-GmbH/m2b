@@ -3,6 +3,7 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { BandCandidate, BandPress, BandReview, BandSettle, BandSnapshot } from '../types'
 import { launcherPath, m2bHome, machineConfigPath, runM2b } from './m2b'
+import { NOTE_COMMAND, note } from './note'
 import { plainLine } from './plain-text'
 import { shared } from './shared-cache'
 import { COULD_NOT_LOOK, statusLine } from './status-line'
@@ -449,6 +450,11 @@ export const register: Register = on => {
     lockTimers.clear()
     await carryPressesOver($)
     loadedVersion = await readLoadedVersion($)
+    try {
+      await $.command.register(NOTE_COMMAND)
+    } catch {
+      // Without the command the band still runs; the skill m2b:capture notes the same way.
+    }
     minuteTimer = $.clock.every(REFRESH_EVERY_MS, inBackground($, () => refresh($)))
     $.clock.after(0, inBackground($, () => refresh($)))
     void noteSeen($)
@@ -461,6 +467,19 @@ export const register: Register = on => {
       $.clock.after(0, inBackground($, () => refresh($, true)))
     }
     return result
+  })
+
+  on('command.run', { command: NOTE_COMMAND.name }, async ($, e, next) => {
+    // Registered only outside a curation run, where nothing would type it; the band stays out of it.
+    if (await isCurationRun($)) {
+      return next(e)
+    }
+    const outcome = await note($, e.args, () => isSetUp($))
+    if (outcome.isWritten) {
+      // The status line counts the new capture without waiting for the minute.
+      $.clock.after(0, inBackground($, () => refresh($, true)))
+    }
+    return { text: outcome.line }
   })
 
   // The band only clears its notice here; when that throws or overruns, the prompt still enters

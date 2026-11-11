@@ -59,6 +59,10 @@ export class FakeM2b {
   runFails: string | null = null
   /** When set, `$.fs.exists` rejects, as it does for a folder on a network location that does not answer. */
   existsFails = false
+  /** What `m2b capture` was handed on standard input, one entry per call. */
+  readonly captured: string[] = []
+  /** When set, `m2b capture` fails with this as its message. */
+  captureFails: string | null = null
   /** The installed core's version, as `m2b band --json` answers it. */
   version = '0.3.0'
   /** The version in the manifest of the plugin the band was loaded from; null when it cannot be read. */
@@ -88,7 +92,7 @@ export class FakeM2b {
     return this
   }
 
-  handle(argv: readonly string[]): ProcessRunResult {
+  handle(argv: readonly string[], stdin?: string): ProcessRunResult {
     expect(argv[0]).toBe(this.launcher)
     const args = argv.slice(1)
     this.calls.push(args)
@@ -97,6 +101,13 @@ export class FakeM2b {
     }
     if (args[0] === 'band') {
       return this.bandAnswer()
+    }
+    if (args[0] === 'capture') {
+      if (this.captureFails !== null) {
+        return fail(this.captureFails)
+      }
+      this.captured.push(stdin ?? '')
+      return ok('/home/alex/Notes/inbox/20260314-173000-claude-ab12.md\n')
     }
     if (this.failure !== null) {
       return fail(this.failure)
@@ -145,7 +156,10 @@ export function fail(message: string): ProcessRunResult {
   return { exitCode: 1, stdout: '', stderr: `m2b: ${message}\n`, isStdoutTruncated: false, isStderrTruncated: false }
 }
 
-export type World = { clock: MockClock; statuses: (string | undefined)[] }
+/** A slash command the mod registered, as `$.command.register` was handed it. */
+export type Registered = { name: string; immediate?: true }
+
+export type World = { clock: MockClock; statuses: (string | undefined)[]; commands: Registered[] }
 
 /** Files under the home folder, shared by the sessions of one test: what `$.fs` reads and writes. */
 export type Files = Map<string, string>
@@ -182,11 +196,16 @@ export async function start(
     })
   }
   const statuses: (string | undefined)[] = []
+  const commands: Registered[] = []
+  on('command.register', (_, e) => {
+    commands.push(e)
+    return { value: { command: e.name } }
+  })
   on('process.run', async (_, e) => {
     if (fake.runFails !== null) {
       return { deny: fake.runFails }
     }
-    const value = fake.handle(e.argv)
+    const value = fake.handle(e.argv, e.init?.stdin)
     const delay = fake.delayMs(e.argv.slice(1))
     if (delay > 0) {
       await clock.sleep(delay)
@@ -206,7 +225,7 @@ export async function start(
   })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await clock.advance(1)
-  return { clock, statuses }
+  return { clock, statuses, commands }
 }
 
 export async function texts(ui: { findAll: (q: { type: string }) => Promise<{ text: string }[]> }): Promise<string[]> {

@@ -27,6 +27,8 @@ All notable changes to this project are documented here. The format follows
   running.
 - Undo in the band: keep and drop wait 5 seconds, while the row offers `undo`, and write only then.
   A click taken back, or a session closed within those seconds, leaves the task as it was.
+- `/m2b-note <text>` writes the text into the inbox at once, without a model turn, also while a turn
+  is working, and answers with one line showing how the note begins.
 - A session whose band is older than the installed m2b says so in one line and names
   `/reload-plugins`; `m2b band --json` answers the installed `version` for that.
 

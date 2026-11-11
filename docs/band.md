@@ -47,6 +47,23 @@ Until the band has read the list after the write, the row offers nothing to clic
 The band draws every text as one plain line: escape sequences and control characters a capture
 brought along from terminal output are left out, line breaks and tabs become spaces.
 
+## Noting without the model
+
+`/m2b-note <text>` writes the text into the inbox at once, through `m2b capture`, and answers with
+one line that shows how it begins:
+
+```text
+> /m2b-note Sam brings the plywood on Saturday, the long boards too
+  noted: Sam brings the plywood on Saturday, the long board…
+```
+
+No model turn runs for it, so it costs no model turn and does not wait: Claude Code runs the
+command also while a turn is working. The text goes in as typed, quotes and dashes included, with the
+source `claude`, as a capture through the skill would; the next curation run files it. Without
+text it writes nothing and says what it needs; when `m2b` fails, the line says why, starting with
+`not noted:`. The confirmation stays in the conversation, where the model reads it in its next request. The skill `/m2b:capture` remains the way to note with the model's help, for instance with a
+follow-up date or where the band does not run.
+
 ## The status line
 
 Below the prompt, one line sums up the brain, such as `2 in inbox · curated 21:36`: the captures

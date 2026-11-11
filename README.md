@@ -235,7 +235,9 @@ next run files it; drop it in the band, or delete the task, and it does not come
 Above the prompt, [the band](docs/band.md) shows memory candidates and "Still current?" questions,
 each with keep and drop buttons you click with the mouse (a click waits 5 seconds with `undo`
 before it writes), and the open review task with its first findings; below the prompt, a status
-line such as `3 in inbox · curated 18:02`. It is part of m2b and starts once m2b is set up. It is a mod, so it needs mods on in Claude Code; `m2b doctor` says
+line such as `3 in inbox · curated 18:02`. `/m2b-note <text>` notes a text into the inbox at once,
+without a model turn, also while one is working. The band is part of m2b and starts once m2b is
+set up. It is a mod, so it needs mods on in Claude Code; `m2b doctor` says
 whether the latest session ran it, and why not.
 
 ## Add-ons

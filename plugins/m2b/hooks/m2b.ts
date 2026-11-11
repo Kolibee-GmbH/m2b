@@ -43,13 +43,15 @@ export async function runM2b(
   $: EngineInterface,
   args: readonly string[],
   timeoutMs: number,
+  stdin?: string,
 ): Promise<M2bOutcome> {
   const launcher = await launcherPath($)
   if (launcher === undefined) {
     return { ok: false, error: 'neither M2B_HOME nor HOME is set' }
   }
   try {
-    const { exitCode, stdout, stderr } = await $.process.run([launcher, ...args], { timeoutMs })
+    const init = stdin === undefined ? { timeoutMs } : { timeoutMs, stdin }
+    const { exitCode, stdout, stderr } = await $.process.run([launcher, ...args], init)
     if (exitCode === 0) {
       return { ok: true, stdout }
     }
