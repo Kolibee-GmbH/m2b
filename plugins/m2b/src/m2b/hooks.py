@@ -29,12 +29,14 @@ import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from m2b import launcher, topic_state
+from m2b import launcher, session_remotes, topic_state
+from m2b.addons import names_on
 from m2b.atomic_file import write_text_atomically
 from m2b.config.errors import SETUP_COMMAND
 from m2b.config.machine import MachineConfig
 from m2b.curate import machine_state
 from m2b.curate.detach import NOT_DOWNLOADED, start_detached
+from m2b.git_program import usable_git
 from m2b.hook_input import HookInput
 from m2b.notes.characters import without_hidden
 from m2b.notes.layout import MEMORY, MEMORY_INDEX
@@ -53,6 +55,8 @@ MAX_DISTILLATE_BYTES = 8 * 1024
 # read, so the whole output stays below this, with room for the cut line.
 OUTPUT_LIMIT = 9_500
 STALE_AFTER = datetime.timedelta(days=3)
+# How long a session start waits for git to name a folder's remotes before it notes nothing.
+REMOTES_TIMEOUT_SECONDS = 2.0
 # A step's name as the core and the add-ons write it; a record names its steps in a synced file.
 _STEP_NAME = re.compile(r"[a-z][a-z0-9-]{0,39}")
 # Enough for an overview; beyond it the line itself would crowd the session start.
@@ -206,9 +210,45 @@ def launcher_hook(
     config: MachineConfig, machine: MachinePaths, environ: Mapping[str, str], hook_input: HookInput | None = None
 ) -> None:
     """The session-start hook: notes the session for ``m2b doctor``, which compares it with the band's
-    note, then checks the launcher."""
+    note, and the git remotes of the session's folder, then checks the launcher."""
     note_session(machine)
+    note_remotes(config, machine, environ, hook_input or HookInput())
     launcher_check(config, machine, environ, hook_input)
+
+
+def note_remotes(
+    config: MachineConfig, machine: MachinePaths, environ: Mapping[str, str], hook_input: HookInput
+) -> None:
+    """Notes the git remotes of the folder the session starts in, while the folder is there to ask.
+
+    Whoever reads the session later leaves it out by them (``session_remotes``). Noted only where
+    sessions are read at all: with ``curation.read_sessions``, or with an add-on on, which may read
+    them. The notes that are too old go at every session start, before anything else, so neither
+    a machine that stopped reading nor one whose git is gone keeps one for longer. A git that is
+    missing, fails or does not answer in time notes nothing, and nothing here holds or fails the
+    session start.
+    """
+    notes = machine.state_dir / session_remotes.NOTES_FOLDER
+    with contextlib.suppress(OSError):
+        session_remotes.forget_old_notes(notes, now())
+    if not (config.curation.read_sessions or names_on(config.addons)):
+        return
+    git = usable_git(environ, timeout=REMOTES_TIMEOUT_SECONDS)
+    if git is None:
+        return
+    folder = hook_input.cwd or environ.get(PROJECT_DIR_VARIABLE) or os.getcwd()
+    with contextlib.suppress(OSError):
+        remotes = session_remotes.remotes_in(Path(folder), git, timeout=REMOTES_TIMEOUT_SECONDS, environ=environ)
+        if remotes is None:
+            return
+        machine.temp_dir.mkdir(parents=True, exist_ok=True)
+        session_remotes.note(
+            notes,
+            folder,
+            remotes,
+            now(),
+            lambda path, text: write_text_atomically(path, text, machine.temp_dir),
+        )
 
 
 def note_session(machine: MachinePaths) -> None:

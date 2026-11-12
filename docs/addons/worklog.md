@@ -18,7 +18,8 @@ turned that on.
 
 Spheres are the areas your work falls into, such as an employer, a company of your own and private
 projects. Each has an `id`, a `label`, whether its time is `billable`, and how it is recognized:
-parts of git remote URLs (`git_remote_contains`) and folders under your home folder (`path_under`).
+parts of the URL of the `origin` remote (`git_remote_contains`, compared without regard to case and
+in both spellings of an SSH address) and folders under your home folder (`path_under`).
 A session that matches none falls to the default sphere, the one with `"default": true`. A sphere
 other than the default with neither is never matched, so its time lands in the default sphere. With
 invented names:
@@ -33,25 +34,61 @@ name. The worklog only reads that list; it never adds to it.
 ## Leaving work out
 
 Work whose prompts and commits must not reach your store at all, such as a customer's under a
-confidentiality agreement, is named in the profile by its folders under your home folder:
+confidentiality agreement, is named in the profile: by its folders under your home folder, by a
+part of the URL of its repository's git remote, or by both.
 
 ```bash
-m2b profile merge '{"worklog_leave_out": {"path_under": ["~/code/globex", "~/worktrees/globex"]}}'
+m2b profile set worklog_leave_out.path_under '["~/code/globex", "~/worktrees/globex"]'
+m2b profile set worklog_leave_out.git_remote_contains '["git.globex.example/", "github.com/globex-ag/"]'
 ```
 
-What ran in such a folder, or in any folder below it, is in no worklog: a session there is not in
-the facts the model step reads, not in the note and not in the ledger, and a transcript from there
-is left out also where another session's pane worked in it. Its time is in no time span either, so
-the ledger shows a gap. The worklog still reads these transcripts and recordings to learn where a
-session ran; it keeps nothing of them. What to know:
+What ran in such a folder, in any folder below it, or in a folder of such a repository is in no
+worklog: a session there is not in the facts the model step reads, not in the note and not in the
+ledger, and a transcript from there is left out also where another session's pane worked in it.
+Its time is in no time span either, so the ledger shows a gap. The worklog still reads these
+transcripts and recordings to learn where a session ran; it keeps nothing of them.
+
+### By git remote
+
+A remote names a repository once, in every folder it is checked out in, so no worktree is
+forgotten. Every remote of the repository counts, `origin` or not, and so does the address a
+remote is pushed to when that is another one. A part is compared without
+regard to upper and lower case, and one written like a web address also finds the SSH spelling:
+`github.com/globex-ag/` finds `git@github.com:Globex-AG/portal.git`. A remote counts as your git
+configuration writes it and as git rewrites it (`url.<base>.insteadOf`), so the address
+`git remote -v` shows is found too.
+
+A worktree is often gone by the time the worklog runs, and then nobody can ask git there. So on a
+machine that reads sessions (this add-on on, or `curation.read_sessions`), every Claude Code
+session notes the remotes of the folder it starts in, in `~/.local/state/m2b/session-remotes/`:
+on this machine only, never in the store, and without the user name or token a URL may carry. The
+worklog takes what was noted for a folder and what git says there when it runs. What to know:
+
+- **Work whose repository nobody can tell is left out too**, while you name a remote: a folder
+  for which nothing was noted and where git says nothing, because it is gone or git does not
+  answer. It cannot be shown to be other work. The note says under "Could not read" in how many
+  folders that was; it does not name them. This meets a worktree that is gone and in which no
+  session has started since this machine notes remotes, and a herdr workspace in which no Claude
+  Code session ever started.
+- **A session counts by the folder it started in.** One that starts in a folder above the
+  repository, or in another repository, and works in the confidential one through commands is not
+  found by its remote; name the folder it starts in.
+- **A remote stays noted for 30 days** after it was last seen in a folder. A folder you reuse for
+  other work stays left out that long.
+- **A repository without a remote** cannot be named by one; name its folder.
+
+### By folder
 
 - **Name every folder the repository is checked out in**: the clone and the folder your worktrees
   live in. A folder counts as it was recorded, so a worktree that is gone by the time the worklog
   runs is still left out; no symbolic link is followed and the spelling counts, upper and lower
   case included.
-- **Commits.** A commit made in a session left out is shown by no other session. One made in the
-  repository while no session there was at work can still appear under another checkout of the
-  same repository that is not left out.
+- **A commit made in the repository while no session there was at work** can still appear under
+  another checkout of the same repository that is not left out.
+
+### Either way
+
+- **Commits.** A commit made in a session left out is shown by no other session.
 - **A pane of another workspace** that changes into such a folder keeps adding its time to that
   workspace's session; its prompts are left out.
 - **Every machine needs this version.** The profile is written as version 2 once it holds the
@@ -59,7 +96,8 @@ session ran; it keeps nothing of them. What to know:
   change the profile, so update every machine that shares the store, the curating one first.
 
 The setting holds from the next worklog on; what earlier worklogs wrote stays as it is. To take it
-back, set it to an empty list: `m2b profile set worklog_leave_out '{"path_under": []}'`.
+back, set a list to empty: `m2b profile set worklog_leave_out.path_under '[]'`, and the same for
+`git_remote_contains`. `m2b profile merge` with `worklog_leave_out` replaces both lists at once.
 
 ## Time spans
 
@@ -190,7 +228,8 @@ takes out the timer. The recordings stay until `m2b-worklog recordings delete` r
 Only while it is on and only on the curating machine: the herdr events its recorder wrote; from your
 Claude Code transcripts for the period, the prompts (240 characters each) and the last 500
 characters of each session's last answer, where a question to you stands; your own git commits and
-the `origin` remote in the session folders; and the names of the period's captures in the inbox. A
+the `origin` remote in the session folders, and every remote there while you
+[leave work out by remote](#by-git-remote); and the names of the period's captures in the inbox. A
 prompt loses the blocks Claude Code adds to it, such as a `<system-reminder>`, before it is cut, and
 the summary Claude Code writes after a context cut counts as no prompt. Neither does what Claude
 Code marks as sent by someone else than you: a plugin that drives the session, a finished task,

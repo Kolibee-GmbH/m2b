@@ -49,7 +49,7 @@ An example with invented values:
 | `curation.model` | the model of each fenced model step, any name `claude --model` takes | `haiku` |
 | `curation.max_budget_usd` | a spending cap per model step, from Claude Code's own estimate of API cost; it can differ from the bill and says little on a subscription | none |
 | `curation.max_turns` | the turns one model step may take before it stops and is reported | 100 |
-| `curation.read_sessions` | whether a curation run on this machine reads what you typed in Claude Code since the last reading and keeps what a model proposes from it for your memory; of a session in a folder of `worklog_leave_out` in the profile or of `distillate.skip_under` nothing reaches the model | `false` |
+| `curation.read_sessions` | whether a curation run on this machine reads what you typed in Claude Code since the last reading and keeps what a model proposes from it for your memory; of a session the profile's `worklog_leave_out` names, by its folder or by a git remote of its repository, or in a folder of `distillate.skip_under`, nothing reaches the model | `false` |
 | `curation.git_commit` | whether a curation run on this machine ends with a git commit of what it changed, when the store folder is the top of a git work tree ([A commit per run](curation.md#a-commit-per-run)); without a repository there the setting does nothing | `true` |
 | `band.due_tasks` | whether the band shows your tasks due today or overdue below the candidates | `true` |
 | `distillate.skip_under` | folders, absolute or starting with `~/`, in and below which sessions get no distillate; `m2b distillate off` and `on` change it | none |
@@ -110,6 +110,7 @@ The task backend lives in the store, not on the machine, so every machine uses t
 | `owner` | your name, as the curator writes about you |
 | `language` | `en` or `de`: task titles, notes and the worklog are written in it |
 | `spheres` | for the worklog: areas of work, how each is recognized, which are billable, one default |
+| `worklog_leave_out` | work that reaches no worklog and no reading of your sessions: folders under your home folder (`path_under`) and parts of the URLs of git remotes (`git_remote_contains`); see [Leaving work out](addons/worklog.md#leaving-work-out). A profile with it is written as version 2 |
 | `customers` | for the worklog: the only names its booking proposals may use |
 
 `profile merge` merges spheres by `id` (a sphere you name replaces the one with its id) and adds

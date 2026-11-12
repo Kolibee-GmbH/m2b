@@ -17,7 +17,8 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-from m2b import cli, paths
+from m2b import cli, paths, session_remotes
+from m2b import hooks as session_start
 from m2b.calendar.base import local_midnight
 from m2b.commands import doctor
 from m2b.config import machine, profile
@@ -634,6 +635,103 @@ class DoctorTest(CommandTest):
         self.run_command("hook", "launcher")
 
         self.assertEqual(stat.S_IMODE(self.machine.state_dir.stat().st_mode), 0o700)
+
+    def a_repository(self, remote: str | None) -> Path:
+        repository = self.home / "code" / "portal"
+        repository.mkdir(parents=True)
+        environ = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+        added = [["remote", "add", "origin", remote]] if remote else []
+        for arguments in (["init", "-q"], *added):
+            subprocess.run(["git", "-C", str(repository), *arguments], check=True, env=environ, capture_output=True)
+        return repository
+
+    def start_session(self, folder: Path) -> str:
+        """Runs the launcher hook as Claude Code does at a session start in ``folder``; what it printed."""
+        given = io.StringIO(json.dumps({"session_id": "s-1", "source": "startup", "cwd": str(folder)}))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(cli.main(["hook", "launcher"], self.environ, given), cli.EXIT_OK)
+        return out.getvalue()
+
+    def noted_remotes(self, folder: Path) -> frozenset[str] | None:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        return session_remotes.noted(self.machine.state_dir / session_remotes.NOTES_FOLDER, str(folder), now)
+
+    def test_the_launcher_hook_notes_the_git_remotes_of_the_folder_a_session_starts_in(self) -> None:
+        """Covers: B151"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"}, curation={"read_sessions": True})
+        repository = self.a_repository("https://ghp_Zx81kQ4tToken@git.globex.example/globex-ag/portal.git")
+
+        self.start_session(repository)
+
+        self.assertEqual(self.noted_remotes(repository), {"https://git.globex.example/globex-ag/portal.git"})
+        [note] = (self.machine.state_dir / session_remotes.NOTES_FOLDER).glob("*.json")
+        self.assertNotIn("ghp_", note.read_text(encoding="utf-8"))
+        self.assertEqual(list(self.store_root.rglob("*globex*")), [])
+
+    def test_the_launcher_hook_notes_remotes_while_an_addon_is_on_that_reads_sessions(self) -> None:
+        """Covers: B151"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"}, addons={"worklog": {"on": True}})
+        repository = self.a_repository(None)
+
+        self.start_session(repository)
+
+        self.assertEqual(self.noted_remotes(repository), frozenset())
+
+    def test_the_launcher_hook_notes_no_remote_on_a_machine_that_reads_no_sessions(self) -> None:
+        """Covers: B151"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        repository = self.a_repository("https://git.globex.example/globex-ag/portal.git")
+
+        self.start_session(repository)
+
+        self.assertFalse((self.machine.state_dir / session_remotes.NOTES_FOLDER).exists())
+
+    def test_a_machine_that_stopped_reading_sessions_keeps_no_note_longer_than_one_that_reads(self) -> None:
+        """Covers: B151"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"}, curation={"read_sessions": True})
+        repository = self.a_repository("https://git.globex.example/globex-ag/portal.git")
+        self.start_session(repository)
+        [note] = (self.machine.state_dir / session_remotes.NOTES_FOLDER).glob("*.json")
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+
+        self.start_session(repository)
+        kept = note.exists()
+        long_ago = (datetime.datetime.now() - session_remotes.KEEP_FOR - datetime.timedelta(days=1)).timestamp()
+        os.utime(note, (long_ago, long_ago))
+        self.start_session(repository)
+
+        self.assertEqual((kept, note.exists()), (True, False))
+
+    def test_a_machine_whose_git_is_gone_keeps_no_note_longer_either(self) -> None:
+        """Covers: B151"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"}, curation={"read_sessions": True})
+        repository = self.a_repository("https://git.globex.example/globex-ag/portal.git")
+        self.start_session(repository)
+        [note] = (self.machine.state_dir / session_remotes.NOTES_FOLDER).glob("*.json")
+        long_ago = (datetime.datetime.now() - session_remotes.KEEP_FOR - datetime.timedelta(days=1)).timestamp()
+        os.utime(note, (long_ago, long_ago))
+
+        with mock.patch.object(session_start, "usable_git", return_value=None):
+            self.start_session(repository)
+
+        self.assertFalse(note.exists())
+
+    def test_the_launcher_hook_notes_nothing_and_says_nothing_when_git_cannot_say(self) -> None:
+        """Covers: B151"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"}, curation={"read_sessions": True})
+        repository = self.a_repository("https://git.globex.example/globex-ag/portal.git")
+        before = self.start_session(self.home / "code" / "gone")
+
+        # No git on the machine, or on macOS only the stand-in that would open a dialog.
+        with mock.patch.object(session_start, "usable_git", return_value=None) as looked_for:
+            without_git = self.start_session(repository)
+
+        self.assertEqual(looked_for.call_args.kwargs, {"timeout": session_start.REMOTES_TIMEOUT_SECONDS})
+
+        self.assertEqual((before, without_git), ("", ""))
+        self.assertIsNone(self.noted_remotes(repository))
+        self.assertIsNone(self.noted_remotes(self.home / "code" / "gone"))
 
     def test_a_store_path_the_curation_run_cannot_fence_is_a_problem(self) -> None:
         """Covers: B81"""

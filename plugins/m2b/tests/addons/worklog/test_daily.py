@@ -7,6 +7,7 @@ import datetime
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import zipfile
@@ -16,12 +17,13 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-from m2b import atomic_file
+from m2b import atomic_file, session_remotes
+from m2b.paths import MachinePaths
 from m2b_worklog import daily, ledger, writeup
 from m2b_worklog.daily import DailyError, Sources
 from m2b_worklog.paths import WorklogPaths
 from m2b_worklog.sources import SourceState
-from test_facts import NOW, PROFILE, TEST_TZ, Fixture, at
+from test_facts import BY_REMOTE, GLOBEX, NOW, PROFILE, TEST_TZ, Fixture, at
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[3]
 COMMAND = PLUGIN_ROOT / "bin" / "m2b-worklog"
@@ -435,6 +437,42 @@ class StateTest(DailyFixture):
         self.assertIn(
             "## Could not read\n\n- herdr: herdr did not answer", (self.store / note).read_text(encoding="utf-8")
         )
+
+    def test_work_left_out_for_a_repository_nobody_can_tell_is_named_in_the_note_by_its_count(self) -> None:
+        """Covers: B153"""
+        self.profile.update(BY_REMOTE)
+        self.a_due_day()
+        self.a_second_workspace("w2", self.home / "notes")
+        shutil.rmtree(self.repo)
+
+        self.run_daily()
+
+        [note] = self.worklog_notes()
+        text = (self.store / note).read_text(encoding="utf-8")
+        self.assertIn("## Could not read\n\n- repositories: work in 2 folders is left out", text)
+        self.assertNotIn("acme/invoices", text)
+
+    def test_a_worklog_knows_a_folder_that_is_gone_by_what_the_core_noted_at_a_session_start(self) -> None:
+        """Covers: B153"""
+        self.profile.update(BY_REMOTE)
+        self.a_due_day()
+        self.a_second_workspace("w2", self.home / "notes")
+        # Where the core's session-start hook writes on a machine with this home folder.
+        notes = MachinePaths(self.home).state_dir / session_remotes.NOTES_FOLDER
+        for folder in (self.repo, self.repo / "src"):
+            session_remotes.note(
+                notes, str(folder), frozenset({GLOBEX}), at(8), lambda path, text: path.write_text(text)
+            )
+        shutil.rmtree(self.repo)
+
+        self.run_daily()
+
+        [note] = self.worklog_notes()
+        text = (self.store / note).read_text(encoding="utf-8")
+        self.assertNotIn("repositories:", text)
+        self.assertNotIn("round per line", text)
+        [period] = self.ledger_periods().values()
+        self.assertEqual({span["session"].split(":")[1] for span in period["spans"]}, {"w2"})
 
     def test_a_stretch_the_recorder_did_not_record_is_named_in_the_note(self) -> None:
         """Covers: B89"""

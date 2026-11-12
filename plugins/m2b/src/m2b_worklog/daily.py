@@ -98,7 +98,16 @@ def run(paths: WorklogPaths, core: Core, now: datetime.datetime, sources: Source
     if watermark is not None and now - watermark < DUE_AFTER:
         return f"worklog: not due, the last one ended {watermark.isoformat(timespec='minutes')}"
     profile = core.profile()
-    inputs = facts.Inputs(store, paths.state_dir, sources.transcripts, paths.home, profile, now, herdr=sources.herdr)
+    inputs = facts.Inputs(
+        store,
+        paths.state_dir,
+        sources.transcripts,
+        paths.home,
+        profile,
+        now,
+        paths.session_remotes,
+        herdr=sources.herdr,
+    )
     collected = facts.collect(inputs)
     # Before the model and before anything is written: a period the ledger holds already is not judged again.
     period = collected["period"]

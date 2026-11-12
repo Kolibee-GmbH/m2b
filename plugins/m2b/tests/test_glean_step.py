@@ -9,9 +9,9 @@ from unittest import mock
 
 import test_runner
 import test_sessions
-from m2b import glean, proposal_answers, proposals
+from m2b import glean, proposal_answers, proposals, session_remotes
 from m2b.config.profile import save_profile
-from m2b.curate import machine_state, model
+from m2b.curate import glean_step, machine_state, model
 from m2b.run_record import SUCCEEDED, load_run_record
 from m2b.tasks import markers
 from m2b.tasks.base import TasksError
@@ -310,6 +310,85 @@ class FoldersLeftOutTest(GleanStepTest):
         self.assertEqual(self.steps()[1], ("glean", "skipped"))
         self.assertEqual(self.calls(), [])
         self.assertEqual(self.info(), ["1 session in a folder that is left out was not read"])
+
+
+class RemotesLeftOutTest(GleanStepTest):
+    GLOBEX = "https://git.globex.example/globex-ag/portal.git"
+
+    def leaving_out(self, *parts: str) -> None:
+        self.reading()
+        left_out = {"git_remote_contains": list(parts)}
+        save_profile(self.store, {"version": 2, "owner": "Alex", "language": "en", "worklog_leave_out": left_out})
+
+    def started_in(self, folder: str, *remotes: str) -> None:
+        """What the session-start hook noted for a folder that is gone by the time of the run."""
+        notes = self.machine.state_dir / session_remotes.NOTES_FOLDER
+        session_remotes.note(notes, folder, frozenset(remotes), START - DAY, lambda path, text: path.write_text(text))
+
+    def test_a_session_of_a_repository_named_by_its_remote_does_not_reach_the_model(self) -> None:
+        """Covers: B152"""
+        self.leaving_out("github.com/globex-ag/", "git.globex.example/")
+        self.started_in("/home/alex/worktrees/portal-fix", self.GLOBEX)
+        self.started_in("/home/alex/worktrees/portal-ssh", "git@github.com:Globex-AG/portal.git")
+        self.started_in("/home/alex/projects/shed", "git@github.com:alex/shed.git")
+        self.typed("Kim Lee leads Globex's IT", START - 3 * HOUR, "fix", "/home/alex/worktrees/portal-fix")
+        self.typed("Kim wants the report on Friday", START - 2 * HOUR, "ssh", "/home/alex/worktrees/portal-ssh")
+        self.typed(DANA_SAID, START - HOUR)
+        self.answers()
+
+        self.run_curate()
+
+        self.assertEqual(self.prompts_asked(), [[DANA_SAID]])
+        self.assertIn("2 sessions of a repository that is left out were not read", self.info())
+
+    def test_a_session_whose_remotes_nobody_can_tell_is_not_read_and_counted(self) -> None:
+        """Covers: B152"""
+        self.leaving_out("globex-ag/")
+        self.started_in("/home/alex/projects/shed")
+        self.typed("Kim Lee leads Globex's IT", START - 3 * HOUR, "fix", "/home/alex/worktrees/portal-fix")
+        self.typed("Kim wants the report on Friday", START - 2 * HOUR, "docs", "/home/alex/worktrees/portal-docs")
+        self.typed(DANA_SAID, START - HOUR)
+        self.answers()
+
+        self.run_curate()
+
+        self.assertEqual(self.prompts_asked(), [[DANA_SAID]])
+        self.assertIn(
+            "2 sessions were not read, because no git remote is known for their folders (the folders are gone or "
+            "git did not answer) and the profile leaves work out by git remote",
+            self.info(),
+        )
+
+    def test_on_a_machine_without_a_git_to_start_a_session_nobody_noted_is_not_read(self) -> None:
+        """Covers: B152"""
+        self.leaving_out("globex-ag/")
+        there = self.machine.home / "code" / "shed"
+        there.mkdir(parents=True)
+        self.typed("the doctor moved my appointment to Tuesday", START - 2 * HOUR, "there", str(there))
+        self.started_in("/home/alex/projects/shed")
+        self.typed(DANA_SAID, START - HOUR)
+        self.answers()
+
+        with mock.patch.object(glean_step, "usable_git", return_value=None):
+            self.run_curate()
+
+        self.assertEqual(self.prompts_asked(), [[DANA_SAID]])
+        self.assertIn(
+            "1 session was not read, because no git remote is known for its folder (the folder is gone or git did "
+            "not answer) and the profile leaves work out by git remote",
+            self.info(),
+        )
+
+    def test_while_the_profile_names_no_remote_a_session_in_a_folder_that_is_gone_is_read(self) -> None:
+        """Covers: B152"""
+        self.leaving_out()
+        self.typed(DANA_SAID, START - HOUR)
+        self.answers()
+
+        self.run_curate()
+
+        self.assertEqual(self.prompts_asked(), [[DANA_SAID]])
+        self.assertFalse((self.machine.state_dir / session_remotes.NOTES_FOLDER).exists())
 
 
 class ChecksTest(GleanStepTest):

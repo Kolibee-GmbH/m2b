@@ -10,9 +10,14 @@ through Claude Code like any session.
 With the worklog add-on, the daily note in the store holds topics a model wrote from your prompts,
 and your commit subjects. Credentials in prompts, answers and commit subjects are redacted by
 pattern before the model sees them, which stays incomplete. Work that must not reach the store at
-all, such as a customer's under a confidentiality agreement, can be left out by folder
+all, such as a customer's under a confidentiality agreement, can be left out by folder or by a
+git remote of its repository
 ([docs/addons/worklog.md](docs/addons/worklog.md#leaving-work-out), with what the setting does not
-cover).
+cover). For that, on a machine that reads sessions (the worklog add-on on, or
+`curation.read_sessions`), every session start notes the URLs of the git remotes of the folder it
+starts in, without the user name or token a URL may carry, in
+`~/.local/state/m2b/session-remotes/`. A note reaches neither the store nor a model, and one that
+no session start renewed for 30 days is removed at the next session start on the machine.
 
 The model runs only fenced: from an empty folder, without your settings or other plugins, with
 exactly the commands and store paths its step lists, and nothing else allowed. A tool call outside
@@ -131,8 +136,8 @@ Off until you say yes in setup ([docs/curation.md](docs/curation.md#reading-your
 curation run then gives a model what you typed in Claude Code since the last reading, with the
 folder and the day of each session: the prompts Claude Code marks as typed by you, without pasted
 blocks, Claude's answers, tool results and what a plugin or another agent sent, each cut at 2,000
-characters, with credentials redacted by pattern, which stays incomplete. A session in a folder
-you left out does not reach it. With the prompts the model gets the distillate and, from
+characters, with credentials redacted by pattern, which stays incomplete. A session you left out,
+by its folder or by a git remote of its repository, does not reach it. With the prompts the model gets the distillate and, from
 `state/core/proposals.json` in the store, up to 30 proposals you kept and 30 you dropped, each
 with the words of yours it stood on; so words you typed in an earlier period go to the model again
 while such a proposal is among them, until 90 days after a run settled your answer to it.

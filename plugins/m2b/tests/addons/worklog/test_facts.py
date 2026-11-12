@@ -14,6 +14,7 @@ import unittest
 from pathlib import Path
 from typing import Any
 
+from m2b import session_remotes
 from m2b.redaction import redact
 from m2b_worklog import facts, schema
 from m2b_worklog.facts import FactsError, Inputs
@@ -27,6 +28,8 @@ ZONE = datetime.timezone(datetime.timedelta(hours=1))
 TEST_TZ = "Etc/GMT-1"
 NOW = datetime.datetime(2026, 3, 14, 18, 0, tzinfo=ZONE)
 COMMAND = Path(__file__).resolve().parents[3] / "bin" / "m2b-worklog"
+GLOBEX = "https://git.globex.example/globex-ag/invoices.git"
+BY_REMOTE = {"worklog_leave_out": {"path_under": [], "git_remote_contains": ["globex-ag/"]}}
 PROFILE = {
     "version": 1,
     "owner": "Alex",
@@ -69,6 +72,7 @@ class Fixture(unittest.TestCase):
         (self.store / "inbox").mkdir(parents=True)
         self.recordings = self.home / ".local" / "state" / "m2b" / "worklog"
         self.recordings.mkdir(parents=True)
+        self.remote_notes = self.home / ".local" / "state" / "m2b" / session_remotes.NOTES_FOLDER
         self.projects = self.home / ".claude" / "projects"
         self.repo = self.home / "code" / "acme" / "invoices"
         self.repo.mkdir(parents=True)
@@ -134,12 +138,22 @@ class Fixture(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps({"end": moment.isoformat()}), encoding="utf-8")
 
-    def collect(self, profile: dict[str, Any] = PROFILE) -> dict[str, Any]:
-        inputs = Inputs(self.store, self.recordings, self.projects, self.home, profile, NOW)
+    def inputs(self, profile: dict[str, Any] = PROFILE) -> Inputs:
+        return Inputs(self.store, self.recordings, self.projects, self.home, profile, NOW, self.remote_notes)
+
+    def started_in(self, folder: Path, *remotes: str) -> None:
+        """What the core's session-start hook noted for the folder a session started in."""
+        when = at(8)
+        session_remotes.note(
+            self.remote_notes, str(folder), frozenset(remotes), when, lambda path, text: path.write_text(text)
+        )
+
+    def collect(self, profile: dict[str, Any] = PROFILE, run: Any = subprocess.run) -> dict[str, Any]:
+        inputs = self.inputs(profile)
         environ_backup = dict(os.environ)
         os.environ.update({"GIT_CONFIG_GLOBAL": str(self.base / "gitconfig"), "GIT_CONFIG_NOSYSTEM": "1"})
         try:
-            found = facts.collect(inputs)
+            found = facts.collect(inputs, run)
         finally:
             os.environ.clear()
             os.environ.update(environ_backup)
@@ -179,6 +193,13 @@ class Fixture(unittest.TestCase):
         self.commit("fix(export): round per line", at(10, 30))
         self.commit("chore(deps): bump by a colleague", at(10, 35), email="dana@example.invalid")
         self.commit("feat(export): yesterday", at(9) - datetime.timedelta(days=1))
+
+    def a_second_workspace(self, workspace: str, folder: Path) -> None:
+        folder.mkdir(parents=True, exist_ok=True)
+        cache = json.loads((self.recordings / "workspaces.json").read_text(encoding="utf-8"))
+        cache[workspace] = [{"repo": None, "label": folder.name, "folder": str(folder), "since": at(8).isoformat()}]
+        self.cache(cache)
+        self.events(workspace, (at(11), "agent_working", "p1"), (at(11, 30), "agent_stopped", "p1"), cwd=folder)
 
 
 class CollectTest(Fixture):
@@ -223,13 +244,6 @@ class CollectTest(Fixture):
             [c["subject"] for c in session["commits"]],
             ["fix(export): round per line", "chore(db): migrate with PGPASSWORD=[removed]"],
         )
-
-    def a_second_workspace(self, workspace: str, folder: Path) -> None:
-        folder.mkdir(parents=True, exist_ok=True)
-        cache = json.loads((self.recordings / "workspaces.json").read_text(encoding="utf-8"))
-        cache[workspace] = [{"repo": None, "label": folder.name, "folder": str(folder), "since": at(8).isoformat()}]
-        self.cache(cache)
-        self.events(workspace, (at(11), "agent_working", "p1"), (at(11, 30), "agent_stopped", "p1"), cwd=folder)
 
     def test_a_session_in_a_folder_the_profile_leaves_out_is_not_in_the_facts(self) -> None:
         """Covers: B111"""
@@ -286,6 +300,113 @@ class CollectTest(Fixture):
 
         # The other checkout sees every branch, and without the first session it would own the commit.
         self.assertEqual([(s["workspace"], s["commits"]) for s in found["sessions"]], [("w2", [])])
+
+    def test_a_session_whose_repository_has_a_remote_the_profile_names_is_not_in_the_facts(self) -> None:
+        """Covers: B153"""
+        self.a_day_of_work()
+        # The folder the day's transcript started in, below the repository's top.
+        (self.repo / "src").mkdir()
+        self.git("remote", "add", "origin", "git@github.com:alex/invoices.git")
+        self.git("remote", "add", "upstream", GLOBEX)
+        self.a_second_workspace("w2", self.home / "notes")
+
+        found = self.collect({**PROFILE, **BY_REMOTE})
+
+        self.assertEqual([s["workspace"] for s in found["sessions"]], ["w2"])
+        self.assertNotIn("invoice", json.dumps(found))
+        self.assertNotIn("round per line", json.dumps(found))
+        self.assertEqual(found["sources"]["repositories"], {"state": "read", "detail": ""})
+        self.assertEqual([s["workspace"] for s in self.collect()["sessions"]], ["w1", "w2"])
+
+    def test_a_remote_noted_when_the_session_started_leaves_it_out_when_its_folder_is_gone(self) -> None:
+        """Covers: B153"""
+        self.a_day_of_work()
+        self.a_second_workspace("w2", self.home / "notes")
+        self.started_in(self.repo, GLOBEX)
+        self.started_in(self.repo / "src", GLOBEX)
+        shutil.rmtree(self.repo)
+
+        found = self.collect({**PROFILE, **BY_REMOTE})
+
+        self.assertEqual([s["workspace"] for s in found["sessions"]], ["w2"])
+        self.assertNotIn("invoice", json.dumps(found))
+        self.assertEqual(found["sources"]["repositories"]["state"], "read")
+
+    def test_a_transcript_from_a_repository_left_out_reaches_no_other_session(self) -> None:
+        """Covers: B153"""
+        # One workspace on the folder above, which is in no repository: it holds the transcript from below.
+        self.watermark(at(9))
+        self.git("remote", "add", "origin", GLOBEX)
+        code = self.home / "code"
+        self.cache({"w1": [{"repo": None, "label": "code", "folder": str(code), "since": at(8).isoformat()}]})
+        self.events("w1", (at(10), "agent_working", "p1"), (at(10, 40), "agent_stopped", "p1"), cwd=code)
+        prompt = {"type": "user", "timestamp": "2026-03-14T09:01:00Z", "message": {"content": "Fix the invoice export"}}
+        answer = {"type": "assistant", "timestamp": "2026-03-14T09:30:00Z", "message": {"content": "It rounds now."}}
+        self.transcript("s1", self.repo, [prompt, answer])
+
+        [kept] = self.collect({**PROFILE, **BY_REMOTE})["sessions"]
+        [whole] = self.collect()["sessions"]
+
+        self.assertEqual(whole["blocks"][0]["prompts"], ["Fix the invoice export"])
+        self.assertEqual(kept["folder"], str(code))
+        self.assertEqual([block["prompts"] for block in kept["blocks"]], [[]])
+        self.assertIsNone(kept["state"]["last_answer"])
+
+    def test_a_session_whose_remotes_nobody_can_tell_is_left_out_and_named_as_not_read(self) -> None:
+        """Covers: B153"""
+        self.a_day_of_work()
+        self.a_second_workspace("w2", self.home / "notes")
+        shutil.rmtree(self.repo)
+
+        found = self.collect({**PROFILE, **BY_REMOTE})
+
+        self.assertEqual([s["workspace"] for s in found["sessions"]], ["w2"])
+        self.assertNotIn("invoice", json.dumps(found))
+        self.assertEqual(found["sources"]["repositories"]["state"], "could not read")
+        # The session's folder and the folder its transcript started in; neither is named.
+        self.assertEqual(
+            found["sources"]["repositories"]["detail"],
+            "work in 2 folders is left out: no git remote is known for them (the folders are gone or git did not "
+            "answer), and the profile leaves work out by git remote",
+        )
+        self.assertEqual([s["workspace"] for s in self.collect()["sessions"]], ["w1", "w2"])
+
+    def test_a_session_whose_git_does_not_answer_is_left_out_while_a_remote_is_named(self) -> None:
+        """Covers: B153"""
+        self.a_day_of_work()
+        # Both folders are there, so only git's silence leaves their repository untold.
+        (self.repo / "src").mkdir()
+        self.git("remote", "add", "origin", GLOBEX)
+
+        def hangs(command: list[str], **_: Any) -> Any:
+            raise subprocess.TimeoutExpired(command, 10.0)
+
+        found = self.collect({**PROFILE, **BY_REMOTE}, run=hangs)
+
+        self.assertEqual(found["sessions"], [])
+        self.assertEqual(found["sources"]["repositories"]["state"], "could not read")
+        self.assertEqual([s["workspace"] for s in self.collect(run=hangs)["sessions"]], ["w1"])
+
+    def test_a_session_noted_with_another_remote_stays_when_its_folder_is_gone(self) -> None:
+        """Covers: B153"""
+        self.a_day_of_work()
+        self.started_in(self.repo, "git@github.com:alex/invoices.git")
+        self.started_in(self.repo / "src", "git@github.com:alex/invoices.git")
+        shutil.rmtree(self.repo)
+
+        found = self.collect({**PROFILE, **BY_REMOTE})
+
+        self.assertEqual([s["workspace"] for s in found["sessions"]], ["w1"])
+        self.assertEqual(found["sources"]["repositories"]["state"], "read")
+
+    def test_a_sphere_is_found_by_its_remote_in_either_spelling_of_the_address(self) -> None:
+        self.a_day_of_work()
+        self.git("remote", "add", "origin", "git@github.com:Acme-Ltd/invoices.git")
+        by_remote = {"id": "acme", "billable": True, "match": {"git_remote_contains": ["github.com/acme-ltd/"]}}
+
+        [session] = self.collect({**PROFILE, "spheres": [by_remote, {"id": "private", "default": True}]})["sessions"]
+
+        self.assertEqual(session["sphere"], "acme")
 
     def test_a_session_seen_for_less_than_two_minutes_is_left_out(self) -> None:
         """Covers: B33"""
@@ -503,7 +624,7 @@ class PeriodTest(Fixture):
             with self.subTest(text):
                 path.write_text(text, encoding="utf-8")
                 with self.assertRaises(FactsError):
-                    facts.collect(Inputs(self.store, self.recordings, self.projects, self.home, PROFILE, NOW))
+                    facts.collect(self.inputs())
 
 
 class SourcesTest(Fixture):
@@ -1031,7 +1152,7 @@ class EvictedFilesTest(Fixture):
         facts.is_evicted = lambda path: True  # type: ignore[assignment]
         try:
             with self.assertRaises(FactsError) as raised:
-                facts.collect(Inputs(self.store, self.recordings, self.projects, self.home, PROFILE, NOW))
+                facts.collect(self.inputs())
         finally:
             facts.is_evicted = original  # type: ignore[assignment]
 

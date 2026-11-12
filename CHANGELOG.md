@@ -64,8 +64,15 @@ All notable changes to this project are documented here. The format follows
   the eight eval cases with m2b and without, and the model, the Claude Code version and the day of
   the run. Until now the scores a release was checked with were written down nowhere.
 - The worklog leaves out the work you name in the profile: `worklog_leave_out` takes folders under
-  your home folder. What ran there is in no worklog, not in what the model step reads, the note or
-  the ledger. The profile is written as version 2 once it holds the setting, so every machine that
+  your home folder (`path_under`) and parts of the URLs of git remotes (`git_remote_contains`),
+  which name a repository in every folder it is checked out in. What ran there is in no worklog,
+  not in what the model step reads, the note or the ledger. A worktree that is gone when the
+  worklog runs is still known by its remote: on a machine that reads sessions, every session start
+  notes the remotes of the folder it starts in, in `~/.local/state/m2b/session-remotes/`, without
+  the user name or token of a URL. While you name a remote, work in a folder whose repository
+  nobody can tell is left out too, and the note says in how many folders. A sphere's
+  `git_remote_contains` now ignores upper and lower case and also finds the SSH spelling of an
+  address. The profile is written as version 2 once it holds the setting, so every machine that
   shares the store needs this version
   ([docs/addons/worklog.md](docs/addons/worklog.md#leaving-work-out)).
 - A curation run can read what you typed in Claude Code and propose what belongs in your memory
@@ -84,8 +91,8 @@ All notable changes to this project are documented here. The format follows
   ([docs/band.md](docs/band.md#the-proposals-from-your-sessions-in-the-pane)). Only what you typed is
   read: no answer of Claude, no tool result, no pasted block, nothing another sender put into the
   session; credentials are redacted.
-  Of a session in a folder of `worklog_leave_out`, or in one where you ran `m2b distillate off`,
-  nothing reaches the model ([docs/curation.md](docs/curation.md#reading-your-sessions)). A new
+  Of a session `worklog_leave_out` names, by its folder or by a git remote of its repository, or
+  in a folder where you ran `m2b distillate off`, nothing reaches the model ([docs/curation.md](docs/curation.md#reading-your-sessions)). A new
   scenario, `E23-proposals-from-sessions`, runs it from setup's yes to the filed capture.
 - A proposal from your sessions that got no answer for 14 days expires: it waits no longer, does
   not count as dropped and is not proposed again for 90 days; `m2b proposals keep <id>` still keeps

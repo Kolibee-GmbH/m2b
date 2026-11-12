@@ -91,6 +91,16 @@ class ParseTest(unittest.TestCase):
         )
         self.assertEqual(profile.parse_profile(INVENTED_PROFILE).worklog_leave_out.path_under, ())
 
+    def test_what_the_worklog_leaves_out_is_also_named_by_parts_of_git_remote_urls(self) -> None:
+        """Covers: B153"""
+        raw = _profile(worklog_leave_out={"git_remote_contains": ["git.globex.example/", "globex-ag/"]})
+
+        left_out = profile.parse_profile(raw).worklog_leave_out
+
+        self.assertEqual(left_out.git_remote_contains, ("git.globex.example/", "globex-ag/"))
+        self.assertEqual(left_out.path_under, ())
+        self.assertEqual(profile.parse_profile(INVENTED_PROFILE).worklog_leave_out.git_remote_contains, ())
+
     def test_the_folders_left_out_are_under_each_machines_home_however_they_are_written(self) -> None:
         raw = _profile(worklog_leave_out={"path_under": ["~/code/globex", "worktrees/globex"]})
 
@@ -104,7 +114,8 @@ class ParseTest(unittest.TestCase):
         for left_out, named in (
             ({"path_under": ["/Users/alex/code"]}, "worklog_leave_out.path_under"),
             ({"folders": ["~/code"]}, "folders"),
-            ({"git_remote_contains": ["globex-ag/"]}, "git_remote_contains"),
+            ({"git_remote_contains": [""]}, "worklog_leave_out.git_remote_contains"),
+            ({"git_remote_contains": "globex-ag/"}, "worklog_leave_out.git_remote_contains"),
             (["~/code"], "worklog_leave_out"),
         ):
             with self.subTest(left_out=left_out), self.assertRaises(InvalidConfigError) as caught:

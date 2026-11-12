@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import datetime
 import os
-import shutil
 import stat
 import subprocess
 import sys
@@ -47,6 +46,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from m2b.git_program import usable_git
 from m2b.run_record import FAILED, SKIPPED, SUCCEEDED, StepResult
 from m2b.store.base import Store, fetch_command
 
@@ -77,10 +77,6 @@ UNFINISHED_OPERATIONS = {
     "rebase-merge": "rebase",
     "rebase-apply": "rebase",
 }
-# On macOS this path is a stand-in: without the developer tools it opens a dialog that offers to
-# install them, which a run in the background must never cause.
-APPLE_GIT_STAND_IN = Path("/usr/bin/git")
-DEVELOPER_TOOLS_CHECK = ("/usr/bin/xcode-select", "-p")
 SHOWN_ID_LENGTH = 12
 # ``--replace``: a file where a folder was, or a folder where a file was, takes the old entry's place.
 UPDATE_INDEX = ("update-index", "-z", "--add", "--remove", "--replace", "--stdin")
@@ -180,20 +176,10 @@ def find_repository(
     tree turns out to be another folder is found here and fails the commit, which says so."""
     if not holds_git_folder(store):
         return None
-    git = shutil.which("git", path=environ.get("PATH"))
+    git = usable_git(environ, platform, run, GIT_TIMEOUT_SECONDS)
     if git is None:
         return None
-    if platform == "darwin" and Path(git) == APPLE_GIT_STAND_IN and not _developer_tools_installed(run):
-        return None
     return Repository(store, git, _git_environment(environ), pass_fds, run)
-
-
-def _developer_tools_installed(run: Runner) -> bool:
-    try:
-        result = run(list(DEVELOPER_TOOLS_CHECK), capture_output=True, timeout=GIT_TIMEOUT_SECONDS)
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    return bool(result.returncode == 0)
 
 
 def _git_environment(environ: Mapping[str, str]) -> dict[str, str]:

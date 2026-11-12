@@ -163,7 +163,23 @@ class CommandLineTest(unittest.TestCase):
         # The worklog add-on reads this answer, not the file: an object with ``path_under``.
         printed = json.loads(self._run("profile", "get", "--json").stdout)
 
-        self.assertEqual(printed["worklog_leave_out"], {"path_under": ["~/code/globex"]})
+        self.assertEqual(printed["worklog_leave_out"], {"path_under": ["~/code/globex"], "git_remote_contains": []})
+        self.assertEqual(printed["version"], 2)
+
+    def test_profile_get_prints_the_remotes_the_worklog_leaves_out_in_the_shape_of_the_file(self) -> None:
+        """Covers: B153"""
+        self._set_up(version=1, owner="Alex")
+        # One key of the setting is set beside the other; a merge would replace the setting as a whole.
+        added = self._run("profile", "set", "worklog_leave_out.git_remote_contains", '["globex-ag/"]')
+        self.assertEqual(added.returncode, 0, added.stderr)
+        beside = self._run("profile", "set", "worklog_leave_out.path_under", '["~/code/globex"]')
+        self.assertEqual(beside.returncode, 0, beside.stderr)
+
+        printed = json.loads(self._run("profile", "get", "--json").stdout)
+
+        self.assertEqual(
+            printed["worklog_leave_out"], {"path_under": ["~/code/globex"], "git_remote_contains": ["globex-ag/"]}
+        )
         self.assertEqual(printed["version"], 2)
 
     def test_profile_get_without_a_profile_names_setup(self) -> None:

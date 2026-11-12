@@ -12,9 +12,11 @@ import datetime
 import json
 import subprocess
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from m2b.session_remotes import ByRemote, RemoteRule, remotes_in
 
 from m2b_worklog import classify, periods, sessions
 from m2b_worklog.files import is_evicted
@@ -49,6 +51,8 @@ class Inputs:
     home: Path
     profile: Mapping[str, Any]
     now: datetime.datetime
+    # Where the core's session-start hook notes the git remotes of the folders sessions start in.
+    remote_notes: Path
     git: str = "git"
     # Whether herdr runs with the recorder linked; the command asks herdr (recorder.herdr_state).
     herdr: SourceState = HERDR_NOT_CHECKED
@@ -59,6 +63,48 @@ class Period:
     start: datetime.datetime
     end: datetime.datetime
     origin: str
+
+
+@dataclass
+class _WorkLeftOut:
+    """The work the profile leaves out, by its folder or by a git remote of its repository.
+
+    A folder whose remotes nobody can tell, neither the note from a session start nor git now, is
+    left out while the profile names a remote, and kept in ``unknown``: the worklog says how many
+    there were, since it cannot say they held no work.
+    """
+
+    by_folder: classify.LeftOut
+    by_remote: RemoteRule
+    unknown: set[str | None] = field(default_factory=set)
+
+    def holds(self, folder: str | None) -> bool:
+        if self.by_folder.holds(folder):
+            return True
+        judged = self.by_remote.judge(folder)
+        if judged is ByRemote.UNKNOWN:
+            self.unknown.add(folder)
+        return judged is not ByRemote.NOT_NAMED
+
+    def state(self) -> SourceState:
+        """Read, unless work was left out only because its repository could not be told."""
+        if not self.unknown:
+            return SourceState.read()
+        one = len(self.unknown) == 1
+        return SourceState.failed(
+            f"work in {len(self.unknown)} {'folder' if one else 'folders'} is left out: no git remote is known "
+            f"for {'it' if one else 'them'} ({'the folder is' if one else 'the folders are'} gone or git did not "
+            "answer), and the profile leaves "
+            "work out by git remote"
+        )
+
+
+def _work_left_out(inputs: Inputs, run: Runner) -> _WorkLeftOut:
+    named = classify.left_out(inputs.profile, inputs.home)
+    by_remote = RemoteRule(
+        named.remote_parts, inputs.remote_notes, inputs.now, lambda folder: remotes_in(folder, inputs.git, run)
+    )
+    return _WorkLeftOut(named, by_remote)
 
 
 def read_watermark(store: Path) -> datetime.datetime | None:
@@ -100,7 +146,7 @@ def collect(inputs: Inputs, run: Runner = subprocess.run) -> dict[str, Any]:
     inbox = read_inbox(inputs.store, period.start, period.end)
     # A transcript goes by its own folder: a session in another folder can hold a pane that worked
     # in one the owner leaves out, and would carry its prompts.
-    left_out = classify.left_out(inputs.profile, inputs.home)
+    left_out = _work_left_out(inputs, run)
     read = [transcript for transcript in transcripts.transcripts if not left_out.holds(transcript.cwd)]
     drafts = sessions.draft_sessions(recordings.events, recordings.workspaces, read, period.start, period.end)
     rules = classify.sphere_rules(inputs.profile, inputs.home)
@@ -130,6 +176,7 @@ def collect(inputs: Inputs, run: Runner = subprocess.run) -> dict[str, Any]:
             "herdr": _state(inputs.herdr),
             "transcripts": _state(transcripts.state),
             "inbox": _state(inbox.state),
+            "repositories": _state(left_out.state()),
         },
         "spheres": [{"id": r.sphere_id, "label": r.label, "billable": r.billable, "default": r.default} for r in rules],
         "customers": [c for c in inputs.profile.get("customers", []) if isinstance(c, str)],

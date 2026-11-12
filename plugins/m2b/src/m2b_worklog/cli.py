@@ -117,6 +117,7 @@ def _collect(paths: WorklogPaths, now_text: str | None, out: str | None) -> int:
             home=paths.home,
             profile=profile if isinstance(profile, dict) else {},
             now=now,
+            remote_notes=paths.session_remotes,
             herdr=recorder.herdr_state(os.environ),
         )
         text = json.dumps(facts.collect(inputs), ensure_ascii=False, indent=1) + "\n"

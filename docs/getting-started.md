@@ -169,7 +169,7 @@ m2b config set executables.claude "$(command -v claude)"
 | `<store>/memory/MEMORY.md` | the distillate every session sees |
 | `<store>/tasks/` | your tasks, with the `markdown` backend |
 | `~/.config/m2b/config.json` | this machine's settings |
-| `~/.local/state/m2b/` | lock, run log, temp files, the worklog's recordings |
+| `~/.local/state/m2b/` | lock, run log, temp files, the worklog's recordings, and while sessions are read the git remotes of the folders they start in |
 | `~/.local/share/m2b/` | the copy of the worklog's herdr recorder, with the worklog add-on |
 | `~/.local/bin/m2b` | the launcher scripts and schedules call |
 

@@ -251,7 +251,7 @@ it, each proposal with your own words beside it. It is off until you say yes in 
 the band's pane, which `/m2b-proposals` opens, or with `m2b proposals`, `m2b proposals keep <id>`
 and `m2b proposals drop <id>`. Only the prompts you typed are read, with credentials redacted: no
 answer of Claude, no tool result, no pasted block, nothing a plugin or another agent sent, and no
-session in a folder you left out ([Reading your sessions](docs/curation.md#reading-your-sessions)).
+session you left out by its folder or its git remote ([Reading your sessions](docs/curation.md#reading-your-sessions)).
 
 **Memory candidates.** `m2b tasks add --candidate "<a fact>"` proposes one fact as a task
 "Remember? ...", for a script or an integration of yours: tick it and the next run files it; drop
@@ -315,7 +315,7 @@ topic, that topic's facts.
 recorder writes to `~/.local/state/m2b/worklog/`, the prompts and the end of each session's last
 answer from your Claude Code transcripts for the period (with credentials and long tokens
 redacted, and without a prompt a plugin, a finished task or another session sent), your own git commits (their subjects redacted the same way), and the inbox. Of the
-folders you tell it to leave out it keeps nothing; its model step may also search the archive. Its
+work you tell it to leave out, by folder or by git remote, it keeps nothing; its model step may also search the archive. Its
 ledger with time spans and booking proposals lands in the store under `state/addons/worklog/`.
 A time span is when a workspace was in use: an agent at work (up to 30 minutes past its last sign
 of life, so a machine asleep does not count), the workspace in focus (up to 10 minutes after each of

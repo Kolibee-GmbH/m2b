@@ -26,7 +26,7 @@ from worklog_fixtures import PLUGIN_ROOT
 SESSION_START_COMMAND = '"${CLAUDE_PLUGIN_ROOT}"/bin/m2b-worklog hook session-start'
 # Each knowledge that must exist once: how credentials are found, what Claude Code writes into a
 # transcript, how a file is written whole into a synced folder, and how an evicted file is told.
-IMPORTED_FROM_THE_CORE = ("redaction", "claude_code", "atomic_file", "store.guard")
+IMPORTED_FROM_THE_CORE = ("redaction", "claude_code", "atomic_file", "store.guard", "session_remotes")
 
 
 def sources_an_import_runs(module: str) -> list[Path]:

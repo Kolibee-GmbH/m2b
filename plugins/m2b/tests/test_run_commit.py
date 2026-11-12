@@ -12,6 +12,7 @@ import unittest
 from pathlib import Path
 from typing import Any
 
+from m2b import git_program
 from m2b.curate import run_commit
 from m2b.run_record import StepResult
 from m2b.store.folder import FolderStore
@@ -304,7 +305,7 @@ class WhereNothingIsDoneTest(RunCommitTest):
     def test_on_macos_the_stand_in_for_git_is_never_started_without_the_developer_tools(self) -> None:
         """Covers: B139"""
         self.git("init", "-q", "-b", "main")
-        if not run_commit.APPLE_GIT_STAND_IN.exists():
+        if not git_program.APPLE_GIT_STAND_IN.exists():
             self.skipTest("this machine has no /usr/bin/git")
         started: list[list[str]] = []
 
@@ -312,11 +313,11 @@ class WhereNothingIsDoneTest(RunCommitTest):
             started.append(command)
             return types.SimpleNamespace(returncode=2)
 
-        environ = {**self.environ, "PATH": str(run_commit.APPLE_GIT_STAND_IN.parent)}
+        environ = {**self.environ, "PATH": str(git_program.APPLE_GIT_STAND_IN.parent)}
         found = run_commit.find_repository(self.store, environ, platform="darwin", run=no_developer_tools)
 
         self.assertIsNone(found)
-        self.assertEqual(started, [list(run_commit.DEVELOPER_TOOLS_CHECK)])
+        self.assertEqual(started, [list(git_program.DEVELOPER_TOOLS_CHECK)])
 
 
 class TheOwnersRepositoryTest(RunCommitTest):

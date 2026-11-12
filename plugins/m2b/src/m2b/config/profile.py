@@ -56,14 +56,17 @@ class Sphere:
 
 @dataclass(frozen=True)
 class WorklogLeaveOut:
-    """Folders under the home folder whose sessions m2b reads nowhere: the worklog add-on leaves them
-    out of the worklog, and a curation run that reads the sessions leaves them out too.
+    """The work whose sessions m2b reads nowhere: the worklog add-on leaves it out of the worklog,
+    and a curation run that reads the sessions leaves it out too.
 
-    It has the shape of the key in the file, because ``m2b profile get --json`` prints the profile
-    from here and the add-on reads that answer.
+    Work is named by folders under the home folder, and by parts of the URLs of its repository's
+    git remotes (``session_remotes`` says what is known of a folder's remotes and how a part is
+    compared). It has the shape of the key in the file, because ``m2b profile get --json`` prints
+    the profile from here and the add-on reads that answer.
     """
 
     path_under: tuple[str, ...] = ()
+    git_remote_contains: tuple[str, ...] = ()
 
     def folders(self, home: Path) -> tuple[Path, ...]:
         """The folders on a machine whose home folder is ``home``."""
@@ -117,8 +120,9 @@ def _profile(fields: Fields, version: int, strict_keys: bool, strict_language: b
 
 def _left_out(left_out: Fields, strict_keys: bool) -> WorklogLeaveOut:
     if strict_keys:
-        left_out.reject_unknown(("path_under",))
-    return WorklogLeaveOut(_paths_under(left_out))
+        left_out.reject_unknown(("path_under", "git_remote_contains"))
+    # An empty part would name every remote; ``strings`` refuses one.
+    return WorklogLeaveOut(_paths_under(left_out), left_out.strings("git_remote_contains"))
 
 
 def _language(fields: Fields, strict: bool) -> str:

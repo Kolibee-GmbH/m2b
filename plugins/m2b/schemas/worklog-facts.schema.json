@@ -52,7 +52,8 @@
         "recorder",
         "herdr",
         "transcripts",
-        "inbox"
+        "inbox",
+        "repositories"
       ],
       "properties": {
         "recorder": {
@@ -113,6 +114,26 @@
           }
         },
         "inbox": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "detail"
+          ],
+          "properties": {
+            "state": {
+              "enum": [
+                "read",
+                "could not read"
+              ]
+            },
+            "detail": {
+              "type": "string"
+            }
+          }
+        },
+        "repositories": {
+          "description": "Whether every folder's repository could be told while the profile leaves work out by git remote. Could not read: work in folders without a known git remote is left out, and the detail says in how many.",
           "type": "object",
           "additionalProperties": false,
           "required": [
