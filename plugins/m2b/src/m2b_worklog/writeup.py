@@ -1,19 +1,22 @@
-"""What one worklog writes, decided before anything is written: the note, the ledger spans, the candidates.
+"""What one worklog writes, decided before anything is written: the note and the ledger spans.
 
 The plan is pure: facts and a checked verdict in, a ``Plan`` out. The writer (``daily``) records it
 as its intent first and then carries it out piece by piece, so a rerun after a crash carries out
 the same plan and never a second one.
 
 The note's name is the period's end in UTC with a suffix from a hash of the period, so a rerun
-finds the note it wrote, in the inbox or already filed into the corpus. A booking proposal comes
-only from a block of a billable sphere with a customer from the list; the owner books,
-because a wrong booking ends up on an invoice (B29).
+finds the note it wrote, in the inbox or already filed into the corpus. A plan read back from the
+intent file is taken only with a name of that form: the name becomes a path below the inbox, and
+the intent file lies in the synced store, where another machine can write it (B107). A booking
+proposal comes only from a block of a billable sphere with a customer from the list; the owner
+books, because a wrong booking ends up on an invoice (B29).
 """
 
 from __future__ import annotations
 
 import datetime
 import hashlib
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -21,6 +24,9 @@ from typing import Any
 SOURCE = "worklog"
 KIND = "worklog"
 ID_CHARACTERS = 12
+NOTE_SUFFIX_CHARACTERS = 4
+# What note_name builds, as a whole name: matched with fullmatch, so a trailing newline does not pass.
+_NOTE_NAME = re.compile(rf"[0-9]{{8}}T[0-9]{{6}}Z-{SOURCE}-[0-9a-f]{{{NOTE_SUFFIX_CHARACTERS}}}\.md")
 
 HEADINGS = {
     "en": {
@@ -30,7 +36,6 @@ HEADINGS = {
         "commits": "Commits",
         "bookings": "Booking proposals",
         "no_bookings": "None.",
-        "candidates": "Proposed for memory",
         "unread": "Could not read",
         "not_recorded": "Not recorded",
         "not_recorded_why": "herdr was not running, the machine was asleep, recording was off or the recorder's "
@@ -47,7 +52,6 @@ HEADINGS = {
         "commits": "Commits",
         "bookings": "Buchungsvorschläge",
         "no_bookings": "Keine.",
-        "candidates": "Zum Merken vorgeschlagen",
         "unread": "Nicht lesbar",
         "not_recorded": "Nicht aufgezeichnet",
         "not_recorded_why": "herdr lief nicht, der Rechner schlief, die Aufzeichnung war aus oder der Zeitgeber "
@@ -68,27 +72,28 @@ class Plan:
     note_name: str
     note_text: str
     spans: list[dict[str, Any]]
-    candidates: list[str]
 
     def as_json(self) -> dict[str, Any]:
         return {
             "period": {"id": self.period_id, "start": self.start, "end": self.end},
             "note": {"name": self.note_name, "text": self.note_text},
             "spans": self.spans,
-            "candidates": self.candidates,
         }
 
     @classmethod
     def from_json(cls, raw: Mapping[str, Any]) -> Plan:
         period, note = raw["period"], raw["note"]
+        name = str(note["name"])
+        if not _NOTE_NAME.fullmatch(name):
+            # Without the name: the message goes into the owner's review task.
+            raise ValueError("the note's name is not a worklog note's")
         return cls(
             str(period["id"]),
             str(period["start"]),
             str(period["end"]),
-            str(note["name"]),
+            name,
             str(note["text"]),
             [dict(span) for span in raw["spans"]],
-            [str(text) for text in raw["candidates"]],
         )
 
 
@@ -98,7 +103,7 @@ def period_id(start: str, end: str) -> str:
 
 def note_name(end: datetime.datetime, identifier: str) -> str:
     utc = end.astimezone(datetime.timezone.utc)
-    return f"{utc:%Y%m%dT%H%M%S}Z-{SOURCE}-{identifier[:4]}.md"
+    return f"{utc:%Y%m%dT%H%M%S}Z-{SOURCE}-{identifier[:NOTE_SUFFIX_CHARACTERS]}.md"
 
 
 def build(facts: Mapping[str, Any], verdict: Mapping[str, Any], language: str) -> Plan:
@@ -114,9 +119,8 @@ def build(facts: Mapping[str, Any], verdict: Mapping[str, Any], language: str) -
         if session["key"] in judged
     ]
     spans = [span for session in sessions for span in session.spans(identifier, spheres)]
-    candidates = _unique([c["text"].strip() for c in verdict["candidates"]])
-    text = _note(facts, sessions, spans, candidates, spheres, words)
-    return Plan(identifier, start, end, note_name(_time(end), identifier), text, spans, candidates)
+    text = _note(facts, sessions, spans, spheres, words)
+    return Plan(identifier, start, end, note_name(_time(end), identifier), text, spans)
 
 
 @dataclass(frozen=True)
@@ -169,7 +173,6 @@ def _note(
     facts: Mapping[str, Any],
     sessions: Sequence[_Session],
     spans: Sequence[Mapping[str, Any]],
-    candidates: Sequence[str],
     spheres: Mapping[str, Mapping[str, Any]],
     words: Mapping[str, Any],
 ) -> str:
@@ -195,8 +198,6 @@ def _note(
     lines += [f"## {words['bookings']}", ""]
     lines += [_booking_line(span, words) for span in bookings] or [words["no_bookings"]]
     lines.append("")
-    if candidates:
-        lines += [f"## {words['candidates']}", "", *[f"- {text}" for text in candidates], ""]
     unread = _unread(facts)
     if unread:
         lines += [f"## {words['unread']}", "", *[f"- {line}" for line in unread], ""]
@@ -277,14 +278,3 @@ def _duration(minutes: int, words: Mapping[str, Any]) -> str:
 
 def _time(text: str) -> datetime.datetime:
     return datetime.datetime.fromisoformat(text)
-
-
-def _unique(texts: Sequence[str]) -> list[str]:
-    seen: set[str] = set()
-    found = []
-    for text in texts:
-        folded = " ".join(text.split()).casefold()
-        if text and folded not in seen:
-            seen.add(folded)
-            found.append(text)
-    return found

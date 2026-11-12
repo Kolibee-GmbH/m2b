@@ -7,6 +7,7 @@ import datetime
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import zipfile
@@ -16,11 +17,14 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+from m2b import atomic_file, session_remotes
+from m2b.paths import MachinePaths
 from m2b_worklog import daily, ledger, writeup
 from m2b_worklog.daily import DailyError, Sources
 from m2b_worklog.paths import WorklogPaths
 from m2b_worklog.sources import SourceState
-from test_facts import NOW, PROFILE, TEST_TZ, Fixture, at
+from m2b_worklog.sources.git import NO_GIT_TO_START
+from test_facts import BY_REMOTE, GLOBEX, NOW, PROFILE, TEST_TZ, Fixture, at
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[3]
 COMMAND = PLUGIN_ROOT / "bin" / "m2b-worklog"
@@ -34,7 +38,7 @@ class Crash(Exception):
 
 
 def judged(found: dict[str, Any]) -> dict[str, Any]:
-    """What the verdict skill hands in for the day of work: one session, b1 booked, one candidate."""
+    """What the verdict skill hands in for the day of work: one session, b1 booked."""
     sessions = []
     for session in found["sessions"]:
         blocks: dict[str, Any] = {block["id"]: None for block in session["blocks"]}
@@ -48,14 +52,7 @@ def judged(found: dict[str, Any]) -> dict[str, Any]:
                 "blocks": blocks,
             }
         )
-    return {
-        "version": 1,
-        "sessions": sessions,
-        "candidates": [
-            {"text": "Dana reviews the invoice export on Fridays"},
-            {"text": "dana reviews the invoice  export on fridays"},
-        ],
-    }
+    return {"version": 1, "sessions": sessions}
 
 
 def hand_in(paths: WorklogPaths, verdict: Any) -> None:
@@ -70,8 +67,6 @@ class FakeCore:
     def __init__(self, paths: WorklogPaths, store: Path, profile: dict[str, Any], judge: Callable[..., Any]) -> None:
         self.paths, self._store, self._profile, self._judge = paths, store, profile, judge
         self.model_calls: list[tuple[str, tuple[str, ...]]] = []
-        self.proposed: list[str] = []
-        self.attempts: list[str] = []
 
     def store(self) -> Path:
         return self._store
@@ -91,12 +86,6 @@ class FakeCore:
         if problems:
             raise AssertionError(problems)
 
-    def propose(self, text: str) -> None:
-        # The core refuses a text it holds open already, with exit 0 (B35).
-        self.attempts.append(text)
-        if text not in self.proposed:
-            self.proposed.append(text)
-
 
 class DailyFixture(Fixture):
     def setUp(self) -> None:
@@ -105,12 +94,13 @@ class DailyFixture(Fixture):
         self.profile: dict[str, Any] = {**PROFILE, "language": "en"}
         self.core = FakeCore(self.paths, self.store, self.profile, judged)
         self.herdr = SourceState.read()
+        self.git_to_start: str | None = "git"
 
     def run_daily(self, now: datetime.datetime = NOW) -> str:
         environ_backup = dict(os.environ)
         os.environ.update({"GIT_CONFIG_GLOBAL": str(self.base / "gitconfig"), "GIT_CONFIG_NOSYSTEM": "1"})
         try:
-            return daily.run(self.paths, self.core, now, Sources(self.projects, self.herdr))
+            return daily.run(self.paths, self.core, now, Sources(self.projects, self.herdr, self.git_to_start))
         finally:
             os.environ.clear()
             os.environ.update(environ_backup)
@@ -201,7 +191,6 @@ class WriteTest(DailyFixture):
                 "Bash(m2b-worklog facts *)",
                 "Bash(m2b-worklog verdict *)",
                 "Bash(m2b search *)",
-                "Bash(m2b tasks list *)",
                 "Bash(m2b curate report *)",
                 "Read(<store>/memory/**)",
                 "Read(<store>/inbox/**)",
@@ -211,7 +200,7 @@ class WriteTest(DailyFixture):
             ),
         )
 
-    def test_a_worklog_writes_the_note_the_ledger_the_exports_the_candidates_and_the_watermark(self) -> None:
+    def test_a_worklog_writes_the_note_the_ledger_the_exports_and_the_watermark(self) -> None:
         """Covers: B28"""
         self.a_due_day()
 
@@ -228,7 +217,6 @@ class WriteTest(DailyFixture):
         self.assertIn("- 2026-03-14 10:00-10:50 (50 min): Globex, Invoices, development", note)
         spans = self.ledger_periods()[period]["spans"]
         self.assertEqual([(s["block"], s["customer"]) for s in spans], [("b1", "Globex"), ("b2", None)])
-        self.assertEqual(self.core.proposed, ["Dana reviews the invoice export on Fridays"])
         self.assertEqual(self.watermark_end(), NOW.isoformat())
         self.assertFalse((self.store / STATE / "intent.json").exists())
 
@@ -238,7 +226,7 @@ class WriteTest(DailyFixture):
         folder = self.store / STATE
         first = (folder / "ledger.csv").read_bytes(), (folder / "ledger.xlsx").read_bytes()
 
-        ledger.export(folder)
+        ledger.export(folder, self.paths.temp_dir)
 
         self.assertEqual(((folder / "ledger.csv").read_bytes(), (folder / "ledger.xlsx").read_bytes()), first)
         rows = list(csv.DictReader(io.StringIO(first[0].decode("utf-8"))))
@@ -276,7 +264,7 @@ class WriteTest(DailyFixture):
         }
         (folder / "ledger.json").write_text(json.dumps(old), encoding="utf-8")
 
-        ledger.export(folder)
+        ledger.export(folder, self.paths.temp_dir)
 
         [row] = list(csv.DictReader(io.StringIO((folder / "ledger.csv").read_text(encoding="utf-8"))))
         self.assertEqual((row["minutes"], row["minutes_present"]), ("60", ""))
@@ -289,11 +277,20 @@ class LedgerOverlapTest(DailyFixture):
     def test_a_span_overlapping_one_of_the_same_session_is_refused_and_nothing_is_added(self) -> None:
         """Covers: B87"""
         folder = self.store / STATE
-        ledger.add(folder, "p1", at(9).isoformat(), at(12).isoformat(), [self.span("s1", at(10), at(11))])
+        ledger.add(
+            folder, "p1", at(9).isoformat(), at(12).isoformat(), [self.span("s1", at(10), at(11))], self.paths.temp_dir
+        )
         before = (folder / "ledger.json").read_bytes()
 
         with self.assertRaises(ledger.LedgerError) as caught:
-            ledger.add(folder, "p2", at(9).isoformat(), at(13).isoformat(), [self.span("s1", at(10, 30), at(12))])
+            ledger.add(
+                folder,
+                "p2",
+                at(9).isoformat(),
+                at(13).isoformat(),
+                [self.span("s1", at(10, 30), at(12))],
+                self.paths.temp_dir,
+            )
 
         self.assertIn("s1", str(caught.exception))
         self.assertIn(at(10).isoformat(), str(caught.exception))
@@ -303,7 +300,9 @@ class LedgerOverlapTest(DailyFixture):
     def test_a_period_that_only_touches_the_last_one_is_added(self) -> None:
         """Covers: B87"""
         folder = self.store / STATE
-        ledger.add(folder, "p1", at(9).isoformat(), at(11).isoformat(), [self.span("s1", at(10), at(11))])
+        ledger.add(
+            folder, "p1", at(9).isoformat(), at(11).isoformat(), [self.span("s1", at(10), at(11))], self.paths.temp_dir
+        )
 
         added = ledger.add(
             folder,
@@ -311,6 +310,7 @@ class LedgerOverlapTest(DailyFixture):
             at(11).isoformat(),
             at(13).isoformat(),
             [self.span("s2", at(11), at(12)), self.span("s1", at(11), at(12))],
+            self.paths.temp_dir,
         )
 
         self.assertTrue(added)
@@ -320,11 +320,11 @@ class LedgerOverlapTest(DailyFixture):
         # A workspace reopened under a new id: the same minutes come back under another session key.
         folder = self.store / STATE
         held = [self.span("workspace:w2:", at(10), at(11))]
-        ledger.add(folder, "p1", at(9).isoformat(), at(12).isoformat(), held)
+        ledger.add(folder, "p1", at(9).isoformat(), at(12).isoformat(), held, self.paths.temp_dir)
 
         with self.assertRaises(ledger.LedgerError) as caught:
             again = [self.span("workspace:w1:", at(10), at(11))]
-            ledger.add(folder, "p2", at(8).isoformat(), at(13).isoformat(), again)
+            ledger.add(folder, "p2", at(8).isoformat(), at(13).isoformat(), again, self.paths.temp_dir)
 
         self.assertIn(f"the period from {at(9).isoformat()} to {at(12).isoformat()}", str(caught.exception))
 
@@ -439,6 +439,54 @@ class StateTest(DailyFixture):
         self.assertIn(
             "## Could not read\n\n- herdr: herdr did not answer", (self.store / note).read_text(encoding="utf-8")
         )
+
+    def test_a_machine_without_a_git_to_start_is_named_in_the_note_for_each_session(self) -> None:
+        """Covers: B158"""
+        self.git_to_start = None
+        self.a_due_day()
+
+        self.run_daily()
+
+        [note] = self.worklog_notes()
+        text = (self.store / note).read_text(encoding="utf-8")
+        self.assertIn(f"## Could not read\n\n- git in {self.repo}: {NO_GIT_TO_START}\n", text)
+        self.assertNotIn("fix(export)", text)
+
+    def test_work_left_out_for_a_repository_nobody_can_tell_is_named_in_the_note_by_its_count(self) -> None:
+        """Covers: B153"""
+        self.profile.update(BY_REMOTE)
+        self.a_due_day()
+        self.a_second_workspace("w2", self.home / "notes")
+        shutil.rmtree(self.repo)
+
+        self.run_daily()
+
+        [note] = self.worklog_notes()
+        text = (self.store / note).read_text(encoding="utf-8")
+        self.assertIn("## Could not read\n\n- repositories: work in 2 folders is left out", text)
+        self.assertNotIn("acme/invoices", text)
+
+    def test_a_worklog_knows_a_folder_that_is_gone_by_what_the_core_noted_at_a_session_start(self) -> None:
+        """Covers: B153"""
+        self.profile.update(BY_REMOTE)
+        self.a_due_day()
+        self.a_second_workspace("w2", self.home / "notes")
+        # Where the core's session-start hook writes on a machine with this home folder.
+        notes = MachinePaths(self.home).state_dir / session_remotes.NOTES_FOLDER
+        for folder in (self.repo, self.repo / "src"):
+            session_remotes.note(
+                notes, str(folder), frozenset({GLOBEX}), at(8), lambda path, text: path.write_text(text)
+            )
+        shutil.rmtree(self.repo)
+
+        self.run_daily()
+
+        [note] = self.worklog_notes()
+        text = (self.store / note).read_text(encoding="utf-8")
+        self.assertNotIn("repositories:", text)
+        self.assertNotIn("round per line", text)
+        [period] = self.ledger_periods().values()
+        self.assertEqual({span["session"].split(":")[1] for span in period["spans"]}, {"w2"})
 
     def test_a_stretch_the_recorder_did_not_record_is_named_in_the_note(self) -> None:
         """Covers: B89"""
@@ -593,15 +641,15 @@ class VerdictTest(DailyFixture):
         daily.hand_to_model(self.paths, self.store, "en", found)
         return found
 
-    def test_more_than_three_candidates_are_refused(self) -> None:
-        """Covers: B99"""
+    def test_a_verdict_that_names_something_for_memory_is_refused(self) -> None:
+        """Covers: B129"""
         self.a_due_day()
         good = judged(self.handed_facts())
-        four = {**good, "candidates": [{"text": f"Dana likes tea number {n}"} for n in range(4)]}
+        for candidates in ([{"text": "Dana reviews the invoice export on Fridays"}], []):
+            with self.subTest(candidates=candidates):
+                self.assertEqual(self.problems({**good, "candidates": candidates}), ["$: candidates is not allowed"])
 
-        self.assertEqual(self.problems(four), ["$.candidates: 4 candidates, at most 3"])
-
-    def test_a_line_break_in_a_topic_a_detail_a_note_or_a_candidate_is_refused(self) -> None:
+    def test_a_line_break_in_a_topic_a_detail_a_note_or_a_booking_is_refused(self) -> None:
         """Covers: B99"""
         self.a_due_day()
         good = judged(self.handed_facts())
@@ -610,8 +658,6 @@ class VerdictTest(DailyFixture):
             broken["sessions"][0][field] = "Invoice export\n## Not a heading"
             with self.subTest(field=field):
                 self.assertEqual(self.problems(broken), [f"$.sessions[0].{field}: holds a line break"])
-        candidate = {**good, "candidates": [{"text": "Dana reviews\nthe export"}]}
-        self.assertEqual(self.problems(candidate), ["$.candidates[0].text: holds a line break"])
         booking = json.loads(json.dumps(good))
         booking["sessions"][0]["blocks"]["b1"]["activity"] = "Review\x0b## Not a heading"
         self.assertEqual(self.problems(booking), ["$.sessions[0].blocks.b1.activity: holds a line break"])
@@ -652,7 +698,6 @@ class RerunTest(DailyFixture):
         self.assertEqual(len(self.core.model_calls), 1)
         self.assertEqual(len(self.worklog_notes()), 1)
         self.assertEqual(len(self.ledger_periods()), 1)
-        self.assertEqual(self.core.proposed, ["Dana reviews the invoice export on Fridays"])
         self.assertEqual(self.watermark_end(), NOW.isoformat())
         self.assertFalse((self.store / STATE / "intent.json").exists())
 
@@ -671,11 +716,6 @@ class RerunTest(DailyFixture):
     def test_a_crash_after_the_exports(self) -> None:
         """Covers: B28"""
         self.assert_rerun_completes(ledger, "export")
-
-    def test_a_crash_after_a_candidate_was_proposed(self) -> None:
-        """Covers: B28"""
-        self.assert_rerun_completes(self.core, "propose")
-        self.assertEqual(len(self.core.attempts), 2)
 
     def test_a_crash_after_the_watermark(self) -> None:
         """Covers: B28"""
@@ -732,12 +772,135 @@ class RerunTest(DailyFixture):
 
         self.assertIn("m2b store fetch state/addons/worklog/ledger.json downloads it", str(raised.exception))
 
+    def test_an_evicted_intent_stops_the_worklog_and_names_the_fetch_command(self) -> None:
+        (self.store / STATE).mkdir(parents=True)
+        (self.store / STATE / "intent.json").write_text("{}", encoding="utf-8")
+
+        with mock.patch.object(daily, "is_evicted", return_value=True), self.assertRaises(DailyError) as raised:
+            self.run_daily()
+
+        self.assertIn("m2b store fetch state/addons/worklog/intent.json downloads it", str(raised.exception))
+
     def test_an_unreadable_intent_stops_the_worklog(self) -> None:
         (self.store / STATE).mkdir(parents=True)
         (self.store / STATE / "intent.json").write_text("{", encoding="utf-8")
 
         with self.assertRaisesRegex(DailyError, "repair it by hand: m2b-worklog state"):
             self.run_daily()
+
+    def an_unfinished_worklog(self) -> Path:
+        self.a_due_day()
+        with self.crash_after(daily, "_write_intent"), self.assertRaises(Crash):
+            self.run_daily()
+        return self.store / STATE / "intent.json"
+
+    def name_the_note(self, intent_file: Path, name: str) -> None:
+        intent = json.loads(intent_file.read_text(encoding="utf-8"))
+        intent["plan"]["note"]["name"] = name
+        intent_file.write_text(json.dumps(intent), encoding="utf-8")
+
+    def files_on_the_machine(self) -> dict[str, bytes]:
+        return {
+            path.relative_to(self.base).as_posix(): path.read_bytes()
+            for path in sorted(self.base.rglob("*"))
+            if path.is_file()
+        }
+
+    def test_an_intent_whose_note_name_is_no_worklog_note_is_unreadable_and_writes_nothing(self) -> None:
+        """Covers: B107"""
+        intent_file = self.an_unfinished_worklog()
+        names = (
+            "../../outside.md",
+            str(self.base / "outside.md"),
+            "sub/20261110T080000Z-worklog-ab12.md",
+            "20261110T080000Z-worklog-ab12.md\n",
+            "20261110T080000Z-cli-ab12.md",
+            "outside.md",
+            "",
+        )
+        for name in names:
+            with self.subTest(name=name):
+                self.name_the_note(intent_file, name)
+                before = self.files_on_the_machine()
+
+                with self.assertRaisesRegex(DailyError, "repair it by hand: m2b-worklog state") as refused:
+                    self.run_daily()
+
+                self.assertEqual(self.files_on_the_machine(), before)
+                self.assertIn("the note's name is not a worklog note's", str(refused.exception))
+                self.assertNotIn("outside", str(refused.exception))
+                self.assertIn("cannot be read", daily.state(self.store)["unfinished"])
+
+    def test_an_intent_with_the_note_name_the_worklog_gave_it_is_carried_out(self) -> None:
+        """Covers: B107"""
+        intent_file = self.an_unfinished_worklog()
+        name = json.loads(intent_file.read_text(encoding="utf-8"))["plan"]["note"]["name"]
+
+        self.run_daily()
+
+        self.assertEqual(self.worklog_notes(), [f"inbox/{name}"])
+
+
+class WholeWritesTest(DailyFixture):
+    """Each piece reaches the store whole, from a temporary file in the machine's temp folder (B135)."""
+
+    @contextmanager
+    def last_steps_into_the_store(
+        self, break_off_at: str | None = None
+    ) -> Iterator[list[tuple[str, Path, dict[str, bytes]]]]:
+        """Each last step of a write into the store: the file, its temporary file, the store at that moment."""
+        seen: list[tuple[str, Path, dict[str, bytes]]] = []
+
+        def recording(real: Callable[..., None]) -> Callable[..., None]:
+            def last_step(source: Any, target: Any) -> None:
+                if self.store in Path(target).parents:
+                    name = Path(target).relative_to(self.store).as_posix()
+                    seen.append((name, Path(source), self.store_files()))
+                    if name == break_off_at:
+                        raise Crash(name)
+                real(source, target)
+
+            return last_step
+
+        with (
+            mock.patch.object(atomic_file.os, "replace", recording(os.replace)),
+            mock.patch.object(atomic_file.os, "link", recording(os.link)),
+        ):
+            yield seen
+
+    def test_every_piece_of_a_worklog_reaches_the_store_from_the_machines_temp_folder(self) -> None:
+        """Covers: B135"""
+        self.a_due_day()
+        held = set(self.store_files())
+
+        with self.last_steps_into_the_store() as seen:
+            self.run_daily()
+
+        [note] = self.worklog_notes()
+        state = [
+            f"{STATE.as_posix()}/{name}" for name in ("ledger.json", "ledger.csv", "ledger.xlsx", "watermark.json")
+        ]
+        written = [f"{STATE.as_posix()}/intent.json", note, *state]
+        self.assertEqual([name for name, _, _ in seen], written)
+        for index, (name, temporary, store_at_that_moment) in enumerate(seen):
+            with self.subTest(piece=name):
+                self.assertEqual(temporary.parent, self.paths.temp_dir)
+                self.assertEqual(sorted(store_at_that_moment), sorted({*held, *written[:index]}))
+        self.assertEqual(list(self.paths.temp_dir.iterdir()), [])
+
+    def test_a_worklog_broken_off_in_the_middle_of_a_write_leaves_the_store_as_it_was(self) -> None:
+        """Covers: B135"""
+        self.a_due_day()
+        ledger_file = f"{STATE.as_posix()}/ledger.json"
+
+        with self.last_steps_into_the_store(break_off_at=ledger_file) as seen, self.assertRaises(Crash):
+            self.run_daily()
+
+        _, _, store_before_the_last_step = seen[-1]
+        self.assertEqual(self.store_files(), store_before_the_last_step)
+        self.assertNotIn(ledger_file, store_before_the_last_step)
+        self.assertIn("resumed", self.run_daily())
+        self.assertEqual(len(self.ledger_periods()), 1)
 
 
 class CommandTest(DailyFixture):
@@ -764,8 +927,6 @@ elif arguments[:2] == ["curate", "model"]:
     with open(facts["verdict_file"], "w", encoding="utf-8") as draft:
         draft.write(open({str(verdict)!r}).read())
     subprocess.run([{str(COMMAND)!r}, "verdict"])
-elif arguments[:3] == ["tasks", "add", "--candidate"]:
-    print("aaaa00000001")
 else:
     sys.exit(f"unexpected: {{arguments}}")
 """
@@ -773,9 +934,9 @@ else:
         launcher.chmod(0o755)
         return calls
 
-    def command(self, *arguments: str) -> subprocess.CompletedProcess[str]:
+    def command(self, *arguments: str, environ: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [str(COMMAND), *arguments], capture_output=True, text=True, env=self.environ(), timeout=60
+            [str(COMMAND), *arguments], capture_output=True, text=True, env=environ or self.environ(), timeout=60
         )
 
     def environ(self) -> dict[str, str]:
@@ -790,7 +951,8 @@ else:
             "TZ": TEST_TZ,
         }
 
-    def test_run_asks_the_core_for_the_model_step_and_the_candidates(self) -> None:
+    def test_run_asks_the_core_for_the_model_step_and_for_no_task(self) -> None:
+        """Covers: B129"""
         calls = self.launcher()
         self.a_due_day()
         collected = self.command("collect", "--now", NOW.isoformat())
@@ -804,9 +966,31 @@ else:
         [model] = [call for call in made if call[:2] == ["curate", "model"]]
         self.assertEqual(model[:5], ["curate", "model", "--skill", "m2b:worklog-verdict", "--allow"])
         self.assertIn("Read(<store>/inbox/**)", model)
-        self.assertIn(["tasks", "add", "--candidate", "--", "Dana reviews the invoice export on Fridays"], made)
+        self.assertEqual([call for call in made if call[:1] == ["tasks"]], [])
         [note] = self.worklog_notes()
         self.assertIn("- herdr: herdr did not answer", (self.store / note).read_text(encoding="utf-8"))
+
+    def test_with_no_git_on_the_path_collect_and_run_say_that_the_machine_has_none_to_start(self) -> None:
+        """Covers: B158"""
+        self.launcher()
+        self.a_due_day()
+        programs = self.base / "programs"
+        programs.mkdir()
+        # All that the command's own script needs from the PATH.
+        (programs / "dirname").symlink_to(shutil.which("dirname") or "/usr/bin/dirname")
+        environ = {**self.environ(), "PATH": str(programs)}
+
+        collected = self.command("collect", "--now", NOW.isoformat(), environ=environ)
+        self.assertEqual(collected.returncode, 0, collected.stderr)
+        found = json.loads(collected.stdout)
+        (self.base / "verdict.json").write_text(json.dumps(judged(found)), encoding="utf-8")
+        ran = self.command("run", "--now", NOW.isoformat(), environ=environ)
+
+        [session] = found["sessions"]
+        self.assertEqual(session["git"], {"state": "could not read", "detail": NO_GIT_TO_START})
+        self.assertEqual(ran.returncode, 0, ran.stderr)
+        [note] = self.worklog_notes()
+        self.assertIn(f"- git in {self.repo}: {NO_GIT_TO_START}\n", (self.store / note).read_text(encoding="utf-8"))
 
     def test_state_shows_the_watermark_and_the_last_period_and_names_a_broken_file(self) -> None:
         """Covers: B87"""

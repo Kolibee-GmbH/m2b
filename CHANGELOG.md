@@ -7,6 +7,358 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-12
+
+In short:
+
+- A curation run can read what you typed in Claude Code and propose what belongs in your memory;
+  nothing is filed before you keep it ([Reading your sessions](docs/curation.md#reading-your-sessions)).
+- With the store in a git repository, each run ends with one commit, and `git revert` on it puts
+  back what the run changed, the captures it filed included
+  ([A commit per run](docs/curation.md#a-commit-per-run)).
+- A run's model steps are fenced more tightly, and what a capture says is treated as data
+  ([Security](SECURITY.md)).
+- `curation.paused` pauses the background runs on a machine ([Pausing](docs/curation.md#pausing)),
+  `m2b --version` prints the version, and [Commands](docs/commands.md) lists every command.
+- A folder store recognizes the conflict copies of Dropbox and Syncthing, and a current item can
+  stand under a topic, which makes the store format 3 ([Store format](docs/store-format.md#formats)).
+
+### Added
+
+- The README opens with a moving picture that follows one sentence from a prompt, through a
+  curation run, into a session in another project; `scripts/readme-demo` records it from real
+  sessions against a demo store with invented notes. Its comparison names two public projects,
+  obsidian-second-brain and basic-memory, and says where each does more than m2b
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- A store on the `folder` backend recognizes the conflict copies of Dropbox and Syncthing, as the
+  `icloud` backend recognizes iCloud's. Until now such a copy was a file like any other there: a
+  copy of a task file was a second task, a copy in the inbox was filed as a second capture, and a
+  copy in the archive was reported as a note that is not named by the schema. Now `m2b lint`
+  reports a copy in the archive as a conflict copy and `m2b lint fix` removes it when it equals its
+  original byte for byte, a curation run does the same in the inbox and gives a differing text
+  copy a line that names its original, and the Markdown tasks do not read a copy of a task file
+  as a second task. The names are
+  `<name> (... conflicted copy ...).<ext>`, also with `in Konflikt stehende Kopie` as Dropbox
+  writes it for a German account, and `<name>.sync-conflict-<date>-<time>-<device>.<ext>`, each
+  only next to the file it is a copy of. There is nothing to set: every folder store recognizes
+  both, and a copy that differs from its original is never removed
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- `m2b lint` names a conflict copy of a task file, where the tasks are Markdown files, in a store
+  on either backend. A task ticked on one machine and changed on another leaves two files, and
+  until now the copy was passed over without a word: nothing said that a second state of the
+  task existed. Lint reports the copy as it reports one in the archive: as an action when it
+  differs from the task (keep one of them), as an info when it equals the task, or when the two
+  were not compared because one is not downloaded or cannot be read. `m2b lint fix` and the lint
+  step of a curation run remove a copy that equals its task byte for byte and nothing else: the
+  task and a differing copy stay as they are. With Reminders as the tasks backend a `tasks/`
+  folder left in the store is not looked at ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- `m2b doctor` has a line `store-git`. It says whether the store folder is a git repository and,
+  on the machine that curates, where the git directory lies that a run commits into and which
+  git named it. `cannot commit` with the reason counts as a problem: a `.git` in the store folder
+  on a curating machine without git, where a run commits nothing and says nothing, a `.git` that
+  is not downloaded, a repository git cannot read, or one whose work tree is another folder.
+  Where the folder holds a `.git` and this machine does not curate or has `curation.git_commit`
+  off, the line says so and git is not started. The git directory and git's reason are printed
+  with invisible characters written out, because both come from the `.git` in the store
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- `m2b doctor` has a line `prompt-hook`. The hook that brings a topic's facts before a prompt says
+  nothing when it fails, so that no prompt waits or breaks for it; one that never worked looked
+  the same as a prompt that named no topic. Doctor now starts it the way Claude Code does, within
+  the same time limit, and reports `answers`, or `does not answer` with the reason (the distillate
+  is not downloaded, the config is broken, Python is not found), or `missing`
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- A curation run started in the background, at a session start or with `m2b curate --detach`,
+  keeps what it writes on standard error in `~/.local/state/m2b/detached-run.err`, replaced at
+  each such start. Until now that output was discarded, and a run that died before it could write
+  its record left no reason behind ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- A curation run ends with one git commit when you keep the store in a git repository: run
+  `git init` in the store folder and commit the store once, and from then on
+  `git revert <commit>` takes one run back. The
+  commit holds what changed in the store while the run ran, and nothing else of what you left
+  uncommitted or staged (a file the run also wrote goes in as it is on disk); its author is `m2b <m2b@localhost>`, so `git log --author=m2b` lists the
+  runs. m2b makes no repository, writes no git configuration, never pushes, runs no hook and signs
+  nothing; a commit that fails is reported in the review task and never fails the run. In a synced
+  folder git gets only files that are on this machine, so nothing is downloaded for a commit.
+  Without a repository in the store folder nothing changes, and `curation.git_commit: false` in
+  the machine config turns it off ([A commit per run](docs/curation.md#a-commit-per-run)).
+  A capture that came in after your last commit is a file git does not know, so before its first
+  step a run commits such captures where they wait, in a commit of their own
+  (`m2b: captures before the curation run ...`): only files in `inbox/` that git does not know,
+  nothing you staged or changed. Reverting the run's commit then puts such a capture back into
+  `inbox/` instead of deleting it from the store folder
+  ([Taking a run back](docs/curation.md#taking-a-run-back) names what a revert does not put back)
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- A current item can stand under a topic. In `## Current` of the distillate, a heading
+  `### <name> (<word>, <word>)` now works as it does under `## Facts`: the items below it stay out
+  of the session start and come in with the topic's facts, where the project folder's path or a
+  prompt names one of its words. Until now every line under `## Current` reached every session, and
+  lint reported such a heading as an error. Curation files what you are working on for one subject
+  (a customer, an organisation's project, a club) under that subject's topic there, with the
+  heading its facts have, and what goes on in your own life above the topics. An item that stands
+  above the topics and is about one subject moves under its topic when a new capture is about the
+  same thing; one you move under a topic yourself stays there. A model-level scenario, `E14-topics`, checks where a
+  real ingest step puts both kinds. The store gets format 3
+  at the curating machine's next run, and nothing in `memory/` changes; update the curating machine
+  first. A machine on an older m2b keeps capturing and gives every session every current item until
+  it is updated ([Store format](docs/store-format.md#memory))
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- [Evals](docs/evals.md) shows what m2b does to Claude's answers, measured: the score of each of
+  the eight eval cases with m2b and without, and the model, the Claude Code version and the day of
+  the run. Until now the scores a release was checked with were written down nowhere
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- The worklog leaves out the work you name in the profile: `worklog_leave_out` takes folders under
+  your home folder (`path_under`) and parts of the URLs of git remotes (`git_remote_contains`),
+  which name a repository in every folder it is checked out in. What ran there is in no worklog,
+  not in what the model step reads, the note or the ledger. A worktree that is gone when the
+  worklog runs is still known by its remote: on a machine that reads sessions, every session start
+  notes the remotes of the folder it starts in, in `~/.local/state/m2b/session-remotes/`, without
+  the user name or token of a URL. While you name a remote, work in a folder whose repository
+  nobody can tell is left out too, and the note says in how many folders. A sphere's
+  `git_remote_contains` now ignores upper and lower case and also finds the SSH spelling of an
+  address. The profile is written as version 2 once it holds the setting, so every machine that
+  shares the store needs this version
+  ([docs/addons/worklog.md](docs/addons/worklog.md#leaving-work-out))
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- A curation run can read what you typed in Claude Code and propose what belongs in your memory
+  although you never said "remember this": a person and their role, an agreement, a commitment
+  with its day, something about your own life. It is off until you say yes: setup asks on the
+  machine that curates, and `curation.read_sessions` in the machine config holds the answer. A run
+  then reads what you typed since the last reading (the last 24 hours the first time, 7 days at
+  most), asks the model once with nothing it can call, and keeps a proposal only when the words it
+  quotes stand in one of your prompts and you did not capture the same thing yourself. Nothing is
+  filed before you say keep: `m2b proposals` lists what waits, each with your own words and the day
+  you said them; `m2b proposals keep <id>...`, `keep --all` and `drop <id>...` answer, and the next
+  run files what you kept as a capture. While proposals wait, your task list holds one task that
+  says how many, so a phone shows it too; completing it answers nothing. With the band, one row
+  says how many wait, and `show` on it or `/m2b-proposals` opens them in the m2b pane, each with
+  your words, keep and drop with the same 5 seconds of undo as a candidate, and keep all
+  ([docs/band.md](docs/band.md#the-proposals-from-your-sessions-in-the-pane)). Only what you typed is
+  read: no answer of Claude, no tool result, no pasted block, nothing another sender put into the
+  session; credentials are redacted.
+  Of a session `worklog_leave_out` names, by its folder or by a git remote of its repository, or
+  in a folder where you ran `m2b distillate off`, nothing reaches the model ([docs/curation.md](docs/curation.md#reading-your-sessions)). A new
+  scenario, `E23-proposals-from-sessions`, runs it from setup's yes to the filed capture
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- A proposal from your sessions that got no answer for 14 days expires: it waits no longer, does
+  not count as dropped and is not proposed again for 90 days; `m2b proposals keep <id>` still keeps
+  it in that time. Every curation run does this and removes the proposals kept, dropped or expired
+  90 days ago, whether or not it reads the sessions. `m2b status` says what share you kept of the
+  proposals you answered in the last 30 days and how many expired, and `m2b status --json` adds the
+  counts per kind since the first reading: proposed, kept, dropped, expired, and refused because
+  the words they quote do not stand, with at least three words, in a prompt of the session they
+  name ([docs/curation.md](docs/curation.md#reading-your-sessions))
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- The reading of your sessions learns from your answers: it shows the model up to 30 proposals you
+  kept and up to 30 you dropped, those a run settled last, each with its kind, its text and your
+  words, and tells it to leave out what is like something you dropped. Expired proposals are not
+  shown. On the invented day of `scripts/glean-eval`, which now holds five kept and four dropped
+  proposals and one sentence like the dropped ones, `haiku` and `sonnet` proposed that sentence in
+  six of six answers without the examples and in none of six with them, and found all twenty
+  planted statements either way; `scripts/glean-eval --without-examples` measures the day without them
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- `m2b config set curation.paused true` pauses curation on a machine: no session start and no
+  schedule starts a run there until the setting is `false` again. Until now the only ways to stop
+  the background runs were to turn the plugin off, which also takes capture and the distillate
+  away, or to move curation to another machine. A paused machine still captures, its sessions
+  still get the distillate, and `m2b curate --force` still files the inbox when you ask for it;
+  `m2b status` has a line `paused`, and a scheduled `m2b curate` shows there as
+  `last attempt: paused at ...` ([Pausing](docs/curation.md#pausing))
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- [Commands](docs/commands.md) is a new page with everything you can say, type after a slash or
+  run as `m2b`: what to say in a session, the skills (`/m2b:search`) and the band's commands
+  (`/m2b-search`) with what tells them apart, every `m2b` command with one line, and the exit
+  codes. The README lists the ten used most, `m2b tasks list` and `m2b tasks complete <id>` among
+  them, which is how a Markdown task is ticked ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- `m2b --version` prints the version, also on a machine that is not set up. The bug template asks
+  for it ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- A command that groups actions, such as `m2b lint`, `m2b tasks` or `m2b setup`, prints its help
+  when it is named without an action. Until now it ended with a usage error and exit code 2
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+
+### Changed
+
+- `m2b curate` answers a run in two lines. After the line that says how the run ended comes what
+  it did to the inbox, such as `inbox: 3 captures filed, 0 waiting`; when a run that ended well
+  left something in the review task, the line says so. Until now the answer was
+  `the curation run succeeded` alone, and whether anything was filed took a second command. Filed
+  counts what reached the archive, so a ticked "Remember? ..." candidate the same run filed is in
+  it. An answer without a run (not due, paused, `--detach`) is one line as before. A script that
+  compared the whole output must take the second line into account
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- On a machine that is not set up, a command's answer names both ways in: `/m2b:m2b setup` in
+  Claude Code and, without Claude Code, `m2b setup apply` with the address of Getting started.
+  Until now it named only the first, which whoever tries m2b from a checkout does not have
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- The README explains six more of its words (fact file, review task, proposal, memory candidate,
+  mod, herdr), shows under Troubleshooting what `m2b doctor` and `m2b status` answer on a healthy
+  machine and which of their lines only look like a problem, and names two more things to remove
+  when uninstalling: the marketplace and the `PATH` line. [Security](SECURITY.md) opens with five
+  lines that sum it up and says that reports are taken for the latest release.
+  [Getting started](docs/getting-started.md) lists the folder with the copies of `memory/` a run
+  keeps on the machine ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- The README has a quick start right below its first screen, says what Claude Code prints when
+  the install is done, says where m2b stands (young, in daily use by its author on macOS, Linux
+  covered by the tests), that a run's usage is recorded nowhere, that the band's two tools run
+  without Claude Code's permission prompt, and how to report a bug. It no longer says a session
+  keeps your words "verbatim": the note is in your words without the request around them. It
+  also says that a run can file facts under a topic,
+  and that a session then starts with the topic's name only
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- [The curation run](docs/curation.md) has a section "Correcting what a run filed": a wrong fact,
+  a fact under the wrong topic, a finding of lint in the review task, a note that should never
+  have been kept. It also says to commit the store once before the first run commits into it:
+  reverting the first run that touched a file git had never seen deletes that file, the
+  distillate for one ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- lint's finding about a topic's words names the file and says where the words stand: "in
+  memory/MEMORY.md, the topic Trip has 1 word in the brackets of its heading; it needs 2 to 5".
+  Until now it read "the topic Trip has 1 words; it needs 2 to 5"
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- [Getting started](docs/getting-started.md) says after each step in Claude Code what you should
+  see and what to do when you do not, and which session knows a new fact: the session start after
+  a capture starts the run, and the session after that one starts with the fact. The times in it
+  are measured: 15 seconds for a setup with every answer given at once, 13 seconds for a run over
+  one capture ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- `m2b search` prints nothing from the store with a character that draws nothing, as text and
+  with `--json`: zero-width characters, marks that reorder text, variation selectors, soft
+  hyphens and tag characters are gone from a hit's text, the joiners emoji and several scripts
+  need stay. In a file's path, in
+  the command that fetches a file and in the reason a file could not be read, such a character
+  is written out as `<U+200B>`. A session that searches through the skill's command read a hit
+  as it was stored until now, with whatever such a character carried
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- A proposal from your sessions whose topic is longer than the 60 characters a topic's name may
+  have is left out and counted with the entries that are not in the form, like one whose text is
+  over 300 characters ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- A curation step that fails over what it wrote to `memory/` names the line by its file and line
+  number ("line 5 written to memory/MEMORY.md holds U+200B"), no longer by its text, and does not
+  name a file the step added, whose name the model chose. `m2b status` and the review task show
+  that reason to a session that asks, and a quoted line carried whatever a capture had made the
+  model write. The notices at session start now go out without invisible characters, like the
+  distillate below them ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- The session start says of a failed curation run when it failed and in which steps ("failed at
+  2026-11-07 03:05 in ingest; m2b status says why"), no longer why. The reason can repeat what a
+  model said when its run broke, the end of what an add-on's command printed or a file's name, and
+  the notice stands in m2b's own voice above the line that marks the distillate as data.
+  `m2b status` and the review task show the reason as before. Of a run that left no record the
+  notice names the run log, and of a run record that cannot be read it quotes no value
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- A curation step's Claude Code session is fenced more tightly. It has only the tools its step's
+  rules name (Bash, Read, Edit and Write for the steps of the core), no MCP server, no `CLAUDE.md`
+  and no memory of Claude Code's own, and it keeps no transcript. Measured with Claude Code
+  2.1.322, a step had some twenty more tools until now, and those that ask no permission ran: it
+  listed the other Claude sessions on the machine, and no permission kept it from messaging one.
+  The connectors of your claude.ai account were part of a step's session, your own
+  `~/.claude/CLAUDE.md` was in every step's context, so an instruction you wrote for your sessions
+  reached the step that files your notes too, and each step left a transcript under
+  `~/.claude/projects/`. A step can no longer read or change a file in Claude Code's own folder
+  either: Claude Code allows that in the memory folder it keeps for a session's project without
+  any rule, and where your home folder is a git repository, that is the memory your sessions
+  there start with. Other commands and files outside a step's rules were denied before as they are
+  now. m2b checks what Claude Code gives the session: a step whose session starts with another
+  tool or an MCP server is stopped and fails with their names, and a call of a tool the step does
+  not have fails it like a denied call. An executable you put in `claude`'s place with
+  `M2B_MODEL_RUNNER` has to print the line that names its tools and MCP servers
+  ([SECURITY.md](SECURITY.md#the-fence-around-a-model-step))
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- The session-start and prompt hooks take every character that draws nothing out of the
+  distillate before a session reads it, not only those that hide or reorder text: also soft
+  hyphens, fillers, direction marks and variation selectors, which can carry bytes nobody sees.
+  The core and the band now keep one table of these characters (what Unicode calls default
+  ignorable, without the two joiners emoji and several scripts need), so the model's search tool
+  and the hooks remove the same ones. What undoes a curation step stays as it was: a selector
+  after an emoji or a soft hyphen in a pasted text is no reason to fail a run
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- `m2b search` answers with what is curated first: hits from `memory/` (the distillate, then the
+  fact files), then from the archive, then from the inbox, and in the archive and the inbox the
+  newest note first, by the time in the note's name. Before, hits came in the order the files are
+  read: the inbox, the archive from its oldest note on, memory last. The `/m2b-search` pane and
+  the model's search tool show the first 100 hits, so a word with more hits than that showed the
+  inbox and the oldest notes and left out memory
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- The worklog proposes nothing for your memory any more and adds no task. Its model step judged
+  prompts cut at 240 characters and proposed at most three facts a day, each as a task
+  "Remember? ..."; what your sessions hold for memory comes from the curation run's reading of
+  your sessions, once you turned it on, with your own words beside each proposal
+  ([docs/curation.md](docs/curation.md#reading-your-sessions)). The worklog keeps topics, time
+  spans and booking proposals. Its verdict names the sessions only, its note has no part
+  "Proposed for memory", and its model step no longer reads your task list. "Remember? ..." tasks
+  work as before for a fact proposed with `m2b tasks add --candidate`
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- The worklog takes as your prompts only what you sent. What Claude Code marks as sent by a
+  plugin, a finished task or another session is no prompt in the facts its model step judges,
+  while its time still counts as work; before, a plugin that drives a session filled the session's
+  prompts with its own tasks. A prompt without the mark, from a Claude Code before the mark,
+  counts as yours ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- The model's note tool runs without asking only for a note in your own words: every word of it
+  stands in one prompt you submitted in the session, in any order, apart from additions of up to
+  four words in square brackets. For any other note Claude Code asks, as it does for a tool no rule
+  allows. Before, the mod let every note run, so text the model had read elsewhere, such as a web
+  page, could become a note without you seeing it. The `capture` skill's command is unchanged
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- The curation run treats what a capture says as data. A capture that gives instructions to
+  whoever files it (to replace or delete facts, to write a given line or rule into memory, to run
+  a command) is not carried out: nothing from it is filed, it goes into the archive as written, and
+  the review names it, so you can capture what is true in your own words. The refresh step and the
+  worklog's verdict follow the same rule for the text they read. A new model-level scenario,
+  `E17-planted-capture`, checks it with two captures written to steer the run
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+
+### Fixed
+
+- A task gets the day its capture names in words: "on Wednesday", "tomorrow", "in two weeks",
+  "am 11. November". The ingest skill asked for a day "only when the capture names a day
+  (`YYYY-MM-DD` or `YYYY-MM-DD HH:MM`)", and `haiku`, the default model of a curation run, took
+  that in some runs for a day written as a date: over eight invented captures of one Monday, each
+  a task with such a day, it filed 42 of 240 tasks on no day in thirty curation runs, more often
+  when the captures were ten days old than three. The skill now says that a day named in words is
+  a day, that it counts from the capture's `created` and not from the day of the run (a weekday
+  is the next such day after it, as for the last day of a fact), and that it is given also when
+  it has passed by then, so the task shows as overdue. With that, `haiku` gave every day in thirty
+  runs; `sonnet` did before and after. No run of either model counted from the day of the run
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- A question in one language over notes in another is answered in the language of the question.
+  The search tool's description and the skill `search` already said so, and a session still
+  answered an English question in German about one time in six where the distillate and the
+  note were both German. The search tool now takes `question_language`, the language the
+  question was asked in, and its result ends with a line that names it as the language to
+  answer in. With it, 100 of 100 sessions on Sonnet answered in English; a sentence alone, at the
+  end of the result or at the session's start, did not change the rate. The skill's command,
+  used where the mod does not run, answered in English in 30 of 30 and is unchanged
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- Only a file is the original of a conflict copy. A folder with that name beside the copy was
+  taken for the original, and comparing the two failed with a read error; a symlink with that
+  name that pointed at the copy compared equal to it, so the copy, the only bytes, was removed
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- A conflict copy or an original that cannot be read no longer stops lint, the curation run's
+  look at the inbox or the Markdown tasks: the pair is not compared, the copy stays, and lint
+  says so in its finding ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- The worklog's redaction also finds credentials as tools and environments write them: the value
+  of `PGPASSWORD=...`, `SECRET_KEY: ...`, `AccountKey=...` and other names that hold password,
+  secret, token or a kind of key, the password in a URL and after `curl -u name:`, and AWS access
+  key ids. Commit subjects are redacted like prompts; before, they went into the note as written.
+  `curl -u name:pw` no longer loses the URL after it while keeping the password
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- The worklog finishes an unfinished worklog only when the note's name in `intent.json` is one the
+  worklog gives a note. Before, it joined any name to `inbox/`, so a changed `intent.json` in the
+  synced store could create a file outside the store on the machine that curates. Such a file now
+  counts as unreadable and nothing is written ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- The worklog no longer puts a temporary file into the store's folder while it writes its note, the
+  ledger, the two exports, the watermark or `intent.json`. It writes them with the code the core
+  writes the store with, from a temporary file in `~/.local/state/m2b/tmp/`, so a synced store sees
+  neither half a file of the worklog nor a leftover after a crash; only when that folder is on
+  another volume than the store, a hidden temporary file stands beside the target while it is
+  written. A new file of the worklog now gets the mode your umask gives, like every other file in
+  the store, where it was readable by you alone before
+  ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+- The worklog starts git only when it starts without asking you anything. On a Mac without the
+  developer tools, `/usr/bin/git` is a stand-in that opens a dialog offering to install them, and
+  the daily worklog, which runs in the background, started it for every session's commits and
+  remotes. Now it asks once per run which git there is to start, as the commit of a curation run
+  and the session-start hook already did, and without one starts none: the note says under "Could
+  not read" for each session whose folder is still there that this machine has no git to start,
+  and while you leave work out by git remote, a folder's repository is known only by what a
+  session start noted for it ([#19](https://github.com/Kolibee-GmbH/m2b/pull/19)).
+
 ## [0.3.4] - 2026-11-11
 
 ### Fixed

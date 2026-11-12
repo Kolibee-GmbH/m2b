@@ -1,0 +1,308 @@
+{
+  "description": "E25 the store is a git repository: Alex runs `git init` in the store folder and commits it; a capture comes in, which git does not know; `m2b curate --force` commits it where it waits, files it with a fact and ends with one commit by m2b that holds the filed capture, the fact, the list of candidates the first run starts and the finished run record, and leaves `git status` clean; `git revert` on that commit puts the capture back into the inbox and `memory/` back as it was; the next run files it again in one commit, because git knows the capture now; a run that has nothing to do makes no commit.",
+  "model": {
+    "skills": {
+      "/m2b:ingest": {
+        "actions": [
+          {
+            "tool": "Bash",
+            "command": "m2b ingest list --json"
+          },
+          {
+            "tool": "Write",
+            "file_path": "<store>/memory/dana.md",
+            "content": "# Dana\n\n- Likes old maps.\n\n## Evidence\n\n- [[<capture:cli>]]\n"
+          },
+          {
+            "tool": "Edit",
+            "file_path": "<store>/memory/MEMORY.md",
+            "old_string": "## Facts\n\n",
+            "new_string": "## Facts\n\n- Dana likes old maps (dana.md)\n\n"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest facts-filed <capture:cli>"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest note <capture:cli> 'filed: fact dana.md'"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest finish <capture:cli>"
+          }
+        ]
+      }
+    }
+  },
+  "steps": [
+    {
+      "run": [
+        "git",
+        "-C",
+        "{store}",
+        "init",
+        "-q",
+        "-b",
+        "main"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      }
+    },
+    {
+      "run": [
+        "git",
+        "-C",
+        "{store}",
+        "-c",
+        "user.name=Alex",
+        "-c",
+        "user.email=alex@example.com",
+        "add",
+        "--all"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      }
+    },
+    {
+      "run": [
+        "git",
+        "-C",
+        "{store}",
+        "-c",
+        "user.name=Alex",
+        "-c",
+        "user.email=alex@example.com",
+        "commit",
+        "-q",
+        "-m",
+        "the store as Alex keeps it"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "Dana likes old maps"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdout": "\\Athe curation run succeeded\\ninbox: 1 capture filed, 0 waiting\\n\\Z"
+    },
+    {
+      "run": [
+        "git",
+        "-C",
+        "{store}",
+        "log",
+        "--format=%an <%ae>|%s"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdout": "\\Am2b <m2b@localhost>\\|m2b: curation run \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}\\nm2b <m2b@localhost>\\|m2b: captures before the curation run \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}\\nAlex <alex@example\\.com>\\|the store as Alex keeps it\\n\\Z"
+    },
+    {
+      "run": [
+        "git",
+        "-C",
+        "{store}",
+        "show",
+        "--name-status",
+        "--format=",
+        "--no-renames",
+        "HEAD~1"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdout": "\\AA\\tinbox/\\d{8}T\\d{6}Z-cli-[0-9a-f]{4}\\.md\\n\\Z"
+    },
+    {
+      "run": [
+        "git",
+        "-C",
+        "{store}",
+        "show",
+        "--name-status",
+        "--format=",
+        "--no-renames",
+        "HEAD"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdout": "\\AA\\tcorpus/\\d{4}/\\d{2}/\\d{8}T\\d{6}Z-cli-[0-9a-f]{4}\\.md\\nD\\tinbox/\\d{8}T\\d{6}Z-cli-[0-9a-f]{4}\\.md\\nM\\tmemory/MEMORY\\.md\\nA\\tmemory/dana\\.md\\nA\\tstate/core/candidates\\.json\\nA\\tstate/core/last-run\\.json\\n\\Z"
+    },
+    {
+      "run": [
+        "git",
+        "-C",
+        "{store}",
+        "status",
+        "--porcelain"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdout": "\\A\\Z"
+    },
+    {
+      "run": [
+        "git",
+        "-C",
+        "{store}",
+        "-c",
+        "user.name=Alex",
+        "-c",
+        "user.email=alex@example.com",
+        "revert",
+        "--no-edit",
+        "HEAD"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      }
+    },
+    {
+      "run": [
+        "git",
+        "-C",
+        "{store}",
+        "status",
+        "--porcelain",
+        "--untracked-files=all"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdout": "\\A\\Z"
+    },
+    {
+      "run": [
+        "git",
+        "-C",
+        "{store}",
+        "ls-files",
+        "inbox",
+        "corpus",
+        "memory"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdout": "\\Ainbox/\\d{8}T\\d{6}Z-cli-[0-9a-f]{4}\\.md\\nmemory/MEMORY\\.md\\n\\Z"
+    },
+    {
+      "run": [
+        "git",
+        "-C",
+        "{store}",
+        "diff",
+        "--stat",
+        "HEAD~3",
+        "HEAD",
+        "--",
+        "memory"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdout": "\\A\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdout": "\\Athe curation run succeeded\\ninbox: 1 capture filed, 0 waiting\\n\\Z"
+    },
+    {
+      "run": [
+        "git",
+        "-C",
+        "{store}",
+        "log",
+        "-1",
+        "--format=%an <%ae>|%s"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdout": "\\Am2b <m2b@localhost>\\|m2b: curation run \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}\\n\\Z"
+    },
+    {
+      "run": [
+        "git",
+        "-C",
+        "{store}",
+        "rev-list",
+        "--count",
+        "HEAD"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdout": "\\A5\\n\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdout": "\\Athe curation run succeeded\\ninbox: 0 captures filed, 0 waiting\\n\\Z"
+    },
+    {
+      "run": [
+        "git",
+        "-C",
+        "{store}",
+        "rev-list",
+        "--count",
+        "HEAD"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdout": "\\A5\\n\\Z"
+    }
+  ]
+}

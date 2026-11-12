@@ -1,0 +1,145 @@
+{
+  "description": "An invented inbox for scripts/ingest-eval: twenty captures of one day, 9 November 2026, in English and German, and what each should leave behind. `words` are regular expressions, ignoring case, that the facts line, the current item or the task title must hold, because a model words its lines its own way. For a fact or a current item, `topic` is null when it belongs above the first topic, a regular expression for the topic's name when it belongs under one, and missing where the filing rules leave room. `no_longer` is a value that must not stand in the facts list any more, and `earlier` what the fact file keeps of it under `## Earlier`. A task says its `due` day, or null for none. One capture writes its day out with its year, one names a weekday and one a day without its year; those two count from the day of the capture, so the expected day is the same on whatever day the eval runs, and the weekday's lies before any such day: a model that counts from the day of the run cannot land on it. A capture without `expected` holds nothing to file. `topics` names the topics a filing may start; the store before has the others.",
+  "topics": ["Globex"],
+  "captures": [
+    {
+      "file": "20261109T070000Z-cli-1a01.md",
+      "text": "Dana's new phone number is 555 0142.",
+      "expected": [
+        {"what": "Dana's phone number", "kind": "fact", "words": ["Dana", "555.?0142"], "topic": null}
+      ]
+    },
+    {
+      "file": "20261109T070700Z-phone-1a02.md",
+      "text": "Sam Weber, unser Nachbar, ist allergisch gegen Nüsse.",
+      "expected": [
+        {"what": "Sam's allergy", "kind": "fact", "words": ["Sam", "nut|Nuss|Nüsse"]}
+      ]
+    },
+    {
+      "file": "20261109T071400Z-cli-1a03.md",
+      "text": "My brother Robin turns 40 on 12 May 2027.",
+      "expected": [
+        {"what": "Robin's birthday", "kind": "fact", "words": ["Robin", "12(th)? (of )?May|May 12|05-12"], "topic": null}
+      ]
+    },
+    {
+      "file": "20261109T072100Z-claude-1a04.md",
+      "text": "Ich trinke nach 14 Uhr keinen Kaffee mehr.",
+      "expected": [
+        {"what": "no coffee after 14:00", "kind": "fact", "words": ["coffee|Kaffee", "14|2(:00)? ?p\\.?m"], "topic": null}
+      ]
+    },
+    {
+      "file": "20261109T072800Z-cli-1a05.md",
+      "text": "Dana moved from Zurich to Bern last week.",
+      "expected": [
+        {"what": "Dana lives in Bern", "kind": "fact", "words": ["Dana", "Bern"], "topic": null, "no_longer": "lives in Zurich", "earlier": "Zurich"}
+      ]
+    },
+    {
+      "file": "20261109T073500Z-mac-1a06.md",
+      "text": "Acme Ltd moved its office to Harbour Street 12.",
+      "expected": [
+        {"what": "Acme's office", "kind": "fact", "words": ["Acme", "Harbour"], "topic": "Acme"}
+      ]
+    },
+    {
+      "file": "20261109T074200Z-cli-1a07.md",
+      "text": "Jo Marti ist neu die Projektleiterin bei Acme.",
+      "expected": [
+        {"what": "Jo Marti at Acme", "kind": "fact", "words": ["Jo Marti"], "topic": "Acme"}
+      ]
+    },
+    {
+      "file": "20261109T074900Z-phone-1a08.md",
+      "text": "The Riverside Choir rehearses on Tuesdays at 19:30 in the old school hall.",
+      "expected": [
+        {"what": "the choir's rehearsal time", "kind": "fact", "words": ["19[:.]30|7[:.]30"], "topic": "Riverside"}
+      ]
+    },
+    {
+      "file": "20261109T075600Z-cli-1a09.md",
+      "text": "Globex AG ist ein neuer Kunde, meine Ansprechpartnerin dort ist Mira Keller.",
+      "expected": [
+        {"what": "Mira Keller at Globex", "kind": "fact", "words": ["Mira Keller"], "topic": "Globex"}
+      ]
+    },
+    {
+      "file": "20261109T080300Z-claude-1a0a.md",
+      "text": "Globex pays invoices within 30 days.",
+      "expected": [
+        {"what": "Globex's payment term", "kind": "fact", "words": ["Globex", "30"], "topic": "Globex"}
+      ]
+    },
+    {
+      "file": "20261109T081000Z-cli-1a0b.md",
+      "text": "Call the plumber about the boiler on 20 November 2026.",
+      "expected": [
+        {"what": "call the plumber", "kind": "task", "words": ["plumber"], "due": "2026-11-20"}
+      ]
+    },
+    {
+      "file": "20261109T081700Z-phone-1a0c.md",
+      "text": "Am Mittwoch die Steuerunterlagen an die Treuhänderin schicken.",
+      "expected": [
+        {"what": "send the tax papers", "kind": "task", "words": ["Steuer|tax"], "due": "2026-11-11"}
+      ]
+    },
+    {
+      "file": "20261109T082400Z-cli-1a0d.md",
+      "text": "Pay the garage invoice by 27 November.",
+      "expected": [
+        {"what": "pay the garage", "kind": "task", "words": ["garage"], "due": "2026-11-27"}
+      ]
+    },
+    {
+      "file": "20261109T083100Z-mac-1a0e.md",
+      "text": "Buy a new bike lock.",
+      "expected": [
+        {"what": "buy a bike lock", "kind": "task", "words": ["lock"], "due": null}
+      ]
+    },
+    {
+      "file": "20261109T083800Z-phone-1a0f.md",
+      "text": "Bei Gelegenheit den Keller aufräumen.",
+      "expected": [
+        {"what": "tidy the cellar", "kind": "task", "words": ["Keller|cellar|basement"], "due": null}
+      ]
+    },
+    {
+      "file": "20261109T084500Z-phone-1a10.md",
+      "follow_up": "2026-11-18",
+      "text": "Ask Robin whether he comes for Christmas.",
+      "expected": [
+        {"what": "ask Robin about Christmas", "kind": "task", "words": ["Robin"], "due": "2026-11-18"}
+      ]
+    },
+    {
+      "file": "20261109T085200Z-cli-1a11.md",
+      "text": "Robin's new address is Mill Lane 4 in Thun. Send him a postcard.",
+      "expected": [
+        {"what": "Robin's address", "kind": "fact", "words": ["Robin", "Mill Lane"], "topic": null},
+        {"what": "send Robin a postcard", "kind": "task", "words": ["postcard|Postkarte"], "due": null}
+      ]
+    },
+    {
+      "file": "20261109T085900Z-claude-1a12.md",
+      "text": "I have started building the data export for Acme Ltd.",
+      "expected": [
+        {"what": "the export for Acme", "kind": "current", "words": ["export"], "topic": "Acme"}
+      ]
+    },
+    {
+      "file": "20261109T090600Z-cli-1a13.md",
+      "text": "Ich plane gerade eine Wanderwoche in Norwegen für nächsten Sommer.",
+      "expected": [
+        {"what": "the hiking week in Norway", "kind": "current", "words": ["Norway|Norwegen"], "topic": null}
+      ]
+    },
+    {
+      "file": "20261109T091300Z-mac-1a14.md",
+      "text": "test test, just trying the new shortcut"
+    }
+  ]
+}

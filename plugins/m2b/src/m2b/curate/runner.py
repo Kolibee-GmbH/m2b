@@ -11,10 +11,13 @@ records the cause (in the run record, or in the local log when even that cannot 
 the backoff makes the next attempt wait. After preflight every step runs whatever the one before
 did (B13): a failing step is recorded and reported in the review, and when it is a core step the
 run counts as failed, so the last successful run does not move; an add-on's failing step leaves the
-run succeeded, so an add-on never holds back the core. The one exception is a migration (``migrations``): the
-due ones run first, and when one fails the run goes straight to the review, because every later
-step follows rules the store does not hold yet. Ingest is skipped when the inbox holds nothing, refresh
-when no fact is past its day.
+run succeeded, so an add-on never holds back the core, and so do the reading of the sessions
+(``glean_step``), which is in the run only while ``curation.read_sessions`` is on, and the last
+step before the review, which lets proposals without an answer expire and brings the task for
+those that wait up to date (``proposals_task``). The one
+exception is a migration (``migrations``): the due ones run first, and when one fails the run goes
+straight to the review, because every later step follows rules the store does not hold yet. Ingest
+is skipped when the inbox holds nothing, refresh when no fact is past its day.
 
 ``refresh_all`` is the one-time backfill for lines written before ingest dated them: the run starts
 whether due or not, and the refresh step also gets the fact files without ``until`` and the current
@@ -30,6 +33,20 @@ just before its model step (``memory_guard``): refresh is held to its due facts,
 have their removed and rewritten facts lines listed in the review, and a line holding characters
 that hide text undoes any of them. A runner stopped by SIGTERM still checks; a run that never
 finished is checked by the next one, against the copy of ``memory/`` it saved.
+
+A run in a store that is a git repository ends with one commit of what changed while it ran
+(``run_commit``). The commit comes after the review and the finished record, so both are in it; the
+record therefore names it only when it failed, and then the review is written once more to say so.
+A failed commit never fails the run. A run stopped at preflight, or stopped before its end, is not
+committed: what it changed stays in the work tree.
+
+Before its first step such a run commits the captures in the inbox that git does not know, so that
+reverting the run's commit puts them back into the inbox instead of deleting them. That commit
+comes after preflight, which downloads the inbox, and it stays when the run is stopped later: it
+holds the captures as they waited and nothing a step did. When it fails, it is the failed step
+``commit`` from then on, so the review and the record the run's commit holds say so; when the
+run's own commit is not made either, that one is named alone, because without it there is nothing
+to revert.
 """
 
 from __future__ import annotations
@@ -42,7 +59,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from m2b import current_check, expiry, ingest, launcher, lint
+from m2b import current_check, expiry, ingest, launcher, lint, proposal_answers, proposals, proposals_task
 from m2b.addons import CURATION_SLOTS, Addon, names_on, steps_in
 from m2b.candidates import PREFIX_KEY
 from m2b.config.errors import ConfigError, NotSetUpError
@@ -54,12 +71,12 @@ from m2b.config.store_settings import (
     load_store_settings,
     write_store_format,
 )
-from m2b.curate import machine_state, memory_guard, migrations, model, report
-from m2b.curate.due import check_due
-from m2b.harvest import harvest
+from m2b.curate import glean_step, machine_state, memory_guard, migrations, model, report, run_commit
+from m2b.curate.due import PAUSED_MESSAGE, check_due
+from m2b.harvest import HarvestReport, harvest
 from m2b.journal import write_journal
 from m2b.locale import Locale, load_locale
-from m2b.notes.characters import strip_unsafe
+from m2b.notes.characters import with_hidden_written_out, without_hidden
 from m2b.notes.layout import (
     CORPUS,
     INBOX,
@@ -72,7 +89,7 @@ from m2b.notes.layout import (
     waiting_on_evicted,
 )
 from m2b.paths import MachinePaths
-from m2b.review import StepFailure, review_is_open, update_review
+from m2b.review import StepFailure, reaches_the_owner, review_is_open, update_review
 from m2b.run_record import (
     FAILED,
     RUN_RECORD,
@@ -87,21 +104,24 @@ from m2b.run_record import (
 )
 from m2b.setup import write_store_contract
 from m2b.sort_facts import sorting_problem
-from m2b.store.base import DEFAULT_FETCH_TIMEOUT_SECONDS, FetchError, Store, StoreError, fetch_command
+from m2b.store.base import DEFAULT_FETCH_TIMEOUT_SECONDS, FetchError, Scan, Store, StoreError, fetch_command
 from m2b.store.factory import open_store
-from m2b.tasks.base import Tasks
+from m2b.tasks.base import Tasks, TasksError
 from m2b.tasks.factory import open_tasks
 
 __all__ = ["NotSetUpError", "RunOutcome", "RunRecordWriteError", "StoreError", "curate"]
 
 PREFLIGHT = "preflight"
 HARVEST = "harvest"
+GLEAN = "glean"
 INGEST = "ingest"
 REFRESH = "refresh"
 SORT = "sort"
 LINT = "lint"
 JOURNAL = "journal"
+PROPOSALS = "proposals"
 REVIEW = "review"
+COMMIT = "commit"
 # A failure between preflight and review that belongs to no step.
 RUN = "run"
 
@@ -147,13 +167,14 @@ LINT_RULES = (
     "Edit(<store>/memory/**)",
 )
 MODEL_STEPS = 3
-# Harvest, journal and review have no timeout of their own; they get this much in the deadline. The
-# journal's fetch of evicted month files is counted with the preflight fetch.
+# Harvest, journal, the proposals task and review have no timeout of their own; they get this much
+# in the deadline. The journal's fetch of evicted month files is counted with the preflight fetch.
 CODE_STEPS_MARGIN = datetime.timedelta(minutes=10)
 
 NOT_CURATING = "not-curating"
 ALREADY_RUNNING = "already-running"
 NOT_DUE = "not-due"
+PAUSED = "paused"
 
 
 class RunRecordWriteError(StoreError):
@@ -195,6 +216,9 @@ class RunOutcome:
     state: str
     message: str
     record: RunRecord | None = None
+    # What a run that happened did to the inbox, as a second line for whoever started it by hand;
+    # None when no run happened or the inbox could not be listed.
+    summary: str | None = None
 
 
 def now() -> datetime.datetime:
@@ -211,8 +235,16 @@ def curate(
     sort_facts: bool = False,
 ) -> RunOutcome:
     """Runs curation once when this machine curates, no run holds the lock and one is due (or forced,
-    which ``refresh_all`` and ``sort_facts`` imply)."""
+    which ``refresh_all`` and ``sort_facts`` imply).
+
+    A paused machine (``curation.paused``) runs only when forced; asked otherwise, as a schedule
+    does, it reads nothing of the store and records the attempt, so the schedule shows it got here.
+    """
     config = load_machine_config(machine)
+    asked_by_hand = force or refresh_all or sort_facts
+    if config.curation.paused and not asked_by_hand:
+        machine_state.record_attempt(machine, machine_state.PAUSED, PAUSED_MESSAGE, clock())
+        return RunOutcome(PAUSED, PAUSED_MESSAGE)
     store = open_store(config.store, machine.temp_dir)
     try:
         store.fetch([STORE_SETTINGS_FILE_NAME], fetch_timeout_seconds)
@@ -230,7 +262,7 @@ def curate(
         return RunOutcome(NOT_CURATING, message)
     if machine_state.lock_is_held(machine):
         return RunOutcome(ALREADY_RUNNING, "a curation run is already running on this machine")
-    if not force and not refresh_all and not sort_facts:
+    if not asked_by_hand:
         due = check_due(store, machine, clock())
         if not due.due:
             machine_state.record_attempt(machine, machine_state.NOT_DUE, due.reason, clock())
@@ -261,8 +293,9 @@ class _Run:
     undated: expiry.Undated | None = None
     steps: list[StepResult] = field(default_factory=list)
     failures: list[StepFailure] = field(default_factory=list)
-    # The steps add-ons ran: their failure goes into the review but leaves the run succeeded.
-    addon_steps: set[str] = field(default_factory=set)
+    # The steps whose failure goes into the review but leaves the run succeeded: the add-ons', the
+    # reading of the sessions and the task for the proposals that wait.
+    forgiven_steps: set[str] = field(default_factory=set)
     findings: list[report.Finding] = field(default_factory=list)
     last_success: datetime.datetime | None = None
     started: datetime.datetime | None = None
@@ -271,22 +304,131 @@ class _Run:
     # Changed facts lines: those of earlier runs the owner has not seen yet, and this run's.
     carried_changes: list[report.Finding] = field(default_factory=list)
     fact_changes: list[report.Finding] = field(default_factory=list)
+    # Where the run is committed, and the store's listing from before its first write; without a
+    # repository there is neither, and with one the listing is missing only when it failed.
+    repository: run_commit.Repository | None = None
+    listed_before: run_commit.StoreListing | None = None
+    not_listed: str = ""
+    # The notes the archive gained during the ingest step; None when the archive could not be listed.
+    filed: int | None = 0
 
     def run(self) -> RunOutcome:
         started = self.clock()
+        self._list_before_the_run()
         try:
             tasks, locale = self._preflight(started)
         # Whatever stops preflight is recorded, then raised again for the exit code.
         except Exception as error:
             self._stop_at_preflight(started, error)
             raise
+        self._commit_waiting_captures(started)
         self.carried_changes = self._carried_changes(tasks)
         self._check_interrupted()
         self.started = started
         findings = self._run_steps(tasks, locale)
         self._keep_changes()
         self._step(REVIEW, lambda: update_review(tasks, findings, self.failures, started, locale), reported=False)
-        return self._finish(started, findings)
+        record = self._finish(started, findings)
+        problem = self._commit(started)
+        if problem is not None:
+            record = self._tell_of_failed_commit(
+                problem, record, lambda: update_review(tasks, findings, self.failures, started, locale)
+            )
+        return _outcome(record, self._summary(record, findings))
+
+    def _summary(self, record: RunRecord, findings: Sequence[report.Finding]) -> str | None:
+        """The line after how the run ended: the captures it filed and what waits in the inbox,
+        counted as ``m2b status`` counts it; None when either could not be counted.
+
+        A run that ended well and still left something for the owner names the review task here;
+        a failed step is named with the review in the first line already.
+        """
+        try:
+            inbox = self.store.scan(INBOX)
+        except StoreError:
+            return None
+        if self.filed is None:
+            return None
+        waiting = len(inbox.files) + len(inbox.evicted)
+        line = f"inbox: {self.filed} {'capture' if self.filed == 1 else 'captures'} filed, {waiting} waiting"
+        if record.state == SUCCEEDED and not record.message and (reaches_the_owner(findings) or self.failures):
+            line += "; the review task in your list says what to look at"
+        return line
+
+    def _list_before_the_run(self) -> None:
+        """Finds the repository a run is committed into and lists the store as the run found it."""
+        if not self.config.curation.git_commit:
+            return
+        try:
+            self.repository = run_commit.find_repository(self.store, self.environ, self.lock.pass_fds)
+            if self.repository is not None:
+                self.listed_before = run_commit.listing(self.store)
+        except (OSError, StoreError) as error:
+            self.not_listed = f"the store could not be listed before the run: {error}"
+
+    def _commit_waiting_captures(self, started: datetime.datetime) -> None:
+        """Commits the captures git does not know, before a step files them.
+
+        A failure is a failed step from here on, one that leaves the run succeeded: the review and
+        the finished record are written with it, so the run's commit holds both as they are.
+        """
+        if self.repository is None or self.listed_before is None:
+            return
+        text = run_commit.captures_message(started)
+        try:
+            run_commit.commit_waiting_captures(self.repository, self.listed_before, text, self.machine.temp_dir)
+            return
+        except run_commit.StaleIndexError as error:
+            problem = str(error)
+        except (run_commit.CommitError, OSError, StoreError) as error:
+            reason = str(error) or type(error).__name__
+            problem = (
+                "the captures in the inbox were not committed before the run, so reverting the run's commit "
+                f"removes those it filed instead of putting them back: {reason}"
+            )
+        self.forgiven_steps.add(COMMIT)
+        self.steps.append(StepResult(COMMIT, FAILED, problem))
+        self.failures.append(StepFailure(COMMIT, problem))
+
+    def _commit(self, started: datetime.datetime) -> str | None:
+        """Why the run is not committed although the store is a git repository; None when it is, or
+        when there was nothing to commit or nothing to commit into."""
+        if self.not_listed:
+            return self.not_listed
+        if self.repository is None or self.listed_before is None:
+            return None
+        # The message names the run's steps; a commit of the captures that failed is none of them.
+        text = run_commit.message(started, [step for step in self.steps if step.name != COMMIT])
+        try:
+            run_commit.commit(self.repository, self.listed_before, text, self.machine.temp_dir, (RUN_RECORD,))
+        except run_commit.StaleIndexError as error:
+            # The commit is made, so a failed commit of the captures still says what a revert does.
+            return str(error)
+        except (run_commit.CommitError, OSError, StoreError) as error:
+            self._forget_failed_commit_of_the_captures()
+            return str(error) or type(error).__name__
+        return None
+
+    def _forget_failed_commit_of_the_captures(self) -> None:
+        """Without a commit of the run there is nothing to revert, so its failure is named alone."""
+        self.steps = [step for step in self.steps if step.name != COMMIT]
+        self.failures = [failure for failure in self.failures if failure.step != COMMIT]
+
+    def _tell_of_failed_commit(self, problem: str, record: RunRecord, review: Callable[[], object]) -> RunRecord:
+        """Puts a commit of the run that failed into the review and the record, which were written before it."""
+        self.steps.append(StepResult(COMMIT, FAILED, problem))
+        self.failures.append(StepFailure(COMMIT, problem))
+        # A task list that fails here failed the review step too, or the record still says it.
+        with contextlib.suppress(Exception):
+            review()
+        told = dataclasses.replace(record, steps=tuple(self.steps), message=self._failed_steps())
+        try:
+            self._write(told)
+        except RunRecordWriteError as error:
+            machine_state.log_event(
+                self.machine, machine_state.UNRECORDED, f"{error}; {COMMIT}: {problem}", self.clock()
+            )
+        return told
 
     def _preflight(self, started: datetime.datetime) -> tuple[Tasks, Locale]:
         machine_state.clear_leftovers(self.machine, started)
@@ -403,8 +545,11 @@ class _Run:
             # The undated lines preflight read for ``--refresh-all`` are from before the migration.
             self.undated = None
         self._step(HARVEST, lambda: self._harvest(tasks, locale))
+        if self.config.curation.read_sessions:
+            self.forgiven_steps.add(GLEAN)
+            self._step(GLEAN, self._glean)
         self._addons("before_ingest", token)
-        self._step(INGEST, lambda: self._ingest(token))
+        self._step(INGEST, lambda: self._ingest_counting_the_filed(token))
         self._addons("after_ingest", token)
         self._step(REFRESH, lambda: self._refresh(tasks, locale, token))
         if self.sort_facts:
@@ -412,6 +557,8 @@ class _Run:
         self._step(LINT, lambda: self._lint(tasks, token))
         self._step(JOURNAL, lambda: self._journal(tasks))
         self._addons("after_journal", token)
+        self.forgiven_steps.add(PROPOSALS)
+        self._step(PROPOSALS, lambda: self._proposals_task(tasks, locale))
 
     def _step(self, name: str, action: Callable[[], object], reported: bool = True) -> None:
         """Runs one step; a failure is recorded, and reported in the review unless it is the review.
@@ -481,9 +628,54 @@ class _Run:
         self._report_fact_changes(migrations.step_name(migration), before, after, InboxBefore())
 
     def _harvest(self, tasks: Tasks, locale: Locale) -> None:
-        result = harvest(self.store, tasks, locale.text(PREFIX_KEY), self.clock())
-        self.findings += [report.Finding(HARVEST, report.ACTION, problem) for problem in result.problems]
+        result = HarvestReport()
+        try:
+            harvest(self.store, tasks, locale.text(PREFIX_KEY), self.clock(), result)
+        finally:
+            # A harvest that fails has still said what waits and why.
+            self.findings += [report.Finding(HARVEST, report.ACTION, problem) for problem in result.problems]
         current_check.settle(self.store, tasks, self.clock().date(), task_list=self._task_list())
+
+    def _glean(self) -> Skipped | None:
+        """What the person typed since the last reading; the model only when a session has a prompt."""
+        started = self.started or self.clock()
+        try:
+            reading = glean_step.propose(
+                self.store, self.config, self.machine, self.environ, started, self.lock.pass_fds
+            )
+        # Whatever stopped the reading, the review says what the step was for and that nothing is lost.
+        except Exception as error:
+            text = str(error) or type(error).__name__
+            raise StepError(
+                f"the sessions were not read for proposals ({text}); the next run reads them again"
+            ) from error
+        self.findings += [report.Finding(GLEAN, report.INFO, note) for note in reading.notes]
+        return Skipped(reading.skipped) if reading.skipped is not None else None
+
+    def _proposals_task(self, tasks: Tasks, locale: Locale) -> Skipped | None:
+        """What time makes of the proposals, then the one task for those that wait.
+
+        In every run, whether or not it reads the sessions: harvest settles answers in every run, and
+        a proposal expires or is forgotten by the calendar, not by a reading.
+
+        Only a task list that did not answer clears by itself, so only then the review says the next
+        run does it; any other cause says itself what it takes.
+        """
+        not_done = "the task for the proposals that wait was not brought up to date"
+        try:
+            aged = proposal_answers.expire(self.store, self.clock())
+            if aged.expired:
+                self.findings.append(report.Finding(PROPOSALS, report.INFO, _expired_note(aged.expired)))
+            outcome = proposals_task.update(self.store, tasks, locale)
+        except Exception as error:
+            cause = str(error) or type(error).__name__
+            if isinstance(error, TasksError):
+                raise StepError(f"{not_done} ({cause}); the next run does it") from error
+            raise StepError(f"{not_done}: {cause}") from error
+        # A step that let a proposal expire or forgot one did run, also when no task changed for it.
+        if outcome.had_nothing_to_do and not (aged.expired or aged.forgotten):
+            return Skipped("no proposal waits for an answer")
+        return None
 
     def _journal(self, tasks: Tasks) -> None:
         result = write_journal(
@@ -497,6 +689,26 @@ class _Run:
 
     def _task_list(self) -> str:
         return current_check.task_list_of(self.settings.tasks.backend, self.settings.tasks.list_name)
+
+    def _ingest_counting_the_filed(self, token: str) -> Skipped | None:
+        """The ingest step, and how many captures it filed, also when it failed after filing some.
+
+        Counted is what reached the archive, one note for a capture and the sidecar note for a
+        bundle: what left the inbox would miss a capture the harvest step wrote in this run and
+        count a file that normalize only renamed.
+        """
+        before = self._archive()
+        try:
+            return self._ingest(token)
+        finally:
+            after = self._archive()
+            self.filed = None if before is None or after is None else _notes_gained(before, after)
+
+    def _archive(self) -> Scan | None:
+        try:
+            return self.store.scan(CORPUS)
+        except StoreError:
+            return None
 
     def _ingest(self, token: str) -> Skipped | None:
         """The model only when something in the inbox can be filed: a file the last run could not file
@@ -648,7 +860,7 @@ class _Run:
         if any(finding.code == lint.BROKEN_LINK and len(finding.candidates) == 1 for finding in scanned.findings):
             self._guarded(LINT, LINT_SKILL, LINT_RULES, token)
             return
-        if lint.fix(self.store, self.clock()):
+        if lint.fix(self.store, tasks, self.clock()):
             scanned = lint.scan(self.store, tasks)
         self.findings += [report.Finding(LINT, finding.kind, finding.text) for finding in scanned.findings]
 
@@ -768,7 +980,7 @@ class _Run:
 
     def _addons(self, slot: str, token: str) -> None:
         for addon in steps_in(slot, self.config.addons):
-            self.addon_steps.add(addon.name)
+            self.forgiven_steps.add(addon.name)
             self._step(addon.name, functools.partial(self._addon, addon, token))
 
     def _addon(self, addon: Addon, token: str) -> None:
@@ -785,20 +997,24 @@ class _Run:
         if end.returncode != 0:
             raise StepError(end.failure())
 
-    def _finish(self, started: datetime.datetime, findings: list[report.Finding]) -> RunOutcome:
-        """A failed core step fails the run (B13, B63); a failed add-on step only reaches the review.
+    def _finish(self, started: datetime.datetime, findings: list[report.Finding]) -> RunRecord:
+        """The finished record, written. A failed core step fails the run (B13, B63); a failed add-on
+        step, a failed reading of the sessions and a task for the waiting proposals that could not
+        be brought up to date only reach the review.
 
-        An add-on's failure that does not clear by itself must not hold back the filing of the inbox
+        Such a failure that does not clear by itself must not hold back the filing of the inbox
         with the backoff, nor keep the run due at every session start.
         """
         failed = [step for step in self.steps if step.result == FAILED]
-        message = "; ".join(f"{step.name}: {step.detail}" for step in failed)
-        state = FAILED if any(step.name not in self.addon_steps for step in failed) else SUCCEEDED
+        message = self._failed_steps()
+        state = FAILED if any(step.name not in self.forgiven_steps for step in failed) else SUCCEEDED
         record = self._record(state, started, finished_at=self.clock(), message=message, findings=tuple(findings))
         self._close(record, message or "the run succeeded")
-        if state == SUCCEEDED and message:
-            return RunOutcome(state, f"the curation run succeeded; an add-on failed, see the review: {message}", record)
-        return RunOutcome(state, message or "the curation run succeeded", record)
+        return record
+
+    def _failed_steps(self) -> str:
+        """The failed steps with their reasons, as the record's message names them."""
+        return "; ".join(f"{step.name}: {step.detail}" for step in self.steps if step.result == FAILED)
 
     def _close(self, record: RunRecord, message: str) -> None:
         """Writes the finished record, moves the backoff and logs the outcome once."""
@@ -854,7 +1070,8 @@ class _Run:
         # Preflight fetches once, the journal once more for older month files.
         fetch = 2 * datetime.timedelta(seconds=self.fetch_timeout_seconds)
         backfill = len(expiry.batches(self.undated, BACKFILL_BATCH)) - 1 if self.undated is not None else 0
-        model_steps = MODEL_STEPS + max(backfill, 0) + addon_steps + (1 if self.sort_facts else 0)
+        optional = (1 if self.sort_facts else 0) + (1 if self.config.curation.read_sessions else 0)
+        model_steps = MODEL_STEPS + max(backfill, 0) + addon_steps + optional
         return fetch + step * model_steps + CODE_STEPS_MARGIN
 
 
@@ -864,6 +1081,37 @@ def refresh_rules(due_files: Sequence[str], fixed: Sequence[str] = REFRESH_RULES
     for relative in due_files:
         rules += [f"Read(<store>/{relative})", f"Edit(<store>/{relative})"]
     return rules
+
+
+def _notes_gained(before: Scan, after: Scan) -> int:
+    """The notes in ``after`` that ``before`` did not hold.
+
+    A folder that was not downloaded stands for everything in it, so a note that only became
+    readable is none the archive gained.
+    """
+    known = {*before.files, *before.evicted}
+    not_listed = tuple(f"{folder}/" for folder in before.evicted)
+    return sum(
+        1
+        for path in (*after.files, *after.evicted)
+        if path.endswith(".md") and path not in known and not path.startswith(not_listed)
+    )
+
+
+def _outcome(record: RunRecord, summary: str | None) -> RunOutcome:
+    """What the caller is told of a finished run."""
+    if record.state == SUCCEEDED and record.message:
+        forgiven = "the curation run succeeded; a step that does not fail it failed, see the review: "
+        return RunOutcome(record.state, forgiven + record.message, record, summary)
+    return RunOutcome(record.state, record.message or "the curation run succeeded", record, summary)
+
+
+def _expired_note(expired: int) -> str:
+    one = expired == 1
+    return (
+        f"{expired} {'proposal' if one else 'proposals'} from the sessions got no answer for "
+        f"{proposals.EXPIRES_AFTER.days} days and {'waits' if one else 'wait'} no longer"
+    )
 
 
 def _copy_started(copy: Path) -> datetime.datetime | None:
@@ -883,15 +1131,16 @@ def _interrupted_changes(copy: Path, store: Store) -> list[report.Finding]:
     except (OSError, StoreError) as error:
         text = f"{run} could not be checked: memory/ could not be compared with its copy {copy}: {error}"
         return [report.Finding(RUN, report.ACTION, text)]
-    # The lines are shown as the owner reads them: a character that hides text stays out of the review.
+    # The lines are shown as the owner reads them: a character that draws nothing stays out of the review.
     records = memory_guard.fact_change_list(before, after)
     findings = [
-        report.Finding(RUN, report.ACTION, f"{run}: {strip_unsafe(change.described())}", _without_unsafe(change))
+        report.Finding(RUN, report.ACTION, f"{run}: {without_hidden(change.described())}", _shown_change(change))
         for change in records
     ]
-    problem = memory_guard.unsafe_line(before, after)
+    problem = memory_guard.unsafe_line(before, after, added_files_stay=True)
     if problem is not None:
-        findings.insert(0, report.Finding(RUN, report.ACTION, f"{run}: {problem}"))
+        # The file is still there, and its name must be the one the owner finds on disk.
+        findings.insert(0, report.Finding(RUN, report.ACTION, f"{run}: {with_hidden_written_out(problem)}"))
     if not findings:
         return []
     check = f"memory/ as it was before that run is in {copy}; check the changes above"
@@ -901,13 +1150,13 @@ def _interrupted_changes(copy: Path, store: Store) -> list[report.Finding]:
     ]
 
 
-def _without_unsafe(change: memory_guard.FactChange) -> dict[str, object]:
-    """The change as data, its lines without the characters that hide text, as the review shows them."""
+def _shown_change(change: memory_guard.FactChange) -> dict[str, object]:
+    """The change as data, its lines without the characters that draw nothing, as the review shows them."""
     data = change.as_json()
     for side in ("before", "after"):
         value = data[side]
         if isinstance(value, str):
-            data[side] = strip_unsafe(value)
+            data[side] = without_hidden(value)
     return data
 
 

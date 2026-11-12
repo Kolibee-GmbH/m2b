@@ -40,8 +40,9 @@ are chosen per machine.
 3. **Pass the contract.** Each kind has a contract test class: `Contracts.TasksContract` in
    `tests/tasks_contract.py`, `Contracts.StoreContract` in `tests/store_contract.py`,
    `Contracts.CalendarContract` in `tests/calendar_contract.py`. Subclass it and say how to build a
-   fresh, empty backend; for tasks with a method, for a store with the class attribute
-   `make_store` (a constructor taking the root, a temp folder and the guard):
+   fresh, empty backend; for tasks with a method, for a store with the class attributes
+   `make_store` (a constructor taking the root, a temp folder and the guard) and `copy_of_plan`
+   (a name the backend's sync service gives a conflict copy of `plan.md`):
 
    ```python
    class MyTasksContractTest(Contracts.TasksContract):

@@ -6,17 +6,22 @@
 #   scripts/check                    everything; exits 1 when any stage fails
 #
 # The full run covers the unit tests of the core, of each add-on and of the repository tools (with
-# python3, and on macOS also with /usr/bin/python3 when that is Python 3.9), ruff, mypy,
-# the shell linter, the plugin manifest, the tests of the band (the core's mod), the B/X coverage report and
-# the end-to-end scenarios at the stub level.
+# python3, and on macOS also with /usr/bin/python3 when that is Python 3.9), the core once more in a
+# copy of the plugin without its add-ons, ruff, mypy,
+# the shell linter, the workflow linter, the plugin manifest, the tests of the band (the core's mod),
+# the B/X coverage check and the end-to-end scenarios at the stub level.
 #
 # The add-ons' tests sit in plugins/m2b/tests/addons/<add-on>/ under a folder without __init__.py, so
-# the core's discovery does not descend into them and each runs as its own suite.
+# the core's discovery does not descend into them and each runs as its own suite. An add-on's suite
+# may use the fixtures of the core's tests, so their folder is on its path; the core's suite uses
+# nothing of an add-on, which the core-alone stage proves.
 set -eu
 
 readonly RUFF_VERSION=0.16.3
 # mypy 2 no longer type-checks for Python 3.9.
 readonly MYPY_VERSION=1.19.1
+# The package on PyPI that installs actionlint; its first three numbers are actionlint's version.
+readonly ACTIONLINT_PACKAGE_VERSION=1.7.12.25
 readonly LEGACY_PYTHON=/usr/bin/python3
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
@@ -54,7 +59,7 @@ run_suite() {
     if [ "$2" = m2b ]; then
         run_unit_tests "$1" "$PLUGIN/tests" m2b "$PLUGIN/src"
     else
-        run_unit_tests "$1" "$PLUGIN/tests/addons/$2" "$2" "$PLUGIN/src"
+        run_unit_tests "$1" "$PLUGIN/tests/addons/$2" "$2" "$PLUGIN/src" "$PLUGIN/tests"
     fi
 }
 
@@ -115,6 +120,12 @@ all_unit_tests() {
     return "$unit_status"
 }
 
+# The core's unit tests, and the end-to-end scenarios that turn no add-on on, in a temporary copy of
+# the plugin without any part of an add-on.
+core_alone() {
+    PYTHONPATH="$repo_root/scripts" python3 -m repo_tools.core_alone
+}
+
 ruff_checks() {
     dev_tool ruff "$RUFF_VERSION" check . && dev_tool ruff "$RUFF_VERSION" format --check .
 }
@@ -133,8 +144,21 @@ shell_checks() {
         echo "shellcheck not installed; skipped"
         return 0
     fi
-    shellcheck scripts/check scripts/e2e scripts/e2e-shortcut-setup scripts/no-model scripts/readme-images \
+    shellcheck scripts/check scripts/e2e scripts/e2e-shortcut-setup scripts/evals-page scripts/fence-probe \
+        scripts/glean-eval scripts/ingest-eval scripts/no-model scripts/readme-demo scripts/readme-images \
         "$PLUGIN"/bin/m2b "$PLUGIN"/bin/m2b-worklog
+}
+
+# GitHub starts no run from a workflow file it cannot read and tells no one, so a mistake in a
+# scheduled workflow shows as nothing happening.
+workflow_checks() {
+    if command -v uvx >/dev/null 2>&1; then
+        uvx --quiet --from "actionlint-py==$ACTIONLINT_PACKAGE_VERSION" actionlint .github/workflows/*.yml
+    elif command -v actionlint >/dev/null 2>&1; then
+        actionlint .github/workflows/*.yml
+    else
+        echo "actionlint not installed and uvx is missing; skipped"
+    fi
 }
 
 manifest_checks() {
@@ -154,7 +178,7 @@ band_tests() {
     claude plugin test "$PLUGIN"
 }
 
-coverage_report() {
+coverage_check() {
     PYTHONPATH="$repo_root/scripts" python3 -m repo_tools.coverage_check
 }
 
@@ -185,12 +209,14 @@ if [ "${CI:-}" = true ] && ! command -v claude >/dev/null 2>&1; then
 fi
 
 stage unit-tests all_unit_tests
+stage core-alone core_alone
 stage ruff ruff_checks
 stage mypy mypy_checks
 stage shellcheck shell_checks
+stage workflows workflow_checks
 stage manifests manifest_checks
 stage band band_tests
-stage coverage coverage_report
+stage coverage coverage_check
 stage e2e scripts/e2e --level stub
 
 if [ -n "$failed_stages" ]; then

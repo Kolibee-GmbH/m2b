@@ -3,9 +3,8 @@
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.png">
     <img src="docs/images/logo-light.png" alt="m2b" width="230">
   </picture>
+  <br><em>A second brain for Claude Code. The right context in every session.</em>
 </p>
-
-<p align="center"><em>A second brain for Claude Code. The right context in every session.</em></p>
 
 <p align="center">
   <a href="https://github.com/Kolibee-GmbH/m2b/releases"><img src="https://img.shields.io/github/v/release/Kolibee-GmbH/m2b?style=flat-square" alt="Release"></a>
@@ -15,26 +14,55 @@
 </p>
 
 <p align="center">
-  <a href="#install"><strong>Install</strong></a> ·
-  <a href="#features">Features</a> ·
-  <a href="#add-ons">Add-ons</a> ·
-  <a href="#configure">Configure</a> ·
-  <a href="docs/getting-started.md">Getting started</a> ·
-  <a href="CHANGELOG.md">Changelog</a>
+  <a href="#quick-start"><strong>Quick start</strong></a> · <a href="#install">Install</a> · <a href="#how-it-works">How it works</a> ·
+  <a href="#what-runs-on-your-machine">What runs on your machine</a> · <a href="#features">Features</a> ·
+  <a href="#add-ons">Add-ons</a> · <a href="#configure">Configure</a> · <a href="docs/getting-started.md">Getting started</a> ·
+  <a href="docs/commands.md">Commands</a> · <a href="SECURITY.md">Security</a> · <a href="CHANGELOG.md">Changelog</a>
 </p>
 
-## TL;DR
+![Three steps in a terminal. First, in a Claude Code session in the project invoice-tool, the prompt "remember that Dana's birthday is on 3 March" makes Claude call the m2b note tool, which saves the sentence as one file, and the status line below the prompt reads "1 in inbox". Second, the next Claude Code session starts in the same project and nobody types anything: its start begins a curation run in the background, and the status line goes from "1 in inbox" to "0 in inbox". Third, a new Claude Code session in another project, garden-site, is asked "when is Dana's birthday?" and answers 3 March from the note dana.md, without a tool call](docs/images/demo.gif)
+<sub>One sentence from a prompt into a later session: three real Claude Code sessions on a demo machine with invented notes, recorded by `scripts/readme-demo`. The start of the second begins the real background run that files the note; nobody types a command. The waits are shortened.</sub>
 
-- You capture notes, facts and tasks from any Claude Code session or the command line. Nothing
-  is filed while you work: captures land in an inbox, written once and never edited.
-- At the next session start after a capture, a curation run files the inbox in the background:
-  facts into a small distillate, tasks into your task list, every capture into an archive by
-  month. Every new session starts with the distillate.
-- Your notes are plain Markdown files in a folder you choose: iCloud Drive, a synced folder, or
-  any local folder. Tasks live in Apple Reminders or in Markdown files next to the notes.
-- The model files your notes in a separate `claude -p` run that may call only the commands its
-  step needs, never in your session. Everything else is plain code: standard library Python, no
-  network calls of its own, no server, no database.
+Tell Claude Code "remember that Dana's birthday is on 3 March" in one project. A run in the
+background files the note, and from then on every session, in any project, starts knowing it. You
+type no command for it: you say what to keep and ask for what you need. Your notes stay plain
+Markdown files in a folder you own.
+
+What m2b adds to Claude Code's own memory, the notes Claude keeps for itself for each project:
+- one memory for all your projects and machines, in a folder you choose and sync as you like;
+- your words kept as you said them, and every fact pointing back to them;
+- tasks from the same sentence: "remind me to call the plumber on Friday" lands in your task list.
+
+**What it costs.** Setup is three slash commands in Claude Code and a few questions; setup itself,
+started as `/m2b:setup` with every answer given at once, took 15 seconds (2026-11-12). A session
+starts with a summary of your notes, at most 8 KB, and about 10,000 characters of tool and skill
+descriptions, without a model call. Filing uses your Claude Code login: five notes cost US$0.013 at
+API prices (2026-11-08).
+
+**No server, no account, no telemetry.** [What runs on your machine](#what-runs-on-your-machine)
+says what m2b starts, when, and what leaves the machine.
+
+## Quick start
+
+In a Claude Code session, three slash commands:
+
+```
+/plugin marketplace add Kolibee-GmbH/m2b
+```
+
+```
+/plugin install m2b@m2b
+```
+
+```
+/m2b:m2b setup
+```
+
+Setup's first offer is a new folder `~/m2b` with tasks as Markdown files; nothing else is
+installed. Then say "remember that the spare key is under the blue pot", start a new session, and
+in the one after it ask where the spare key is. [Getting started](docs/getting-started.md) shows
+what you should see at each step, and [Install](#install) what the commands need. Before you
+install: [what runs on your machine](#what-runs-on-your-machine) and [uninstalling](#uninstalling).
 
 ![A Claude Code session in an unrelated project answers when Sam brings the plywood and where the shed key is, straight from the distillate, without a tool call; above the prompt the band asks whether planning the trip to Porto is still current, with keep and drop, and lists an overdue task to return Sam's ladder, below it the status line reads "2 in inbox · curated 08:15"](docs/images/session-start.png)
 
@@ -51,7 +79,75 @@ Markdown files.
 2026-11-08 with Claude Code 2.1.319: a run over five captures took 48 seconds and 31 turns,
 read about 365,000 input tokens (338,000 of them from Claude Code's prompt cache) and wrote 8,000;
 Claude Code put it at US$0.013 at API prices. A run with nothing to read (an empty inbox, nothing
-expiring, no memory link to repair) uses no model.
+expiring, no memory link to repair) uses no model. m2b does not record what a run used:
+`curation.max_turns` and `curation.max_budget_usd` cap a model step, and `curation.paused` stops
+the runs that start by themselves ([Configuration](docs/configuration.md)).
+
+**Status.** m2b is young: its first version is from 2026-11-09, and its author has used it every
+day since 2026-11-08, on macOS with iCloud Drive and Apple Reminders. Linux is covered by the
+tests, not by daily use. The store format is versioned, and the curating machine migrates the
+store by itself when a version changes it ([Store format](docs/store-format.md#formats)); commands
+and settings can still change before 1.0, and the [changelog](CHANGELOG.md) says when one does.
+
+## How it works
+
+One sentence, followed from your prompt into a later session. The name and the note are invented;
+the files are what m2b wrote in a run on 2026-11-12.
+
+**1. You say it.** In any session: "remember that Dana's birthday is on 3 March". Claude writes
+one file into `inbox/`, the folder for new notes, in your own words, without the
+"remember that" around them. Nothing is filed while you work, and your words in the file are never
+changed. `source` says who wrote it:
+`claude` from a session, as here, `cli` from a terminal with `m2b capture`.
+
+```markdown
+---
+created: 2026-11-12T21:58:13+01:00
+source: claude
+---
+Dana's birthday is on 3 March.
+```
+
+**2. A run files it.** At the next session start m2b sees a note waiting and starts a curation
+run in the background: a `claude -p` of its own, apart from your session, in which a model reads
+the inbox and may call only the commands its step needs. Here it took 11 seconds. It wrote one
+line into `memory/MEMORY.md`, the distillate:
+
+```markdown
+## Facts
+
+- Dana's birthday is on 3 March (dana.md)
+```
+
+`memory/dana.md` holds the fact and a link to the note it came from. The note moved to the
+archive, `corpus/2026/11/`, with your words as you said them. m2b marked it `curated: true` in its
+frontmatter and added two lines below your words: a marker and `filed: fact dana.md`.
+
+**3. Every later session starts with it.** A hook prints the distillate, at most 8 KB, at each
+session start, in any project, without a model call. Asked when Dana's birthday is, Claude has
+the line in front of it. The picture above shows such a session.
+
+A run can also put the facts about one subject, such as a customer or a club, under a topic. A
+session then starts with the topic's name only, and its facts come in when your prompt or the
+project folder's path names one of the topic's words, or through a search
+([The distillate at session start](#the-distillate-at-session-start)).
+
+What a note becomes is the model's reading of it, by these rules:
+
+| The note says | It becomes | For example |
+|---|---|---|
+| something that stays true | a fact: a line in the distillate and a fact file | "Dana's birthday is on 3 March" |
+| something true until a known day | a fact with that day, rewritten once the day has passed | "Sam brings the plywood on Saturday" |
+| something going on right now | a line under "Current" in the distillate; after a month without a new note about it, m2b asks whether it still holds | "I am planning the trip to Porto" |
+| something to do | a task in your task list, due on the day the note names | "remind me to call the plumber on Friday" |
+
+A note can be several of these, and a sentence that reads two ways is filed one way: "Sam brings
+the ladder back on Saturday" became a task in one run and a fact until that Saturday in another.
+The last line of the archived note says what was filed.
+
+The store is a folder you choose: iCloud Drive, a synced folder, or any local folder. Tasks live
+in Apple Reminders or in Markdown files next to the notes. Apart from the model's step, m2b is
+plain code: standard library Python, no database.
 
 ## Words used here
 
@@ -59,11 +155,19 @@ expiring, no memory link to repair) uses no model.
 |---|---|
 | store | the folder that holds your notes: `inbox/`, `corpus/` (the archive), `memory/` |
 | capture | one note as you said it, one file in `inbox/` |
+| inbox | `inbox/` in the store: the captures no run has filed yet |
+| archive | `corpus/` in the store: every filed capture, by the month it was captured in |
 | curation run | the background run that files the inbox, on one machine per store, the curating machine |
 | distillate | `memory/MEMORY.md`: lasting facts, each pointing to its fact file in `memory/`, and under "Current" what is going on now |
+| fact file | one file in `memory/` for one subject, such as `dana.md`: its facts, and under "Evidence" links to the captures they came from |
 | topic | a heading in the distillate for one subject, such as a customer or a club, whose facts come in only when a session is about it |
+| review task | the one task m2b keeps in your task list for what a run needs you to look at: a step that failed, a finding, a facts line it removed or rewrote. Ticking it, or `ok` in the band, closes it |
+| proposal | a fact a curation run suggests from what you typed in your sessions, with your own words beside it. Off until you say yes in setup, and nothing is filed before you keep it |
+| memory candidate | a task "Remember? ..." that proposes one fact, put into your list by a script or an integration of yours: tick it and the next run files it |
 | band | the rows above the prompt where you keep or drop what curation proposes, and the status line below it |
+| mod | a module Claude Code loads with a plugin. m2b's mod is the band, with its `/m2b-...` commands and the two tools the model notes and searches with |
 | add-on | an optional piece of m2b, off until its own setup: `worklog` |
+| herdr | an [agent runtime](https://herdr.dev), a product of its own. Only the worklog add-on needs it; the rest of m2b runs without it |
 
 ## Who it is for
 
@@ -75,7 +179,8 @@ belong in its repository and its `CLAUDE.md`; m2b is for what has no repository.
 |---|---|---|---|
 | `CLAUDE.md` | instructions and facts for one project | in the repository | you, by hand |
 | Claude Code's memory | short notes Claude keeps for itself | Claude Code's own files, per project or user | Claude, in the session |
-| A notes MCP server | whatever the server stores | the server | the model, in the session |
+| [obsidian-second-brain](https://github.com/eugeniughelbur/obsidian-second-brain) | what a chat or a source you feed it says, as linked notes on people, projects, decisions and tasks | your Obsidian vault: Markdown files on your computer | the model in your session, on its commands that save, ingest and capture and with each answer (its "Two-Output Rule"); if you turn them on, a headless run after each context compaction and scheduled agents |
+| [basic-memory](https://github.com/basicmachines-co/basic-memory) | notes with observations and relations, which form a knowledge graph | Markdown files on your disk with a local SQLite index, or the project's paid cloud | the model in your session, through the tools of an MCP server, and you in any editor |
 | m2b | your notes, facts and tasks across all projects, as plain files you own | a folder you choose, synced as you like | you capture; a curation run files |
 
 ### m2b or Claude Code's auto memory
@@ -96,6 +201,66 @@ What m2b has that Claude Code's memory does not:
 - one store across all projects and machines, in a folder you choose and sync as you like, as
   plain Markdown you can read, back up and move without m2b.
 
+### m2b or another memory project
+
+Two public projects also keep what Claude Code should remember as Markdown files you own, and both
+do more than m2b in several ways. The table is from their READMEs as read on 2026-11-12:
+[obsidian-second-brain](https://github.com/eugeniughelbur/obsidian-second-brain/blob/addf151ebb4c98c681ad8bd15e102ab6dad6caf8/README.md)
+as of its commit `addf151`,
+[basic-memory](https://github.com/basicmachines-co/basic-memory/blob/b056f8e57013de9c0791e37678fe0c74caf47ffa/README.md)
+as of `b056f8e`. Their code was not read, both change quickly, and "not stated" means that README
+does not say.
+
+| | obsidian-second-brain | basic-memory | m2b |
+|---|---|---|---|
+| Works with | Claude Code, Codex CLI, Gemini CLI, OpenCode, Hermes, Pi, Grok Bot and any Agent Skills harness | any MCP client: Claude Desktop, Claude Code, Codex, Cursor, VS Code, ChatGPT | Claude Code only |
+| Runs on | macOS, Linux and Windows | macOS, Windows and Linux are named for Claude Desktop | macOS 14 or newer and Linux, not Windows |
+| Search | keyword search without setup; search by meaning as an option, with a local or a hosted embedding model | full text and by meaning, ranked together; reranking as an option | full text only: a note is found by the words it holds |
+| Takes in | chats, links, PDFs, Word files, voice memos, screenshots, YouTube videos, web research | what the model writes in a chat and what you write in an editor; imports of Claude and ChatGPT conversations | what you ask it to remember; after a yes in setup also proposals from what you typed in your sessions |
+| Connects notes | rewrites existing pages when a source comes in, resolves contradictions, writes pages that name patterns across sources | observations and relations between notes, a graph the model follows link by link | no links between notes: one fact file per subject, pointing to the notes it came from |
+| Other devices | a Telegram bot as an option, to capture from a phone, with your Anthropic API key and a poller on your computer; the vault syncs with Obsidian Sync, iCloud, Syncthing or Git | the paid cloud: web, mobile and desktop with sync, snapshots and backups, US$15 a month for as long as you stay subscribed when you sign up during its beta (regular price US$19); a local install syncs by Git, Syncthing or the like | whatever syncs the folder; a phone captures through a shortcut you write ([Integrations](docs/integrations.md)), m2b has no app |
+| Several people or agents | Crew: one logbook that Claude Code, Codex, Cursor and Grok Bot share | Teams: a shared cloud workspace | one person |
+| Where notes are filed | in your session; as options, after each context compaction by a headless `claude -p` with `--dangerously-skip-permissions` and the tools Read, Write, Edit, Glob and Grep, and by four scheduled agents | in your session, by the model through the server's tools | in a run of its own, apart from your session, in which the model may call only the commands its step needs |
+| Facts that stop being true | every stored fact is timeless, dated or a pointer, checked by a linter; a changed fact keeps when it was true and when the vault learned it | not stated | a fact can carry the day it ends and is rewritten once that day has passed |
+| Tasks | saved as notes and on kanban boards in the vault | not stated | Apple Reminders or Markdown files |
+| Network and telemetry | the vault commands need no API key; some research commands need your keys for Grok, Perplexity or Gemini; telemetry is not stated | anonymous events about the promotion of its cloud and logins to it, off with `BASIC_MEMORY_NO_PROMOS=1`; checks for updates every 24 hours and installs them, for `uv tool` and Homebrew installs, unless turned off | no network connection of its own, no telemetry |
+| License | MIT | AGPL-3.0 | MIT |
+
+Take one of them when you need another agent than Claude Code, Windows, search by meaning,
+sources beyond your own sentences, or notes that link to each other. m2b is the narrower tool: it
+keeps what you say, files it outside your session and puts a summary in front of every session.
+
+## What runs on your machine
+
+Claude Code starts m2b's programs: the hooks, the band and, from a hook, the curation run. Only
+the worklog add-on, off until its own setup, puts something outside Claude Code: a recorder in
+[herdr](https://herdr.dev), the agent runtime in which it sees which workspace is in use, and a
+timer of the operating system. After the install and before `/m2b:m2b setup`, the hooks print nothing and
+no run starts.
+
+| What | When | Model | What leaves the machine | How to turn it off |
+|---|---|---|---|---|
+| Session-start hooks | at every session start: four commands, each with a limit of 20 or 30 seconds | no | nothing by m2b. They print the distillate (at most 8 KB) and a routing rule into the session, start a curation run when one is due, keep the `m2b` command up to date and, with the worklog on, set its recording switch and keep its recorder, its link in herdr and its timer in place. Where sessions are read (below), they note the git remotes of the session's folder in a file on the machine | `m2b distillate off` in a folder keeps the distillate out of the sessions there and below; the other three commands have no switch of their own. With the plugin turned off in `/plugin`, none of the four runs |
+| Prompt hook | before every prompt: one command, with a limit of 5 seconds | no | nothing by m2b. When the prompt names a topic, it adds that topic's facts to the session, at most 4 KB; it reads the prompt and stores nothing of it | it has no switch of its own; where the distillate is off, it adds nothing |
+| Curation run | in the background, on the one machine that curates: at a session start when a capture waits or the last successful run is more than 20 hours old, on a schedule if you set one up, or with `m2b curate --force` | yes, in the steps with something to read: `claude -p` with `haiku` by default. A run with nothing to read starts no model | the captures in the inbox, your memory files, and what a step reads or searches in the archive, to the model | `m2b config set curation.paused true` on the curating machine: no session start and no schedule starts one there until you set it back to `false`, while `m2b curate --force` still runs one ([Pausing](docs/curation.md#pausing)). `m2b curate take-over` on another machine moves curation there; with the plugin turned off in `/plugin`, no session starts one, while a schedule you set up goes on until you delete it |
+| Reading your sessions | once in a curation run, only after you said yes in setup | yes, one call that can use no tool | the distillate, your latest answers to its proposals and, for each session since the last reading, its folder, its day and the prompts you typed, with credentials redacted, to the model | `m2b config set curation.read_sessions false` |
+| Worklog add-on | only after `/m2b:worklog-setup`, on the machine that curates: herdr starts its recorder on each event, a timer starts it every five minutes, and one step of a curation run writes the day's worklog | yes, once a day with sessions | the day's prompts, the end of each session's last answer, your commit subjects and, for each session, its folder, herdr workspace, repository and time spans, with the spheres of work and customers you named in its setup, the inbox, memory and what the step searches in the archive, to the model. The recordings stay on the machine | `m2b addons off worklog` stops its model step and, from the next session start, the recording; `/m2b:worklog-setup remove` also takes the recorder out of herdr and the timer out of the operating system |
+| The band | while a session is open and mods are on in Claude Code: it asks `m2b` about once a minute and after each of your turns | no | nothing by m2b. The descriptions of its two tools, about 5,000 characters, are part of every session it runs in. A call of either tool runs without Claude Code's permission prompt, the note tool only for a note in your own words; your own `permissions.ask` and `permissions.deny` rules for `mcp__m2b__note` and `mcp__m2b__search` come first ([Security](SECURITY.md#the-tools-the-model-calls)) | it has no switch of its own; with mods off in Claude Code it does not run |
+
+m2b opens no network connection of its own and sends no telemetry. Your notes reach a model only
+through your Claude Code, under your login. In a session: the distillate, the facts of a topic a
+prompt names, and what you ask the session to look up, such as search hits from the inbox, the
+archive and memory, rediscovered notes, your open tasks and today's events. In a curation run:
+what the table says. Whoever provides the model behind your Claude Code receives them as it
+receives your sessions.
+
+A store in a synced folder also goes where that service takes it; m2b has no sync of its own.
+Tasks in Apple Reminders and events in a calendar go wherever that list or calendar syncs. In a
+store that is a git repository a run commits and never pushes.
+
+[Cost and privacy](#cost-and-privacy) says what each step hands the model.
+[SECURITY.md](SECURITY.md) says what a hostile note can do and how the model's step is fenced.
+
 ## Install
 
 ```
@@ -107,7 +272,10 @@ What m2b has that Claude Code's memory does not:
 ```
 
 Install it for your user, the default; installed for one project only, nothing outside Claude
-Code finds it. Then, in a Claude Code session:
+Code finds it. The install ends with `Plugin is now active.`, or with
+`Run /reload-plugins to apply.`, which Claude Code then runs by itself; when it left the plugin
+waiting instead, run `/reload-plugins`. Type `/` and `/m2b:m2b` is in the list. Then, in the same
+session:
 
 ```
 /m2b:m2b setup
@@ -119,8 +287,10 @@ files, nothing else to install. It never overwrites a store that exists: pointed
 another machine already uses, it joins it. [Getting started](docs/getting-started.md) walks
 through it, including a first run without Claude Code.
 
-Setup writes the command `~/.local/bin/m2b` for terminals and schedules. `~/.local/bin` is not on
-the `PATH` by default on macOS; add it, for example in `~/.zshrc`:
+Setup also writes the command `~/.local/bin/m2b`. Capturing, asking and filing do not need it in
+a terminal; with Markdown tasks, ticking a task does (`m2b tasks complete <id>`, below). To type
+`m2b` yourself, put `~/.local/bin` on the `PATH`; on macOS it is not there by default. For example
+in `~/.zshrc`:
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
@@ -153,12 +323,21 @@ holds, the curating machine's next run migrates the store by itself; update that
 1. Turn the add-ons off that left something outside Claude Code: with the worklog on, run
    `/m2b:worklog-setup remove` in a session, which turns it off and unlinks its herdr recorder;
    and delete any schedule you set up for `m2b curate` (a Shortcuts automation or a cron line).
-2. Uninstall the plugin in `/plugin`. That stops every hook, the band and the recorder.
+2. Uninstall the plugin in `/plugin`. That stops every hook, the band and the recorder. Then take
+   the marketplace out as well, or Claude Code keeps its copy of this repository:
+
+   ```
+   /plugin marketplace remove m2b
+   ```
+
 3. Delete what m2b keeps on the machine, if you want it gone:
 
    ```bash
    rm -rf ~/.local/bin/m2b ~/.config/m2b ~/.local/state/m2b ~/.local/share/m2b
    ```
+
+4. If you added `~/.local/bin` to your `PATH` for m2b alone, take that line out of `~/.zshrc`
+   again.
 
 Your store stays as it is: plain files, yours to keep or delete. So do the tasks m2b created in
 your list, such as a review task or a "Remember? ..." candidate.
@@ -169,8 +348,10 @@ your list, such as a review task or a "Remember? ..." candidate.
 
 In any session, say what you want kept: "remember that Dana's birthday is on 3 March", "note
 this", "remind me to call the plumber on Friday". You type no command: the model's note tool,
-or the `capture` skill where the band does not run, writes one file into `inbox/` with your words
-verbatim, and with a date it also creates a task that points back to the note. Say that you want it
+or the `capture` skill where the band does not run, writes a note into `inbox/` in your own words,
+without the request around them ("remember that", "remind me to"). With a date it also creates a
+task that points back to the note, and the day stands in the task. Typed in a terminal, `m2b capture "<text>"` keeps the text character for character.
+Say that you want it
 kept; a sentence on its own, such as "Dana's birthday is on 3 March", stays part of the
 conversation and is not captured.
 
@@ -209,13 +390,16 @@ that folder turns it off for every session there and below, on this machine.
 Sessions capture what you learn about people and verbal agreements, at work too: who is who,
 which role, what was agreed. Documents of customers and what a third party told you in confidence
 are never captured. A customer's people land under that customer's topic, so their facts reach a
-session only when it is about that customer. Lines under Current reach every session.
+session only when it is about that customer. What you are working on for that customer lands under
+the same topic in Current; what goes on in your own life stays above the topics there and reaches
+every session.
 
 ### Search, todos, rediscover
 
 "What did I note about the shed?", "what's open?", "show me something old": the `search`,
 `todos` and `rediscover` skills answer from the store. Search is full text over archive, memory
-and inbox; the skill searches a word together with its translation, so a note written in German
+and inbox; hits from memory come first, then the archive, then the inbox, in both the newest note
+first. The skill searches a word together with its translation, so a note written in German
 answers a question asked in English. Todos lists overdue, this week and undated tasks, and today's events when a calendar
 is set up. Rediscover brings one or a few old notes back, each with its reason, also for "what
 did I note last spring?". A file iCloud Drive has not downloaded is named, never read and never
@@ -230,28 +414,74 @@ or the last successful run is more than 20 hours old. A schedule is optional; it
 while the curating machine has no session for days ([On a schedule](docs/curation.md#on-a-schedule)).
 The model reads only when there is something to read: new captures, or a fact past the day it
 was true until, such as an appointment. A step that fails is reported and the run goes on; the
-review task in your list says what needs you. [The curation run](docs/curation.md) lists its
+review task in your list says what needs you. If the store folder is a git repository, each run
+ends with one commit, and reverting it puts back what the run changed, the captures it filed included ([Taking a run back](docs/curation.md#taking-a-run-back) names the exceptions). [The curation run](docs/curation.md) lists its
 steps, the one-off runs for a distillate moved over from another tool, and the status line.
 
-### Memory candidates
+### What a run asks you
 
 A line under Current that no capture has touched for a month comes back as a task "Still
 current? ...": tick it and it stays; drop it in the band, or delete the task, and it leaves the
-distillate. The worklog add-on may propose a fact the same way, as "Remember? ...": tick it and the
-next run files it; drop it in the band, or delete the task, and it does not come back for 90 days.
+distillate.
+
+**Proposals from your sessions.** Much of what belongs in a second brain you say in passing,
+without "remember this": who runs what at a customer, what was agreed, what you promised by
+Friday. A curation run can read what you typed in Claude Code since the last reading and propose
+it, each proposal with your own words beside it. It is off until you say yes in setup
+(`curation.read_sessions` in the machine config), and nothing is filed before you say keep: in
+the band's pane, which `/m2b-proposals` opens, or with `m2b proposals`, `m2b proposals keep <id>`
+and `m2b proposals drop <id>`. Only the prompts you typed are read, with credentials redacted: no
+answer of Claude, no tool result, no pasted block, nothing a plugin or another agent sent, and no
+session you left out by its folder or its git remote ([Reading your sessions](docs/curation.md#reading-your-sessions)).
+
+**Memory candidates.** `m2b tasks add --candidate "<a fact>"` proposes one fact as a task
+"Remember? ...", for a script or an integration of yours: tick it and the next run files it; drop
+it in the band, or delete the task, and it does not come back for 90 days.
+
+**Ticking a task.** With Apple Reminders you tick in the Reminders app. With Markdown tasks,
+`m2b tasks list` shows every open task with its id, the review task and these questions among
+them; `m2b tasks complete <id>` ticks one and `m2b tasks drop <id>` drops one. The band's keep and
+drop buttons call the same two commands.
+
+### Commands
+
+Capturing, asking and filing need none of these: you say what you want, and Claude calls the tool
+or the skill; ticking a Markdown task takes `m2b tasks complete <id>`. The ten typed most, the
+first two in a session and the rest in a terminal or a script; [Commands](docs/commands.md) has
+every one, and what to say instead of typing most.
+
+| Command | What it does |
+|---|---|
+| `/m2b:m2b` | says what m2b is and what to type; `/m2b:m2b setup` sets a machine up |
+| `/m2b-note <text>` | notes the text into the inbox at once, without a model turn |
+| `m2b capture "<text>"` | the same from a terminal or a script |
+| `m2b search <words>` | full text over archive, memory and inbox |
+| `m2b todos` | open tasks by due date, and today's events |
+| `m2b tasks list` | every open task with its id |
+| `m2b tasks complete <id>` | ticks a task |
+| `m2b status` | the inbox, the last curation run, whether one is due |
+| `m2b doctor` | checks every backend and says what to fix |
+| `m2b curate --force` | files the inbox now instead of at the next session start |
+
+A slash command with a colon (`/m2b:search`) is a skill and takes a model turn; one with a dash
+(`/m2b-search`) is a command of the band and runs at once.
 
 ## The band
 
 Above the prompt, [the band](docs/band.md) shows memory candidates and "Still current?" questions,
 each with keep and drop buttons you click with the mouse (a click waits 5 seconds with `undo`
-before it writes), and the open review task: the facts a run changed in one row, its other
+before it writes), one row that says how many proposals from your sessions wait, and the open
+review task: the facts a run changed in one row, its other
 findings, and `ok` to close it; below the prompt, a status
 line such as `3 in inbox · curated 18:02`. `/m2b-note <text>` notes a text into the inbox at once,
 without a model turn, also while one is working. `/m2b-review` opens a pane with the whole last
-curation run, and `/m2b-search <text>` shows search hits there. The model notes and searches
+curation run, `/m2b-proposals` shows the proposals from your sessions there, each with keep and
+drop, and `/m2b-search <text>` shows search hits. The model notes and searches
 through two tools of the mod, `mcp__m2b__note` and `mcp__m2b__search`, without a shell call. The
-band is part of m2b and starts once m2b is set up. It is a mod, so it needs mods on in Claude Code; `m2b doctor` says
-whether the latest session ran it, and why not.
+band is part of m2b and starts once m2b is set up. It is a mod, a module Claude Code loads with the
+plugin, so it runs only while mods are on in Claude Code. `m2b doctor` says in its line `band`
+whether the latest session ran it; when it did not,
+[What it needs](docs/band.md#what-it-needs) names the two causes and what to do about each.
 
 ## Add-ons
 
@@ -274,8 +504,9 @@ m2b addons off worklog
 
 **The model.** Only a curation run calls a model, and only for a step with something to read:
 ingest for new captures, refresh for a fact past its day, lint for a broken link in memory with
-exactly one candidate, and the worklog's verdict once a day while that add-on is on, unless the day
-had no sessions. Each step runs with `curation.model` (`haiku` by default; setup offers `sonnet`
+exactly one candidate, the reading of your sessions once in a run while it is on and you typed
+something since the last reading, and the worklog's verdict once a day while that add-on is on,
+unless the day had no sessions. Each step runs with `curation.model` (`haiku` by default; setup offers `sonnet`
 for more careful filing at a higher cost) and stops after `curation.max_turns` turns;
 `curation.max_budget_usd`, unset by default, caps its spending. It runs on your Claude Code login
 and is billed like your sessions.
@@ -283,15 +514,19 @@ and is billed like your sessions.
 **What reaches the model.** In a curation step: what the step's rules allow, nothing else. Ingest
 and lint read the captures and memory files; refresh reads the distillate, the fact files that are
 due and any archive file; sorting reads memory. Ingest, lint, `--refresh-all` and the worklog step
-also get `m2b search` results over inbox, archive and memory. With the worklog add-on, its step sees
-the period's prompts and last answers, commits and session folders, the inbox, memory and your task list (below). In every session:
+also get `m2b search` results over inbox, archive and memory. The reading of your sessions sends
+the distillate, up to 30 proposals you kept and 30 you dropped lately, each with your words, and,
+per session, its folder, its day and the prompts you typed, redacted, to a model that can call
+nothing. With the worklog add-on, its step sees the period's prompts and last
+answers, commits and session folders, the inbox and memory (below). In every session:
 the distillate, the routing rule and the notices at session start; before a prompt that names a
 topic, that topic's facts.
 
 **What the worklog reads** (only while on, only on the curating machine): the herdr events its
 recorder writes to `~/.local/state/m2b/worklog/`, the prompts and the end of each session's last
 answer from your Claude Code transcripts for the period (with credentials and long tokens
-redacted), your own git commits, and the inbox; its model step may also search the archive. Its
+redacted, and without a prompt a plugin, a finished task or another session sent), your own git commits (their subjects redacted the same way), and the inbox. Of the
+work you tell it to leave out, by folder or by git remote, it keeps nothing; its model step may also search the archive. Its
 ledger with time spans and booking proposals lands in the store under `state/addons/worklog/`.
 A time span is when a workspace was in use: an agent at work (up to 30 minutes past its last sign
 of life, so a machine asleep does not count), the workspace in focus (up to 10 minutes after each of
@@ -333,7 +568,38 @@ m2b status
 ```
 
 `doctor` checks every backend and says what to fix; `status` shows the inbox, the last run and
-whether a run is due.
+whether a run is due. On a healthy machine with the quick start's store, a folder with Markdown
+tasks, they answer like this (the paths, the machine's name and the times are yours):
+
+```text
+$ m2b doctor
+store: reachable
+store-format: current (format 3)
+store-git: no repository
+tasks: reachable
+calendar: not configured
+executable claude: found (/Users/alex/.local/bin/claude)
+executable python3: found (/usr/bin/python3)
+claude-code: found (the launcher runs m2b from /Users/alex/.claude/plugins/cache/m2b/m2b/0.4.0)
+prompt-hook: answers (topics in the distillate: 0)
+band: seen (it ran in the latest session, started 2026-11-12 17:25)
+
+$ m2b status
+inbox: 0
+run: succeeded on a1b2-alexsmacbook at 2026-11-12T17:26:04+01:00
+due: no (the last successful run was at 2026-11-12 17:26; the next is due after 2026-11-13 13:26)
+store: reachable
+tasks: reachable
+calendar: not configured
+store format: current (format 3)
+add-ons on: none
+```
+
+Three of these lines look like a problem and are none. `band: not seen (...)`, with a long reason
+in brackets, is what `doctor` says from setup until the next session has started. `store-git: no
+repository` only says that the store folder is not a git repository, which is optional
+([A commit per run](docs/curation.md#a-commit-per-run)). `calendar: not configured` is the answer
+for a setup without a calendar.
 
 - **`m2b: command not found`.** Add `~/.local/bin` to your `PATH` (see Install). Inside a
   session, `!m2b status` works without it.
@@ -347,14 +613,22 @@ whether a run is due.
   `m2b config set executables.claude "$(command -v claude)"`.
 - **The session start says the last run failed.** The review task in your list names the step
   and the cause. Fix it and run `m2b curate --force`.
+- **A topic's facts do not come in when you name it.** The hook that brings them says nothing when
+  it fails. `m2b doctor` starts it and says in its line `prompt-hook` why it does not answer.
 - **`curating` for a long time.** A run is going on; each model step is stopped after
   `curation.model_timeout_minutes` (15). When it ends, its outcome is added to
   `~/.local/state/m2b/run.log`.
 - **Tasks "not reachable" with Apple Reminders.** The terminal Claude Code runs in needs access:
   System Settings, Privacy & Security, Reminders.
-- **"not set up".** Run `/m2b:m2b setup` on this machine.
+- **"not set up".** Run `/m2b:m2b setup` on this machine. Without Claude Code, from a checkout,
+  it is `m2b setup apply` ([Getting started](docs/getting-started.md#from-the-command-line-without-claude-code)).
 - **Files "not downloaded".** iCloud Drive keeps them in the cloud ("Optimize Mac Storage").
   `m2b store fetch <path>` downloads them; m2b never reads them by accident.
+- **A run filed something wrong,** or the review task names a finding you do not know what to do
+  with. [Correcting what a run filed](docs/curation.md#correcting-what-a-run-filed).
+- **Something else.** Open an issue with the output of `m2b doctor` and `m2b --version`, and leave
+  out what your notes say and the names in them
+  ([new issue](https://github.com/Kolibee-GmbH/m2b/issues/new/choose)).
 
 ## Limits
 
@@ -370,7 +644,9 @@ whether a run is due.
   task is due on a day, not at a time.
 - The worklog needs [herdr](https://herdr.dev) 0.9 or later and records only the curating machine. It never books anything: its
   bookings are proposals for you to enter.
-- Sync is whatever moves the folder. m2b has no sync and no server of its own.
+- Sync is whatever moves the folder. m2b has no sync and no server of its own. It knows a
+  conflict copy by the name iCloud Drive gives it (backend `icloud`) or Dropbox and Syncthing
+  give it (backend `folder`); the copies of another service are files like any other to it.
 - Nothing captured is deleted automatically. What does get deleted: conflict copies identical
   to their original, the product's own leftover temp files and settled candidate tasks.
 
@@ -385,7 +661,9 @@ scripts/e2e --level stub    # end-to-end scenarios without a model
 [Architecture](docs/architecture.md) is the short tour of the code; [CONTRIBUTING.md](CONTRIBUTING.md)
 has the ground rules. To write your own client, read [Integrations](docs/integrations.md); to add a store,
 task or calendar backend, [Writing a backend](docs/writing-a-backend.md). What m2b promises to do,
-and which defects it must not have, is listed in [Behavior](docs/behavior.md).
+and which defects it must not have, is listed in [Behavior](docs/behavior.md). What it does to
+Claude's answers is measured: [Evals](docs/evals.md) has eight cases, each run with m2b and
+without, and the scores of the last run.
 
 ## License
 

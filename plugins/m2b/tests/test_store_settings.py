@@ -29,6 +29,7 @@ INVENTED_SETTINGS: dict[str, Any] = {
 KEYS_BY_FORMAT: dict[int, tuple[set[str], set[str]]] = {
     1: ({"format", "tasks", "curating_machine", "journal_since"}, {"backend", "list", "timeout_seconds"}),
     2: ({"format", "tasks", "curating_machine", "journal_since"}, {"backend", "list", "timeout_seconds"}),
+    3: ({"format", "tasks", "curating_machine", "journal_since"}, {"backend", "list", "timeout_seconds"}),
 }
 
 

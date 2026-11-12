@@ -20,6 +20,7 @@ import fcntl
 import json
 import os
 import pty
+import re
 import select
 import shutil
 import signal
@@ -48,7 +49,10 @@ BACKGROUND = "#1e1e2e"
 INHERITED_PREFIXES = ("CLAUDE", "HERDR_", "M2B_")
 # Where the user keeps Claude Code's config and login, when not in ~/.claude; the recording needs it.
 KEPT = frozenset({"CLAUDE_CONFIG_DIR"})
+TOOLS = ("claude", "node", "npm", "magick", "git")
 DOWN = "\x1b[B"
+# What a terminal takes as a command, not as text: a title, a color or a cursor move, a single key.
+ESCAPES = re.compile(rb"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-?]*[ -/]*[@-~]|\x1b[@-Z\\-_]")
 ENTER = "\r"
 
 
@@ -59,6 +63,25 @@ class Shot:
     answer_seconds: int
     prompt: str
     fresh_store: bool
+
+
+@dataclass(frozen=True)
+class Wait:
+    """Read what the command draws for ``seconds``, or only until it drew ``until``, then type ``keys``.
+    ``until`` is looked for in the text alone: a shell with line editing draws an escape sequence
+    between a line's end and its prompt."""
+
+    seconds: float
+    keys: str = ""
+    until: bytes = b""
+
+
+@dataclass(frozen=True)
+class Recording:
+    """What a command drew, each chunk with the seconds since its start, and the moment each wait ended."""
+
+    chunks: tuple[tuple[float, bytes], ...]
+    typed_at: tuple[float, ...]
 
 
 # In this order: todos runs on the store the capture left, so it lists the task just captured.
@@ -173,10 +196,34 @@ def build_demo(environ: Mapping[str, str]) -> None:
     """A fresh demo machine: setup, filed notes and memory, tasks, two captures waiting,
     and one curation run without a model, which asks whether the Porto trip, untouched since September,
     is still current: the band's question comes from the core, not from the worklog."""
+    store = set_up_machine(environ)
+    for relative, (created, source, text) in CORPUS.items():
+        _write(store / "corpus" / relative, f"---\ncreated: {created}\nsource: {source}\n---\n{text}\n")
+    # Recent on any day the pictures are taken, so only the Porto trip is quiet enough to be asked about.
+    recent = (datetime.date.today() - datetime.timedelta(days=5)).isoformat()
+    for name, text in MEMORY.items():
+        _write(store / "memory" / name, text.replace("{recent}", recent))
+    for title, due in TASKS:
+        _m2b(environ, "tasks", "add", *(["--due", due] if due else []), title)
+    for text in INBOX:
+        _m2b(environ, "capture", text)
+    _m2b(environ, "curate", "--force")
+    make_project(
+        PROJECT,
+        {
+            "README.md": "# invoice-tool\n\nTurns time entries into PDF invoices.\n",
+            "src/invoice.py": "def total(entries):\n    return sum(e.hours * e.rate for e in entries)\n",
+        },
+        environ,
+    )
+
+
+def set_up_machine(environ: Mapping[str, str]) -> Path:
+    """A fresh demo machine, set up for the invented Alex with an empty store, whose folder it returns."""
     if DEMO.exists():
         shutil.rmtree(DEMO)
     store = DEMO / "notes"
-    for folder in (DEMO / "home", store, PROJECT / "src"):
+    for folder in (DEMO / "home", store):
         folder.mkdir(parents=True)
     answers = {
         "store": {"backend": "folder", "path": str(store)},
@@ -189,22 +236,16 @@ def build_demo(environ: Mapping[str, str]) -> None:
         "machine_id": MACHINE_ID,
     }
     _m2b(environ, "setup", "apply", "--answers", json.dumps(answers))
-    for relative, (created, source, text) in CORPUS.items():
-        _write(store / "corpus" / relative, f"---\ncreated: {created}\nsource: {source}\n---\n{text}\n")
-    # Recent on any day the pictures are taken, so only the Porto trip is quiet enough to be asked about.
-    recent = (datetime.date.today() - datetime.timedelta(days=5)).isoformat()
-    for name, text in MEMORY.items():
-        _write(store / "memory" / name, text.replace("{recent}", recent))
-    for title, due in TASKS:
-        _m2b(environ, "tasks", "add", *(["--due", due] if due else []), title)
-    for text in INBOX:
-        _m2b(environ, "capture", text)
-    _m2b(environ, "curate", "--force")
-    _write(PROJECT / "README.md", "# invoice-tool\n\nTurns time entries into PDF invoices.\n")
-    _write(PROJECT / "src" / "invoice.py", "def total(entries):\n    return sum(e.hours * e.rate for e in entries)\n")
-    git = ["git", "-C", str(PROJECT), "-c", "user.name=Alex", "-c", "user.email=alex@example.com"]
+    return store
+
+
+def make_project(project: Path, files: Mapping[str, str], environ: Mapping[str, str]) -> None:
+    """An unrelated project for a session to start in: a git repository of Alex's with one commit."""
+    for relative, text in files.items():
+        _write(project / relative, text)
+    git = ["git", "-C", str(project), "-c", "user.name=Alex", "-c", "user.email=alex@example.com"]
     for arguments in (["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "-m", "first draft"]):
-        _run([*git, *arguments], environ)
+        run([*git, *arguments], environ)
 
 
 def shots_for(only: str | None) -> list[Shot]:
@@ -226,6 +267,16 @@ def record(
     command: Sequence[str], cwd: Path, environ: Mapping[str, str], rows: int, steps: Sequence[tuple[float, str]]
 ) -> bytes:
     """Every byte the command draws in a terminal of ``COLUMNS`` x ``rows`` while the keys are typed."""
+    waits = [Wait(seconds, keys) for seconds, keys in [*steps, (1, "")]]
+    return b"".join(drawn for _, drawn in record_timed(command, cwd, environ, rows, COLUMNS, waits).chunks)
+
+
+def record_timed(
+    command: Sequence[str], cwd: Path, environ: Mapping[str, str], rows: int, columns: int, waits: Sequence[Wait]
+) -> Recording:
+    """What the command draws in a terminal of ``columns`` x ``rows`` while the waits pass and their
+    keys are typed, with its times. It ends early when the command does, and fails when a wait does
+    not see what it waits for."""
     pid, fd = pty.fork()
     if pid == 0:  # pragma: no cover - the child process
         # A child that cannot start the command must not unwind into the parent's cleanup.
@@ -234,24 +285,28 @@ def record(
             os.execvpe(command[0], list(command), dict(environ))
         finally:
             os._exit(127)
-    fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, COLUMNS, 0, 0))
-    drawn = bytearray()
+    fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, columns, 0, 0))
+    start = time.monotonic()
+    chunks: list[tuple[float, bytes]] = []
+    typed_at: list[float] = []
     try:
-        for seconds, keys in [*steps, (1, "")]:
-            if not _read_for(fd, seconds, rows, drawn):
+        for wait in waits:
+            if not _read_for(fd, wait, rows, start, chunks):
                 break
-            if keys:
-                os.write(fd, keys.encode())
+            typed_at.append(time.monotonic() - start)
+            if wait.keys:
+                os.write(fd, wait.keys.encode())
     finally:
         os.kill(pid, signal.SIGKILL)
         os.waitpid(pid, 0)
         os.close(fd)
-    return bytes(drawn)
+    return Recording(tuple(chunks), tuple(typed_at))
 
 
-def _read_for(fd: int, seconds: float, rows: int, drawn: bytearray) -> bool:
-    """Reads for ``seconds``, answering cursor position queries; False once the command has ended."""
-    end = time.monotonic() + seconds
+def _read_for(fd: int, wait: Wait, rows: int, start: float, chunks: list[tuple[float, bytes]]) -> bool:
+    """Reads until the wait is over, answering cursor position queries; False once the command has ended."""
+    end = time.monotonic() + wait.seconds
+    seen = b""
     while time.monotonic() < end:
         ready, _, _ = select.select([fd], [], [], 0.1)
         if not ready:
@@ -262,23 +317,27 @@ def _read_for(fd: int, seconds: float, rows: int, drawn: bytearray) -> bool:
             return False
         if not data:
             return False
-        drawn.extend(data)
+        chunks.append((time.monotonic() - start, data))
         if b"\x1b[6n" in data:
             os.write(fd, f"\x1b[{rows};1R".encode())
+        if wait.until:
+            seen += data
+            if wait.until in ESCAPES.sub(b"", seen):
+                return True
+    if wait.until:
+        raise ImagesError(f"the terminal did not draw {wait.until!r} within {wait.seconds:g} seconds")
     return True
 
 
 def render(recording: Path, image: Path, rows: int, xterm: Path) -> None:
-    _run(
+    run(
         ["node", str(RENDERER), str(recording), str(image), str(COLUMNS), str(rows), str(xterm), BACKGROUND], os.environ
     )
-    _run(
-        ["magick", str(image), "-trim", "+repage", "-bordercolor", BACKGROUND, "-border", "18", str(image)], os.environ
-    )
+    run(["magick", str(image), "-trim", "+repage", "-bordercolor", BACKGROUND, "-border", "18", str(image)], os.environ)
 
 
-def missing_tools(which: Callable[[str], str | None] = shutil.which) -> list[str]:
-    return [tool for tool in ("claude", "node", "npm", "magick", "git") if which(tool) is None]
+def missing_tools(which: Callable[[str], str | None] = shutil.which, tools: Sequence[str] = TOOLS) -> list[str]:
+    return [tool for tool in tools if which(tool) is None]
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -298,7 +357,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 if shot.fresh_store:
                     build_demo(environ)
                 recording = Path(work) / f"{shot.name}.bin"
-                recording.write_bytes(record(_claude(), PROJECT, environ, shot.rows, steps_for(shot)))
+                recording.write_bytes(record(claude_command(), PROJECT, environ, shot.rows, steps_for(shot)))
                 IMAGES.mkdir(parents=True, exist_ok=True)
                 render(recording, IMAGES / f"{shot.name}.png", shot.rows, xterm)
                 print(f"readme-images: {IMAGES.relative_to(REPO_ROOT) / shot.name}.png")
@@ -309,7 +368,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-def _claude() -> list[str]:
+def claude_command() -> list[str]:
     allowed = ["Skill(m2b:todos)", "Skill(m2b:capture)", "Skill(m2b:search)"]
     return [
         "claude",
@@ -325,12 +384,12 @@ def _claude() -> list[str]:
 
 
 def _install_xterm(work: Path) -> Path:
-    _run(["npm", "install", "--silent", "--no-audit", "--no-fund", "--prefix", str(work), XTERM], os.environ)
+    run(["npm", "install", "--silent", "--no-audit", "--no-fund", "--prefix", str(work), XTERM], os.environ)
     return work / "node_modules" / "@xterm" / "xterm"
 
 
 def _m2b(environ: Mapping[str, str], *arguments: str) -> None:
-    _run([str(PLUGIN / "bin" / "m2b"), *arguments], environ)
+    run([str(PLUGIN / "bin" / "m2b"), *arguments], environ)
 
 
 def _write(path: Path, text: str) -> None:
@@ -338,7 +397,7 @@ def _write(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def _run(command: Sequence[str], environ: Mapping[str, str]) -> None:
+def run(command: Sequence[str], environ: Mapping[str, str]) -> None:
     result = subprocess.run(list(command), env=dict(environ), capture_output=True, text=True, check=False)
     if result.returncode != 0:
         lines = [line for line in (result.stderr or result.stdout).strip().splitlines() if line.strip()]

@@ -7,6 +7,7 @@ import datetime
 import json
 import os
 import signal
+import stat
 import subprocess
 import time
 
@@ -39,6 +40,69 @@ class CurateCommandTest(test_runner.RunnerTest):
 
         self.assertEqual(code, cli.EXIT_PROBLEM)
         self.assertIn("lint", out)
+
+    def test_a_run_says_in_a_second_line_how_many_captures_it_filed_and_how_many_wait(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        self.capture()
+        self.model({"m2b:ingest": test_runner.INGEST_FILES_THE_CAPTURE})
+
+        code, out, err = self.run_command("curate", "--force")
+
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertEqual(out.splitlines(), ["the curation run succeeded", "inbox: 1 capture filed, 0 waiting"])
+
+    def test_the_second_line_counts_a_capture_the_run_left_in_the_inbox_as_waiting(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        self.capture()
+        self.capture("20261107T070100Z-cli-c3d4.md")
+        self.model({"m2b:ingest": []})
+
+        _, out, _ = self.run_command("curate", "--force")
+
+        self.assertEqual(out.splitlines()[1], "inbox: 0 captures filed, 2 waiting")
+
+    def test_the_second_line_names_the_review_task_when_a_run_that_ended_well_left_a_finding(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        self.repairable_link()
+        report = "m2b curate report --step lint --kind action --text 'dana.md links two notes'"
+        self.model({"m2b:lint": [{"tool": "Bash", "command": report}]})
+
+        code, out, err = self.run_command("curate", "--force")
+
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertEqual(
+            out.splitlines(),
+            [
+                "the curation run succeeded",
+                "inbox: 0 captures filed, 0 waiting; the review task in your list says what to look at",
+            ],
+        )
+
+    def test_a_failed_run_says_the_second_line_too_and_names_the_review_task_once(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        self.capture()
+        self.repairable_link()
+        self.model({"m2b:ingest": test_runner.INGEST_FILES_THE_CAPTURE, "m2b:lint": []}, outcomes={"m2b:lint": "error"})
+
+        code, out, _ = self.run_command("curate", "--force")
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        first, second = out.splitlines()
+        self.assertTrue(first.endswith("The review task names what to look at."), first)
+        self.assertEqual(second, "inbox: 1 capture filed, 0 waiting")
+
+    def test_an_answer_without_a_run_stays_one_line(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        self.set_store_value("curating_machine", "sb-test-m2")
+
+        _, out, _ = self.run_command("curate", "--force")
+
+        self.assertEqual(len(out.splitlines()), 1, out)
 
     def test_not_the_curating_machine_and_already_running_exit_0(self) -> None:
         """Covers: B62, B63"""
@@ -147,6 +211,58 @@ class DetachTest(test_runner.RunnerTest):
         self.assertEqual(command[-2:], ["curate", "--force"])
         self.assertFalse((self.store_root / RUN_RECORD).exists())
 
+    def start_writing(self, said: bytes) -> tuple[int, str]:
+        """``curate --detach`` with a run that writes ``said`` on its standard error; the exit code and stderr."""
+
+        def fake_start(command: list[str], **options: object) -> object:
+            self.assertEqual(options["stdout"], subprocess.DEVNULL)
+            errors = options["stderr"]
+            assert isinstance(errors, int)
+            os.write(errors, said)
+            return _Started()
+
+        with test_runner.mock.patch("m2b.curate.detach.subprocess.Popen", side_effect=fake_start):
+            code, _, err = self.run_command("curate", "--force", "--detach")
+        return code, err
+
+    def test_what_the_background_run_says_on_standard_error_is_kept_for_the_owner_alone(self) -> None:
+        """Covers: B145"""
+        self.curating()
+
+        code, err = self.start_writing(b"Traceback: the run broke\n")
+
+        self.assertEqual(code, cli.EXIT_OK, err)
+        kept = machine_state.detached_errors(self.machine)
+        self.assertEqual(kept, self.machine.state_dir / "detached-run.err")
+        self.assertEqual(kept.read_bytes(), b"Traceback: the run broke\n")
+        self.assertEqual(stat.S_IMODE(kept.stat().st_mode), 0o600)
+
+    def test_each_start_replaces_what_the_start_before_left(self) -> None:
+        """Covers: B145"""
+        self.curating()
+        self.start_writing(b"the first run said a great deal more than the second\n")
+
+        self.start_writing(b"the second run\n")
+
+        self.assertEqual(machine_state.detached_errors(self.machine).read_bytes(), b"the second run\n")
+
+    def test_a_run_whose_standard_error_cannot_be_kept_starts_all_the_same(self) -> None:
+        """Covers: B145"""
+        self.curating()
+        machine_state.detached_errors(self.machine).mkdir(parents=True)
+        outputs: list[object] = []
+
+        def fake_start(command: list[str], **options: object) -> object:
+            outputs.append(options["stderr"])
+            return _Started()
+
+        with test_runner.mock.patch("m2b.curate.detach.subprocess.Popen", side_effect=fake_start):
+            code, out, err = self.run_command("curate", "--force", "--detach")
+
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertIn("started in the background", out)
+        self.assertEqual(outputs, [subprocess.DEVNULL])
+
     def test_refresh_all_reaches_the_run(self) -> None:
         outcome = runner.RunOutcome(SUCCEEDED, "the curation run succeeded")
         with test_runner.mock.patch("m2b.commands.curate.runner.curate", return_value=outcome) as curate:
@@ -194,6 +310,32 @@ class DetachTest(test_runner.RunnerTest):
         self.assertEqual(code, cli.EXIT_OK)
         self.assertIn("already running", out)
         start.assert_not_called()
+
+    def test_detach_on_a_paused_machine_starts_nothing_unless_forced(self) -> None:
+        """Covers: B161"""
+        self.curating(curation={"paused": True})
+        self.capture()
+
+        with test_runner.mock.patch("m2b.curate.detach.subprocess.Popen", return_value=_Started()) as start:
+            code, out, _ = self.run_command("curate", "--detach")
+            start.assert_not_called()
+            forced_code, forced_out, _ = self.run_command("curate", "--force", "--detach")
+
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertIn("paused", out)
+        self.assertEqual(forced_code, cli.EXIT_OK)
+        self.assertIn("started in the background", forced_out)
+        start.assert_called_once()
+
+    def test_curate_without_force_on_a_paused_machine_says_so_and_exits_0(self) -> None:
+        """Covers: B161"""
+        self.curating(curation={"paused": True})
+        self.capture()
+
+        code, out, err = self.run_command("curate")
+
+        self.assertEqual((code, err), (cli.EXIT_OK, ""))
+        self.assertIn("curation is paused: no curation run starts by itself", out)
 
 
 class TakeOverTest(test_runner.RunnerTest):
@@ -365,6 +507,17 @@ class AddonsCommandTest(test_runner.RunnerTest):
         code, _, err = self.run_command("addons", "list", "--json")
         self.assertEqual(code, cli.EXIT_USAGE)
         self.assertIn("not set up", err)
+
+    def test_the_answer_before_setup_names_the_way_in_with_claude_code_and_the_one_without(self) -> None:
+        """Covers: B164"""
+        code, _, err = self.run_command("status")
+
+        self.assertEqual(code, cli.EXIT_USAGE)
+        self.assertTrue(err.startswith("m2b: not set up: "), err)
+        self.assertEqual(len(err.splitlines()), 1, err)
+        self.assertIn("/m2b:m2b setup", err)
+        self.assertIn("m2b setup apply", err)
+        self.assertIn("docs/getting-started.md", err)
 
     def test_the_old_parts_command_is_a_usage_error(self) -> None:
         self.curating()

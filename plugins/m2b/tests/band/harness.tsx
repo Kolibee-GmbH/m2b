@@ -30,6 +30,18 @@ export type FakeTask = {
   marker: string
 }
 
+/** A proposal from the sessions as `m2b band --json` names it; `answer` once the person kept or dropped it. */
+export type FakeProposal = {
+  id: string
+  kind: string
+  text: string
+  quote: string
+  day: string
+  topic: string | null
+  due: string | null
+  answer?: 'keep' | 'drop'
+}
+
 export const STATUS = {
   inbox: { count: 2, evicted: 0 },
   run: { state: 'succeeded', last_succeeded_at: '2026-03-14T18:02:00+01:00' },
@@ -91,6 +103,14 @@ export class FakeM2b {
   reviewDetails: { changes: unknown[]; copies: unknown[]; paragraphs: string[] } | null = null
   /** Set, a toast is refused, as while the session closes. */
   toastFails = false
+  /** What a reading of the sessions proposed; null as a core that does not know proposals answers. */
+  proposals: FakeProposal[] | null = []
+  /** When set, the proposals part of the band's answer is this error, as with answers that are not downloaded. */
+  proposalsError: string | null = null
+  /** When set, the proposals part is this instead, whatever its shape. */
+  proposalsPart: unknown = undefined
+  /** When set, starting `m2b proposals keep` or `drop` fails with this, before anything is answered. */
+  answerFails: string | null = null
   /** The installed core's version, as `m2b band --json` answers it. */
   version = '0.3.0'
   /** The version in the manifest of the plugin the band was loaded from; null when it cannot be read. */
@@ -118,6 +138,32 @@ export class FakeM2b {
     const notes = ['m2b:review\nCuration run of 2026-03-14 18:02', ...findings].join('\n\n')
     this.tasks.push({ id, title: 'm2b: review', notes, completed: false, dropped: false, marker: 'review' })
     return this
+  }
+
+  proposal(id: string, text: string, quote = text, fields: Partial<FakeProposal> = {}): this {
+    const proposed = { id, kind: 'person', text, quote, day: '2026-03-12', topic: null, due: null, ...fields }
+    this.proposals = [...(this.proposals ?? []), proposed]
+    return this
+  }
+
+  /** As `m2b proposals keep` and `drop`: an unknown id answers nothing, another answer than the one that stands ends with exit 1. */
+  answer(verb: string | undefined, ids: string[]): ProcessRunResult {
+    if (this.answerFails !== null) {
+      return fail(this.answerFails)
+    }
+    const known = this.proposals ?? []
+    const unknown = ids.filter(id => !known.some(proposed => proposed.id === id))
+    if ((verb !== 'keep' && verb !== 'drop') || unknown.length > 0) {
+      return fail(`no proposal has the id ${unknown.join(', ')}; m2b proposals lists those that wait`)
+    }
+    const standing: string[] = []
+    for (const proposed of known.filter(one => ids.includes(one.id))) {
+      if (proposed.answer !== undefined && proposed.answer !== verb) {
+        standing.push(`m2b: ${proposed.id} is answered with ${proposed.answer} already; that answer stands`)
+      }
+      proposed.answer ??= verb
+    }
+    return standing.length === 0 ? ok('') : { ...fail(''), stderr: `${standing.join('\n')}\n` }
   }
 
   handle(argv: readonly string[], stdin?: string): ProcessRunResult {
@@ -160,6 +206,9 @@ export class FakeM2b {
       const result = ok(`${stdout}\n`)
       return this.captureNotice === null ? result : { ...result, stderr: `m2b: ${this.captureNotice}\n` }
     }
+    if (args[0] === 'proposals') {
+      return this.answer(args[1], args.slice(2))
+    }
     if (this.failure !== null) {
       return fail(this.failure)
     }
@@ -185,7 +234,7 @@ export class FakeM2b {
     }
     const open = (marker: string): FakeTask[] => this.tasks.filter(task => task.marker === marker && !task.completed)
     const error = this.isStoreMissing
-      ? 'not set up: no store.json in the store /home/alex/Notes. Run /m2b:m2b setup in Claude Code.'
+      ? 'not set up: no store.json in the store /home/alex/Notes. Run /m2b:m2b setup in Claude Code; without Claude Code, m2b setup apply (https://github.com/Kolibee-GmbH/m2b/blob/main/docs/getting-started.md).'
       : this.failure
     const tasks =
       error === null
@@ -197,7 +246,27 @@ export class FakeM2b {
             ...(this.reviewDetails !== null && open('review').length > 0 ? { review: this.reviewDetails } : {}),
           }
         : { error }
-    return ok(JSON.stringify({ version: this.version, tasks, status: this.status }))
+    const proposals = this.proposalsPart ?? this.waitingProposals()
+    return ok(JSON.stringify({ version: this.version, tasks, ...(proposals === null ? {} : { proposals }), status: this.status }))
+  }
+
+  waitingProposals(): unknown {
+    if (this.proposalsError !== null) {
+      return { error: this.proposalsError }
+    }
+    if (this.proposals === null) {
+      return null
+    }
+    const waiting = this.proposals.filter(proposed => proposed.answer === undefined)
+    return {
+      proposals: waiting.map(({ answer: _, ...fields }) => fields),
+      answered: this.proposals.length - waiting.length,
+    }
+  }
+
+  /** The calls that answered proposals. */
+  answers(): string[][] {
+    return this.calls.filter(call => call[0] === 'proposals')
   }
 
   writes(): string[][] {

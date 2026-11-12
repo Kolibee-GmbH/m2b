@@ -1,5 +1,5 @@
 {
-  "description": "Session start: the distillate with the routing rule and one line per notice, the nudge that starts a due curation run in the background, the launcher check and the worklog's recording switch, which prints nothing while its add-on is off. Before every prompt, the facts of each topic of the distillate the prompt names, once per session, silent on any error. All always exit 0. The band above the prompt and the status line are the mod in register.tsx, which Claude Code loads while mods are on.",
+  "description": "Session start: the distillate with the routing rule and one line per notice, the nudge that starts a due curation run in the background, the launcher check, with it a note of the git remotes of the session's folder on a machine that reads sessions, and the worklog's recording switch, which prints nothing while its add-on is off. Before every prompt, the facts of each topic of the distillate the prompt names, once per session, silent on any error. All always exit 0. The band above the prompt and the status line are the mod in register.tsx, which Claude Code loads while mods are on.",
   "modules": ["./register.tsx"],
   "hooks": {
     "SessionStart": [

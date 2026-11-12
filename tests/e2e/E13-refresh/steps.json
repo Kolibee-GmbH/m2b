@@ -50,7 +50,7 @@
         "curate",
         "--force"
       ],
-      "stdout": "\\Athe curation run succeeded\\n\\Z"
+      "stdout": "\\Athe curation run succeeded\\ninbox: 0 captures filed, 0 waiting\\n\\Z"
     },
     {
       "run": [

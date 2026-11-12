@@ -1,0 +1,142 @@
+{
+  "description": "E23 proposals from sessions (stub level): setup records the yes to reading the sessions; a curation run reads what was typed an hour ago and keeps what the scripted model proposes from it, with the person's words; `m2b proposals` shows the proposal, `m2b band --json` names it for the band, and the task list holds one open task that says it waits; the person keeps it, and the band's answer then counts one answer that waits; the next run writes its capture, the scripted ingest moves it into the archive, no proposal waits any more and the task is completed. What a real model proposes from a day of prompts is measured by `scripts/glean-eval`.",
+  "model": {
+    "text": {
+      "answer": "{\"proposals\": [{\"kind\": \"person\", \"text\": \"Dana is head of IT at Northwind.\", \"quote\": \"Dana runs IT at Northwind\", \"session\": 1, \"topic\": null, \"due\": null}]}"
+    },
+    "skills": {
+      "/m2b:ingest": {
+        "actions": [
+          {
+            "tool": "Bash",
+            "command": "m2b ingest list --json"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest note <capture:proposal> 'filed: nothing, scripted'"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest finish <capture:proposal>"
+          }
+        ]
+      }
+    }
+  },
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "config",
+        "get",
+        "store.path"
+      ],
+      "save": {
+        "store": "\\A(.+)\\n"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "config",
+        "get",
+        "store.backend"
+      ],
+      "save": {
+        "backend": "\\A(.+)\\n"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "setup",
+        "apply",
+        "--json",
+        "--answers",
+        "{\"store\": {\"backend\": \"{backend}\", \"path\": \"{store}\"}, \"calendar\": \"none\", \"curates\": true, \"read_sessions\": true}"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "config",
+        "get",
+        "curation.read_sessions"
+      ],
+      "stdout": "\\Atrue\\n\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "stdout": "\\Athe curation run succeeded\\ninbox: 0 captures filed, 0 waiting\\n\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "tasks",
+        "list",
+        "--marker",
+        "proposals",
+        "--json"
+      ],
+      "stdout": "\\A\\[\\s*\\{[^\\]]*\"title\": \"m2b: proposals from your sessions\"[^\\]]*\"completed\": false[^\\]]*\"marker\": \"proposals\"[^\\]]*\\}\\s*\\]\\n\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "proposals"
+      ],
+      "stdout": "\\A1 proposal waits for an answer:\\n\\n[0-9a-f]{12}  person\\n  Dana is head of IT at Northwind\\.\\n  said on \\d{4}-\\d{2}-\\d{2}: \"Dana runs IT at Northwind\"\\n\\nkeep with: "
+    },
+    {
+      "run": [
+        "m2b",
+        "band",
+        "--json"
+      ],
+      "stdout": "\"proposals\": \\{\\s*\"proposals\": \\[\\s*\\{\\s*\"id\": \"[0-9a-f]{12}\",\\s*\"kind\": \"person\",\\s*\"text\": \"Dana is head of IT at Northwind\\.\",\\s*\"quote\": \"Dana runs IT at Northwind\",\\s*\"day\": \"\\d{4}-\\d{2}-\\d{2}\",\\s*\"topic\": null,\\s*\"due\": null\\s*\\}\\s*\\],\\s*\"answered\": 0\\s*\\}"
+    },
+    {
+      "run": [
+        "m2b",
+        "proposals",
+        "keep",
+        "--all"
+      ],
+      "stdout": "\\Akeep [0-9a-f]{12}: Dana is head of IT at Northwind\\.\\nthe next curation run files what is kept\\n\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "proposals"
+      ],
+      "stdout": "\\Ano proposal waits for an answer\\n1 answer waits for the next curation run\\n\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "band",
+        "--json"
+      ],
+      "stdout": "\"proposals\": \\{\\s*\"proposals\": \\[\\],\\s*\"answered\": 1\\s*\\}"
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "stdout": "\\Athe curation run succeeded\\ninbox: 1 capture filed, 0 waiting\\n\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "proposals"
+      ],
+      "stdout": "\\Ano proposal waits for an answer\\n\\Z"
+    }
+  ]
+}

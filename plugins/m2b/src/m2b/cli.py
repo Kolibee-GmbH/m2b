@@ -14,7 +14,7 @@ import sys
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, TextIO
 
-from m2b import hooks
+from m2b import hooks, launcher
 from m2b.calendar.base import (
     CalendarChoiceError,
     CalendarError,
@@ -34,6 +34,7 @@ from m2b.commands import doctor as doctor_command
 from m2b.commands import ingest as ingest_commands
 from m2b.commands import launcher as launcher_commands
 from m2b.commands import lint as lint_commands
+from m2b.commands import proposals as proposals_commands
 from m2b.commands import rediscover as rediscover_commands
 from m2b.commands import refresh as refresh_commands
 from m2b.commands import search as search_commands
@@ -162,6 +163,20 @@ class _Once(argparse.Action):
         setattr(namespace, self.dest, values)
 
 
+class _Version(argparse.Action):
+    """Prints the version of the plugin this command belongs to; read only when asked for."""
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Any,
+        option_string: str | None = None,
+    ) -> None:
+        print(f"{parser.prog} {launcher.core_version()}")
+        parser.exit()
+
+
 def _command(
     group: Any,
     name: str,
@@ -180,8 +195,21 @@ def _command(
     return command
 
 
+class _GroupHelp:
+    """The handler of a command that only groups actions: named without one, it prints its help."""
+
+    def __init__(self, group: argparse.ArgumentParser) -> None:
+        self._group = group
+
+    def __call__(self, arguments: argparse.Namespace, context: Context) -> int:
+        self._group.print_help()
+        return EXIT_OK
+
+
 def _group(commands: Any, name: str, help_text: str, listed: bool = True) -> Any:
-    return commands.add_parser(name, **_help(help_text, listed)).add_subparsers(dest="action", required=True)
+    group: argparse.ArgumentParser = commands.add_parser(name, **_help(help_text, listed))
+    group.set_defaults(handler=_GroupHelp(group), curator=False)
+    return group.add_subparsers(dest="action")
 
 
 def _help(help_text: str, listed: bool) -> dict[str, str]:
@@ -191,6 +219,7 @@ def _help(help_text: str, listed: bool) -> dict[str, str]:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="m2b")
+    parser.add_argument("--version", action=_Version, nargs=0, help="print the version of m2b and exit")
     commands = parser.add_subparsers(dest="command", required=True)
 
     config = _group(commands, "config", "the machine config")
@@ -246,6 +275,22 @@ def _parser() -> argparse.ArgumentParser:
     again.add_argument("--count", type=int, default=3, help="at most this many notes; 3 without it")
     again.add_argument("--today", help="YYYY-MM-DD: the day that counts as today")
     again.add_argument("--month", help="YYYY-MM or YYYY-MM..YYYY-MM: notes from these months only")
+
+    proposed = _command(
+        commands, "proposals", proposals_commands.proposals_command, "what the sessions proposed, to keep or drop", True
+    )
+    # No answer named: the listing. The answers set no handler of their own, the command reads ``action``.
+    answers = proposed.add_subparsers(dest="action")
+    for answer, help_text in (
+        ("keep", "file these proposals with the next curation run"),
+        ("drop", "forget these proposals"),
+    ):
+        given = answers.add_parser(answer, help=help_text)
+        given.add_argument("ids", nargs="*", metavar="id")
+        given.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+        given.set_defaults(all=False)
+        if answer == "keep":
+            given.add_argument("--all", action="store_true", help="every proposal that waits for an answer")
 
     refresh_group = _group(commands, "refresh", "memory lines past their day or gone quiet")
     refresh_due = _command(refresh_group, "due", refresh_commands.refresh_due, "what is due, for the refresh", True)
@@ -361,7 +406,7 @@ def _parser() -> argparse.ArgumentParser:
         commands,
         "harvest",
         candidate_commands.harvest_command,
-        "ticked candidates into the inbox",
+        "ticked candidates and kept proposals into the inbox",
         True,
         curator=True,
         listed=False,
@@ -400,7 +445,7 @@ def _parser() -> argparse.ArgumentParser:
     band_command = _command(
         commands, "band", band_commands.band_command, "what the band above the prompt shows, as JSON", json_flag=True
     )
-    band_command.add_argument("--tasks-only", action="store_true", help="only the curator tasks, without the status")
+    band_command.add_argument("--tasks-only", action="store_true", help="only the curator tasks, nothing else")
 
     launcher = _group(commands, "launcher", "the launcher in ~/.local/bin")
     _command(launcher, "install", launcher_commands.launcher_install, "write or refresh the launcher")
@@ -410,8 +455,35 @@ def _parser() -> argparse.ArgumentParser:
 
     hook = commands.add_parser("hook", description="run a session hook; always exits 0")
     hook.add_argument("name")
-    commands.metavar = "{" + ",".join(action.dest for action in commands._choices_actions) + "}"
+    commands.metavar = "{" + ",".join(_listed(commands)) + "}"
     return parser
+
+
+def command_paths() -> list[str]:
+    """Every command ``--help`` lists, as its words after ``m2b``: ``capture``, ``tasks list``.
+
+    A command that only groups actions is named by its actions alone; one that also runs without
+    an action (``curate``, ``proposals``) is named both ways. The page of commands is held to this.
+    """
+    paths: list[str] = []
+    commands = _actions_of(_parser())
+    for name in _listed(commands):
+        command: argparse.ArgumentParser = commands.choices[name]
+        if not isinstance(command.get_default("handler"), _GroupHelp):
+            paths.append(name)
+        actions = _actions_of(command)
+        if actions is not None:
+            paths.extend(f"{name} {action}" for action in _listed(actions))
+    return paths
+
+
+def _actions_of(parser: argparse.ArgumentParser) -> Any:
+    return next((action for action in parser._actions if isinstance(action, argparse._SubParsersAction)), None)
+
+
+def _listed(subcommands: Any) -> list[str]:
+    """The subcommands given ``help``, which are the ones ``--help`` shows."""
+    return [action.dest for action in subcommands._choices_actions]
 
 
 if __name__ == "__main__":

@@ -1,8 +1,9 @@
 """The ``icloud`` backend: a folder in iCloud Drive, on macOS 14 or newer.
 
 iCloud names a conflict copy ``<stem> <n>.<ext>`` next to the original, for any n of 2 or more.
-The pattern also matches files a user named that way (``plan 2026.md``), so a copy only counts
-as removable when its bytes equal the original's. Before macOS 14, iCloud kept evicted files as
+The pattern also matches files a user named that way (``plan 2026.md``), so the name is only a
+candidate: ``Store.conflict_copies`` counts it next to its original and lets it be removed only
+when its bytes equal the original's. Before macOS 14, iCloud kept evicted files as
 hidden ``.<name>.icloud`` stubs, which the guard cannot see: the backend refuses an older macOS
 and a store whose top folders hold such stubs; ``old_stub_files`` searches the whole store, for
 setup and doctor, where that walk costs once.
@@ -19,7 +20,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from m2b.store.base import ConflictCopy, FetchError, Store, StoreReadError, UnsupportedStoreError
+from m2b.store.base import FetchError, Store, StoreReadError, UnsupportedStoreError
 from m2b.store.guard import DatalessGuard
 
 _CONFLICT_NAME = re.compile(r"(?P<stem>.+) (?:[2-9]|[1-9][0-9]+)\.(?P<extension>[^.]+)\Z")
@@ -52,28 +53,11 @@ class ICloudStore(Store):
         except (OSError, subprocess.TimeoutExpired) as error:
             raise FetchError(f"iCloud did not start downloading {relative}: {error}") from error
 
-    def conflict_copies(self, folder: str = "") -> list[ConflictCopy]:
-        copies = []
-        # scan, not a recursive listing: an evicted folder is skipped instead of failing the whole walk,
-        # while an evicted file stays a copy, so callers keep leaving it alone.
-        scan = self.scan(folder)
-        evicted_files = [relative for relative in scan.evicted if not self.path(relative).is_dir()]
-        for relative in sorted([*scan.files, *evicted_files]):
-            parent, _, name = relative.rpartition("/")
-            match = _CONFLICT_NAME.match(name)
-            if match is None:
-                continue
-            original_name = f"{match.group('stem')}.{match.group('extension')}"
-            original = f"{parent}/{original_name}" if parent else original_name
-            if self.exists(original):
-                copies.append(ConflictCopy(relative, original, self._same_bytes(relative, original)))
-        return copies
-
-    def _same_bytes(self, first: str, second: str) -> bool | None:
-        """None when either file is evicted: comparing would mean downloading."""
-        if self.is_evicted(first) or self.is_evicted(second):
+    def _original_name(self, name: str) -> str | None:
+        match = _CONFLICT_NAME.match(name)
+        if match is None:
             return None
-        return self.read_bytes(first) == self.read_bytes(second)
+        return f"{match.group('stem')}.{match.group('extension')}"
 
     def _refuse_old_stub_files_at_the_top(self) -> None:
         """Looks into the root and its direct subfolders; an evicted subfolder is left alone."""

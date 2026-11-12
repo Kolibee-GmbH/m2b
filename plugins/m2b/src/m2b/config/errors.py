@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 SETUP_COMMAND = "/m2b:m2b setup"
+# The way in for whoever runs m2b from a checkout, without Claude Code.
+SETUP_WITHOUT_CLAUDE_CODE = "m2b setup apply"
+GETTING_STARTED_PAGE = "https://github.com/Kolibee-GmbH/m2b/blob/main/docs/getting-started.md"
 
 
 class ConfigError(Exception):
@@ -13,7 +16,10 @@ class NotSetUpError(ConfigError):
     """Something setup writes does not exist yet."""
 
     def __init__(self, what: str) -> None:
-        super().__init__(f"not set up: {what}. Run {SETUP_COMMAND} in Claude Code.")
+        super().__init__(
+            f"not set up: {what}. Run {SETUP_COMMAND} in Claude Code; "
+            f"without Claude Code, {SETUP_WITHOUT_CLAUDE_CODE} ({GETTING_STARTED_PAGE})."
+        )
 
 
 class InvalidConfigError(ConfigError):

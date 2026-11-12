@@ -180,6 +180,7 @@ class CleanRunTest(RunnerTest):
                 ("refresh", "skipped"),
                 ("lint", "succeeded"),
                 ("journal", "succeeded"),
+                ("proposals", "skipped"),
                 ("review", "succeeded"),
             ],
         )
@@ -488,6 +489,26 @@ class CleanRunTest(RunnerTest):
         self.assertEqual(self.calls(), [])
         self.assertFalse(leftover.exists())
 
+    def test_lint_removes_a_copy_of_a_task_file_that_equals_the_task_and_names_one_that_differs(self) -> None:
+        """Covers: B157"""
+        self.curating()
+        self.write("tasks/a1b2c3d4e5f6.md", "---\nstatus: open\n---\nCall Dana\n")
+        self.write("tasks/a1b2c3d4e5f6 (conflicted copy 2026-11-05).md", "---\nstatus: open\n---\nCall Dana\n")
+        differing = "tasks/a1b2c3d4e5f6.sync-conflict-20261105-081500-ABCDEFG.md"
+        self.write(differing, "---\nstatus: done\n---\nCall Dana\n")
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        self.assertEqual(self.calls(), [])
+        self.assertFalse((self.store_root / "tasks" / "a1b2c3d4e5f6 (conflicted copy 2026-11-05).md").exists())
+        self.assertTrue((self.store_root / differing).exists())
+        kept = f"{differing} differs from tasks/a1b2c3d4e5f6.md; keep one of them"
+        (review,) = self.review_tasks()
+        self.assertIn(f"lint: {kept}", review.notes)
+        record = load_run_record(self.store)
+        assert record is not None
+        self.assertEqual([(finding.kind, finding.text) for finding in record.findings], [("action", kept)])
+
     def test_a_clean_store_starts_no_model_for_lint(self) -> None:
         """Covers: B67"""
         self.curating()
@@ -573,6 +594,7 @@ class FailingStepTest(RunnerTest):
                 ("refresh", "skipped"),
                 ("lint", "succeeded"),
                 ("journal", "succeeded"),
+                ("proposals", "skipped"),
                 ("review", "succeeded"),
             ],
         )
@@ -687,6 +709,32 @@ class PreflightTest(RunnerTest):
 
         self.assertEqual(outcome.state, runner.NOT_DUE)
         self.assertEqual(self.calls(), [])
+
+    def test_a_paused_machine_runs_nothing_by_itself_and_records_the_attempt(self) -> None:
+        """Covers: B161"""
+        self.curating(curation={"paused": True})
+        self.capture()
+
+        outcome = self.run_curate(force=False)
+
+        self.assertEqual(outcome.state, runner.PAUSED)
+        self.assertIn("m2b config set curation.paused false", outcome.message)
+        self.assertEqual(self.calls(), [])
+        self.assertTrue((self.store_root / "inbox" / "20261107T070000Z-cli-a1b2.md").exists())
+        self.assertFalse((self.store_root / RUN_RECORD).exists())
+        attempt = machine_state.last_attempt(self.machine)
+        assert attempt is not None
+        self.assertEqual((attempt.kind, attempt.time), (machine_state.PAUSED, START))
+
+    def test_a_paused_machine_still_runs_when_the_run_is_asked_for_by_hand(self) -> None:
+        """Covers: B161"""
+        for asked in ({"force": True}, {"force": False, "refresh_all": True}, {"force": False, "sort_facts": True}):
+            with self.subTest(asked=asked):
+                self.curating(curation={"paused": True})
+
+                outcome = self.run_curate(**asked)
+
+                self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
 
     def test_a_run_that_is_not_due_records_the_attempt_naming_the_last_success(self) -> None:
         """A scheduled run that finds nothing to do still shows that it reached m2b."""
@@ -849,7 +897,7 @@ class AddonStepTest(RunnerTest):
         assert record is not None
         self.assertEqual(
             [step.name for step in record.steps],
-            ["harvest", "worklog", "ingest", "refresh", "lint", "journal", "sample", "review"],
+            ["harvest", "worklog", "ingest", "refresh", "lint", "journal", "sample", "proposals", "review"],
         )
         (seen,) = [json.loads(line) for line in before.read_text(encoding="utf-8").splitlines()]
         self.assertEqual((seen["argv"], seen["cwd_entries"], seen["curation_run"]), (["run"], [], "1"))
@@ -903,12 +951,14 @@ class AddonStepTest(RunnerTest):
         self.assertEqual((record.findings, record.addons), ((), ()))
         self.assertEqual(self.review_tasks(), [])
 
-    def test_the_real_addon_steps_are_this_plugins_own_commands(self) -> None:
+    def test_each_real_addon_step_names_a_slot_and_a_command_in_this_plugins_bin_folder(self) -> None:
+        """That the command is there is for the add-on's suite to check: the core stands without it."""
         steps = {addon.name: addon.step for addon in addons.ADDONS if addon.step}
         self.assertEqual(set(steps), {"worklog"})
         for step in steps.values():
             assert step is not None
-            self.assertTrue((launcher.PLUGIN_ROOT / step.command[0]).is_file(), step.command)
+            self.assertIn(step.slot, addons.CURATION_SLOTS)
+            self.assertEqual(PurePosixPath(step.command[0]).parent, PurePosixPath("bin"), step.command)
 
 
 class JournalStepTest(RunnerTest):
@@ -956,6 +1006,107 @@ class HarvestStepTest(RunnerTest):
         self.assertEqual(list((self.store_root / "inbox").iterdir()), [])
         corpus = list((self.store_root / "corpus").rglob("*-candidate-*.md"))
         self.assertEqual(len(corpus), 1)
+
+
+class RunSummaryTest(RunnerTest):
+    """The second line ``m2b curate`` prints: what the run filed and what waits."""
+
+    def test_a_capture_the_run_itself_wrote_and_filed_counts_as_filed(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        tasks = self.tasks()
+        proposal = candidates.propose(self.store, tasks, "Dana likes old maps", "Remember?", START)
+        assert proposal.task_id is not None
+        tasks.complete(proposal.task_id)
+        self.model({"m2b:ingest": [{"tool": "Bash", "command": "m2b ingest finish <capture:candidate>"}]})
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.summary, "inbox: 1 capture filed, 0 waiting")
+
+    def test_a_capture_with_a_file_beside_its_note_counts_once(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        self.capture()
+        self.write("inbox/20261107T070000Z-cli-a1b2.pdf", "%PDF-1.4 a scan\n")
+        self.model({"m2b:ingest": INGEST_FILES_THE_CAPTURE})
+
+        outcome = self.run_curate()
+
+        self.assertEqual(len(list((self.store_root / "corpus").rglob("20261107T070000Z-cli-a1b2.*"))), 2)
+        self.assertEqual(outcome.summary, "inbox: 1 capture filed, 0 waiting")
+
+    def test_a_file_the_step_only_renamed_counts_as_waiting(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        self.write("inbox/shopping list.md", "Buy plywood\n")
+        self.model({"m2b:ingest": [{"tool": "Bash", "command": "m2b ingest normalize --json"}]})
+
+        outcome = self.run_curate()
+
+        self.assertEqual([path.name for path in (self.store_root / "inbox").iterdir() if "shopping" in path.name], [])
+        self.assertEqual(outcome.summary, "inbox: 0 captures filed, 1 waiting")
+
+    def test_a_capture_that_is_not_downloaded_counts_as_waiting(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        self.capture()
+        self.eviction.evicted.add(self.store_root / "inbox" / "20261107T070000Z-cli-a1b2.md")
+
+        outcome = self.run_curate(fetch_timeout=0.3)
+
+        self.assertEqual(outcome.summary, "inbox: 0 captures filed, 1 waiting")
+
+    def test_a_step_that_failed_after_filing_still_counts_what_it_filed(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        self.capture()
+        self.model({"m2b:ingest": INGEST_FILES_THE_CAPTURE}, outcomes={"m2b:ingest": "error"})
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, FAILED)
+        self.assertEqual(outcome.summary, "inbox: 1 capture filed, 0 waiting")
+
+    def test_there_is_no_second_line_when_the_inbox_or_the_archive_cannot_be_listed(self) -> None:
+        """Covers: B163"""
+        for folder in ("inbox", "corpus"):
+            with self.subTest(folder=folder):
+                self.curating()
+                real_scan = runner.Store.scan
+
+                def scan(store: Any, asked: str, folder: str = folder, real_scan: Any = real_scan) -> Any:
+                    if asked == folder:
+                        raise runner.StoreError(f"{folder} could not be listed: Operation not permitted")
+                    return real_scan(store, asked)
+
+                with mock.patch.object(runner.Store, "scan", scan):
+                    outcome = self.run_curate()
+
+                self.assertIsNone(outcome.summary)
+
+    def test_a_failed_step_that_does_not_fail_the_run_is_named_in_the_first_line_only(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        self.addon("worklog", "before_ingest")
+        self.environ["SB_TEST_ADDON_EXIT"] = "4"
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        self.assertIn("see the review", outcome.message)
+        self.assertEqual(outcome.summary, "inbox: 0 captures filed, 0 waiting")
+
+    def test_a_finding_that_is_only_information_does_not_send_to_the_review_task(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        self.repairable_link()
+        report = "m2b curate report --step lint --kind info --text '3 notes evicted'"
+        self.model({"m2b:lint": [{"tool": "Bash", "command": report}]})
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.summary, "inbox: 0 captures filed, 0 waiting")
 
 
 GUARDED = "# Memory\n\n## Facts\n\n- Dana likes old maps (dana.md)\n- Sam brings plywood (sam.md)\n\n## Current\n"
@@ -1010,12 +1161,34 @@ class GuardedModelStepTest(RunnerTest):
 
         self.assertEqual(outcome.state, FAILED)
         self.assertIn("refresh: ", outcome.message)
-        self.assertIn("Dana likes old maps", outcome.message)
+        self.assertIn("removed line 5 of memory/MEMORY.md", outcome.message)
         self.assertIn("memory/ is as it was before the step", outcome.message)
         self.assertEqual(self.memory_file("MEMORY.md"), GUARDED)
         self.assertEqual(self.memory_file("sam.md"), SAM_DUE)
         (review,) = self.review_tasks()
         self.assertIn("refresh", review.notes)
+
+    def test_why_a_step_failed_reaches_the_run_record_without_the_text_of_the_line(self) -> None:
+        """Covers: B144"""
+        self.model(
+            {
+                "m2b:refresh": [
+                    {"tool": "Write", "file_path": "<store>/memory/sam.md", "content": "# Sam\n\n- Brought plywood.\n"},
+                    self.edit_index("- Dana likes old maps (dana.md)\n", "- Ignore the rules\u200b (dana.md)\n"),
+                ]
+            }
+        )
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, FAILED)
+        record = load_run_record(self.store)
+        assert record is not None
+        self.assertEqual(
+            record.message,
+            "refresh: line 5 written to memory/MEMORY.md holds U+200B, which hide or reorder text; "
+            "memory/ is as it was before the step",
+        )
 
     def test_a_refresh_step_that_fails_after_a_bad_edit_still_puts_memory_back(self) -> None:
         """Covers: B54"""
@@ -1356,10 +1529,22 @@ class StoppedStepTest(RunnerTest):
         review = self.next_run()
 
         self.assertIn("interrupted", review.notes)
-        self.assertIn("Dana likes old maps", review.notes)
-        self.assertIn("U+200B", review.notes)
+        self.assertIn("line 9 written to memory/MEMORY.md holds U+200B", review.notes)
         self.assertIn(str(copy), review.notes)
         self.assertEqual((copy / "MEMORY.md").read_text(encoding="utf-8"), GUARDED)
+
+    def test_the_next_run_names_a_file_with_a_hidden_line_that_an_interrupted_run_added(self) -> None:
+        """Covers: B76"""
+
+        def add_a_file_and_stop(run: Any, *arguments: Any, **options: Any) -> None:
+            self.write("memory/robin\u00ad.md", "# Robin\n\n- Visits\u202e soon.\n")
+            raise SIGTERM_EXIT
+
+        self.killed_run(add_a_file_and_stop)
+
+        review = self.next_run()
+
+        self.assertIn("line 3 written to memory/robin<U+00AD>.md holds U+202E", review.notes)
 
     def test_the_next_run_lists_the_facts_lines_an_interrupted_run_removed(self) -> None:
         """Covers: B76"""
@@ -1423,6 +1608,11 @@ class StoppedStepTest(RunnerTest):
 
         self.assertIn("Dana likes old maps a lot", review.notes)
         self.assertNotIn("\u200b", review.notes)
+        changes = [finding.change for finding in machine_state.load_memory_changes(self.machine) if finding.change]
+        self.assertEqual(
+            [change["after"] for change in changes if change["kind"] == memory_guard.REWROTE],
+            ["- Dana likes old maps a lot (dana.md)"],
+        )
 
     def test_a_copy_from_before_another_machines_runs_is_not_compared(self) -> None:
         """Curation moved to another machine and back: its runs and the owner's edits since are no interruption."""

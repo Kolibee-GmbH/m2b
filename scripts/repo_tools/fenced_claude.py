@@ -4,6 +4,9 @@ From an empty working folder, with ``--setting-sources project`` (so the user's 
 permission rules and plugins stay out), one ``--plugin-dir`` for the core, and
 ``--permission-mode dontAsk`` (so nothing runs that is not pre-approved). The output is read as
 ``stream-json`` line by line, so a caller can stop the run as soon as it has seen what it needs.
+
+A check that asks the model to read a text and answer, with nothing to call, uses the core's own
+run for that, ``m2b.curate.model.text_command`` and ``run_text``.
 """
 
 from __future__ import annotations

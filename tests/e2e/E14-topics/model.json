@@ -1,0 +1,125 @@
+{
+  "description": "E14 at the model level: a real ingest step files three captures into a distillate that already has a topic under `## Current`. One is a fact about a customer's person, one is work going on for that customer, one is something going on in the owner's own life. The fact starts the customer's topic under `## Facts`; the work becomes a current item under the same heading in `## Current`, dated; the owner's own item goes above the first topic there. The lines that were there stay where they were. The session start then shows the owner's own item and not the customer's, and a prompt that names the customer brings the work in below the customer's facts. The captures are two seconds apart, so that a model does not mix up files named for the same second. Run it after a change to the ingest skill: where a line goes is the model's filing, not m2b's code.",
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "Kim Lee is the IT lead at Acme Ltd and wants a status mail every Friday."
+      ]
+    },
+    {
+      "run": [
+        "sleep",
+        "2"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "--source",
+        "claude",
+        "I have started building the data export for Acme Ltd."
+      ]
+    },
+    {
+      "run": [
+        "sleep",
+        "2"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "--source",
+        "phone",
+        "I have started planning a hiking week in Norway for next summer."
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "hook",
+        "distillate"
+      ],
+      "stdout": "\\A(?![\\s\\S]*(?i:export))[\\s\\S]*Norway[\\s\\S]*m2b topics [^\\n]*Acme"
+    },
+    {
+      "run": [
+        "m2b-prompt-hook"
+      ],
+      "stdin": "{\"session_id\": \"e2e-session\", \"prompt\": \"Write the Friday mail to Kim Lee at Acme Ltd\"}",
+      "stdout": "### Acme[^\"]*Kim Lee[^\"]*\\\\n#### Current\\\\n- [^\"]*(?i:export)"
+    }
+  ],
+  "invariants": [
+    {
+      "run_state": "succeeded"
+    },
+    {
+      "no_denials": true
+    },
+    {
+      "count": 0,
+      "glob": "inbox/*"
+    },
+    {
+      "matches": "(?s)## Facts(?:(?!\\n## ).)*\\n### Acme[^\\n]*\\([^\\n]+\\)\\n(?:- [^\\n]*\\n)*?- [^\\n]*Kim Lee[^\\n]*\\([a-z0-9-]+\\.md\\)\\n",
+      "path": "memory/MEMORY.md"
+    },
+    {
+      "matches": "(?s)## Current(?:(?!\\n### ).)*\\n- [^\\n]*Norway[^\\n]*\\(since \\d{4}-\\d{2}-\\d{2}\\)\\n",
+      "path": "memory/MEMORY.md"
+    },
+    {
+      "matches": "(?s)## Current\\n.*\\n### Acme[^\\n]*\\([^\\n]+\\)\\n(?:- [^\\n]*\\n)*?- [^\\n]*(?i:export)[^\\n]*\\(since \\d{4}-\\d{2}-\\d{2}\\)(\\n|\\Z)",
+      "path": "memory/MEMORY.md"
+    },
+    {
+      "matches": "(?s)(\\n### Acme[^\\n]*\\n).*\\n## Current\\n.*\\1",
+      "path": "memory/MEMORY.md"
+    },
+    {
+      "matches": "(?s)## Current(?:(?!\\n### ).)*\\n- Planning the trip to Porto\\n",
+      "path": "memory/MEMORY.md"
+    },
+    {
+      "matches": "(?s)## Current\\n.*\\n### Riverside Choir \\(Riverside Choir, Petra Lang\\)\\n- Rehearsing for the spring concert(\\n|\\Z)",
+      "path": "memory/MEMORY.md"
+    },
+    {
+      "matches": "(?s)## Facts(?:(?!\\n### ).)*\\n- Alex prefers green tea in the morning \\(alex\\.md\\)\\n",
+      "path": "memory/MEMORY.md"
+    },
+    {
+      "once": "(?im)^- [^\\n]*export",
+      "glob": "memory/MEMORY.md"
+    },
+    {
+      "once": "(?m)^- [^\\n]*Norway",
+      "glob": "memory/MEMORY.md"
+    },
+    {
+      "once": "(?m)^### Riverside Choir",
+      "glob": "memory/MEMORY.md"
+    },
+    {
+      "once": "(?m)^## Current$",
+      "glob": "memory/MEMORY.md"
+    },
+    {
+      "count": 3,
+      "glob": "corpus/*/*/*.md",
+      "content": "(?s)source: (cli|claude|phone)\\n.*(Kim Lee|Acme|Norway).*<!-- m2b:curation -->"
+    }
+  ]
+}

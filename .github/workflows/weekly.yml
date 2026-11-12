@@ -1,0 +1,155 @@
+name: weekly
+
+# Once a week, and on demand, with the newest Claude Code. m2b hangs on Claude Code's plugin
+# interface: the hooks, the skills, the test kit of the mod, and the headless run that a curation
+# step is. ci.yml holds the oldest version m2b supports; this run meets the next one before a user
+# does. GitHub starts a scheduled run from the default branch only, and stops scheduling in a
+# public repository after sixty days without activity until someone turns the workflow on again.
+on:
+  schedule:
+    # Mondays at 05:17 UTC, off the full hour, when scheduled runs start late.
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      scenarios:
+        description: Model-level scenarios to run, separated by spaces (empty runs all of them)
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        # The same two jobs as in ci.yml, which says why.
+        include:
+          - os: macos-latest
+            python: "3.x"
+          - os: ubuntu-24.04
+            python: "3.9"
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    outputs:
+      claude-code: ${{ steps.claude-code.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: npm install --global "@anthropic-ai/claude-code@latest"
+      - id: claude-code
+        run: echo "version=$(claude --version)" >> "$GITHUB_OUTPUT"
+      - run: scripts/check
+
+  # The model-level scenarios and the fence probe need a model, and a model needs an account: an
+  # API key, billed per run, or the token `claude setup-token` gives for a subscription. A
+  # repository without either says so and passes, so a fork's weekly run is not red for a secret
+  # it cannot have.
+  access:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      granted: ${{ steps.look.outputs.granted }}
+    steps:
+      - id: look
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            echo "granted=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "granted=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Model scenarios skipped::This repository has neither the secret ANTHROPIC_API_KEY nor CLAUDE_CODE_OAUTH_TOKEN, so the model-level scenarios and the fence probe did not run."
+          fi
+
+  model-scenarios:
+    needs: access
+    if: needs.access.outputs.granted == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.9"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: npm install --global "@anthropic-ai/claude-code@latest"
+      - run: claude --version
+      # The account reaches this one step only. The names arrive through the environment, never
+      # pasted into the command.
+      - env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          SCENARIOS: ${{ inputs.scenarios }}
+        run: |
+          # Unquoted, so that each name is its own argument.
+          # shellcheck disable=SC2086
+          scripts/e2e --level model $SCENARIOS
+
+  # Whether the newest Claude Code still keeps a curation step inside its fence: two runs of a
+  # model through the core's own start, one of them without the two switches of the fence. A job
+  # of its own, so that the report names it apart from the scenarios.
+  fence:
+    needs: access
+    if: needs.access.outputs.granted == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.9"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: npm install --global "@anthropic-ai/claude-code@latest"
+      - run: claude --version
+      # As above: the account reaches this one step only.
+      - env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: scripts/fence-probe
+
+  # GitHub mails a failed scheduled run to one person, whoever changed the schedule last. An issue
+  # reaches everyone who watches the repository, and a week that fails again adds a comment to it
+  # and opens no second one. A run started by hand reports to the person who started it.
+  report:
+    needs: [check, model-scenarios, fence]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CLAUDE_CODE: ${{ needs.check.outputs.claude-code }}
+          CHECK: ${{ needs.check.result }}
+          MODEL_SCENARIOS: ${{ needs.model-scenarios.result }}
+          FENCE: ${{ needs.fence.result }}
+        run: |
+          title="The weekly run with the newest Claude Code failed"
+          body="The weekly run failed with Claude Code ${CLAUDE_CODE:-(version unknown)}: $RUN_URL
+
+          - scripts/check: $CHECK
+          - the model-level scenarios: $MODEL_SCENARIOS
+          - the fence probe: $FENCE
+
+          A model words its answers anew each time, so a failed model-level scenario is not always a change in Claude Code. Re-run the failed job before reading it as one. The fence probe's log ends with its verdict: unproven can be the model too, broken is read from what a run did."
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi

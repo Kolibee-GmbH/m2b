@@ -1,8 +1,8 @@
 """What the worklog asks of the core, always through its launcher, as an integration
 would: an add-on talks to the core only through ``m2b`` and the store format.
 
-The store's folder and the profile, the fenced model step, and a memory candidate. ``Core`` is
-what the daily worklog needs; ``LauncherCore`` is the real one, tests hand in their own.
+The store's folder and the profile, and the fenced model step. ``Core`` is what the daily worklog
+needs; ``LauncherCore`` is the real one, tests hand in their own.
 """
 
 from __future__ import annotations
@@ -54,8 +54,6 @@ class Core(Protocol):
 
     def model(self, skill: str, allow: Sequence[str]) -> None: ...
 
-    def propose(self, text: str) -> None: ...
-
 
 class LauncherCore:
     def __init__(self, paths: WorklogPaths, environ: Mapping[str, str], run: Runner = subprocess.run) -> None:
@@ -74,10 +72,6 @@ class LauncherCore:
         for rule in allow:
             arguments += ["--allow", rule]
         self._call(arguments, MODEL_TIMEOUT_SECONDS)
-
-    def propose(self, text: str) -> None:
-        """A candidate; the core refuses one it holds open or saw dropped lately, with exit 0 (B35)."""
-        self._call(["tasks", "add", "--candidate", "--", text], CORE_TIMEOUT_SECONDS)
 
     def _call(self, arguments: list[str], timeout: float) -> None:
         try:

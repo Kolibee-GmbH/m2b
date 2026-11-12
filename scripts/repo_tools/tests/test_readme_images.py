@@ -53,7 +53,7 @@ class BuildDemoTest(unittest.TestCase):
         self.assertIn("Spare shed key", (store / "memory" / "MEMORY.md").read_text(encoding="utf-8"))
         tasks = [path.read_text(encoding="utf-8") for path in (store / "tasks").glob("*.md")]
         self.assertEqual(len(tasks), 4)
-        # The band shows a core question, never a worklog candidate, which only the worklog add-on proposes.
+        # The band shows a question of the curation run, never a candidate: only `m2b tasks add --candidate` makes one.
         self.assertEqual([task for task in tasks if "m2b:candidate" in task], [])
         (question,) = [task for task in tasks if "m2b:current" in task]
         self.assertIn("Still current? Planning the trip to Porto in spring", question)
@@ -72,6 +72,36 @@ class RecordTest(unittest.TestCase):
 
         self.assertIn(b"ready", drawn)
         self.assertIn(b"got yes", drawn)
+
+    def test_a_wait_ends_as_soon_as_what_it_waits_for_is_drawn_and_every_chunk_has_its_time(self) -> None:
+        command = ["sh", "-c", "printf 'one\\n'; read answer; printf 'two\\n'; sleep 5"]
+        waits = [readme_images.Wait(30, "go\r", until=b"one"), readme_images.Wait(30, until=b"two")]
+
+        recording = readme_images.record_timed(command, Path("/"), {"PATH": "/usr/bin:/bin"}, 10, 40, waits)
+
+        self.assertIn(b"two", b"".join(drawn for _, drawn in recording.chunks))
+        self.assertEqual(len(recording.typed_at), 2)
+        self.assertLess(recording.typed_at[1], 10)
+        times = [at for at, _ in recording.chunks]
+        self.assertEqual(times, sorted(times))
+        self.assertLessEqual(times[-1], recording.typed_at[1])
+
+    def test_a_wait_finds_a_prompt_behind_the_escape_sequence_a_shell_draws_before_it(self) -> None:
+        command = ["sh", "-c", "printf 'done\\n\\033[?2004h$ '; sleep 5"]
+
+        recording = readme_images.record_timed(
+            command, Path("/"), {"PATH": "/usr/bin:/bin"}, 10, 40, [readme_images.Wait(3, until=b"\n$ ")]
+        )
+
+        self.assertEqual(len(recording.typed_at), 1)
+
+    def test_a_wait_that_never_sees_what_it_waits_for_fails(self) -> None:
+        command = ["sh", "-c", "printf 'one\\n'; sleep 5"]
+
+        with self.assertRaisesRegex(readme_images.ImagesError, "did not draw b'two' within 0.5 seconds"):
+            readme_images.record_timed(
+                command, Path("/"), {"PATH": "/usr/bin:/bin"}, 10, 40, [readme_images.Wait(0.5, until=b"two")]
+            )
 
     def test_a_shot_trusts_the_folder_then_asks_its_prompt(self) -> None:
         shot = readme_images.Shot("todos", 40, 40, "what's on my list?", False)
@@ -93,6 +123,7 @@ class ToolsTest(unittest.TestCase):
         found = {"claude": "/bin/claude", "node": "/bin/node", "npm": "/bin/npm", "git": "/bin/git"}
 
         self.assertEqual(readme_images.missing_tools(found.get), ["magick"])
+        self.assertEqual(readme_images.missing_tools(found.get, ("claude", "agg")), ["agg"])
 
 
 if __name__ == "__main__":

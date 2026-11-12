@@ -81,6 +81,9 @@ class Answers:
     create_store: bool = False
     # Only when the owner chose one; without it the recorded model, or the default, stays.
     curation_model: str | None = None
+    # The owner's yes or no to curation runs that read what they typed in Claude Code. Without the
+    # answer the recorded one stays, and a machine never asked reads nothing.
+    read_sessions: bool | None = None
 
 
 @dataclass
@@ -125,6 +128,11 @@ def parse_answers(raw: object, home: Path) -> Answers:
     curation_model = raw.get("curation_model")
     if curation_model is not None and curation_model not in CURATION_MODELS:
         raise SetupError(f"curation_model must be one of {', '.join(CURATION_MODELS)}")
+    read_sessions = raw.get("read_sessions")
+    if read_sessions is not None and not isinstance(read_sessions, bool):
+        raise SetupError(
+            "read_sessions must be true or false: may the curation runs of this machine read what was typed?"
+        )
     executables = raw.get("executables") or {}
     if not isinstance(executables, dict) or not all(isinstance(value, str) for value in executables.values()):
         raise SetupError("executables must map names to absolute paths")
@@ -139,6 +147,7 @@ def parse_answers(raw: object, home: Path) -> Answers:
         executables=executables,
         create_store=create,
         curation_model=curation_model,
+        read_sessions=read_sessions,
     )
 
 
@@ -303,8 +312,10 @@ def _machine_config(
         elif name not in executables:
             result.missing_executables.append(name)
     raw["executables"] = executables
-    if answers.curation_model is not None:
-        raw["curation"] = {**(raw.get("curation") or {}), "model": answers.curation_model}
+    answered = {"model": answers.curation_model, "read_sessions": answers.read_sessions}
+    chosen = {key: value for key, value in answered.items() if value is not None}
+    if chosen:
+        raw["curation"] = {**(raw.get("curation") or {}), **chosen}
     return raw
 
 

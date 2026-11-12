@@ -17,6 +17,10 @@ differ, each copy of ``memory/`` from before a run, and the review's paragraphs 
 so the band can draw them readably and leave the rest of the review as written. Only changes whose
 paragraph the open review still holds are named: the changes are this machine's, the review is
 shared, and another machine's run may have rewritten it.
+``proposals`` is the answer of ``proposals --json``: what a reading of the sessions proposed and
+still waits for keep or drop, with the fields the band draws, and how many answers wait for the
+next run. A store where that cannot be looked at is named in ``proposals.error``, like the task
+list in its part, and the other parts still answer: could not look is never an empty list.
 ``version`` is this core's: the launcher always runs the installed one, while a session keeps the
 band it loaded, so the band compares the two and asks for a reload when they differ.
 """
@@ -31,9 +35,10 @@ import re
 from typing import Any
 
 from m2b.commands import Context
-from m2b.commands.backends import configured_tasks
+from m2b.commands.backends import configured_store, configured_tasks
 from m2b.commands.doctor import NOT_REACHABLE, PROBE_FAILURES, REACHABLE, Check
 from m2b.commands.output import print_json
+from m2b.commands.proposals import waiting_answer
 from m2b.commands.status import status_answer
 from m2b.commands.tasks import task_json
 from m2b.config.machine import MachineConfig, load_machine_config
@@ -41,6 +46,7 @@ from m2b.curate import machine_state, memory_guard
 from m2b.curate.report import one_line
 from m2b.launcher import core_version
 from m2b.notes.memory_index import parse_fact_line
+from m2b.proposals import ProposalsError
 from m2b.tasks import markers
 from m2b.tasks.base import Task
 from m2b.todos import due_by_today
@@ -51,15 +57,23 @@ CALENDAR_BUDGET_SECONDS = 10
 
 def band_command(arguments: argparse.Namespace, context: Context) -> int:
     """Always JSON: the band is its only reader; ``--json`` is accepted like elsewhere. ``--tasks-only``
-    leaves the status out, for the band's second look before a keep or drop."""
+    leaves the status and the proposals out, for the band's second look before a keep or drop."""
     config = load_machine_config(context.machine)
     tasks, tasks_check = _tasks_part(config, context, datetime.datetime.now().astimezone())
     if arguments.tasks_only:
         print_json({"tasks": tasks})
         return 0
     status = status_answer(_short_calendar(config), context, tasks_check)
-    print_json({"version": core_version(), "tasks": tasks, "status": status})
+    waiting = _proposals_part(config, context)
+    print_json({"version": core_version(), "tasks": tasks, "proposals": waiting, "status": status})
     return 0
+
+
+def _proposals_part(config: MachineConfig, context: Context) -> dict[str, Any]:
+    try:
+        return waiting_answer(configured_store(config, context.machine))
+    except (*PROBE_FAILURES, ProposalsError) as error:
+        return {"error": str(error)}
 
 
 def _short_calendar(config: MachineConfig) -> MachineConfig:

@@ -108,6 +108,11 @@ class LayoutTest(unittest.TestCase):
         self.assertFalse(layout.is_journal_name("202613-done.md"))
         self.assertFalse(layout.is_journal_name("202603-done.md.bak"))
 
+    def test_a_journal_name_gives_its_year_and_month(self) -> None:
+        self.assertEqual(layout.journal_month("202603-done.md"), (2026, 3))
+        self.assertIsNone(layout.journal_month("202613-done.md"))
+        self.assertIsNone(layout.journal_month("20260305T101500Z-cli-a1b2.md"))
+
 
 if __name__ == "__main__":
     unittest.main()

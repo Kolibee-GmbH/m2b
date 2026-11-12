@@ -1,0 +1,8 @@
+#!/bin/sh
+# Measures the fence around a curation step with two real model runs on your own Claude login,
+# one as the core starts a step and one without the fence's two switches: scripts/fence-probe
+set -eu
+
+repo_root=$(cd "$(dirname "$0")/.." && pwd)
+PYTHONPATH="$repo_root/scripts:$repo_root/plugins/m2b/src${PYTHONPATH:+:$PYTHONPATH}" \
+    exec python3 -m repo_tools.fence_probe "$@"

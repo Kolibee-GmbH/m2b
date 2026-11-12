@@ -1,5 +1,5 @@
 {
-  "description": "E19 at the model level: a real Claude Code session with m2b is asked in English where the spare key for the shed is, and the only note on it is in German, as the German distillate at session start suggests. The search skill searches the English word together with its German translation in one `m2b search --any` call and answers from the German note, in English, the language of the question. Run it after each Claude Code minor update: the answer is the model's, not m2b's code.",
+  "description": "E19 at the model level: a real Claude Code session with m2b is asked in English where the spare key for the shed is, and the only note on it is in German, as the German distillate at session start suggests. The session searches the English word together with its German translation in one call, with m2b's search tool or with the search skill's `m2b search --any`, and answers from the German note, in English, the language of the question: the English words for where the key is come before the note's German word for it, `Blumentopf`, so an answer in German that adds a translation does not pass, and an English answer that quotes the note after it does. Run it after each Claude Code minor update: the answer is the model's, not m2b's code.",
   "steps": [
     {
       "run": [
@@ -22,7 +22,7 @@
         "stream-json",
         "--verbose"
       ],
-      "stdout": "(?s)(?=.*\"command\":\"m2b search --json --any --)(?=.*\"result\":\"(?:[^\"\\\\]|\\\\.)*[Bb]lue (?:flower ?)?pot)"
+      "stdout": "(?s)(?=.*(?:\"command\":\"m2b search --json --any --|\"name\":\"mcp__m2b__search\"[^}]*\"terms\":\\[\"(?:[^\"\\\\]|\\\\.)*\",))(?=.*\"result\":\"(?:(?!Blumentopf)(?:[^\"\\\\]|\\\\.))*[Bb]lue (?:flower ?)?pot)"
     }
   ],
   "invariants": [

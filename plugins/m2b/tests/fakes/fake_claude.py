@@ -12,6 +12,15 @@ rule covers Edit and Write, a ``Write(<path>)`` rule covers nothing, and a path 
 ``//path/**`` form. That a ``Read(...)`` rule also covers Glob and Grep follows Claude Code's
 documentation and was not measured.
 
+As measured with Claude Code 2.1.322 on 2026-11-12, the session has only the tools ``--tools``
+names and says so in a line before the model's first answer, with its MCP servers; a call of any
+other tool is refused as a tool that does not exist, which is no denial of the ``result`` line.
+A call that a rule of ``--disallowedTools`` names is denied whatever allows it: measured that day
+against what Claude Code itself allows in the folder it keeps its memory in; that such a rule
+also beats one of ``--allowedTools`` follows Claude Code's documentation and was not measured.
+``"start"`` in a script replaces what that line says (``{"tools": [...], "mcp_servers": [...]}``), for a Claude Code
+that gives a session more than it was asked for, and ``"start": "silent"`` leaves the line out.
+
 The actions file: ``{"actions": [...], "outcome": "success"}``, or for a curation run with several
 model steps ``{"skills": {"/m2b:ingest": {"actions": [...]}, "/m2b:lint": {...}}}``, chosen by the
 prompt (a skill not listed does nothing and succeeds); a skill's entry may also be a list of such
@@ -31,6 +40,13 @@ as one JSON line: the arguments, the working folder and the variables the fence 
 As Claude Code does, the ``bin/`` folder of each ``--plugin-dir`` comes first on ``PATH`` for Bash
 calls, so a module's skill calls the module's own command by its name.
 
+A call with ``--tools ""`` is a run without tools: it reads its standard input, notes it in the
+calls file as ``stdin``, carries out no action and prints one result as ``--output-format json``
+does, whose ``result`` is the script's ``answer``. Its script is the actions file's ``text`` entry,
+``{"answer": "...", "outcome": "success"}``, or a list of such, the n-th for the n-th such call and
+the last for every later one; without a ``text`` entry the file itself is the script. Its outcomes
+are those below and ``not-text``, a result that succeeded and holds no text.
+
 Usage: python3 fake_claude.py <actions file> <claude arguments...>
 """
 
@@ -46,7 +62,24 @@ import time
 from pathlib import Path
 from typing import Any
 
-OPTIONS_WITH_VALUES = ("-p", "--setting-sources", "--permission-mode", "--output-format", "--max-turns", "--model")
+OPTIONS_WITH_VALUES = (
+    "-p",
+    "--setting-sources",
+    "--permission-mode",
+    "--output-format",
+    "--max-turns",
+    "--model",
+    "--tools",
+)
+OPTIONS_WITH_RULES = {"--allowedTools": "allowed", "--disallowedTools": "disallowed"}
+FAKE_MODEL = "fake-model"
+SEEN_VARIABLES = (
+    "M2B_CURATION_RUN",
+    "M2B_RUN_TOKEN",
+    "M2B_REFRESH_ALL",
+    "CLAUDE_CODE_DISABLE_CLAUDE_MDS",
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY",
+)
 STORE_VARIABLE = "M2B_STUB_STORE"
 COVERED_BY = {"Read": ("Read", "Glob", "Grep"), "Edit": ("Edit", "Write")}
 SHELL_OPERATORS = re.compile(r"^[;&|<>()]+$")
@@ -54,7 +87,7 @@ _RULE = re.compile(r"^([A-Za-z][A-Za-z0-9_]*)(?:\((.*)\))?$", re.DOTALL)
 
 
 def parse_arguments(arguments: list[str]) -> dict[str, Any]:
-    parsed: dict[str, Any] = {"plugin_dirs": [], "allowed": [], "flags": []}
+    parsed: dict[str, Any] = {"plugin_dirs": [], "allowed": [], "disallowed": [], "flags": []}
     index = 0
     while index < len(arguments):
         argument = arguments[index]
@@ -64,10 +97,10 @@ def parse_arguments(arguments: list[str]) -> dict[str, Any]:
         elif argument == "--plugin-dir":
             parsed["plugin_dirs"].append(arguments[index + 1])
             index += 2
-        elif argument == "--allowedTools":
+        elif argument in OPTIONS_WITH_RULES:
             index += 1
             while index < len(arguments) and not arguments[index].startswith("--"):
-                parsed["allowed"].append(arguments[index])
+                parsed[OPTIONS_WITH_RULES[argument]].append(arguments[index])
                 index += 1
         else:
             parsed["flags"].append(argument)
@@ -95,7 +128,8 @@ def _command_allowed(command: str, specifier: str) -> bool:
     return command == specifier
 
 
-def allowed(action: dict[str, Any], rules: list[str]) -> bool:
+def covered(action: dict[str, Any], rules: list[str]) -> bool:
+    """Whether one of the rules names this call: by its tool alone, by its command or by its path."""
     tool = action["tool"]
     for rule in rules:
         match = _RULE.match(rule)
@@ -193,27 +227,69 @@ def _script_for_call(skills: dict[str, Any], prompt: str, actions_file: Path) ->
     return dict(entry[min(number, len(entry)) - 1])
 
 
+def _text_script(script: dict[str, Any], actions_file: Path) -> dict[str, Any]:
+    """The script for this run without tools: the n-th of a list for the n-th such run, the last after."""
+    entry = script.get("text", script)
+    if not isinstance(entry, list):
+        return dict(entry)
+    lines = Path(f"{actions_file}.calls").read_text(encoding="utf-8").splitlines()
+    number = sum(1 for line in lines if "stdin" in json.loads(line))
+    return dict(entry[min(number, len(entry)) - 1])
+
+
+def _answer_without_tools(script: dict[str, Any]) -> int:
+    """One result on one line, as ``--output-format json`` prints it."""
+    outcome = script.get("outcome", "success")
+    if outcome == "no-result":
+        print("fake claude: crashed", file=sys.stderr)
+        return 1
+    if "sleep" in script:
+        time.sleep(float(script["sleep"]))
+    result: dict[str, Any] = {"type": "result", "modelUsage": {FAKE_MODEL: {}}}
+    if outcome == "over-budget":
+        result.update({"subtype": "error_max_budget_usd", "is_error": True})
+    elif outcome == "not-logged-in":
+        result.update({"subtype": "success", "is_error": True, "result": "Not logged in · Please run /login"})
+    elif outcome == "not-text":
+        result.update({"subtype": "success", "is_error": False, "result": None})
+    elif outcome == "success":
+        result.update({"subtype": "success", "is_error": False, "result": script.get("answer", "")})
+    else:
+        result.update({"subtype": "error_during_execution", "is_error": True, "result": "the run broke"})
+    _emit(result)
+    return 0 if outcome == "success" else 1
+
+
 def main(argv: list[str]) -> int:
     actions_file, arguments = Path(argv[0]), argv[1:]
     parsed = parse_arguments(arguments)
+    without_tools = parsed.get("tools") == ""
     with Path(f"{actions_file}.calls").open("a", encoding="utf-8") as calls:
         seen = {
             "arguments": arguments,
             "cwd": os.getcwd(),
             "cwd_entries": sorted(os.listdir(".")),
-            "environment": {
-                key: os.environ.get(key) for key in ("M2B_CURATION_RUN", "M2B_RUN_TOKEN", "M2B_REFRESH_ALL")
-            },
+            "environment": {key: os.environ.get(key) for key in SEEN_VARIABLES},
         }
+        if without_tools:
+            seen["stdin"] = sys.stdin.buffer.read().decode("utf-8", errors="replace")
         calls.write(json.dumps(seen) + "\n")
     script = json.loads(actions_file.read_text(encoding="utf-8"))
+    if without_tools:
+        return _answer_without_tools(_text_script(script, actions_file))
     if "skills" in script:
         script = _script_for_call(script["skills"], parsed.get("p", ""), actions_file)
     bins = [str(Path(folder, "bin")) for folder in parsed["plugin_dirs"] if Path(folder, "bin").is_dir()]
     os.environ["PATH"] = os.pathsep.join([*bins, os.environ.get("PATH", "")])
     store = os.environ.get(STORE_VARIABLE, "")
     captures: dict[str, str] = {}
-    _emit({"type": "system", "subtype": "init", "cwd": os.getcwd(), "skills": []})
+    tools = [tool for tool in parsed.get("tools", "").split(",") if tool] if "tools" in parsed else None
+    start = script.get("start", {})
+    # The plugin's session-start hooks speak before the session says what it has.
+    _emit({"type": "system", "subtype": "hook_started", "hook_event": "SessionStart"})
+    if start != "silent":
+        says = {"tools": tools or [], "mcp_servers": [], **start}
+        _emit({"type": "system", "subtype": "init", "cwd": os.getcwd(), "skills": [], **says})
     denials = []
     # As Claude Code does, a tool call past --max-turns ends the run with error_max_turns.
     max_turns = int(parsed["max_turns"]) if "max_turns" in parsed else None
@@ -243,7 +319,9 @@ def main(argv: list[str]) -> int:
                 },
             }
         )
-        if allowed(action, parsed["allowed"]):
+        if tools is not None and action["tool"] not in tools:
+            content, is_error = f"Error: No such tool available: {action['tool']}.", True
+        elif covered(action, parsed["allowed"]) and not covered(action, parsed["disallowed"]):
             content, is_error = _carry_out(action)
         else:
             denials.append({"tool_name": action["tool"], "tool_use_id": tool_use_id, "tool_input": tool_input})

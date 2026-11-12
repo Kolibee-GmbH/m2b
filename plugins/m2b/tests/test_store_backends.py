@@ -21,10 +21,12 @@ from store_contract import Contracts, FakeEviction
 
 class FolderStoreContractTest(Contracts.StoreContract):
     make_store = staticmethod(FolderStore)
+    copy_of_plan = "plan (Dana's conflicted copy 2026-11-05).md"
 
 
 class ICloudStoreContractTest(Contracts.StoreContract):
     make_store = staticmethod(ICloudStore)
+    copy_of_plan = "plan 2.md"
 
 
 class _StoreFixture(unittest.TestCase):
@@ -237,22 +239,92 @@ class ConflictCopiesTest(_StoreFixture):
             },
         )
 
-    def test_an_evicted_copy_or_original_is_never_compared(self) -> None:
-        """Covers: X8, B6"""
+    def test_the_folder_backend_recognizes_the_names_dropbox_gives_a_copy(self) -> None:
+        """Covers: B150"""
+        dropbox_names = [
+            "plan (conflicted copy).md",
+            "plan (Dana's conflicted copy).md",
+            "plan (Dana's conflicted copy 2026-11-05).md",
+            "plan (conflicted copy 2026-11-05 1).md",
+            "plan (In Konflikt stehende Kopie von Dana 2026-11-05).md",
+        ]
         self._write("inbox/plan.md", b"draft")
-        self._write("inbox/plan 2.md", b"draft")
-        self.eviction.evicted.add(self.root / "inbox" / "plan.md")
+        for name in dropbox_names:
+            self._write(f"inbox/{name}", b"draft")
 
-        (copy,) = self._store(ICloudStore).conflict_copies("inbox")
+        copies = {copy.path: copy.original for copy in self._store(FolderStore).conflict_copies()}
 
-        self.assertIsNone(copy.identical)
-        self.assertFalse(copy.removable)
+        self.assertEqual(copies, {f"inbox/{name}": "inbox/plan.md" for name in dropbox_names})
 
-    def test_the_folder_backend_recognizes_no_conflict_copies(self) -> None:
+    def test_the_folder_backend_recognizes_the_names_syncthing_gives_a_copy(self) -> None:
+        """Covers: B150"""
+        syncthing_names = [
+            "plan.sync-conflict-20261105-081500-ABCDEFG.md",
+            "plan.sync-conflict-20261105-081500-A2B3C4D.md",
+            # Older versions named no device, and a device without an ID leaves its place empty.
+            "plan.sync-conflict-20261105-081500.md",
+            "plan.sync-conflict-20261105-081500-.md",
+        ]
         self._write("inbox/plan.md", b"draft")
-        self._write("inbox/plan 2.md", b"draft")
+        for name in syncthing_names:
+            self._write(f"inbox/{name}", b"draft")
+
+        copies = {copy.path: copy.original for copy in self._store(FolderStore).conflict_copies()}
+
+        self.assertEqual(copies, {f"inbox/{name}": "inbox/plan.md" for name in syncthing_names})
+
+    def test_the_folder_backend_names_the_original_the_way_the_service_built_the_copy(self) -> None:
+        """Covers: B150"""
+        original_of = {
+            "README (conflicted copy)": "README",
+            "README.sync-conflict-20261105-081500-ABCDEFG": "README",
+            "plan (v2) (conflicted copy).md": "plan (v2).md",
+            "notes.tar.sync-conflict-20261105-081500-ABCDEFG.gz": "notes.tar.gz",
+            # Syncthing syncs a copy like any file, so a copy can get a copy of its own.
+            "list.sync-conflict-20261104-070000-ABCDEFG.sync-conflict-20261105-081500-HIJKLMN.md": (
+                "list.sync-conflict-20261104-070000-ABCDEFG.md"
+            ),
+        }
+        for copy, original in original_of.items():
+            self._write(f"inbox/{original}", b"draft")
+            self._write(f"inbox/{copy}", b"draft")
+
+        copies = {copy.path: copy.original for copy in self._store(FolderStore).conflict_copies()}
+
+        self.assertEqual(copies, {f"inbox/{copy}": f"inbox/{original}" for copy, original in original_of.items()})
+
+    def test_the_folder_backend_takes_no_other_name_for_a_copy(self) -> None:
+        """Covers: B150"""
+        other_names = [
+            "plan 2.md",
+            "plan (copy).md",
+            "plan (Dana's version 2026-11-05).md",
+            "plan(conflicted copy).md",
+            "plan (conflicted copy) final.md",
+            "plan (Laptop (2)'s conflicted copy).md",
+            "plan (conflicted copy (2)).md",
+            "plan (v2) conflicted copy).md",
+            "plan.sync-conflict.md",
+            "plan.sync-conflict-2026115-081500-ABCDEFG.md",
+            "plan.sync-conflict-20261105-08150-ABCDEFG.md",
+            "plan.sync-conflict-2026-11-05-081500.md",
+            "plan.sync-conflict-20261105-081500-abcdefg.md",
+            "plan.sync-conflict-20261105-081500-ABCDEFGH.md",
+            "plan-sync-conflict-20261105-081500-ABCDEFG.md",
+        ]
+        self._write("inbox/plan.md", b"draft")
+        for name in other_names:
+            self._write(f"inbox/{name}", b"draft")
 
         self.assertEqual(self._store(FolderStore).conflict_copies(), [])
+
+    def test_the_icloud_backend_takes_no_dropbox_or_syncthing_name_for_a_copy(self) -> None:
+        """Covers: B150"""
+        self._write("inbox/plan.md", b"draft")
+        self._write("inbox/plan (Dana's conflicted copy 2026-11-05).md", b"draft")
+        self._write("inbox/plan.sync-conflict-20261105-081500-ABCDEFG.md", b"draft")
+
+        self.assertEqual(self._store(ICloudStore).conflict_copies(), [])
 
 
 class OldStubFilesTest(_StoreFixture):

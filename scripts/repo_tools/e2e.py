@@ -3,20 +3,26 @@
 A scenario is a folder under ``tests/e2e/`` with:
 
 - ``given/``: the store before the run (optional, invented content);
+- ``transcripts/``: Claude Code's transcripts before the run (optional, invented content), copied to
+  ``projects/`` in the scenario's ``CLAUDE_CONFIG_DIR`` below the model level; ``<an-hour-ago>`` in one
+  stands for that moment, because a step that reads the sessions takes only recent prompts;
 - ``steps.json``: ``{"steps": [{"run": [argv...], "exit": 0, "stdin": "...", "stdout": "<regex>", "env": {...}}]}``;
   ``env`` adds variables for one step, such as ``M2B_CURATION_RUN`` for a curator command the scenario calls
   in the model's place;
   ``stdout``, when given, is a regular expression searched for in the step's standard output.
   ``"save": {"task": "<regex with one group>"}`` keeps the group from the step's output, and a later
   step's ``{task}`` in its arguments is replaced by it (a generated id, for example). ``{core_plugin}``
-  is always the core plugin's folder, for a step that starts a Claude Code session with it.
+  is always the core plugin's folder, for a step that starts a Claude Code session with it, and
+  ``{store}`` the scenario's store folder, for a step that prepares it with another program
+  (``git init``).
   ``"cwd": "<name>"`` runs the step in a folder of that name beside the scenario's working folder,
   made on first use, so two sessions can stand for two projects; without it a step runs in the
   working folder.
   An optional ``"model": {"actions": [...], "outcome": "success"}`` scripts the model: every model
   run of the scenario replays these actions in the stub ``tests/fakes/fake_claude.py``, which
   denies what the step's rules do not allow (the action format is in the stub);
-  an add-on a scenario needs is turned on by one of its steps (``m2b addons on worklog``), as setup does;
+  an add-on a scenario needs is turned on by one of its steps (``m2b addons on worklog``), as setup does,
+  and ``--core-only`` leaves such a scenario out;
 - ``expect.json``: ``{"store_files": {"<path in store>": "<exact text>"}}`` and, for files
   with generated names (captures, task files), ``"store_patterns": [{"path": "<glob>",
   "content": "<regular expression>"}]``, each matching exactly one file in full. Together they
@@ -34,11 +40,15 @@ At ``--level model`` only scenarios with a ``model.json`` run: ``{"steps": [...]
 and invariants (``check_invariants``) in place of ``expect.json``, because a real model words its
 notes its own way. A value a step saved can name a folder outside the store for an invariant, such
 as the memory folder Claude Code reports at a session's start.
+
+``--plugin`` names another folder that holds the plugin, in place of this checkout's: the proof
+that the core stands without its add-ons runs the scenarios against a copy without them.
 """
 
 from __future__ import annotations
 
 import argparse
+import datetime
 import fnmatch
 import json
 import os
@@ -60,7 +70,9 @@ from repo_tools import REPO_ROOT
 
 SCENARIO_ROOT = REPO_ROOT / "tests" / "e2e"
 CORE_PLUGIN = REPO_ROOT / "plugins" / "m2b"
-MODEL_STUB = CORE_PLUGIN / "tests" / "fakes" / "fake_claude.py"
+# Relative to the plugin's folder.
+MODEL_STUB = Path("tests") / "fakes" / "fake_claude.py"
+ADDON_ON = ["m2b", "addons", "on"]
 MODEL_RUNNER_VARIABLE = "M2B_MODEL_RUNNER"
 MODEL_STUB_STORE_VARIABLE = "M2B_STUB_STORE"
 TEST_RESOURCE_PREFIX = "sb-test-"
@@ -74,6 +86,8 @@ MODEL = "model"
 APPLE = "apple"
 INTEGRATION_VARIABLE = "M2B_IT"
 MODEL_FILE = "model.json"
+TRANSCRIPTS = "transcripts"
+AN_HOUR_AGO = "<an-hour-ago>"
 RUN_RECORD_PATH = "state/core/last-run.json"
 
 EXIT_PASSED = 0
@@ -201,12 +215,13 @@ def _run_steps(
     work: Path,
     timeout_seconds: float = STEP_TIMEOUT_SECONDS,
     saved: dict[str, str] | None = None,
+    plugin: Path = CORE_PLUGIN,
 ) -> list[str]:
-    """Runs the steps in order; what they save is added to ``saved``, which starts with ``core_plugin``."""
+    """Runs the steps in order; what they save is added to ``saved``, which also holds ``core_plugin``."""
     problems = []
     if saved is None:
         saved = {}
-    saved.setdefault("core_plugin", str(CORE_PLUGIN))
+    saved.setdefault("core_plugin", str(plugin))
     for number, step in enumerate(steps, 1):
         argv = [_with_saved(str(argument), saved) for argument in step["run"]]
         expected_exit = step.get("exit", 0)
@@ -274,13 +289,28 @@ def _save(wanted: Mapping[str, str], stdout: str, saved: dict[str, str]) -> str 
     return None
 
 
-def _model_stub(sandbox: Path, script: Mapping[str, Any]) -> Path:
+def _given_transcripts(scenario: Path, claude_config: Path) -> None:
+    """Puts the scenario's transcripts where Claude Code keeps them, each ``<an-hour-ago>`` as that moment.
+
+    Without transcripts the folder is not made, as on a machine where Claude Code never ran."""
+    given = scenario / TRANSCRIPTS
+    if not given.is_dir():
+        return
+    moment = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0) - datetime.timedelta(hours=1)
+    written = moment.isoformat().replace("+00:00", "Z")
+    for source in sorted(given.rglob("*.jsonl")):
+        target = claude_config / "projects" / source.relative_to(given)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(source.read_text(encoding="utf-8").replace(AN_HOUR_AGO, written), encoding="utf-8")
+
+
+def model_stub(sandbox: Path, script: Mapping[str, Any], plugin: Path) -> Path:
     """A ``claude`` for this scenario: the stub with the scenario's model actions."""
     actions = sandbox / "model.json"
     actions.write_text(json.dumps(script), encoding="utf-8")
     runner = sandbox / "bin" / "claude"
     runner.parent.mkdir()
-    stub = " ".join(shlex.quote(str(part)) for part in (sys.executable, MODEL_STUB, actions))
+    stub = " ".join(shlex.quote(str(part)) for part in (sys.executable, plugin / MODEL_STUB, actions))
     runner.write_text(f'#!/bin/sh\nexec {stub} "$@"\n', encoding="utf-8")
     runner.chmod(0o755)
     return runner
@@ -292,9 +322,11 @@ def run_scenario(
     keep: bool = False,
     level: str = STUB,
     sandbox_root: Path | None = None,
+    plugin: Path = CORE_PLUGIN,
 ) -> ScenarioResult:
     """At ``stub`` the scripted model and ``expect.json``; at ``model`` the real fenced ``claude`` and
-    the invariants of ``model.json``, because a real model words things its own way."""
+    the invariants of ``model.json``, because a real model words things its own way. The steps run
+    the commands of the plugin in ``plugin``."""
     result = ScenarioResult(scenario.name)
     store: Path | None = None
     if sandbox_root is not None:
@@ -318,28 +350,29 @@ def run_scenario(
             json.dumps(isolated_machine_config(store, level, location.backend), indent=2) + "\n", encoding="utf-8"
         )
 
+        saved = {"store": str(store)}
         environment = dict(environ)
         environment[HOME_VARIABLE] = str(home)
-        environment["M2B_CORE_ROOT"] = str(CORE_PLUGIN)
-        environment["PATH"] = os.pathsep.join([str(CORE_PLUGIN / "bin"), environ.get("PATH", "")])
+        environment["M2B_CORE_ROOT"] = str(plugin)
+        environment["PATH"] = os.pathsep.join([str(plugin / "bin"), environ.get("PATH", "")])
         if level == MODEL:
             environment.pop(MODEL_RUNNER_VARIABLE, None)
             environment.pop(MODEL_STUB_STORE_VARIABLE, None)
             script = _read_json(scenario / MODEL_FILE)
-            saved: dict[str, str] = {}
-            result.problems += _run_steps(script["steps"], environment, work, MODEL_STEP_TIMEOUT_SECONDS, saved)
+            result.problems += _run_steps(script["steps"], environment, work, MODEL_STEP_TIMEOUT_SECONDS, saved, plugin)
             if not result.problems:
                 result.problems += check_invariants(script["invariants"], visible_store_files(store), saved)
         else:
             scenario_steps = _read_json(scenario / "steps.json")
             environment["CLAUDE_CONFIG_DIR"] = str(sandbox / "claude-config")
+            _given_transcripts(scenario, sandbox / "claude-config")
             environment["M2B_HERDR"] = str(sandbox / "no-herdr")
             environment["M2B_LAUNCHCTL"] = str(sandbox / "no-launchctl")
             environment["M2B_SYSTEMCTL"] = str(sandbox / "no-systemctl")
-            stub = _model_stub(sandbox, scenario_steps.get("model", {"actions": []}))
+            stub = model_stub(sandbox, scenario_steps.get("model", {"actions": []}), plugin)
             environment[MODEL_RUNNER_VARIABLE] = str(stub)
             environment[MODEL_STUB_STORE_VARIABLE] = str(store)
-            result.problems += _run_steps(scenario_steps["steps"], environment, work)
+            result.problems += _run_steps(scenario_steps["steps"], environment, work, saved=saved, plugin=plugin)
             expect = _read_json(scenario / "expect.json")
             result.problems += compare_store(
                 expect["store_files"], visible_store_files(store), expect.get("store_patterns", [])
@@ -430,6 +463,12 @@ def discover_scenarios(root: Path, names: Sequence[str]) -> list[Path]:
     return [by_name[n] for n in names]
 
 
+def turns_an_addon_on(scenario: Path) -> bool:
+    """Whether a step of the scenario turns an add-on on, which is how a scenario says it needs one."""
+    steps = _read_json(scenario / "steps.json")["steps"]
+    return any(step["run"][: len(ADDON_ON)] == ADDON_ON for step in steps)
+
+
 def _parse_arguments(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="e2e", description="Runs the end-to-end scenarios.")
     parser.add_argument(
@@ -442,6 +481,10 @@ def _parse_arguments(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--sandbox-root", type=Path, help="where the temporary scenario folders go")
     parser.add_argument("--keep", action="store_true", help="keep each scenario's temporary folder")
     parser.add_argument("--scenarios", type=Path, default=SCENARIO_ROOT, help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--plugin", type=Path, default=CORE_PLUGIN, help="the folder that holds the plugin (default: this checkout's)"
+    )
+    parser.add_argument("--core-only", action="store_true", help="leave out the scenarios that turn an add-on on")
     parser.add_argument("names", nargs="*", help="scenario folder names (default: all)")
     return parser.parse_args(argv)
 
@@ -460,6 +503,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             scenarios = [scenario for scenario in scenarios if scenario.name not in without]
             if not scenarios:
                 raise UnknownScenarioError(f"no scenario has a {MODEL_FILE}")
+        if arguments.core_only:
+            scenarios = [scenario for scenario in scenarios if not turns_an_addon_on(scenario)]
     except UnknownScenarioError as error:
         print(f"e2e: {error}", file=sys.stderr)
         return EXIT_USAGE
@@ -467,7 +512,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     for scenario in scenarios:
         try:
             result = run_scenario(
-                scenario, os.environ, keep=arguments.keep, level=arguments.level, sandbox_root=arguments.sandbox_root
+                scenario,
+                os.environ,
+                keep=arguments.keep,
+                level=arguments.level,
+                sandbox_root=arguments.sandbox_root,
+                plugin=arguments.plugin,
             )
         except RealStoreError as error:
             print(f"e2e: {error}", file=sys.stderr)

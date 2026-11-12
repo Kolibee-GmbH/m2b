@@ -12,8 +12,22 @@ beyond that, each with what breaks when it changes:
 - ``enabledPlugins`` in Claude Code's managed settings (``MANAGED_SETTINGS`` in the recorder,
   ``M2B_MANAGED_SETTINGS`` in tests) and in the user's: only the worklog recorder reads them, to
   stop recording when m2b is turned off.
-- Transcript files under ``~/.claude/projects/``: only the worklog add-on reads them, for the facts
-  of a period (``m2b_worklog/sources/transcripts.py``); a source it cannot read is reported as such.
+- Transcript files under ``~/.claude/projects/``, one JSON Lines file per session: ``sessions``
+  reads what the person typed, and relies on the mark Claude Code puts on every prompt of who sent
+  it (``origin``, ``promptSource``); the worklog add-on reads prompts, answers and times for the
+  facts of a period (``m2b_worklog/sources/transcripts.py``) and leaves out a prompt the mark gives
+  to another sender. Both read the mark through ``sender_of`` and take out the blocks Claude Code
+  writes into a prompt beside what was typed (``PROMPT_BLOCK``, the one list of their tags).
+  ``sessions`` reports a transcript that cannot be opened or no longer names its folder as not
+  read, the worklog one that cannot be opened. When the mark goes, ``sessions`` counts every
+  prompt but a slash command as unmarked and gives none of them, and the worklog takes every
+  prompt as the owner's again; a record that changed in another way is not recognised and reads
+  as no prompt.
+- The folder itself (``own_folders``): the start of every model step that has tools denies Read
+  and Edit there (``curate.model.fenced_command``), because Claude Code allows the file tools in
+  the memory folder it keeps under ``projects/`` for a session's project without any rule. When
+  Claude Code keeps its files elsewhere, the rules name the wrong folder and a step can read and
+  write that memory folder again.
 - The mod API (``hooks/register.tsx``): the band, early-access API; when it changes, the band
   shows nothing and everything else works.
 
@@ -24,20 +38,66 @@ points at another ``installed_plugins.json`` (tests).
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 MARKETPLACE = "m2b"
 CORE_PLUGIN = "m2b"
 INSTALLED_PLUGINS_VARIABLE = "M2B_INSTALLED_PLUGINS"
+
+# The blocks Claude Code puts into a prompt beside what the person typed: its own reminders, the
+# output of hooks and local commands, notices of finished tasks.
+PROMPT_BLOCK_TAGS = (
+    "system-reminder",
+    "local-command-caveat",
+    "local-command-stdout",
+    "local-command-stderr",
+    "command-message",
+    "user-prompt-submit-hook",
+    "task-notification",
+)
+PROMPT_BLOCK = re.compile(r"<(" + "|".join(PROMPT_BLOCK_TAGS) + r")\b[^>]*>.*?</\1>", re.S)
+
+# The sender Claude Code names for what the person sent: typed in the terminal or in the desktop
+# app, also while Claude was busy, or a suggested prompt they accepted.
+HUMAN = "human"
+
+
+def sender_of(record: Mapping[str, Any]) -> str | None:
+    """Who sent the prompt of a transcript record, by Claude Code's mark; None for a record without it.
+
+    Other senders are a plugin, a finished task and another session. A kind that is no text is
+    some other sender too, never the person and never a missing mark.
+    """
+    origin = record.get("origin")
+    if not isinstance(origin, dict):
+        return None
+    kind = origin.get("kind")
+    return kind if kind is None or isinstance(kind, str) else repr(kind)
 
 
 def installed_plugins_file(environ: Mapping[str, str]) -> Path:
     override = environ.get(INSTALLED_PLUGINS_VARIABLE)
     if override:
         return Path(override)
-    claude_dir = environ.get("CLAUDE_CONFIG_DIR") or str(Path(environ.get("HOME") or Path.home()) / ".claude")
-    return Path(claude_dir) / "plugins" / "installed_plugins.json"
+    return _claude_folder(environ) / "plugins" / "installed_plugins.json"
+
+
+def transcripts_folder(environ: Mapping[str, str]) -> Path:
+    """Where Claude Code keeps a folder of transcripts per project folder."""
+    return _claude_folder(environ) / "projects"
+
+
+def own_folders(environ: Mapping[str, str]) -> list[Path]:
+    """The folder Claude Code keeps its own files in, as it is named and, where a link leads to it, as it resolves."""
+    named = _claude_folder(environ)
+    return list(dict.fromkeys([named, named.resolve()]))
+
+
+def _claude_folder(environ: Mapping[str, str]) -> Path:
+    return Path(environ.get("CLAUDE_CONFIG_DIR") or Path(environ.get("HOME") or Path.home()) / ".claude")
 
 
 def resolve_install_path(plugin: str, environ: Mapping[str, str]) -> Path | None:

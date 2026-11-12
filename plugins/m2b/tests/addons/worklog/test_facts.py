@@ -5,19 +5,24 @@ from __future__ import annotations
 import datetime
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import time
+import types
 import unittest
 from pathlib import Path
 from typing import Any
 
+from m2b import git_program, session_remotes
+from m2b.redaction import redact
 from m2b_worklog import facts, schema
 from m2b_worklog.facts import FactsError, Inputs
 from m2b_worklog.sources import herdr_events
+from m2b_worklog.sources.git import GIT_TIMEOUT_SECONDS, NO_GIT_TO_START, git_to_start
 from m2b_worklog.sources.inbox import read_inbox
-from m2b_worklog.sources.transcripts import answer_text, prompt_text, read_transcripts, redact
+from m2b_worklog.sources.transcripts import answer_text, prompt_text, read_transcripts
 from worklog_fixtures import load_recorder
 
 ZONE = datetime.timezone(datetime.timedelta(hours=1))
@@ -25,6 +30,8 @@ ZONE = datetime.timezone(datetime.timedelta(hours=1))
 TEST_TZ = "Etc/GMT-1"
 NOW = datetime.datetime(2026, 3, 14, 18, 0, tzinfo=ZONE)
 COMMAND = Path(__file__).resolve().parents[3] / "bin" / "m2b-worklog"
+GLOBEX = "https://git.globex.example/globex-ag/invoices.git"
+BY_REMOTE = {"worklog_leave_out": {"path_under": [], "git_remote_contains": ["globex-ag/"]}}
 PROFILE = {
     "version": 1,
     "owner": "Alex",
@@ -67,6 +74,7 @@ class Fixture(unittest.TestCase):
         (self.store / "inbox").mkdir(parents=True)
         self.recordings = self.home / ".local" / "state" / "m2b" / "worklog"
         self.recordings.mkdir(parents=True)
+        self.remote_notes = self.home / ".local" / "state" / "m2b" / session_remotes.NOTES_FOLDER
         self.projects = self.home / ".claude" / "projects"
         self.repo = self.home / "code" / "acme" / "invoices"
         self.repo.mkdir(parents=True)
@@ -78,6 +86,9 @@ class Fixture(unittest.TestCase):
         self.git("init", "-q", "-b", "main")
         self.git("config", "user.email", "alex@example.invalid")
         self.git("config", "user.name", "Alex")
+        # After a commit git tidies up in a process of its own, which would still write its lock
+        # while a test removes the repository.
+        self.git("config", "maintenance.auto", "false")
 
     def git(self, *arguments: str, when: datetime.datetime | None = None, email: str | None = None) -> None:
         environ = dict(self.git_env)
@@ -132,12 +143,24 @@ class Fixture(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps({"end": moment.isoformat()}), encoding="utf-8")
 
-    def collect(self) -> dict[str, Any]:
-        inputs = Inputs(self.store, self.recordings, self.projects, self.home, PROFILE, NOW)
+    def inputs(self, profile: dict[str, Any] = PROFILE, git: str | None = "git") -> Inputs:
+        return Inputs(self.store, self.recordings, self.projects, self.home, profile, NOW, self.remote_notes, git)
+
+    def started_in(self, folder: Path, *remotes: str) -> None:
+        """What the core's session-start hook noted for the folder a session started in."""
+        when = at(8)
+        session_remotes.note(
+            self.remote_notes, str(folder), frozenset(remotes), when, lambda path, text: path.write_text(text)
+        )
+
+    def collect(
+        self, profile: dict[str, Any] = PROFILE, run: Any = subprocess.run, git: str | None = "git"
+    ) -> dict[str, Any]:
+        inputs = self.inputs(profile, git)
         environ_backup = dict(os.environ)
         os.environ.update({"GIT_CONFIG_GLOBAL": str(self.base / "gitconfig"), "GIT_CONFIG_NOSYSTEM": "1"})
         try:
-            found = facts.collect(inputs)
+            found = facts.collect(inputs, run)
         finally:
             os.environ.clear()
             os.environ.update(environ_backup)
@@ -178,6 +201,13 @@ class Fixture(unittest.TestCase):
         self.commit("chore(deps): bump by a colleague", at(10, 35), email="dana@example.invalid")
         self.commit("feat(export): yesterday", at(9) - datetime.timedelta(days=1))
 
+    def a_second_workspace(self, workspace: str, folder: Path) -> None:
+        folder.mkdir(parents=True, exist_ok=True)
+        cache = json.loads((self.recordings / "workspaces.json").read_text(encoding="utf-8"))
+        cache[workspace] = [{"repo": None, "label": folder.name, "folder": str(folder), "since": at(8).isoformat()}]
+        self.cache(cache)
+        self.events(workspace, (at(11), "agent_working", "p1"), (at(11, 30), "agent_stopped", "p1"), cwd=folder)
+
 
 class CollectTest(Fixture):
     def test_a_session_has_its_blocks_prompts_commits_and_state(self) -> None:
@@ -209,6 +239,181 @@ class CollectTest(Fixture):
         # Blocked since 14:30: an agent waiting for an approval still waits hours later.
         self.assertEqual(session["state"], {"agent": "blocked", "last_answer": "The export now rounds per line."})
         self.assertEqual(session["minutes"]["agent"], 38 + 30)
+
+    def test_a_commits_subject_is_redacted_like_a_prompt(self) -> None:
+        """Covers: B110"""
+        self.a_day_of_work()
+        self.commit("chore(db): migrate with PGPASSWORD=hunter2", at(10, 32))
+
+        [session] = self.collect()["sessions"]
+
+        self.assertEqual(
+            [c["subject"] for c in session["commits"]],
+            ["fix(export): round per line", "chore(db): migrate with PGPASSWORD=[removed]"],
+        )
+
+    def test_a_session_in_a_folder_the_profile_leaves_out_is_not_in_the_facts(self) -> None:
+        """Covers: B111"""
+        self.a_day_of_work()
+        self.a_second_workspace("w2", self.home / "notes")
+
+        # The setting as ``m2b profile get --json`` prints it, which is what the worklog is handed.
+        # The session ran in a folder below the one named, as a worktree or a package does.
+        found = self.collect({**PROFILE, "worklog_leave_out": {"path_under": ["~/code/acme"]}})
+
+        self.assertEqual([s["workspace"] for s in found["sessions"]], ["w2"])
+        self.assertNotIn("invoice", json.dumps(found))
+        self.assertNotIn("round per line", json.dumps(found))
+        self.assertEqual([s["workspace"] for s in self.collect()["sessions"]], ["w1", "w2"])
+
+    def test_a_folder_left_out_counts_as_written_also_when_it_is_gone(self) -> None:
+        """Covers: B111"""
+        self.a_day_of_work()
+        shutil.rmtree(self.repo)
+
+        found = self.collect({**PROFILE, "worklog_leave_out": {"path_under": ["~/code/acme"]}})
+
+        self.assertEqual(found["sessions"], [])
+        self.assertEqual([s["workspace"] for s in self.collect()["sessions"]], ["w1"])
+
+    def test_a_transcript_from_a_folder_left_out_reaches_no_other_session(self) -> None:
+        """Covers: B111"""
+        # One workspace on the folder above: without the setting it holds the transcript of the repository below.
+        self.watermark(at(9))
+        code = self.home / "code"
+        self.cache({"w1": [{"repo": None, "label": "code", "folder": str(code), "since": at(8).isoformat()}]})
+        self.events("w1", (at(10), "agent_working", "p1"), (at(10, 40), "agent_stopped", "p1"), cwd=code)
+        prompt = {"type": "user", "timestamp": "2026-03-14T09:01:00Z", "message": {"content": "Fix the invoice export"}}
+        answer = {"type": "assistant", "timestamp": "2026-03-14T09:30:00Z", "message": {"content": "It rounds now."}}
+        self.transcript("s1", self.repo, [prompt, answer])
+
+        [kept] = self.collect({**PROFILE, "worklog_leave_out": {"path_under": ["~/code/acme"]}})["sessions"]
+        [whole] = self.collect()["sessions"]
+
+        self.assertEqual(whole["blocks"][0]["prompts"], ["Fix the invoice export"])
+        self.assertEqual(kept["folder"], str(code))
+        self.assertEqual([block["prompts"] for block in kept["blocks"]], [[]])
+        self.assertIsNone(kept["state"]["last_answer"])
+
+    def test_a_commit_made_in_a_session_left_out_is_not_shown_by_another_checkout(self) -> None:
+        """Covers: B111"""
+        self.a_day_of_work()
+        other = self.home / "worktrees" / "invoices-review"
+        other.parent.mkdir()
+        self.git("worktree", "add", "-q", "-b", "review", str(other))
+        self.a_second_workspace("w2", other)
+
+        found = self.collect({**PROFILE, "worklog_leave_out": {"path_under": ["~/code/acme"]}})
+
+        # The other checkout sees every branch, and without the first session it would own the commit.
+        self.assertEqual([(s["workspace"], s["commits"]) for s in found["sessions"]], [("w2", [])])
+
+    def test_a_session_whose_repository_has_a_remote_the_profile_names_is_not_in_the_facts(self) -> None:
+        """Covers: B153"""
+        self.a_day_of_work()
+        # The folder the day's transcript started in, below the repository's top.
+        (self.repo / "src").mkdir()
+        self.git("remote", "add", "origin", "git@github.com:alex/invoices.git")
+        self.git("remote", "add", "upstream", GLOBEX)
+        self.a_second_workspace("w2", self.home / "notes")
+
+        found = self.collect({**PROFILE, **BY_REMOTE})
+
+        self.assertEqual([s["workspace"] for s in found["sessions"]], ["w2"])
+        self.assertNotIn("invoice", json.dumps(found))
+        self.assertNotIn("round per line", json.dumps(found))
+        self.assertEqual(found["sources"]["repositories"], {"state": "read", "detail": ""})
+        self.assertEqual([s["workspace"] for s in self.collect()["sessions"]], ["w1", "w2"])
+
+    def test_a_remote_noted_when_the_session_started_leaves_it_out_when_its_folder_is_gone(self) -> None:
+        """Covers: B153"""
+        self.a_day_of_work()
+        self.a_second_workspace("w2", self.home / "notes")
+        self.started_in(self.repo, GLOBEX)
+        self.started_in(self.repo / "src", GLOBEX)
+        shutil.rmtree(self.repo)
+
+        found = self.collect({**PROFILE, **BY_REMOTE})
+
+        self.assertEqual([s["workspace"] for s in found["sessions"]], ["w2"])
+        self.assertNotIn("invoice", json.dumps(found))
+        self.assertEqual(found["sources"]["repositories"]["state"], "read")
+
+    def test_a_transcript_from_a_repository_left_out_reaches_no_other_session(self) -> None:
+        """Covers: B153"""
+        # One workspace on the folder above, which is in no repository: it holds the transcript from below.
+        self.watermark(at(9))
+        self.git("remote", "add", "origin", GLOBEX)
+        code = self.home / "code"
+        self.cache({"w1": [{"repo": None, "label": "code", "folder": str(code), "since": at(8).isoformat()}]})
+        self.events("w1", (at(10), "agent_working", "p1"), (at(10, 40), "agent_stopped", "p1"), cwd=code)
+        prompt = {"type": "user", "timestamp": "2026-03-14T09:01:00Z", "message": {"content": "Fix the invoice export"}}
+        answer = {"type": "assistant", "timestamp": "2026-03-14T09:30:00Z", "message": {"content": "It rounds now."}}
+        self.transcript("s1", self.repo, [prompt, answer])
+
+        [kept] = self.collect({**PROFILE, **BY_REMOTE})["sessions"]
+        [whole] = self.collect()["sessions"]
+
+        self.assertEqual(whole["blocks"][0]["prompts"], ["Fix the invoice export"])
+        self.assertEqual(kept["folder"], str(code))
+        self.assertEqual([block["prompts"] for block in kept["blocks"]], [[]])
+        self.assertIsNone(kept["state"]["last_answer"])
+
+    def test_a_session_whose_remotes_nobody_can_tell_is_left_out_and_named_as_not_read(self) -> None:
+        """Covers: B153"""
+        self.a_day_of_work()
+        self.a_second_workspace("w2", self.home / "notes")
+        shutil.rmtree(self.repo)
+
+        found = self.collect({**PROFILE, **BY_REMOTE})
+
+        self.assertEqual([s["workspace"] for s in found["sessions"]], ["w2"])
+        self.assertNotIn("invoice", json.dumps(found))
+        self.assertEqual(found["sources"]["repositories"]["state"], "could not read")
+        # The session's folder and the folder its transcript started in; neither is named.
+        self.assertEqual(
+            found["sources"]["repositories"]["detail"],
+            "work in 2 folders is left out: no git remote is known for them (the folders are gone or git did not "
+            "answer), and the profile leaves work out by git remote",
+        )
+        self.assertEqual([s["workspace"] for s in self.collect()["sessions"]], ["w1", "w2"])
+
+    def test_a_session_whose_git_does_not_answer_is_left_out_while_a_remote_is_named(self) -> None:
+        """Covers: B153"""
+        self.a_day_of_work()
+        # Both folders are there, so only git's silence leaves their repository untold.
+        (self.repo / "src").mkdir()
+        self.git("remote", "add", "origin", GLOBEX)
+
+        def hangs(command: list[str], **_: Any) -> Any:
+            raise subprocess.TimeoutExpired(command, 10.0)
+
+        found = self.collect({**PROFILE, **BY_REMOTE}, run=hangs)
+
+        self.assertEqual(found["sessions"], [])
+        self.assertEqual(found["sources"]["repositories"]["state"], "could not read")
+        self.assertEqual([s["workspace"] for s in self.collect(run=hangs)["sessions"]], ["w1"])
+
+    def test_a_session_noted_with_another_remote_stays_when_its_folder_is_gone(self) -> None:
+        """Covers: B153"""
+        self.a_day_of_work()
+        self.started_in(self.repo, "git@github.com:alex/invoices.git")
+        self.started_in(self.repo / "src", "git@github.com:alex/invoices.git")
+        shutil.rmtree(self.repo)
+
+        found = self.collect({**PROFILE, **BY_REMOTE})
+
+        self.assertEqual([s["workspace"] for s in found["sessions"]], ["w1"])
+        self.assertEqual(found["sources"]["repositories"]["state"], "read")
+
+    def test_a_sphere_is_found_by_its_remote_in_either_spelling_of_the_address(self) -> None:
+        self.a_day_of_work()
+        self.git("remote", "add", "origin", "git@github.com:Acme-Ltd/invoices.git")
+        by_remote = {"id": "acme", "billable": True, "match": {"git_remote_contains": ["github.com/acme-ltd/"]}}
+
+        [session] = self.collect({**PROFILE, "spheres": [by_remote, {"id": "private", "default": True}]})["sessions"]
+
+        self.assertEqual(session["sphere"], "acme")
 
     def test_a_session_seen_for_less_than_two_minutes_is_left_out(self) -> None:
         """Covers: B33"""
@@ -334,6 +539,117 @@ class CollectTest(Fixture):
         self.assertEqual(found["sources"]["transcripts"]["state"], "could not read")
 
 
+class NoGitToStartTest(Fixture):
+    """A machine whose only git would ask the person something: none is started, and the facts say so."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.started: list[list[str]] = []
+
+    def never(self, command: list[str], **_: Any) -> Any:
+        self.started.append(command)
+        raise AssertionError(f"started {command}")
+
+    def test_on_macos_only_the_check_for_the_developer_tools_is_started_without_them(self) -> None:
+        """Covers: B158"""
+        if not git_program.APPLE_GIT_STAND_IN.exists():
+            self.skipTest("this machine has no /usr/bin/git")
+        self.a_day_of_work()
+        timeouts: list[float] = []
+
+        def no_developer_tools(command: list[str], **options: Any) -> Any:
+            self.started.append(command)
+            timeouts.append(options["timeout"])
+            return types.SimpleNamespace(returncode=2)
+
+        environ = {"PATH": str(git_program.APPLE_GIT_STAND_IN.parent)}
+        git = git_to_start(environ, platform="darwin", run=no_developer_tools)
+        [session] = self.collect(run=no_developer_tools, git=git)["sessions"]
+
+        self.assertIsNone(git)
+        self.assertEqual(self.started, [list(git_program.DEVELOPER_TOOLS_CHECK)])
+        self.assertEqual(timeouts, [GIT_TIMEOUT_SECONDS])
+        self.assertEqual(session["git"], {"state": "could not read", "detail": NO_GIT_TO_START})
+
+    def test_on_macos_the_stand_in_is_the_git_to_start_with_the_developer_tools(self) -> None:
+        """Covers: B158"""
+        if not git_program.APPLE_GIT_STAND_IN.exists():
+            self.skipTest("this machine has no /usr/bin/git")
+        environ = {"PATH": str(git_program.APPLE_GIT_STAND_IN.parent)}
+
+        git = git_to_start(environ, platform="darwin", run=lambda command, **_: types.SimpleNamespace(returncode=0))
+
+        self.assertEqual(git, str(git_program.APPLE_GIT_STAND_IN))
+
+    def test_a_machine_with_no_git_on_its_path_has_none_to_start(self) -> None:
+        """Covers: B158"""
+        empty = self.base / "no-programs"
+        empty.mkdir()
+
+        self.assertIsNone(git_to_start({"PATH": str(empty)}, run=self.never))
+        self.assertEqual(self.started, [])
+
+    def test_no_git_is_started_and_each_session_says_its_git_was_not_read(self) -> None:
+        """Covers: B158"""
+        self.a_day_of_work()
+
+        [session] = self.collect(run=self.never, git=None)["sessions"]
+
+        self.assertEqual(self.started, [])
+        self.assertEqual(session["git"], {"state": "could not read", "detail": NO_GIT_TO_START})
+        self.assertEqual(session["commits"], [])
+        # By its folder: the remote that could name a sphere is not asked for.
+        self.assertEqual(session["sphere"], "acme")
+
+    def test_a_session_whose_folder_is_gone_keeps_that_reason(self) -> None:
+        """Covers: B158"""
+        self.a_day_of_work()
+        shutil.rmtree(self.repo)
+
+        [session] = self.collect(run=self.never, git=None)["sessions"]
+
+        self.assertEqual(self.started, [])
+        self.assertEqual(
+            session["git"], {"state": "could not read", "detail": f"the folder {self.repo} no longer exists"}
+        )
+
+    def test_while_a_remote_is_named_a_repository_nothing_was_noted_for_is_unknown(self) -> None:
+        """Covers: B158"""
+        self.a_day_of_work()
+        (self.repo / "src").mkdir()
+        # Another remote than the one the profile names: with a git to start the session would stay.
+        self.git("remote", "add", "origin", "git@github.com:alex/invoices.git")
+
+        found = self.collect({**PROFILE, **BY_REMOTE}, run=self.never, git=None)
+
+        self.assertEqual(self.started, [])
+        self.assertEqual(found["sessions"], [])
+        self.assertEqual(
+            found["sources"]["repositories"],
+            {
+                "state": "could not read",
+                "detail": "work in 2 folders is left out: no git remote is known for them (this machine has no git "
+                "to start), and the profile leaves work out by git remote",
+            },
+        )
+        self.assertEqual([s["workspace"] for s in self.collect({**PROFILE, **BY_REMOTE})["sessions"]], ["w1"])
+
+    def test_what_a_session_start_noted_still_tells_a_repository(self) -> None:
+        """Covers: B158"""
+        self.a_day_of_work()
+        (self.repo / "src").mkdir()
+        self.a_second_workspace("w2", self.home / "notes")
+        self.started_in(self.repo, "git@github.com:alex/invoices.git")
+        self.started_in(self.repo / "src", "git@github.com:alex/invoices.git")
+        self.started_in(self.home / "notes", GLOBEX)
+
+        found = self.collect({**PROFILE, **BY_REMOTE}, run=self.never, git=None)
+
+        self.assertEqual(self.started, [])
+        self.assertEqual([s["workspace"] for s in found["sessions"]], ["w1"])
+        self.assertEqual(found["sources"]["repositories"], {"state": "read", "detail": ""})
+
+
 class NotRecordedTest(Fixture):
     def test_a_stretch_without_a_sign_of_life_is_named_not_recorded(self) -> None:
         """Covers: B89"""
@@ -426,7 +742,7 @@ class PeriodTest(Fixture):
             with self.subTest(text):
                 path.write_text(text, encoding="utf-8")
                 with self.assertRaises(FactsError):
-                    facts.collect(Inputs(self.store, self.recordings, self.projects, self.home, PROFILE, NOW))
+                    facts.collect(self.inputs())
 
 
 class SourcesTest(Fixture):
@@ -551,7 +867,6 @@ class VerdictSchemaTest(unittest.TestCase):
                     "blocks": {"b1": {"customer": "Globex", "activity": "development"}, "b2": None},
                 }
             ],
-            "candidates": [{"text": "Dana reviews the export on Fridays", "session": "workspace:w1:"}],
         }
 
         self.assertEqual(schema.check(verdict, verdict_schema), [])
@@ -955,7 +1270,7 @@ class EvictedFilesTest(Fixture):
         facts.is_evicted = lambda path: True  # type: ignore[assignment]
         try:
             with self.assertRaises(FactsError) as raised:
-                facts.collect(Inputs(self.store, self.recordings, self.projects, self.home, PROFILE, NOW))
+                facts.collect(self.inputs())
         finally:
             facts.is_evicted = original  # type: ignore[assignment]
 
@@ -1000,6 +1315,52 @@ class WhatLeavesATranscriptTest(Fixture):
             with self.subTest(text=text):
                 self.assertNotIn(secret, redact(text))
                 self.assertIn("[removed]", redact(text))
+
+    def test_credentials_as_tools_and_environments_write_them_are_redacted(self) -> None:
+        """Covers: B110"""
+        for text, redacted in (
+            ("PGPASSWORD=hunter2 psql -h db", "PGPASSWORD=[removed] psql -h db"),
+            ("export SECRET_KEY=short1", "export SECRET_KEY=[removed]"),
+            ("aws_secret_access_key = abc123", "aws_secret_access_key = [removed]"),
+            ("DB_PASS=winter24", "DB_PASS=[removed]"),
+            ("pass: winter24", "pass: [removed]"),
+            ("AccountName=acme;AccountKey=ab12==;EndpointSuffix=x", "AccountName=acme;AccountKey=[removed]"),
+            ("psql postgres://admin:pw@db.example:5432/app", "psql postgres://admin:[removed]@db.example:5432/app"),
+            ("clone https://alex:hunter2@example.org/repo.git", "clone https://alex:[removed]@example.org/repo.git"),
+            ("redis://:hunter2@cache.example:6379", "redis://:[removed]@cache.example:6379"),
+            ("curl -u admin:pw https://example.org/api", "curl -u admin:[removed] https://example.org/api"),
+            ("curl --user admin:pw https://example.org", "curl --user admin:[removed] https://example.org"),
+            ("curl --user=admin:pw https://example.org", "curl --user=admin:[removed] https://example.org"),
+            ("curl -uadmin:hunter2 https://example.org", "curl -uadmin:[removed] https://example.org"),
+            ("curl -u admin:1234 https://example.org", "curl -u admin:[removed] https://example.org"),
+            ("psql postgres://admin:p@ss@db.example/app", "psql postgres://admin:[removed]@db.example/app"),
+            ("secretKey: short1 and SecretKey=short2", "secretKey: [removed] and SecretKey=[removed]"),
+            # A section's name is a credential's, the value below it belongs to the key on its own line.
+            ("credentials:\n  password: hunter2\n  user: alex", "credentials:\n  password: [removed]\n  user: alex"),
+            ("credentials: password: hunter2", "credentials: password: [removed]"),
+            ("key id AKIAQ7ZQ7ZQ7ZQ7ZQ7ZQ in the config", "key id [removed] in the config"),
+            ("temporary ASIAQ7ZQ7ZQ7ZQ7ZQ7ZQ.", "temporary [removed]."),
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(redact(text), redacted)
+
+    def test_what_only_looks_like_a_credential_stays_as_written(self) -> None:
+        """Covers: B110"""
+        for text in (
+            "open https://example.org/a/b?x=1 and http://localhost:8080/health",
+            "git clone git@github.com:owner/repo.git",
+            "scp report.pdf alex@host.example:/tmp",
+            "git push -u origin feature",
+            "git push -u origin HEAD:main",
+            "docker run -u 1000:1000 image",
+            "curl -u admin https://example.org",
+            "sort -u names.txt",
+            "the street is called AKIASTRAAT and the code AKIA1234",
+            "the secretary: Dana, the tokenizer=bert and bypass=1",
+            "mail alex@example.org at 10:30",
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(redact(text), text)
 
     def test_a_secret_at_the_edge_of_the_kept_part_is_redacted_after_whitespace_shrinks(self) -> None:
         """Covers: B97"""
@@ -1058,6 +1419,68 @@ class WhatLeavesATranscriptTest(Fixture):
                     ]
                 )
                 self.assertEqual([prompt.text for prompt in found.prompts], ["Fix the export"])
+
+
+class WhoSentAPromptTest(Fixture):
+    """Claude Code marks on every prompt who sent it; the worklog gives the owner's."""
+
+    def prompts_of(self, *records: dict[str, Any]) -> list[str]:
+        self.transcript("s1", self.repo, list(records))
+        [found] = read_transcripts(self.projects, at(9), NOW).transcripts
+        self.assertEqual(len(found.stamps), len(records))
+        return [prompt.text for prompt in found.prompts]
+
+    def sent(self, minute: int, text: str, **mark: Any) -> dict[str, Any]:
+        return {"type": "user", "timestamp": f"2026-03-14T09:{minute:02d}:00Z", "message": {"content": text}, **mark}
+
+    def test_what_another_sender_sent_is_no_prompt_and_still_a_sign_of_work(self) -> None:
+        """Covers: B130"""
+        found = self.prompts_of(
+            self.sent(1, "Fix the invoice export", origin={"kind": "human"}, promptSource="typed"),
+            self.sent(2, "Build the next step of the plan", origin={"kind": "plugin"}, promptSource="system"),
+            self.sent(3, "The background tests finished", origin={"kind": "task-notification"}),
+            self.sent(4, "Another session asks for the schema", origin={"kind": "peer"}),
+            self.sent(5, "A sender this version does not know", origin={"kind": 7}),
+        )
+
+        self.assertEqual(found, ["Fix the invoice export"])
+
+    def test_a_prompt_typed_while_claude_was_busy_or_accepted_from_a_suggestion_is_the_owners(self) -> None:
+        """Covers: B130"""
+        found = self.prompts_of(
+            self.sent(1, "Also round per line", origin={"kind": "human"}, promptSource="queued"),
+            self.sent(2, "Run the tests", origin={"kind": "human"}, promptSource="suggestion_accepted"),
+        )
+
+        self.assertEqual(found, ["Also round per line", "Run the tests"])
+
+    def test_a_prompt_without_the_mark_counts_as_the_owners(self) -> None:
+        """Covers: B130"""
+        found = self.prompts_of(
+            self.sent(1, "Fix the invoice export"),
+            self.sent(2, "Then the totals", origin=None),
+            self.sent(3, "And the footer", origin={}),
+        )
+
+        self.assertEqual(found, ["Fix the invoice export", "Then the totals", "And the footer"])
+
+    def test_a_session_only_another_sender_prompted_needs_fifteen_minutes_of_work(self) -> None:
+        """Covers: B130"""
+        self.projects.mkdir(parents=True)
+        # git log fails in a repository without a commit, which would keep every session.
+        self.commit("chore: start", at(9) - datetime.timedelta(days=1))
+        self.watermark(at(9))
+        self.cache(
+            {"w1": [{"repo": "invoices", "label": "invoices", "folder": str(self.repo), "since": at(8).isoformat()}]}
+        )
+        self.events("w1", (at(10), "agent_working", "p1"), (at(10, 14), "agent_stopped", "p1"))
+        for sender, named in (("plugin", []), ("human", ["w1"])):
+            with self.subTest(sender=sender):
+                self.transcript("s1", self.repo, [self.sent(5, "Build the next step", origin={"kind": sender})])
+
+                found = self.collect()
+
+                self.assertEqual([s["workspace"] for s in found["sessions"]], named)
 
 
 class TimesTest(Fixture):

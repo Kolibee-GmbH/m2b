@@ -69,6 +69,14 @@ Ask in the owner's language, one short question at a time, with the choices:
 - **Model for curation** (only when this machine curates, and only when `machine_config` has no
   `curation.model`): `haiku`, the default, small and cheap; or `sonnet`, which files and condenses
   more carefully and costs more per run. Send it as `"curation_model"`.
+- **May the curation runs read your sessions?** (only when this machine curates, and only when
+  `machine_config` has no `curation.read_sessions`): a run then reads what the owner typed in
+  Claude Code since the last reading and proposes what belongs in the memory although nobody said
+  "remember this". Before asking, say what a yes means: only what the owner typed is read, never
+  Claude's answers and never a pasted block; nothing is filed before the owner says keep to a
+  proposal (`m2b proposals` lists them); and of a session in a folder the profile leaves out of
+  the worklog (`worklog_leave_out`) or that `m2b distillate off` was run in, nothing reaches the
+  model. The default is no. Send the answer as `"read_sessions"`, `true` or `false`.
 
 Never ask for something the store already holds, unless the owner wants to change it.
 
@@ -77,7 +85,7 @@ Never ask for something the store already holds, unless the owner wants to chang
 Hand over the answers as one JSON object; leave out what you did not ask:
 
 ```bash
-m2b setup apply --json --answers '{"store": {"backend": "icloud", "path": "<folder>"}, "tasks": {"backend": "apple-reminders", "list": "Inbox"}, "owner": "Alex", "language": "en", "calendar": "apple-calendar", "curates": true, "curation_model": "haiku"}'
+m2b setup apply --json --answers '{"store": {"backend": "icloud", "path": "<folder>"}, "tasks": {"backend": "apple-reminders", "list": "Inbox"}, "owner": "Alex", "language": "en", "calendar": "apple-calendar", "curates": true, "curation_model": "haiku", "read_sessions": false}'
 ```
 
 The answer lists the files it `written` (empty when nothing changed), `take_over`, the
@@ -94,8 +102,10 @@ m2b doctor
 ```
 
 Report each line whose state is `not reachable`, `missing`, `not installed`, `newer` (the store format: update m2b
-on this machine) or `not usable for curation` (the store path: move the store to a folder the line
-allows and set `store.path` to it), with what to do; `not recorded` only on
+on this machine), `not usable for curation` (the store path: move the store to a folder the line
+allows and set `store.path` to it), `does not answer` (the prompt hook: no topic's facts come in before a
+prompt, for the reason the line gives) or `cannot commit` (the store folder is a git repository, and a
+curation run on this machine cannot commit into it, for the reason the line gives), with what to do; `not recorded` only on
 the curating machine, where the model steps need that program. The line `band` says whether the
 latest session that ran m2b's hooks also started the band above the prompt. Right after setup it
 can say `not seen`, because m2b's hooks only begin with the next session. Say that the band appears

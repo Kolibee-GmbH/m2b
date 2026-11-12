@@ -158,6 +158,11 @@ class Contracts:
             self.assertEqual(reopened.notes, "m2b:candidate\nkept")
             self.assertEqual([task.id for task in self.tasks.completed_items(self._since())], [task_id])
 
+        def test_a_list_whose_tasks_have_no_copies_names_none(self) -> None:
+            self.tasks.add("Call Dana")
+
+            self.assertEqual(self.tasks.conflict_copies(), [])
+
         def test_an_unknown_id_is_an_error(self) -> None:
             for call in (self.tasks.complete, self.tasks.uncomplete, self.tasks.delete, self.tasks.drop):
                 with self.subTest(call=call.__name__), self.assertRaises(UnknownTaskError):

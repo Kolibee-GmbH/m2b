@@ -11,16 +11,19 @@ from __future__ import annotations
 import datetime
 import json
 import subprocess
-from collections.abc import Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from m2b.session_remotes import ByRemote, RemoteRule, remotes_in
+
 from m2b_worklog import classify, periods, sessions
+from m2b_worklog.files import is_evicted
 from m2b_worklog.sources import READ, SourceState
-from m2b_worklog.sources.git import GitFacts, Runner, read_git
+from m2b_worklog.sources.git import NO_GIT_TO_START, GitFacts, Runner, read_git
 from m2b_worklog.sources.herdr_events import read_recordings
-from m2b_worklog.sources.inbox import is_evicted, read_inbox
+from m2b_worklog.sources.inbox import read_inbox
 from m2b_worklog.sources.transcripts import read_transcripts
 
 FACTS_VERSION = 1
@@ -48,7 +51,10 @@ class Inputs:
     home: Path
     profile: Mapping[str, Any]
     now: datetime.datetime
-    git: str = "git"
+    # Where the core's session-start hook notes the git remotes of the folders sessions start in.
+    remote_notes: Path
+    # The git to start for commits and remotes; None on a machine without one (sources.git.git_to_start).
+    git: str | None
     # Whether herdr runs with the recorder linked; the command asks herdr (recorder.herdr_state).
     herdr: SourceState = HERDR_NOT_CHECKED
 
@@ -58,6 +64,58 @@ class Period:
     start: datetime.datetime
     end: datetime.datetime
     origin: str
+
+
+@dataclass
+class _WorkLeftOut:
+    """The work the profile leaves out, by its folder or by a git remote of its repository.
+
+    A folder whose remotes nobody can tell, neither the note from a session start nor git now, is
+    left out while the profile names a remote, and kept in ``unknown``: the worklog says how many
+    there were, since it cannot say they held no work.
+    """
+
+    by_folder: classify.LeftOut
+    by_remote: RemoteRule
+    # Why git names no remotes now, when the reason is the machine and not the folder.
+    no_git_to_start: bool
+    unknown: set[str | None] = field(default_factory=set)
+
+    def holds(self, folder: str | None) -> bool:
+        if self.by_folder.holds(folder):
+            return True
+        judged = self.by_remote.judge(folder)
+        if judged is ByRemote.UNKNOWN:
+            self.unknown.add(folder)
+        return judged is not ByRemote.NOT_NAMED
+
+    def state(self) -> SourceState:
+        """Read, unless work was left out only because its repository could not be told."""
+        if not self.unknown:
+            return SourceState.read()
+        one = len(self.unknown) == 1
+        why = (
+            NO_GIT_TO_START
+            if self.no_git_to_start
+            else f"{'the folder is' if one else 'the folders are'} gone or git did not answer"
+        )
+        return SourceState.failed(
+            f"work in {len(self.unknown)} {'folder' if one else 'folders'} is left out: no git remote is known "
+            f"for {'it' if one else 'them'} ({why}), and the profile leaves work out by git remote"
+        )
+
+
+def _work_left_out(inputs: Inputs, run: Runner) -> _WorkLeftOut:
+    named = classify.left_out(inputs.profile, inputs.home)
+    by_remote = RemoteRule(named.remote_parts, inputs.remote_notes, inputs.now, _asking_git(inputs.git, run))
+    return _WorkLeftOut(named, by_remote, no_git_to_start=inputs.git is None)
+
+
+def _asking_git(git: str | None, run: Runner) -> Callable[[Path], frozenset[str] | None]:
+    """What git names as a folder's remotes now; nothing on a machine without a git to start."""
+    if git is None:
+        return lambda folder: None
+    return lambda folder: remotes_in(folder, git, run)
 
 
 def read_watermark(store: Path) -> datetime.datetime | None:
@@ -97,13 +155,18 @@ def collect(inputs: Inputs, run: Runner = subprocess.run) -> dict[str, Any]:
     signs_from = period.start - periods.RULES.agent_silence
     transcripts = read_transcripts(inputs.transcripts, period.start, period.end, signs_from)
     inbox = read_inbox(inputs.store, period.start, period.end)
-    drafts = sessions.draft_sessions(
-        recordings.events, recordings.workspaces, transcripts.transcripts, period.start, period.end
-    )
+    # A transcript goes by its own folder: a session in another folder can hold a pane that worked
+    # in one the owner leaves out, and would carry its prompts.
+    left_out = _work_left_out(inputs, run)
+    read = [transcript for transcript in transcripts.transcripts if not left_out.holds(transcript.cwd)]
+    drafts = sessions.draft_sessions(recordings.events, recordings.workspaces, read, period.start, period.end)
     rules = classify.sphere_rules(inputs.profile, inputs.home)
     gits = {draft.key: _git_facts(draft.folder, period, inputs.git, run) for draft in drafts}
     blocks = {draft.key: sessions.blocks_of(draft) for draft in drafts}
     owners = _commit_owners(drafts, gits, blocks)
+    # A session left out goes only now: until here it takes the commits made in it, which another
+    # session of the same repository would otherwise show as its own.
+    drafts = [draft for draft in drafts if not left_out.holds(draft.folder)]
     # After ownership: a commit another worktree of the repository made keeps no session. Dropping a
     # session that owns nothing changes no owner.
     owning = set(owners.values())
@@ -124,6 +187,7 @@ def collect(inputs: Inputs, run: Runner = subprocess.run) -> dict[str, Any]:
             "herdr": _state(inputs.herdr),
             "transcripts": _state(transcripts.state),
             "inbox": _state(inbox.state),
+            "repositories": _state(left_out.state()),
         },
         "spheres": [{"id": r.sphere_id, "label": r.label, "billable": r.billable, "default": r.default} for r in rules],
         "customers": [c for c in inputs.profile.get("customers", []) if isinstance(c, str)],
@@ -215,7 +279,7 @@ def _session(
     }
 
 
-def _git_facts(folder: str | None, period: Period, git: str, run: Runner) -> GitFacts:
+def _git_facts(folder: str | None, period: Period, git: str | None, run: Runner) -> GitFacts:
     if folder is None:
         return GitFacts([], None, SourceState.failed("the session has no known folder"))
     if not Path(folder).is_dir():

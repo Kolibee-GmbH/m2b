@@ -12,7 +12,7 @@ labels: bug
 
 **Versions**
 
-- m2b (`/plugin` or `.claude-plugin/plugin.json`):
+- m2b (`m2b --version`):
 - Claude Code (`claude --version`):
 - Python (`python3 --version`):
 - System and store backend (macOS with iCloud Drive, Linux with a folder, ...):

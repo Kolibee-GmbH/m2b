@@ -2,6 +2,8 @@ name: release
 
 # A tag vX.Y.Z on main publishes that release: the tag must name the version in the plugin's
 # manifest and sit on main, and the release notes are that version's section of the changelog.
+# A link in that section to a file of the repository, as `(docs/curation.md#pausing)`, is written
+# out to the file at the tag: release notes are not shown beside the files, so it would lead nowhere.
 # Adapted from the release workflow of prismantis (MIT, Nahum Litvin).
 
 on:
@@ -17,7 +19,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -27,7 +29,8 @@ jobs:
         run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
       - name: Notes from the changelog
         run: |
-          awk -v v="${GITHUB_REF_NAME#v}" 'index($0, "## [" v "] - ") == 1 {f=1; next} /^## / {f=0} f' CHANGELOG.md > notes.md
+          awk -v v="${GITHUB_REF_NAME#v}" 'index($0, "## [" v "] - ") == 1 {f=1; next} /^## / {f=0} f' CHANGELOG.md > section.md
+          sed -E "s|\]\(([^)#:][^):]*)\)|](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/\1)|g" section.md > notes.md
           test -s notes.md
       - run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md
         env:

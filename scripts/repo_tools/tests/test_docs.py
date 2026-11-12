@@ -1,4 +1,5 @@
-"""The documentation's own promises: a page for every add-on, and links that lead somewhere."""
+"""The documentation's own promises: a page for every add-on, an entry to every part of the behavior
+catalog, and links that lead somewhere."""
 
 from __future__ import annotations
 
@@ -6,11 +7,21 @@ import re
 import unittest
 from pathlib import Path
 
+from m2b import cli
 from m2b.addons import addon_names
+
+from repo_tools import coverage_check, evals_page
 
 REPO = Path(__file__).resolve().parents[3]
 ADDONS_PAGE = REPO / "docs" / "addons.md"
 ADDON_PAGES = REPO / "docs" / "addons"
+BEHAVIOR_ENTRY = REPO / "docs" / "behavior.md"
+COMMANDS_PAGE = REPO / "docs" / "commands.md"
+PLUGIN = REPO / "plugins" / "m2b"
+# The first cell of a table row that shows an ``m2b`` command: the words up to its first argument.
+COMMAND_ROW = re.compile(r"^\| `m2b((?: [a-z][a-z-]*)+)[ `]", re.MULTILINE)
+# A slash command the band's mod registers.
+BAND_COMMAND = re.compile(r"^  name: '(m2b-[a-z-]+)',$", re.MULTILINE)
 # A Markdown link or image to a relative target, without its #anchor or title.
 RELATIVE_LINK = re.compile(r"\]\((?!https?:|mailto:|#)<?([^)#\s>]+)>?(?:#[^)\s]*)?(?:\s+\"[^\"]*\")?\)")
 # The same in HTML, as the README's header uses.
@@ -36,6 +47,77 @@ class AddonsPageTest(unittest.TestCase):
         readme = (REPO / "README.md").read_text(encoding="utf-8")
 
         self.assertTrue("](docs/addons.md)" in readme, "README.md does not link docs/addons.md")
+
+
+class BehaviorCatalogTest(unittest.TestCase):
+    def test_the_entry_links_every_part_and_holds_no_rule(self) -> None:
+        entry = BEHAVIOR_ENTRY.read_text(encoding="utf-8")
+        parts = [part.stem for part in coverage_check.BEHAVIOR_CATALOG.glob("*.md")]
+
+        self.assertEqual([name for name in parts if f"](behavior/{name}.md)" not in entry], [])
+        self.assertEqual(coverage_check.rule_ids(entry), [])
+
+    def test_every_part_links_the_entry(self) -> None:
+        parts = sorted(coverage_check.BEHAVIOR_CATALOG.glob("*.md"))
+
+        self.assertEqual(
+            [part.name for part in parts if "](../behavior.md)" not in part.read_text(encoding="utf-8")], []
+        )
+
+
+class CommandsPageTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.page = COMMANDS_PAGE.read_text(encoding="utf-8")
+
+    def test_the_page_has_a_row_for_every_command_help_lists_and_for_no_other(self) -> None:
+        documented = sorted(path.strip() for path in COMMAND_ROW.findall(self.page))
+
+        self.assertEqual(documented, sorted(cli.command_paths()))
+
+    def test_the_page_names_every_skill_with_a_colon(self) -> None:
+        skills = sorted(skill.parent.name for skill in (PLUGIN / "skills").glob("*/SKILL.md"))
+
+        self.assertTrue(skills)
+        self.assertEqual([name for name in skills if f"`/m2b:{name}`" not in self.page], [])
+
+    def test_the_page_names_every_command_of_the_band_with_a_dash(self) -> None:
+        commands = sorted(
+            name for source in (PLUGIN / "hooks").glob("*.ts*") for name in BAND_COMMAND.findall(source.read_text())
+        )
+
+        self.assertEqual(len(commands), 4, commands)
+        self.assertEqual([name for name in commands if f"`/{name}" not in self.page], [])
+
+    def test_the_readme_links_the_page(self) -> None:
+        readme = (REPO / "README.md").read_text(encoding="utf-8")
+
+        self.assertTrue("](docs/commands.md" in readme, "README.md does not link docs/commands.md")
+
+
+class EvalsPageTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.page = evals_page.PAGE.read_text(encoding="utf-8")
+        self.cases = sorted(evals_page.suite_cases(evals_page.EVALS))
+
+    def test_the_results_have_a_row_for_every_case_of_the_suite_and_no_other(self) -> None:
+        results = self.page.partition(evals_page.BLOCK_START)[2].partition(evals_page.BLOCK_END)[0]
+
+        self.assertEqual(re.findall(r"^\| `([a-z-]+)` \|", results, re.MULTILINE), self.cases)
+
+    def test_the_page_says_what_every_case_asks(self) -> None:
+        described = self.page.partition(evals_page.BLOCK_END)[2]
+
+        self.assertEqual(sorted(re.findall(r"^\| `([a-z-]+)` \|", described, re.MULTILINE)), self.cases)
+
+    def test_the_results_name_the_run_they_come_from(self) -> None:
+        for fact in ("Day", "m2b", "Claude Code", "Model", "Runs"):
+            with self.subTest(fact=fact):
+                self.assertRegex(self.page, rf"(?m)^\| {fact} \| \S.* \|$")
+
+    def test_the_readme_links_the_page(self) -> None:
+        readme = (REPO / "README.md").read_text(encoding="utf-8")
+
+        self.assertTrue("](docs/evals.md)" in readme, "README.md does not link docs/evals.md")
 
 
 class LinkTest(unittest.TestCase):

@@ -6,7 +6,8 @@ per session; a visible file in the inbox (evicted ones count, hidden ones do not
 unless the last run could not file it and it has not changed since; so does a last success older
 than 20 hours, or none. A run record that cannot be read leaves the
 answer to the run, whose preflight downloads or rewrites it. Whether this machine curates at all
-is the caller's question.
+is the caller's question, and so is whether it is paused (B161): a start that was not forced
+does not ask on a paused machine, while ``m2b status`` still does.
 """
 
 from __future__ import annotations
@@ -21,6 +22,12 @@ from m2b.run_record import RunRecordError, load_run_record
 from m2b.store.base import Store, StoreError
 
 DUE_AFTER = datetime.timedelta(hours=20)
+# What ``curation.paused`` means, for ``m2b status`` and for a start that was not forced.
+PAUSED_NOTE = (
+    "no curation run starts by itself on this machine; m2b curate --force runs one, "
+    "m2b config set curation.paused false ends the pause"
+)
+PAUSED_MESSAGE = f"curation is paused: {PAUSED_NOTE}"
 
 
 @dataclass(frozen=True)

@@ -38,7 +38,7 @@
         "--force"
       ],
       "exit": 1,
-      "stdout": "\\Athe curation run failed: ingest: a line written to memory/MEMORY\\.md holds U\\+E006F, U\\+E0062, U\\+E0065 and 7 more, which hide or reorder text: \"- Dana moved to Lisbon \\(dana\\.md\\)\"; memory/ is as it was before the step; the captures it filed are in the archive: 20261107T080000Z-cli-7a8b\\.md\\. "
+      "stdout": "\\Athe curation run failed: ingest: line 5 written to memory/MEMORY\\.md holds U\\+E006F, U\\+E0062, U\\+E0065 and 7 more, which hide or reorder text; memory/ is as it was before the step; the captures it filed are in the archive: 20261107T080000Z-cli-7a8b\\.md\\. "
     },
     {
       "run": [
@@ -49,7 +49,7 @@
         "review",
         "--json"
       ],
-      "stdout": "The step ingest failed: a line written to memory/MEMORY\\.md holds U\\+E006F"
+      "stdout": "The step ingest failed: line 5 written to memory/MEMORY\\.md holds U\\+E006F"
     },
     {
       "run": [

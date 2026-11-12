@@ -49,6 +49,9 @@ An example with invented values:
 | `curation.model` | the model of each fenced model step, any name `claude --model` takes | `haiku` |
 | `curation.max_budget_usd` | a spending cap per model step, from Claude Code's own estimate of API cost; it can differ from the bill and says little on a subscription | none |
 | `curation.max_turns` | the turns one model step may take before it stops and is reported | 100 |
+| `curation.read_sessions` | whether a curation run on this machine reads what you typed in Claude Code since the last reading and keeps what a model proposes from it for your memory; of a session the profile's `worklog_leave_out` names, by its folder or by a git remote of its repository, or in a folder of `distillate.skip_under`, nothing reaches the model | `false` |
+| `curation.git_commit` | whether a curation run on this machine ends with a git commit of what it changed, and first commits the captures git does not know yet, when the store folder is the top of a git work tree ([A commit per run](curation.md#a-commit-per-run)); without a repository there the setting does nothing | `true` |
+| `curation.paused` | whether this machine starts no curation run by itself: none at a session start, none from a schedule. `m2b curate --force` still runs one, captures keep reaching the inbox, and `m2b status` says `paused` ([Pausing](curation.md#pausing)) | `false` |
 | `band.due_tasks` | whether the band shows your tasks due today or overdue below the candidates | `true` |
 | `distillate.skip_under` | folders, absolute or starting with `~/`, in and below which sessions get no distillate; `m2b distillate off` and `on` change it | none |
 | `addons.<add-on>.on` | whether an add-on runs on this machine: `worklog` | off |
@@ -70,7 +73,7 @@ leaves nothing to clean up.
 
 ```json
 {
-  "format": 2,
+  "format": 3,
   "tasks": {"backend": "apple-reminders", "list": "Inbox"},
   "curating_machine": "b41c-tower",
   "journal_since": "2026-11-01"
@@ -108,6 +111,7 @@ The task backend lives in the store, not on the machine, so every machine uses t
 | `owner` | your name, as the curator writes about you |
 | `language` | `en` or `de`: task titles, notes and the worklog are written in it |
 | `spheres` | for the worklog: areas of work, how each is recognized, which are billable, one default |
+| `worklog_leave_out` | work that reaches no worklog and no reading of your sessions: folders under your home folder (`path_under`) and parts of the URLs of git remotes (`git_remote_contains`); see [Leaving work out](addons/worklog.md#leaving-work-out). A profile with it is written as version 2 |
 | `customers` | for the worklog: the only names its booking proposals may use |
 
 `profile merge` merges spheres by `id` (a sphere you name replaces the one with its id) and adds
@@ -122,7 +126,7 @@ For tests, development and unusual setups; none is needed in normal use.
 | `M2B_HOME` | moves every machine path (`~/.config/m2b`, `~/.local/state/m2b`, `~/.local/share/m2b`, the launcher) under this folder; a leading `~` stands for your home folder |
 | `M2B_CORE_ROOT` | the launcher runs the core from this folder (a checkout) instead of Claude Code's plugin folder |
 | `M2B_INSTALLED_PLUGINS` | another `installed_plugins.json`, read by the launcher and the worklog's recorder |
-| `M2B_MODEL_RUNNER` | an executable used in place of `claude` for model steps, such as `scripts/no-model` |
+| `M2B_MODEL_RUNNER` | an executable used in place of `claude` for model steps, such as `scripts/no-model`; like `claude`, it has to print the line that names its session's tools and MCP servers before its result |
 | `M2B_PYTHON` | the Python the plugin commands run with |
 | `M2B_HERDR` | the `herdr` executable the worklog add-on calls |
 | `M2B_MANAGED_SETTINGS` | another managed settings file, read by the worklog's recorder for `enabledPlugins` in place of the system one (tests) |

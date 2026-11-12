@@ -50,6 +50,17 @@ class CurationSettings:
     # Claude Code's own estimate of API spend per model step; unset, no cap. On a subscription the
     # estimate says little, so it is off unless the user sets it.
     max_budget_usd: float | None = None
+    # Whether a run reads what the person typed in Claude Code on this machine and proposes from it
+    # (``curate.glean_step``). Off until setup asked: the transcripts hold every project's sessions.
+    read_sessions: bool = False
+    # Whether a run is committed when the store folder is the top of a git work tree
+    # (``curate.run_commit``). On, because the repository is the owner's own doing; this is the way
+    # to keep one there and say no.
+    git_commit: bool = True
+    # Whether this machine starts no run by itself: none at a session start, none from a schedule.
+    # A run asked for by hand (``m2b curate --force``) still runs, so the owner can pause the
+    # background work and file the inbox when it suits.
+    paused: bool = False
 
 
 @dataclass(frozen=True)
@@ -130,12 +141,17 @@ def _executables(fields: Fields) -> Mapping[str, str]:
 
 
 def _curation(fields: Fields) -> CurationSettings:
-    fields.reject_unknown(("model_timeout_minutes", "model", "max_turns", "max_budget_usd"))
+    fields.reject_unknown(
+        ("model_timeout_minutes", "model", "max_turns", "max_budget_usd", "read_sessions", "git_commit", "paused")
+    )
     return CurationSettings(
         model_timeout_minutes=fields.integer("model_timeout_minutes", default=DEFAULT_MODEL_TIMEOUT_MINUTES),
         model=fields.string("model", default=DEFAULT_CURATION_MODEL),
         max_turns=fields.integer("max_turns", default=DEFAULT_MAX_TURNS),
         max_budget_usd=_budget(fields),
+        read_sessions=fields.boolean("read_sessions", default=False),
+        git_commit=fields.boolean("git_commit", default=True),
+        paused=fields.boolean("paused", default=False),
     )
 
 

@@ -58,7 +58,10 @@ class PathOutsideStoreError(ValueError):
 
 @dataclass(frozen=True)
 class ConflictCopy:
-    """A file a sync service made next to ``original``; only an identical copy may be removed."""
+    """A file a sync service made next to ``original``; only an identical copy may be removed.
+
+    ``identical`` is None when the two were not compared: one is evicted or cannot be read.
+    """
 
     path: str
     original: str
@@ -274,9 +277,49 @@ class Store(ABC):
     def _start_download(self, relative: str, timeout_seconds: float) -> None:
         """Asks the sync service for one file; ``fetch`` then waits until it is local."""
 
-    @abstractmethod
     def conflict_copies(self, folder: str = "") -> list[ConflictCopy]:
-        """Conflict copies below ``folder`` that this backend's sync service names its own way."""
+        """Files below ``folder`` that the sync service named as a copy of a file still next to them.
+
+        The name alone proves little: every service's name for a copy is one a person could give
+        a file. So a file counts only while the file it names as its original is there, and a
+        caller may remove it only when ``identical`` is true.
+        """
+        copies = []
+        # scan, not a recursive listing: an evicted folder is skipped instead of failing the whole walk,
+        # while an evicted file stays a copy, so callers keep leaving it alone.
+        scan = self.scan(folder)
+        evicted_files = [relative for relative in scan.evicted if not self.path(relative).is_dir()]
+        for relative in sorted([*scan.files, *evicted_files]):
+            parent, _, name = relative.rpartition("/")
+            original_name = self._original_name(name)
+            if original_name is None:
+                continue
+            original = f"{parent}/{original_name}" if parent else original_name
+            # Not a symlink: one that points at the copy would compare equal to it, and removing the
+            # copy would then remove the only bytes.
+            if self.path(original).is_file() and not self.path(original).is_symlink():
+                copies.append(ConflictCopy(relative, original, self._same_bytes(relative, original)))
+        return copies
+
+    def _same_bytes(self, first: str, second: str) -> bool | None:
+        """None when the two cannot be compared: one is evicted, where comparing would mean
+        downloading, or cannot be read, or is gone since the folder was listed. One such pair must not
+        end the walk for all the others.
+        """
+        try:
+            if self.is_evicted(first) or self.is_evicted(second):
+                return None
+            return self.read_bytes(first) == self.read_bytes(second)
+        except (StoreError, FileNotFoundError):
+            return None
+
+    @abstractmethod
+    def _original_name(self, name: str) -> str | None:
+        """The name of the file that ``name`` would be a conflict copy of, or None for any other name.
+
+        Asked by ``conflict_copies`` for every file name; it knows how this backend's sync
+        service names a copy and looks at nothing but the name.
+        """
 
 
 def _name(entry: Path) -> str:

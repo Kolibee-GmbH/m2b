@@ -1,5 +1,5 @@
 {
-  "description": "E22 at the model level: is a fact told in one project there when another project asks for it? With m2b, a session in project A is told where the spare shed key is, and a session in project B is asked: it answers from m2b. With only Claude Code's own memory, the same is told in project A: a session in project B does not know it, and a second session in project A does, which shows the memory worked and stayed in its project. The answers are the model's; run it after each Claude Code minor update, beside E18.",
+  "description": "E22 at the model level: is a fact told in one project there when another project asks for it? With m2b, a session in project A is told where the spare shed key is, and a session in project B is asked: it answers from m2b. The capture is in the inbox or, when a curation run that a session started in the background has filed it by the end, in the archive. With only Claude Code's own memory, the same is told in project A: a session in project B does not know it, and a second session in project A does, which shows the memory worked and stayed in its project. The answers are the model's; run it after each Claude Code minor update, beside E18.",
   "steps": [
     {
       "run": [
@@ -123,7 +123,7 @@
   "invariants": [
     {
       "count": 1,
-      "glob": "inbox/*-claude-*.md",
+      "glob": "*-claude-*.md",
       "content": "blue pot"
     },
     {

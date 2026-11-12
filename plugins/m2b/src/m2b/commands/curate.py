@@ -15,7 +15,10 @@ from m2b.run_record import FAILED
 
 
 def curate_run(arguments: argparse.Namespace, context: Context) -> int:
-    """One run, or with ``--detach`` one started in the background; only a failed run exits 1."""
+    """One run, or with ``--detach`` one started in the background; only a failed run exits 1.
+
+    A run that happened is told in two lines: how it ended, and what it did to the inbox.
+    """
     if arguments.detach:
         start = start_detached(
             context.machine,
@@ -36,9 +39,11 @@ def curate_run(arguments: argparse.Namespace, context: Context) -> int:
     )
     if outcome.state == FAILED:
         print(f"the curation run failed: {outcome.message}. The review task names what to look at.")
-        return 1
-    print(outcome.message)
-    return 0
+    else:
+        print(outcome.message)
+    if outcome.summary:
+        print(outcome.summary)
+    return 1 if outcome.state == FAILED else 0
 
 
 def curate_take_over(arguments: argparse.Namespace, context: Context) -> int:

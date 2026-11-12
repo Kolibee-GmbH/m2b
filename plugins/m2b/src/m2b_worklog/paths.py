@@ -6,6 +6,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from m2b.session_remotes import NOTES_FOLDER
+
 PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 RECORDER_SOURCE = PLUGIN_ROOT / "recorder"
 RECORDER_ID = "m2b.worklog-recorder"
@@ -32,6 +34,16 @@ class WorklogPaths:
     def verdict_draft(self) -> Path:
         """Where the verdict's model step writes its verdict before it hands it in."""
         return self.run_dir / "verdict-draft.json"
+
+    @property
+    def temp_dir(self) -> Path:
+        """The core's folder for temporary files, in no store; the core clears it of what a crash left."""
+        return self.home / ".local" / "state" / "m2b" / "tmp"
+
+    @property
+    def session_remotes(self) -> Path:
+        """Where the core's session-start hook notes the git remotes of the folders sessions start in."""
+        return self.home / ".local" / "state" / "m2b" / NOTES_FOLDER
 
     @property
     def switch(self) -> Path:

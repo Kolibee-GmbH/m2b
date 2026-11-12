@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Union
 
+from m2b.store.base import ConflictCopy
 from m2b.tasks.markers import marker_of
 
 Due = Union[datetime.date, datetime.datetime]
@@ -70,6 +71,13 @@ class Tasks(ABC):
 
     def unreadable(self) -> list[tuple[str, str]]:
         """The tasks ``items`` leaves out because they cannot be read, by where they are, with the reason.
+
+        Only a backend that keeps tasks as files has any.
+        """
+        return []
+
+    def conflict_copies(self) -> list[ConflictCopy]:
+        """The copies a sync service made of task files, by their path in the store; ``items`` reads none.
 
         Only a backend that keeps tasks as files has any.
         """

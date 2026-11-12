@@ -14,6 +14,7 @@ from unittest import mock
 
 from m2b import cli, paths
 from m2b.config import machine, profile
+from m2b.config.store_settings import KNOWN_STORE_FORMAT, save_store_settings
 from m2b.store.base import EvictedFileError, FetchError, UnsupportedStoreError
 from m2b.store.folder import FolderStore
 from m2b.store.guard import DatalessGuard
@@ -154,6 +155,34 @@ class CommandLineTest(unittest.TestCase):
 
         self.assertEqual(json.loads(result.stdout), ["Globex"])
 
+    def test_profile_get_prints_what_the_worklog_leaves_out_in_the_shape_of_the_file(self) -> None:
+        """Covers: B111"""
+        self._set_up(version=1, owner="Alex")
+        merged = self._run("profile", "merge", '{"worklog_leave_out": {"path_under": ["~/code/globex"]}}')
+        self.assertEqual(merged.returncode, 0, merged.stderr)
+
+        # The worklog add-on reads this answer, not the file: an object with ``path_under``.
+        printed = json.loads(self._run("profile", "get", "--json").stdout)
+
+        self.assertEqual(printed["worklog_leave_out"], {"path_under": ["~/code/globex"], "git_remote_contains": []})
+        self.assertEqual(printed["version"], 2)
+
+    def test_profile_get_prints_the_remotes_the_worklog_leaves_out_in_the_shape_of_the_file(self) -> None:
+        """Covers: B153"""
+        self._set_up(version=1, owner="Alex")
+        # One key of the setting is set beside the other; a merge would replace the setting as a whole.
+        added = self._run("profile", "set", "worklog_leave_out.git_remote_contains", '["globex-ag/"]')
+        self.assertEqual(added.returncode, 0, added.stderr)
+        beside = self._run("profile", "set", "worklog_leave_out.path_under", '["~/code/globex"]')
+        self.assertEqual(beside.returncode, 0, beside.stderr)
+
+        printed = json.loads(self._run("profile", "get", "--json").stdout)
+
+        self.assertEqual(
+            printed["worklog_leave_out"], {"path_under": ["~/code/globex"], "git_remote_contains": ["globex-ag/"]}
+        )
+        self.assertEqual(printed["version"], 2)
+
     def test_profile_get_without_a_profile_names_setup(self) -> None:
         self._set_up()
 
@@ -190,6 +219,29 @@ class CommandLineTest(unittest.TestCase):
 
     def test_an_unknown_command_is_a_usage_error(self) -> None:
         self.assertEqual(self._run("fly").returncode, cli.EXIT_USAGE)
+
+    def test_version_prints_the_version_of_the_plugin_manifest_also_without_a_config(self) -> None:
+        """Covers: B159"""
+        manifest = json.loads((SOURCE_ROOT.parent / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+
+        result = self._run("--version")
+
+        self.assertEqual((result.returncode, result.stderr), (cli.EXIT_OK, ""))
+        self.assertEqual(result.stdout, f"m2b {manifest['version']}\n")
+
+    def test_a_command_that_groups_actions_prints_its_help_when_named_alone(self) -> None:
+        """Covers: B160"""
+        for group, actions in (("lint", ("scan", "fix")), ("tasks", ("list", "complete")), ("setup", ("apply",))):
+            with self.subTest(group=group):
+                result = self._run(group)
+
+                self.assertEqual((result.returncode, result.stderr), (cli.EXIT_OK, ""))
+                self.assertIn(f"usage: m2b {group}", result.stdout)
+                for action in actions:
+                    self.assertIn(action, result.stdout)
+
+    def test_an_unknown_action_of_a_group_stays_a_usage_error(self) -> None:
+        self.assertEqual(self._run("lint", "polish").returncode, cli.EXIT_USAGE)
 
 
 class CuratorCommandsTest(unittest.TestCase):
@@ -253,6 +305,17 @@ class CuratorCommandsTest(unittest.TestCase):
 
     def test_inside_a_curation_run_a_curator_command_runs(self) -> None:
         """Covers: B53"""
+        store = FolderStore(self.store, self.home / "tmp", DatalessGuard(False))
+        save_store_settings(
+            store,
+            {
+                "format": KNOWN_STORE_FORMAT,
+                "tasks": {"backend": "markdown"},
+                "curating_machine": "sb-test-m1",
+                "journal_since": "2026-03-01",
+            },
+        )
+
         code, _, err = self._main(["lint", "fix"], {"M2B_HOME": str(self.home), "M2B_CURATION_RUN": "1"})
 
         self.assertEqual(code, cli.EXIT_OK, err)

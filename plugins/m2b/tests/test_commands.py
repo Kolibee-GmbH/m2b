@@ -7,15 +7,20 @@ import datetime
 import io
 import json
 import os
+import shutil
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
-from m2b import cli, paths
+from m2b import cli, paths, session_remotes
+from m2b import hooks as session_start
 from m2b.calendar.base import local_midnight
+from m2b.commands import doctor
 from m2b.config import machine, profile
 from m2b.config.store_settings import KNOWN_STORE_FORMAT, save_store_settings
 from m2b.store.folder import FolderStore
@@ -104,7 +109,11 @@ class TasksCommandTest(CommandTest):
         task_id = out.strip()
         self.run_command("tasks", "add", "Merken? Dana prefers tea", "--notes", "m2b:candidate")
 
+        self.run_command("tasks", "add", "m2b: proposals from your sessions", "--notes", "m2b:proposals\n2 wait")
+
         (candidate,) = self.run_json("tasks", "list", "--marker", "candidate")
+        (waiting,) = self.run_json("tasks", "list", "--marker", "proposals")
+        self.assertEqual((waiting["title"], waiting["marker"]), ("m2b: proposals from your sessions", "proposals"))
         listed = self.run_json("tasks", "list")
         self.assertEqual(candidate["title"], "Merken? Dana prefers tea")
         self.assertEqual(candidate["marker"], "candidate")
@@ -114,7 +123,10 @@ class TasksCommandTest(CommandTest):
         )
 
         self.assertEqual(self.run_command("tasks", "complete", task_id)[0], cli.EXIT_OK)
-        self.assertEqual([task["title"] for task in self.run_json("tasks", "list")], ["Merken? Dana prefers tea"])
+        self.assertEqual(
+            sorted(task["title"] for task in self.run_json("tasks", "list")),
+            ["Merken? Dana prefers tea", "m2b: proposals from your sessions"],
+        )
         (done,) = [task for task in self.run_json("tasks", "list", "--include-completed") if task["id"] == task_id]
         self.assertTrue(done["completed"])
 
@@ -624,6 +636,103 @@ class DoctorTest(CommandTest):
 
         self.assertEqual(stat.S_IMODE(self.machine.state_dir.stat().st_mode), 0o700)
 
+    def a_repository(self, remote: str | None) -> Path:
+        repository = self.home / "code" / "portal"
+        repository.mkdir(parents=True)
+        environ = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+        added = [["remote", "add", "origin", remote]] if remote else []
+        for arguments in (["init", "-q"], *added):
+            subprocess.run(["git", "-C", str(repository), *arguments], check=True, env=environ, capture_output=True)
+        return repository
+
+    def start_session(self, folder: Path) -> str:
+        """Runs the launcher hook as Claude Code does at a session start in ``folder``; what it printed."""
+        given = io.StringIO(json.dumps({"session_id": "s-1", "source": "startup", "cwd": str(folder)}))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(cli.main(["hook", "launcher"], self.environ, given), cli.EXIT_OK)
+        return out.getvalue()
+
+    def noted_remotes(self, folder: Path) -> frozenset[str] | None:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        return session_remotes.noted(self.machine.state_dir / session_remotes.NOTES_FOLDER, str(folder), now)
+
+    def test_the_launcher_hook_notes_the_git_remotes_of_the_folder_a_session_starts_in(self) -> None:
+        """Covers: B151"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"}, curation={"read_sessions": True})
+        repository = self.a_repository("https://ghp_Zx81kQ4tToken@git.globex.example/globex-ag/portal.git")
+
+        self.start_session(repository)
+
+        self.assertEqual(self.noted_remotes(repository), {"https://git.globex.example/globex-ag/portal.git"})
+        [note] = (self.machine.state_dir / session_remotes.NOTES_FOLDER).glob("*.json")
+        self.assertNotIn("ghp_", note.read_text(encoding="utf-8"))
+        self.assertEqual(list(self.store_root.rglob("*globex*")), [])
+
+    def test_the_launcher_hook_notes_remotes_while_an_addon_is_on_that_reads_sessions(self) -> None:
+        """Covers: B151"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"}, addons={"worklog": {"on": True}})
+        repository = self.a_repository(None)
+
+        self.start_session(repository)
+
+        self.assertEqual(self.noted_remotes(repository), frozenset())
+
+    def test_the_launcher_hook_notes_no_remote_on_a_machine_that_reads_no_sessions(self) -> None:
+        """Covers: B151"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        repository = self.a_repository("https://git.globex.example/globex-ag/portal.git")
+
+        self.start_session(repository)
+
+        self.assertFalse((self.machine.state_dir / session_remotes.NOTES_FOLDER).exists())
+
+    def test_a_machine_that_stopped_reading_sessions_keeps_no_note_longer_than_one_that_reads(self) -> None:
+        """Covers: B151"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"}, curation={"read_sessions": True})
+        repository = self.a_repository("https://git.globex.example/globex-ag/portal.git")
+        self.start_session(repository)
+        [note] = (self.machine.state_dir / session_remotes.NOTES_FOLDER).glob("*.json")
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+
+        self.start_session(repository)
+        kept = note.exists()
+        long_ago = (datetime.datetime.now() - session_remotes.KEEP_FOR - datetime.timedelta(days=1)).timestamp()
+        os.utime(note, (long_ago, long_ago))
+        self.start_session(repository)
+
+        self.assertEqual((kept, note.exists()), (True, False))
+
+    def test_a_machine_whose_git_is_gone_keeps_no_note_longer_either(self) -> None:
+        """Covers: B151"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"}, curation={"read_sessions": True})
+        repository = self.a_repository("https://git.globex.example/globex-ag/portal.git")
+        self.start_session(repository)
+        [note] = (self.machine.state_dir / session_remotes.NOTES_FOLDER).glob("*.json")
+        long_ago = (datetime.datetime.now() - session_remotes.KEEP_FOR - datetime.timedelta(days=1)).timestamp()
+        os.utime(note, (long_ago, long_ago))
+
+        with mock.patch.object(session_start, "usable_git", return_value=None):
+            self.start_session(repository)
+
+        self.assertFalse(note.exists())
+
+    def test_the_launcher_hook_notes_nothing_and_says_nothing_when_git_cannot_say(self) -> None:
+        """Covers: B151"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"}, curation={"read_sessions": True})
+        repository = self.a_repository("https://git.globex.example/globex-ag/portal.git")
+        before = self.start_session(self.home / "code" / "gone")
+
+        # No git on the machine, or on macOS only the stand-in that would open a dialog.
+        with mock.patch.object(session_start, "usable_git", return_value=None) as looked_for:
+            without_git = self.start_session(repository)
+
+        self.assertEqual(looked_for.call_args.kwargs, {"timeout": session_start.REMOTES_TIMEOUT_SECONDS})
+
+        self.assertEqual((before, without_git), ("", ""))
+        self.assertIsNone(self.noted_remotes(repository))
+        self.assertIsNone(self.noted_remotes(self.home / "code" / "gone"))
+
     def test_a_store_path_the_curation_run_cannot_fence_is_a_problem(self) -> None:
         """Covers: B81"""
         self.set_up(calendar="none", tasks={"backend": "markdown"})
@@ -708,6 +817,271 @@ class DoctorTest(CommandTest):
         self.assertEqual(checks["executable claude"]["state"], "missing")
         self.assertEqual(sum(c["name"] == "executable claude" for c in answer["json"]["checks"]), 1)
         self.assertEqual(checks["store"]["state"], "reachable")
+
+    def prompt_hook_line(self) -> tuple[int, str]:
+        code, out, _ = self.run_command("doctor")
+        return code, next(line for line in out.splitlines() if line.startswith("prompt-hook: "))
+
+    def test_doctor_starts_the_prompt_hook_and_says_that_it_answers(self) -> None:
+        """Covers: B146"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        index = self.store_root / "memory" / "MEMORY.md"
+        index.parent.mkdir(exist_ok=True)
+        index.write_text("# Memory\n\n## Facts\n\n### Acme (Acme)\n- Kim leads IT (kim.md)\n", encoding="utf-8")
+
+        self.assertEqual(self.prompt_hook_line(), (cli.EXIT_OK, "prompt-hook: answers (topics in the distillate: 1)"))
+
+    def test_a_prompt_hook_that_cannot_read_the_distillate_is_a_problem_with_its_reason(self) -> None:
+        """Covers: B146"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        index = self.store_root / "memory" / "MEMORY.md"
+        if index.exists():
+            index.unlink()
+        index.mkdir(parents=True)
+
+        code, line = self.prompt_hook_line()
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        self.assertTrue(line.startswith("prompt-hook: does not answer ("), line)
+        self.assertIn("MEMORY.md", line)
+        self.assertTrue(line.endswith("; so no topic's facts come in before a prompt)"), line)
+
+    def plugin_with(self, hooks: dict[str, Any] | None, script: str | None) -> Path:
+        """A plugin folder with these hooks and this prompt hook, either left out when None."""
+        root = Path(tempfile.mkdtemp(prefix="sb-test-plugin-", dir=self.bin.parent))
+        (root / "hooks").mkdir()
+        (root / "bin").mkdir()
+        if hooks is not None:
+            (root / "hooks" / "hooks.json").write_text(json.dumps({"hooks": hooks}), encoding="utf-8")
+        if script is not None:
+            command = root / "bin" / "m2b-prompt-hook"
+            command.write_text(script, encoding="utf-8")
+            command.chmod(0o755)
+        return root
+
+    @staticmethod
+    def registered(timeout: int = 5) -> dict[str, Any]:
+        command = '"${CLAUDE_PLUGIN_ROOT}"/bin/m2b-prompt-hook'
+        return {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": command, "timeout": timeout}]}]}
+
+    def test_a_plugin_whose_hooks_do_not_name_the_prompt_hook_is_a_problem(self) -> None:
+        """Covers: B146"""
+        other = {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": "bin/other", "timeout": 5}]}]}
+        for hooks in (None, {}, other, {"UserPromptSubmit": "broken"}):
+            with self.subTest(hooks=hooks):
+                check = doctor.prompt_hook_check(self.environ, self.plugin_with(hooks, "#!/bin/sh\necho ready\n"))
+
+                self.assertEqual(check.state, "missing")
+                self.assertIn("hooks.json names no hook that runs bin/m2b-prompt-hook", check.detail)
+
+    def test_a_prompt_hook_that_cannot_be_started_is_a_problem(self) -> None:
+        """Covers: B146"""
+        check = doctor.prompt_hook_check(self.environ, self.plugin_with(self.registered(), None))
+
+        self.assertEqual(check.state, "missing")
+        self.assertIn("bin/m2b-prompt-hook could not be started: ", check.detail)
+
+    def test_it_is_started_with_check_and_its_last_line_is_the_reason(self) -> None:
+        """Covers: B146"""
+        script = "#!/bin/sh\necho starting\necho \"asked with: $*\"\necho 'the store is gone' >&2\nexit 3\n"
+        said = doctor.prompt_hook_check(self.environ, self.plugin_with(self.registered(), script))
+        self.assertEqual(said.state, "does not answer")
+        self.assertEqual(said.detail, "asked with: --check; so no topic's facts come in before a prompt")
+
+    def test_a_prompt_hook_that_says_nothing_is_named_by_its_standard_error_or_its_exit_code(self) -> None:
+        for script, reason in (
+            ("#!/bin/sh\necho 'python3: not found' >&2\nexit 127\n", "python3: not found"),
+            ("#!/bin/sh\nexit 4\n", "exit code 4"),
+        ):
+            with self.subTest(reason=reason):
+                check = doctor.prompt_hook_check(self.environ, self.plugin_with(self.registered(), script))
+
+                self.assertEqual(check.state, "does not answer")
+                self.assertEqual(check.detail, f"{reason}; so no topic's facts come in before a prompt")
+
+    def test_a_prompt_hook_slower_than_claude_code_allows_is_a_problem(self) -> None:
+        """Covers: B146"""
+        root = self.plugin_with(self.registered(timeout=7), "#!/bin/sh\necho ready\n")
+
+        allowed: list[float] = []
+
+        def too_slow(command: list[str], **options: Any) -> None:
+            allowed.append(options["timeout"])
+            raise subprocess.TimeoutExpired(command, options["timeout"])
+
+        with mock.patch("m2b.commands.doctor.subprocess.run", side_effect=too_slow):
+            check = doctor.prompt_hook_check(self.environ, root)
+
+        self.assertEqual(allowed, [7])
+        self.assertEqual(check.state, "does not answer")
+        self.assertIn("bin/m2b-prompt-hook took longer than the 7 s Claude Code gives it", check.detail)
+
+    def store_git_line(self) -> tuple[int, str]:
+        code, out, _ = self.run_command("doctor")
+        return code, next(line for line in out.splitlines() if line.startswith("store-git: "))
+
+    def git_init(self, *arguments: str) -> None:
+        """Makes the store folder a git repository, without the developer's git configuration."""
+        environ = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull}
+        subprocess.run(
+            ["git", "init", "-q", "-b", "main", *arguments],
+            cwd=self.store_root,
+            env=environ,
+            capture_output=True,
+            check=True,
+        )
+        self.environ.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_SYSTEM=os.devnull)
+
+    def no_git_on_this_machine(self) -> None:
+        """A PATH with the two programs the prompt hook's line needs, and no git."""
+        programs = self.bin.parent / "no-git"
+        programs.mkdir()
+        os.symlink(sys.executable, programs / "python3")
+        os.symlink(str(shutil.which("dirname")), programs / "dirname")
+        self.environ["PATH"] = str(programs)
+
+    def a_git_that_refuses_with(self, reason: str) -> None:
+        """A PATH whose git ends every call with this reason. The real one words its refusal
+        differently from version to version and does not always name the path it could not use."""
+        self.no_git_on_this_machine()
+        git = Path(self.environ["PATH"]) / "git"
+        git.write_text(f"#!/bin/sh\nprintf '%s\\n' '{reason}' >&2\nexit 128\n", encoding="utf-8")
+        git.chmod(0o755)
+
+    def test_a_store_folder_without_a_git_folder_is_no_repository(self) -> None:
+        """Covers: B149"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+
+        self.assertEqual(self.store_git_line(), (cli.EXIT_OK, "store-git: no repository"))
+
+    def test_a_store_that_is_a_repository_names_the_git_directory_a_run_commits_into(self) -> None:
+        """Covers: B149"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        self.git_init()
+        commits = "a curation run on this machine ends with one commit of what it changed"
+
+        where = f"{self.store_root.resolve() / '.git'}, read with {shutil.which('git')}"
+
+        self.assertEqual(self.store_git_line(), (cli.EXIT_OK, f"store-git: found ({where}; {commits})"))
+
+    def test_a_git_directory_outside_the_store_folder_is_named_where_it_lies(self) -> None:
+        """Covers: B149"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        outside = self.bin.parent.resolve() / "sb-test-store.git"
+        self.git_init("--separate-git-dir", str(outside))
+
+        code, line = self.store_git_line()
+
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertTrue(line.startswith(f"store-git: found ({outside}, read with "), line)
+
+    def test_a_machine_that_does_not_curate_commits_nothing_and_starts_no_git(self) -> None:
+        """Covers: B149"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        self.git_init()
+        settings = json.loads((self.store_root / "store.json").read_text(encoding="utf-8"))
+        save_store_settings(self.store, {**settings, "curating_machine": "sb-test-m2"})
+        self.no_git_on_this_machine()
+
+        self.assertEqual(
+            self.store_git_line(),
+            (
+                cli.EXIT_OK,
+                "store-git: found (.git in the store folder; this machine does not curate, so it commits nothing)",
+            ),
+        )
+
+    def test_with_the_commit_turned_off_nothing_is_committed_and_no_git_starts(self) -> None:
+        """Covers: B149"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"}, curation={"git_commit": False})
+        self.git_init()
+        self.no_git_on_this_machine()
+
+        self.assertEqual(
+            self.store_git_line(),
+            (
+                cli.EXIT_OK,
+                "store-git: found (.git in the store folder; curation.git_commit is false on this machine, "
+                "so its runs commit nothing)",
+            ),
+        )
+
+    def test_a_repository_on_a_curating_machine_without_git_is_a_problem(self) -> None:
+        """Covers: B149"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        self.git_init()
+        self.no_git_on_this_machine()
+
+        self.assertEqual(
+            self.store_git_line(),
+            (
+                cli.EXIT_PROBLEM,
+                "store-git: cannot commit (the store folder holds a .git, but this machine has no git to start; "
+                "a curation run on this machine leaves what it changed uncommitted)",
+            ),
+        )
+
+    def test_a_git_folder_git_cannot_use_is_a_problem_with_gits_reason(self) -> None:
+        """Covers: B149"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        (self.store_root / ".git").write_text("gitdir: /sb-test-nowhere\n", encoding="utf-8")
+
+        code, line = self.store_git_line()
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        self.assertTrue(line.startswith("store-git: cannot commit (git rev-parse failed: "), line)
+        self.assertTrue(line.endswith("; a curation run on this machine leaves what it changed uncommitted)"), line)
+
+    def test_gits_reason_is_printed_with_the_characters_that_draw_nothing_written_out(self) -> None:
+        """Covers: B149"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        (self.store_root / ".git").write_text("gitdir: /sb-test-nowhere\n", encoding="utf-8")
+        self.a_git_that_refuses_with("fatal: not a git repository: /sb-test-no\u200bwhere\U000e0041")
+
+        code, line = self.store_git_line()
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        self.assertIn("fatal: not a git repository: /sb-test-no<U+200B>where<U+E0041>", line)
+
+    def test_the_git_directory_is_printed_with_the_characters_that_draw_nothing_written_out(self) -> None:
+        """Covers: B149"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        outside = self.bin.parent.resolve() / "sb-test\u200b-store.git"
+        self.git_init("--separate-git-dir", str(outside))
+
+        code, line = self.store_git_line()
+
+        self.assertEqual(code, cli.EXIT_OK)
+        shown = self.bin.parent.resolve() / "sb-test<U+200B>-store.git"
+        self.assertTrue(line.startswith(f"store-git: found ({shown}, read with "), line)
+
+    def test_a_repository_whose_work_tree_is_another_folder_is_a_problem(self) -> None:
+        """Covers: B149"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        self.git_init()
+        elsewhere = self.bin.parent / "another-work-tree"
+        elsewhere.mkdir()
+        subprocess.run(["git", "config", "core.worktree", str(elsewhere)], cwd=self.store_root, check=True)
+
+        code, line = self.store_git_line()
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        self.assertIn("cannot commit (the store folder is not the top of the repository's work tree; ", line)
+
+    def test_a_store_that_cannot_be_reached_has_no_line_for_its_repository(self) -> None:
+        """Covers: B149"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        os.rename(self.store_root, self.store_root.with_name("moved"))
+
+        self.assertNotIn("store-git", self.run_command("doctor")[1])
+
+    def test_the_skills_that_run_doctor_name_every_state_that_is_a_problem(self) -> None:
+        skills = Path(__file__).resolve().parents[1] / "skills"
+        for skill in ("m2b", "setup"):
+            body = (skills / skill / "SKILL.md").read_text(encoding="utf-8")
+            for state in doctor.PROBLEMS:
+                with self.subTest(skill=skill, state=state):
+                    self.assertIn(f"`{state}`", body)
 
     def test_a_missing_store_is_reported_and_the_other_checks_still_run(self) -> None:
         self.set_up()

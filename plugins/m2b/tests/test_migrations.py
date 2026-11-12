@@ -271,8 +271,8 @@ class FormatReportTest(MigrationFixture):
         self.assertIn(f"store format: current (format {known})", self.run_command("status")[1])
 
 
-class EarlierValuesMigrationTest(MigrationFixture):
-    def test_format_two_is_the_first_migration_and_changes_nothing_in_memory(self) -> None:
+class MigrationsOfThisM2bTest(MigrationFixture):
+    def test_a_store_of_format_one_gets_format_three_in_two_steps_and_nothing_in_memory_changes(self) -> None:
         """Covers: B73"""
         self.curating()
         self.write("memory/dana.md", "# Dana\n\n- Likes old maps.\n")
@@ -283,17 +283,38 @@ class EarlierValuesMigrationTest(MigrationFixture):
         outcome = self.run_curate()
 
         self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
-        self.assertEqual(self.store_format(), 2)
+        self.assertEqual(self.store_format(), 3)
         self.assertEqual({path.name: path.read_bytes() for path in (self.store_root / "memory").iterdir()}, before)
         record = load_run_record(self.store)
         assert record is not None
-        self.assertEqual((record.steps[0].name, record.steps[0].result), ("migrate-2", SUCCEEDED))
+        self.assertEqual(
+            [(step.name, step.result) for step in record.steps[:2]],
+            [("migrate-2", SUCCEEDED), ("migrate-3", SUCCEEDED)],
+        )
 
-    def test_the_earlier_values_migration_refuses_any_change(self) -> None:
+    def test_a_store_of_format_two_keeps_its_current_items_where_they_are(self) -> None:
         """Covers: B73"""
-        (migration,) = [m for m in migrations.MIGRATIONS if m.target == 2]
+        self.curating()
+        settings = json.loads((self.store_root / "store.json").read_text(encoding="utf-8"))
+        (self.store_root / "store.json").write_text(json.dumps({**settings, "format": 2}), encoding="utf-8")
+        before = self.distillate()
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        self.assertEqual(self.store_format(), 3)
+        self.assertEqual(self.distillate(), before)
+        record = load_run_record(self.store)
+        assert record is not None
+        self.assertEqual((record.steps[0].name, record.steps[1].name), ("migrate-3", "harvest"))
+
+    def test_each_migration_refuses_any_change(self) -> None:
+        """Covers: B73"""
         empty = migrations.Snapshot({})
         changed = migrations.Snapshot({"memory/dana.md": b"# Dana\n"})
 
-        self.assertIsNone(migration.problem(empty, empty))
-        self.assertIsNotNone(migration.problem(empty, changed))
+        self.assertEqual([migration.target for migration in migrations.MIGRATIONS], [2, 3])
+        for migration in migrations.MIGRATIONS:
+            with self.subTest(target=migration.target):
+                self.assertIsNone(migration.problem(empty, empty))
+                self.assertIsNotNone(migration.problem(empty, changed))

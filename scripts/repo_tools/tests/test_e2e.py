@@ -176,6 +176,35 @@ class ScenarioTest(unittest.TestCase):
 
         self.assertTrue(result.passed, result.problems)
 
+    def test_store_in_an_argument_is_the_scenarios_store_folder(self) -> None:
+        write = "import pathlib, sys\n(pathlib.Path(sys.argv[1]) / 'inbox/seen.md').write_text('found')\n"
+        self._given_steps([{"run": [sys.executable, "-c", write, "{store}"]}])
+        self._expect({"inbox/note.md": "Dana likes maps.\n", "inbox/seen.md": "found"})
+
+        result = e2e.run_scenario(self.scenario, self.environ)
+
+        self.assertTrue(result.passed, result.problems)
+
+    def test_a_scenario_runs_the_commands_of_the_plugin_folder_it_is_given(self) -> None:
+        other = Path(self._temp.name) / "other-plugin"
+        write = (
+            "import json, os, pathlib, sys\n"
+            "home = pathlib.Path(os.environ['M2B_HOME'])\n"
+            "store = pathlib.Path(json.loads((home / '.config/m2b/config.json').read_text())['store']['path'])\n"
+            "seen = [sys.argv[1], os.environ['M2B_CORE_ROOT'], os.environ['PATH'].split(os.pathsep)[0]]\n"
+            "stub = pathlib.Path(os.environ['M2B_MODEL_RUNNER']).read_text()\n"
+            "seen.append('its stub' if sys.argv[1] + '/tests/fakes/' in stub else 'another stub')\n"
+            "(store / 'inbox/seen.md').write_text(' '.join(seen))\n"
+        )
+        self._given_steps([{"run": [sys.executable, "-c", write, "{core_plugin}"]}])
+        self._expect(
+            {"inbox/note.md": "Dana likes maps.\n", "inbox/seen.md": f"{other} {other} {other / 'bin'} its stub"}
+        )
+
+        result = e2e.run_scenario(self.scenario, self.environ, plugin=other)
+
+        self.assertTrue(result.passed, result.problems)
+
     def test_a_step_with_a_cwd_runs_in_its_own_folder_beside_the_working_folder(self) -> None:
         self._given_steps(
             [
@@ -216,6 +245,34 @@ class ScenarioTest(unittest.TestCase):
 
         self.assertIn("cannot save task", result.problems[0])
 
+    def test_a_scenarios_transcripts_lie_where_claude_code_keeps_them_dated_an_hour_ago(self) -> None:
+        transcript = self.scenario / "transcripts" / "-shed" / "session.jsonl"
+        transcript.parent.mkdir(parents=True)
+        transcript.write_text('{"timestamp": "<an-hour-ago>"}\n', encoding="utf-8")
+        code = (
+            "import datetime, json, os, pathlib, sys\n"
+            "projects = pathlib.Path(os.environ['CLAUDE_CONFIG_DIR']) / 'projects'\n"
+            "record = json.loads((projects / '-shed' / 'session.jsonl').read_text())\n"
+            "written = datetime.datetime.fromisoformat(record['timestamp'].replace('Z', '+00:00'))\n"
+            "age = datetime.datetime.now(datetime.timezone.utc) - written\n"
+            "sys.exit(0 if 3500 < age.total_seconds() < 3700 else 1)\n"
+        )
+        self._given_steps([self._python_step(code)])
+        self._expect({"inbox/note.md": "Dana likes maps.\n"})
+
+        result = e2e.run_scenario(self.scenario, self.environ)
+
+        self.assertTrue(result.passed, result.problems)
+
+    def test_a_scenario_without_transcripts_has_no_transcripts_folder(self) -> None:
+        code = "import os, pathlib, sys\nsys.exit(1 if pathlib.Path(os.environ['CLAUDE_CONFIG_DIR']).exists() else 0)\n"
+        self._given_steps([self._python_step(code)])
+        self._expect({"inbox/note.md": "Dana likes maps.\n"})
+
+        result = e2e.run_scenario(self.scenario, self.environ)
+
+        self.assertTrue(result.passed, result.problems)
+
     def test_the_sandbox_is_removed_afterwards(self) -> None:
         self._given_steps([self._python_step("import os; print(os.environ['M2B_HOME'])")])
         self._expect({"inbox/note.md": "Dana likes maps.\n"})
@@ -235,6 +292,27 @@ class ScenarioTest(unittest.TestCase):
 
         self.assertEqual(code, e2e.EXIT_FAILED)
         self.assertIn("0 of 1 scenarios passed", output.getvalue())
+
+    def test_core_only_leaves_out_a_scenario_that_turns_an_addon_on(self) -> None:
+        self._given_steps([])
+        self._expect({"inbox/note.md": "Dana likes maps.\n"})
+        needs_an_addon = self.scenarios / "needs-an-addon"
+        needs_an_addon.mkdir()
+        _write_json(needs_an_addon / "steps.json", {"steps": [{"run": ["m2b", "addons", "on", "worklog"]}]})
+        _write_json(needs_an_addon / "expect.json", {"store_files": {}})
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = e2e.main(["--level", "stub", "--scenarios", str(self.scenarios), "--core-only"])
+
+        self.assertEqual(code, e2e.EXIT_PASSED, output.getvalue())
+        self.assertNotIn("needs-an-addon", output.getvalue())
+        self.assertIn("1 of 1 scenarios passed", output.getvalue())
+
+    def test_a_scenario_that_only_lists_or_turns_off_addons_turns_none_on(self) -> None:
+        self._given_steps([{"run": ["m2b", "addons", "list"]}, {"run": ["m2b", "addons", "off", "worklog"]}])
+
+        self.assertFalse(e2e.turns_an_addon_on(self.scenario))
 
     def test_an_unknown_scenario_name_is_a_usage_error(self) -> None:
         self._given_steps([])

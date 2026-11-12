@@ -12,6 +12,7 @@ from typing import Any
 from unittest import mock
 
 from m2b.config.store_settings import TasksSettings
+from m2b.store.base import ConflictCopy, StoreError
 from m2b.store.folder import FolderStore
 from m2b.store.guard import DatalessGuard
 from m2b.store.icloud import ICloudStore
@@ -177,6 +178,61 @@ class MarkdownTaskFilesTest(unittest.TestCase):
             tasks = MarkdownTasks(ICloudStore(root, Path(folder) / "tmp", DatalessGuard(False), macos_release="15.0"))
 
             self.assertEqual([task.id for task in tasks.items(include_completed=True)], ["a1b2c3d4e5f6"])
+            self.assertEqual(
+                tasks.conflict_copies(),
+                [ConflictCopy("tasks/a1b2c3d4e5f6 2.md", "tasks/a1b2c3d4e5f6.md", False)],
+            )
+
+    def test_a_dropbox_or_syncthing_copy_of_a_task_file_is_no_second_task(self) -> None:
+        """Covers: B150"""
+        done = b"---\nstatus: done\n---\nCall Dana\n"
+        self.store.create_exclusive("tasks/a1b2c3d4e5f6.md", b"---\nstatus: open\n---\nCall Dana\n")
+        self.store.create_exclusive("tasks/a1b2c3d4e5f6 (Dana's conflicted copy 2026-11-05).md", done)
+        self.store.create_exclusive("tasks/a1b2c3d4e5f6.sync-conflict-20261105-081500-ABCDEFG.md", done)
+
+        self.assertEqual([task.id for task in self.tasks.items(include_completed=True)], ["a1b2c3d4e5f6"])
+
+    def test_the_copies_of_task_files_are_named_with_their_task_and_whether_they_equal_it(self) -> None:
+        """Covers: B157"""
+        done = b"---\nstatus: done\n---\nCall Dana\n"
+        self.store.create_exclusive("tasks/a1b2c3d4e5f6.md", b"---\nstatus: open\n---\nCall Dana\n")
+        self.store.create_exclusive("tasks/a1b2c3d4e5f6 (conflicted copy 2026-11-05).md", done)
+        self.store.create_exclusive("tasks/bbbbbbbbbbbb.md", done)
+        self.store.create_exclusive("tasks/bbbbbbbbbbbb.sync-conflict-20261105-081500-ABCDEFG.md", done)
+
+        self.assertEqual(
+            self.tasks.conflict_copies(),
+            [
+                ConflictCopy("tasks/a1b2c3d4e5f6 (conflicted copy 2026-11-05).md", "tasks/a1b2c3d4e5f6.md", False),
+                ConflictCopy(
+                    "tasks/bbbbbbbbbbbb.sync-conflict-20261105-081500-ABCDEFG.md", "tasks/bbbbbbbbbbbb.md", True
+                ),
+            ],
+        )
+
+    def test_a_copy_of_a_file_that_is_no_task_file_is_no_copy_of_a_task(self) -> None:
+        """Covers: B157"""
+        self.store.create_exclusive("tasks/shopping.txt", b"milk\n")
+        self.store.create_exclusive("tasks/shopping (conflicted copy 2026-11-05).txt", b"milk\n")
+
+        self.assertEqual(self.tasks.conflict_copies(), [])
+        self.assertEqual(self.tasks.items(), [])
+
+    def test_a_copy_in_a_subfolder_of_the_task_folder_is_no_copy_of_a_task(self) -> None:
+        """Covers: B157"""
+        self.store.create_exclusive("tasks/old/a1b2c3d4e5f6.md", b"---\nstatus: open\n---\nCall Dana\n")
+        self.store.create_exclusive(
+            "tasks/old/a1b2c3d4e5f6 (conflicted copy 2026-11-05).md", b"---\nstatus: open\n---\nCall Dana\n"
+        )
+
+        self.assertEqual(self.tasks.conflict_copies(), [])
+        self.assertEqual(self.tasks.items(), [])
+
+    def test_a_task_folder_that_cannot_be_listed_has_no_answer_about_its_copies(self) -> None:
+        error = StoreError("tasks could not be listed: Permission denied")
+
+        with mock.patch.object(self.store, "scan", side_effect=error), self.assertRaises(TasksUnreachableError):
+            self.tasks.conflict_copies()
 
     def test_a_due_time_with_microseconds_reads_back(self) -> None:
         due = datetime.datetime.now().astimezone() + datetime.timedelta(days=1)

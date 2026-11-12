@@ -41,6 +41,9 @@ changes anything; its worklog recording turns off at its next session start. Add
 turned on per machine: run their setups (such as `/m2b:worklog-setup`) again on the new
 curating machine; `take-over` lists the add-ons that were on in the last run.
 
+On a machine that does not curate, `m2b status` answers the question whether a run is due with
+`due: asked on <machine>, the curating machine`: only that machine decides it, so ask there.
+
 ## When the curating machine is away
 
 The session start on every machine prints one line when the curating machine has not run for more
@@ -52,4 +55,6 @@ when a run happens.
 Update the curating machine first. A machine whose m2b knows an older store format than the store
 has reads the store and captures into it, but refuses to curate it and says to update m2b; its
 `m2b doctor` names the format as the problem. The curating machine, once updated, migrates the
-store at the start of its next run.
+store at the start of its next run. Until the other machine is updated, its sessions get what its
+own version knows: beside a store of format 3, every current item, also one that stands under a
+topic.

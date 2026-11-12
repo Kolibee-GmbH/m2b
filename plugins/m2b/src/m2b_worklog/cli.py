@@ -22,6 +22,7 @@ from pathlib import Path
 
 from m2b_worklog import core, daily, facts, ledger, recorder, session_start
 from m2b_worklog.paths import WorklogPaths, worklog_paths
+from m2b_worklog.sources.git import git_to_start
 from m2b_worklog.sources.transcripts import projects_folder
 
 EXIT_OK = 0
@@ -117,6 +118,8 @@ def _collect(paths: WorklogPaths, now_text: str | None, out: str | None) -> int:
             home=paths.home,
             profile=profile if isinstance(profile, dict) else {},
             now=now,
+            remote_notes=paths.session_remotes,
+            git=git_to_start(os.environ),
             herdr=recorder.herdr_state(os.environ),
         )
         text = json.dumps(facts.collect(inputs), ensure_ascii=False, indent=1) + "\n"
@@ -133,7 +136,9 @@ def _collect(paths: WorklogPaths, now_text: str | None, out: str | None) -> int:
 def _run(paths: WorklogPaths, now_text: str | None) -> int:
     try:
         now = _now(now_text)
-        sources = daily.Sources(projects_folder(os.environ, paths.home), recorder.herdr_state(os.environ))
+        sources = daily.Sources(
+            projects_folder(os.environ, paths.home), recorder.herdr_state(os.environ), git_to_start(os.environ)
+        )
         print(daily.run(paths, core.LauncherCore(paths, os.environ), now, sources))
     except (ValueError, OSError, core.CoreError, facts.FactsError, daily.DailyError, ledger.LedgerError) as error:
         print(f"m2b-worklog: {error}", file=sys.stderr)

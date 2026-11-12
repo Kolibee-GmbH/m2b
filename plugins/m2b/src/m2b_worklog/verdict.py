@@ -2,9 +2,11 @@
 
 The schema holds the shape; the facts hold what the shape may name: every session judged once and
 none invented, only blocks the session has, only a sphere of the profile, and only a customer from
-the customer list, which the worklog never extends (B29). At most three candidates, and no line
-break in a text the note puts on one line, where it would start a heading of its own. Each problem
-names its place, so the model can fix the verdict and hand it in again.
+the customer list, which the worklog never extends (B29). No line break in a text the note puts on
+one line, where it would start a heading of its own. Nothing for memory: the schema takes no
+candidates, because what belongs in memory is proposed from what the owner typed, by the core's
+reading of the sessions, and the owner answers there with their own words beside each proposal.
+Each problem names its place, so the model can fix the verdict and hand it in again.
 """
 
 from __future__ import annotations
@@ -14,7 +16,6 @@ from typing import Any
 
 from m2b_worklog import schema
 
-MAX_CANDIDATES = 3
 ONE_LINE_FIELDS = ("topic", "state_detail", "note")
 BOOKING_LINE_FIELDS = ("project", "activity")
 
@@ -42,15 +43,6 @@ def problems_of(verdict: Any, facts: Mapping[str, Any]) -> list[str]:
         found += _line_break_problems(place, session)
         found += _block_problems(place, session["blocks"], sessions[key], customers)
     found += [f"$.sessions: {key!r} is not judged" for key in sessions if key not in judged]
-    candidates = verdict["candidates"]
-    if len(candidates) > MAX_CANDIDATES:
-        found.append(f"$.candidates: {len(candidates)} candidates, at most {MAX_CANDIDATES}")
-    for index, candidate in enumerate(candidates):
-        if _has_line_break(candidate.get("text")):
-            found.append(f"$.candidates[{index}].text: holds a line break")
-        session_key = candidate.get("session")
-        if session_key is not None and session_key not in sessions:
-            found.append(f"$.candidates[{index}].session: {session_key!r} is not a session of the facts")
     return found
 
 

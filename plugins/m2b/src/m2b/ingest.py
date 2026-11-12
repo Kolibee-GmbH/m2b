@@ -22,6 +22,7 @@ Captured text is never rewritten: only the frontmatter and the trailer change.
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import os
 import shutil
@@ -315,9 +316,12 @@ def _remove_conflict_copies(store: Store, report: NormalizeReport) -> None:
             continue
         report.kept_copies.append(copy.path)
         if copy.identical is False and _is_text(copy.path):
-            note = Note.parse(store.read_text(copy.path))
-            if _add_trailer_line(note, CONFLICT_COPY_PREFIX + PurePosixPath(copy.original).name):
-                _write(store, copy.path, note)
+            # A copy that cannot be read as a note gets no line; it is one of the files normalize
+            # goes through next and is reported there, so the other captures still go on.
+            with contextlib.suppress(UnicodeDecodeError, StoreError):
+                note = Note.parse(store.read_text(copy.path))
+                if _add_trailer_line(note, CONFLICT_COPY_PREFIX + PurePosixPath(copy.original).name):
+                    _write(store, copy.path, note)
 
 
 def _originals(store: Store, files: list[str]) -> tuple[dict[str, list[str]], dict[str, list[str]]]:

@@ -48,8 +48,7 @@ def update_review(
     locale: Locale,
 ) -> ReviewOutcome:
     existing = _review_task(tasks)
-    # Everything but info reaches the owner, a kind nobody knows included.
-    paragraphs = [f"{finding.step}: {one_line(finding.text)}" for finding in findings if finding.kind != INFO]
+    paragraphs = [f"{finding.step}: {one_line(finding.text)}" for finding in reaches_the_owner(findings)]
     paragraphs += [locale.text(FAILURE_KEY, step=failure.step, error=one_line(failure.error)) for failure in failures]
     if not paragraphs:
         if existing is not None and not existing.completed:
@@ -76,6 +75,11 @@ def update_review(
         change = REOPENED
     tasks.set_notes(existing.id, notes)
     return ReviewOutcome(existing.id, change)
+
+
+def reaches_the_owner(findings: Sequence[Finding]) -> list[Finding]:
+    """The findings a review task shows: everything but info, a kind nobody knows included."""
+    return [finding for finding in findings if finding.kind != INFO]
 
 
 def review_is_open(tasks: Tasks) -> bool:

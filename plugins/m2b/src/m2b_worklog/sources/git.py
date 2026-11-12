@@ -5,20 +5,28 @@ walking at the first commit older than ``--since``, and a rebased or cherry-pick
 older date on top would hide every commit below it.
 
 A folder that is not a repository, a git that fails or does not answer, is "could not read" for
-that session, never "no commits".
+that session, never "no commits". So is every session on a machine without a git to start: the
+worklog runs in the background, and the only git there would ask the person something
+(``git_to_start``).
 """
 
 from __future__ import annotations
 
 import datetime
 import subprocess
+import sys
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from m2b.git_program import usable_git
+from m2b.redaction import redact
+
 from m2b_worklog.sources import SourceState
 
 GIT_TIMEOUT_SECONDS = 10.0
+NO_GIT_TO_START = "this machine has no git to start"
 _FIELD = "\x1f"
 
 Runner = Callable[..., "subprocess.CompletedProcess[str]"]
@@ -44,9 +52,17 @@ class _GitError(Exception):
     pass
 
 
+def git_to_start(environ: Mapping[str, str], platform: str = sys.platform, run: Runner = subprocess.run) -> str | None:
+    """The git the worklog starts, asked for once per run; None when the machine has none that starts
+    without asking the person anything."""
+    return usable_git(environ, platform, run, GIT_TIMEOUT_SECONDS)
+
+
 def read_git(
-    folder: Path, start: datetime.datetime, end: datetime.datetime, git: str = "git", run: Runner = subprocess.run
+    folder: Path, start: datetime.datetime, end: datetime.datetime, git: str | None, run: Runner = subprocess.run
 ) -> GitFacts:
+    if git is None:
+        return GitFacts([], None, SourceState.failed(NO_GIT_TO_START))
     try:
         email = _git(run, git, folder, ["config", "user.email"]).strip()
         if not email:
@@ -80,7 +96,7 @@ def read_git(
         except ValueError:
             continue
         if start <= moment < end:
-            commits.append(Commit(commit_hash, moment, subject.strip(), commit_hash in on_head))
+            commits.append(Commit(commit_hash, moment, redact(subject.strip()), commit_hash in on_head))
     return GitFacts(sorted(commits, key=lambda commit: commit.time), remote, SourceState.read())
 
 

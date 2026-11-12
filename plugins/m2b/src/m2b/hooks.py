@@ -7,13 +7,15 @@ the distillate (B7): a failed run, an interrupted one, one whose run record coul
 printed only together with a distillate (B9), and the distillate is cut at 8 KB on a character
 boundary, or shorter so the whole output stays under Claude Code's cap, with a line saying so (B8).
 
-Facts under a topic stay out of the session start (B44): the session gets every other line of the
-distillate, one line naming the topics, and the blocks of the topics its project folder's path
-names. The cut takes from the end, so path topics go first, then the topic line (B46). What the
+Facts and current items under a topic stay out of the session start (B44, B136): the session gets
+every other line of the distillate, one line naming the topics, and the blocks of the topics its
+project folder's path names. The cut takes from the end, so path topics go first, then the topic line (B46). What the
 start showed is noted for the session, so the prompt hook does not bring it again (B47).
 
-Characters that hide or reorder text are taken out before anything is printed (B56): a curation run
-refuses lines that hold them, and this catches one written past it, by hand or by another tool.
+Characters that draw nothing are taken out of the distillate and of the notices before they are
+printed (B143, B144): a curation run refuses the lines that hide or reorder text with them (B56),
+and this catches one written past it, by hand or by another tool, and the characters a run lets
+stand.
 """
 
 from __future__ import annotations
@@ -22,22 +24,25 @@ import contextlib
 import datetime
 import json
 import os
+import re
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from m2b import launcher, topic_state
+from m2b import launcher, session_remotes, topic_state
+from m2b.addons import names_on
 from m2b.atomic_file import write_text_atomically
 from m2b.config.errors import SETUP_COMMAND
 from m2b.config.machine import MachineConfig
 from m2b.curate import machine_state
 from m2b.curate.detach import NOT_DOWNLOADED, start_detached
+from m2b.git_program import usable_git
 from m2b.hook_input import HookInput
-from m2b.notes.characters import strip_unsafe
+from m2b.notes.characters import without_hidden
 from m2b.notes.layout import MEMORY, MEMORY_INDEX
 from m2b.notes.memory_index import TopicBlock, split_topics
 from m2b.paths import MachinePaths
-from m2b.run_record import FAILED, RUN_RECORD, RunRecordError, is_interrupted, load_run_record
+from m2b.run_record import FAILED, RUN_RECORD, RunRecord, RunRecordError, is_interrupted, load_run_record
 from m2b.store.base import EvictedFileError, Store, StoreError, fetch_command
 from m2b.store.factory import open_store
 from m2b.topic_match import names_topic_in_path, project_place
@@ -50,6 +55,10 @@ MAX_DISTILLATE_BYTES = 8 * 1024
 # read, so the whole output stays below this, with room for the cut line.
 OUTPUT_LIMIT = 9_500
 STALE_AFTER = datetime.timedelta(days=3)
+# How long a session start waits for git to name a folder's remotes before it notes nothing.
+REMOTES_TIMEOUT_SECONDS = 2.0
+# A step's name as the core and the add-ons write it; a record names its steps in a synced file.
+_STEP_NAME = re.compile(r"[a-z][a-z0-9-]{0,39}")
 # Enough for an overview; beyond it the line itself would crowd the session start.
 MAX_TOPIC_NAMES = 40
 
@@ -112,7 +121,8 @@ def _print_distillate(
 ) -> list[str]:
     """Prints the notices and the session's view of the distillate; gives back the topics it showed."""
     store = open_store(config.store, machine.temp_dir)
-    notices = "".join(f"m2b: {line}\n" for line in _run_notices(store, machine, config.machine_id))
+    # A notice can name a machine or a file, and neither is m2b's own text.
+    notices = "".join(f"m2b: {without_hidden(line)}\n" for line in _run_notices(store, machine, config.machine_id))
     print(notices, end="")
     text = _distillate_text(store)
     if text is None:
@@ -200,9 +210,45 @@ def launcher_hook(
     config: MachineConfig, machine: MachinePaths, environ: Mapping[str, str], hook_input: HookInput | None = None
 ) -> None:
     """The session-start hook: notes the session for ``m2b doctor``, which compares it with the band's
-    note, then checks the launcher."""
+    note, and the git remotes of the session's folder, then checks the launcher."""
     note_session(machine)
+    note_remotes(config, machine, environ, hook_input or HookInput())
     launcher_check(config, machine, environ, hook_input)
+
+
+def note_remotes(
+    config: MachineConfig, machine: MachinePaths, environ: Mapping[str, str], hook_input: HookInput
+) -> None:
+    """Notes the git remotes of the folder the session starts in, while the folder is there to ask.
+
+    Whoever reads the session later leaves it out by them (``session_remotes``). Noted only where
+    sessions are read at all: with ``curation.read_sessions``, or with an add-on on, which may read
+    them. The notes that are too old go at every session start, before anything else, so neither
+    a machine that stopped reading nor one whose git is gone keeps one for longer. A git that is
+    missing, fails or does not answer in time notes nothing, and nothing here holds or fails the
+    session start.
+    """
+    notes = machine.state_dir / session_remotes.NOTES_FOLDER
+    with contextlib.suppress(OSError):
+        session_remotes.forget_old_notes(notes, now())
+    if not (config.curation.read_sessions or names_on(config.addons)):
+        return
+    git = usable_git(environ, timeout=REMOTES_TIMEOUT_SECONDS)
+    if git is None:
+        return
+    folder = hook_input.cwd or environ.get(PROJECT_DIR_VARIABLE) or os.getcwd()
+    with contextlib.suppress(OSError):
+        remotes = session_remotes.remotes_in(Path(folder), git, timeout=REMOTES_TIMEOUT_SECONDS, environ=environ)
+        if remotes is None:
+            return
+        machine.temp_dir.mkdir(parents=True, exist_ok=True)
+        session_remotes.note(
+            notes,
+            folder,
+            remotes,
+            now(),
+            lambda path, text: write_text_atomically(path, text, machine.temp_dir),
+        )
 
 
 def note_session(machine: MachinePaths) -> None:
@@ -248,23 +294,23 @@ def _run_notices(store: Store, machine: MachinePaths, this_machine: str) -> list
         record = load_run_record(store)
     except EvictedFileError:
         record_notice = f"the run record is not downloaded to this machine; run: {fetch_command(RUN_RECORD)}"
-        return [*_unrecorded(unrecorded), record_notice]
+        return [*_unrecorded(machine, unrecorded), record_notice]
     except (RunRecordError, StoreError) as error:
-        return [*_unrecorded(unrecorded), str(error)]
+        return [*_unrecorded(machine, unrecorded), str(error)]
     if record is None:
-        return _unrecorded(unrecorded)
+        return _unrecorded(machine, unrecorded)
     # A run record written after the logged failure is newer news.
     if unrecorded is not None and (unrecorded.time is None or unrecorded.time > record.last_activity):
-        notices += _unrecorded(unrecorded)
+        notices += _unrecorded(machine, unrecorded)
     if is_interrupted(record, now()):
         notices.append(
             f"the curation run on {record.machine_id} that started at {_when(record.started_at)} did not finish; "
             "the next run starts over."
         )
     if record.state == FAILED:
-        detail = f": {record.message}" if record.message else ""
         notices.append(
-            f"the last curation run on {record.machine_id} failed at {_when(record.last_activity)}{detail}. "
+            f"the last curation run on {record.machine_id} failed at {_when(record.last_activity)}"
+            f"{_in_its_steps(record)}; m2b status says why. "
             "The next run tries again; run m2b doctor if it keeps failing."
         )
     if now() - record.last_activity > STALE_AFTER:
@@ -279,16 +325,27 @@ def _run_notices(store: Store, machine: MachinePaths, this_machine: str) -> list
     return notices
 
 
-def _unrecorded(event: machine_state.LogEvent | None) -> list[str]:
+def _in_its_steps(record: RunRecord) -> str:
+    """The steps that failed, by name. Why they failed stays in the record: a reason can repeat what
+    a model, a command or a file name said, and a notice stands above the line that marks the
+    distillate as data."""
+    names = [step.name for step in record.steps if step.result == FAILED and _STEP_NAME.fullmatch(step.name)]
+    if not names:
+        return ""
+    return " in " + (names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}")
+
+
+def _unrecorded(machine: MachinePaths, event: machine_state.LogEvent | None) -> list[str]:
     if event is None:
         return []
-    return [f"the last curation run on this machine left no run record: {event.message}"]
+    log = machine_state.run_log(machine)
+    return [f"the last curation run on this machine left no run record; the last line of {log} says why."]
 
 
 def _distillate_text(store: Store) -> str | None:
     """The distillate, or None with one printed line saying why there is none."""
     try:
-        return strip_unsafe(store.read_bytes(MEMORY_INDEX_PATH).decode("utf-8", errors="replace"))
+        return without_hidden(store.read_bytes(MEMORY_INDEX_PATH).decode("utf-8", errors="replace"))
     except EvictedFileError:
         print(f"m2b: the distillate is not downloaded to this machine; run: {fetch_command(MEMORY_INDEX_PATH)}")
     except FileNotFoundError:
