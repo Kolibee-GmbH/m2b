@@ -1,5 +1,5 @@
 {
-  "description": "An invented inbox for scripts/ingest-eval: twenty captures of one day, 9 November 2026, in English and German, and what each should leave behind. `words` are regular expressions, ignoring case, that the facts line, the current item or the task title must hold, because a model words its lines its own way. For a fact or a current item, `topic` is null when it belongs above the first topic, a regular expression for the topic's name when it belongs under one, and missing where the filing rules leave room. `no_longer` is a value that must not stand in the facts list any more, and `earlier` what the fact file keeps of it under `## Earlier`. A task says its `due` day, or null for none; a capture that names a day writes it out with its year, so that no expectation depends on the day of the run. A capture without `expected` holds nothing to file. `topics` names the topics a filing may start; the store before has the others.",
+  "description": "An invented inbox for scripts/ingest-eval: twenty captures of one day, 9 November 2026, in English and German, and what each should leave behind. `words` are regular expressions, ignoring case, that the facts line, the current item or the task title must hold, because a model words its lines its own way. For a fact or a current item, `topic` is null when it belongs above the first topic, a regular expression for the topic's name when it belongs under one, and missing where the filing rules leave room. `no_longer` is a value that must not stand in the facts list any more, and `earlier` what the fact file keeps of it under `## Earlier`. A task says its `due` day, or null for none. One capture writes its day out with its year, one names a weekday and one a day without its year; those two count from the day of the capture, so the expected day is the same on whatever day the eval runs, and the weekday's lies before any such day: a model that counts from the day of the run cannot land on it. A capture without `expected` holds nothing to file. `topics` names the topics a filing may start; the store before has the others.",
   "topics": ["Globex"],
   "captures": [
     {
@@ -81,14 +81,14 @@
     },
     {
       "file": "20261109T081700Z-phone-1a0c.md",
-      "text": "Am 13. November 2026 die Steuerunterlagen an die Treuhänderin schicken.",
+      "text": "Am Mittwoch die Steuerunterlagen an die Treuhänderin schicken.",
       "expected": [
-        {"what": "send the tax papers", "kind": "task", "words": ["Steuer|tax"], "due": "2026-11-13"}
+        {"what": "send the tax papers", "kind": "task", "words": ["Steuer|tax"], "due": "2026-11-11"}
       ]
     },
     {
       "file": "20261109T082400Z-cli-1a0d.md",
-      "text": "Pay the garage invoice by 27 November 2026.",
+      "text": "Pay the garage invoice by 27 November.",
       "expected": [
         {"what": "pay the garage", "kind": "task", "words": ["garage"], "due": "2026-11-27"}
       ]

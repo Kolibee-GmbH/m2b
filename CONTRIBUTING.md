@@ -244,8 +244,11 @@ where each goes. How well a model follows it is what `curation.model` buys, and
 captures of one day, in English and German, each with what it should leave behind. That is twenty
 things: eleven facts (about the owner and people, under a topic that exists, under one that so far
 has only current items, under a new one, and one that replaces an older value), two things going
-on, and seven tasks, four with a day (one from `follow_up`) and three without. Each day is written
-out with its year, so the count does not depend on the day you run it. One capture holds nothing
+on, and seven tasks, four with a day and three without. Of the four days one is written out with
+its year, one is a weekday ("Am Mittwoch"), one has no year and one comes from `follow_up`. The
+weekday and the day without its year count from the day of the captures, a Monday, so the expected
+day does not depend on the day you run the eval, and the weekday's lies before any such day: a
+model that counts from the day of the run cannot land on it. One capture holds nothing
 to file. For each run the tool copies the store into a sandbox,
 puts the captures into its inbox and runs `m2b curate --force` there, with its own `M2B_HOME` and
 the model as `curation.model`, so the skill, the fence and the commands are the ones an
@@ -280,12 +283,8 @@ time, take a few minutes on your own login, so this is not part of `scripts/chec
 a change to the ingest skill, to the commands it calls or to the distillate's format, and before
 changing the default model, and write what it gave into [Evals](docs/evals.md#how-well-a-model-files-an-inbox)
 by hand. The stores of the runs stay in your
-temp folder until the next call, for a look at what a model wrote. Like every model run, each
-leaves a session folder under `~/.claude/projects/`:
-
-```bash
-rm -rf ~/.claude/projects/*sb-test-m2b-ingest-eval*
-```
+temp folder until the next call, for a look at what a model wrote. The model steps of a curation
+run keep no session, so these runs leave nothing under `~/.claude/projects/`.
 
 ## Releasing
 

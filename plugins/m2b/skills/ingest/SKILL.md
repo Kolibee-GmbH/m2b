@@ -242,8 +242,13 @@ capture's other tasks:
 m2b ingest task <file> --key plumber --title "Call the plumber" --due 2026-11-13
 ```
 
-`--due` only when the capture names a day (`YYYY-MM-DD` or `YYYY-MM-DD HH:MM`). A capture with
-`follow_up` gets its task with `m2b ingest task <file> --follow-up` and no other options.
+`--due` whenever the capture names a day for the task, and only then; write it as `YYYY-MM-DD` or
+`YYYY-MM-DD HH:MM`. A day named in words is a day too. Work it out from the capture's `created`,
+not from today: a weekday is the next such day after it, "tomorrow" the day after it, "in two
+weeks" fourteen days after it, and a day without its year ("on 3 March") the next such day from it
+on. Give the day also when it has passed by now: the task is then overdue, which is what the owner
+has to see. A capture with `follow_up` gets its task with `m2b ingest task <file> --follow-up` and
+no other options.
 
 **Refs.** Each URL in the text:
 

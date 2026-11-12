@@ -165,6 +165,19 @@ PLACES_CURRENT_ITEMS = (
     "A topic that stands under `## Current` keeps its heading, copied character for character",
 )
 MARKDOWN_BLOCK = re.compile(r"^```markdown\n(.*?)^```$", re.MULTILINE | re.DOTALL)
+# How ingest gives a task its day. The run that files a capture may come days after it, and a
+# model that takes "names a day" for "writes a date" files "on Wednesday" on no day at all.
+DATES_A_TASK = (
+    "`--due` whenever the capture names a day for the task, and only then",
+    "A day named in words is a day too.",
+    "Work it out from the capture's `created`, not from today",
+    '"tomorrow" the day after it, "in two weeks" fourteen days after it',
+    'a day without its year ("on 3 March") the next such day from it on',
+    "Give the day also when it has passed by now",
+)
+# One wording wherever a skill works a day out of what a capture says: a task's day and a fact's
+# last day in ingest, a fact's last day in refresh.
+WEEKDAY_RULE = "a weekday is the next such day after it"
 
 
 class CapturedTextTest(unittest.TestCase):
@@ -204,6 +217,20 @@ class CurrentItemPlacementTest(unittest.TestCase):
         self.assertEqual([fact.topic for fact in index.facts], [None, None, "Acme Ltd"])
         self.assertEqual(example.count("### Acme Ltd (Acme Ltd, Acme, Kim Lee)\n"), 2)
         self.assertEqual((index.unparsed_topic_headings, index.unparsed_fact_lines, index.invalid_since), ([], [], []))
+
+
+class TaskDayTest(unittest.TestCase):
+    def test_ingest_says_that_a_day_named_in_words_is_a_tasks_day_counted_from_the_capture(self) -> None:
+        """Covers: B155"""
+        skill = one_line(skill_text("ingest"))
+        for sentence in DATES_A_TASK:
+            with self.subTest(sentence=sentence[:40]):
+                self.assertIn(sentence, skill)
+
+    def test_a_weekday_is_counted_the_same_way_for_a_task_and_for_the_last_day_of_a_fact(self) -> None:
+        """Covers: B155"""
+        self.assertEqual(one_line(skill_text("ingest")).count(WEEKDAY_RULE), 2)
+        self.assertIn(WEEKDAY_RULE, one_line(skill_text("refresh")))
 
 
 if __name__ == "__main__":

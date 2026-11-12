@@ -188,6 +188,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- A task gets the day its capture names in words: "on Wednesday", "tomorrow", "in two weeks",
+  "am 11. November". The ingest skill asked for a day "only when the capture names a day
+  (`YYYY-MM-DD` or `YYYY-MM-DD HH:MM`)", and `haiku`, the default model of a curation run, took
+  that in some runs for a day written as a date: over eight invented captures of one Monday, each
+  a task with such a day, it filed 42 of 240 tasks on no day in thirty curation runs, more often
+  when the captures were ten days old than three. The skill now says that a day named in words is
+  a day, that it counts from the capture's `created` and not from the day of the run (a weekday
+  is the next such day after it, as for the last day of a fact), and that it is given also when
+  it has passed by then, so the task shows as overdue. With that, `haiku` gave every day in thirty
+  runs; `sonnet` did before and after. No run of either model counted from the day of the run.
 - A question in one language over notes in another is answered in the language of the question.
   The search tool's description and the skill `search` already said so, and a session still
   answered an English question in German about one time in six where the distillate and the

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import datetime
 import io
 import json
 import os
@@ -110,7 +111,7 @@ DANA_WITH_PHONE = f"""\
 # Each task as (capture, key, title, due).
 TASKS = (
     (PLUMBER, "plumber", "Call the plumber about the boiler", "2026-11-20"),
-    (TAX, "tax", "Send the tax papers to the trustee", "2026-11-13"),
+    (TAX, "tax", "Send the tax papers to the trustee", "2026-11-11"),
     (GARAGE, "garage", "Pay the garage invoice", "2026-11-27"),
     (LOCK, "lock", "Buy a new bike lock", None),
     (CELLAR, "cellar", "Tidy the cellar", None),
@@ -200,6 +201,16 @@ class InventedInboxTest(Sandbox):
 
         self.assertEqual(sum(1 for day in days if day is not None), 4)
         self.assertEqual(sum(1 for day in days if day is None), 3)
+
+    def test_a_weekday_and_a_day_without_its_year_are_expected_as_counted_from_the_capture(self) -> None:
+        captures = {capture.file: capture for capture in self.inbox.captures}
+        weekday, without_year = captures[TAX], captures[GARAGE]
+
+        self.assertIn("Am Mittwoch", weekday.text)
+        self.assertEqual(weekday.created.strftime("%A"), "Monday")
+        self.assertEqual(weekday.expected[0].due, weekday.created.date() + datetime.timedelta(days=2))
+        self.assertTrue(without_year.text.endswith("by 27 November."))
+        self.assertEqual(without_year.expected[0].due, datetime.date(without_year.created.year, 11, 27))
 
     def test_every_capture_is_of_the_day_a_current_item_should_carry(self) -> None:
         days = {capture.created.date().isoformat() for capture in self.inbox.captures}
@@ -443,7 +454,7 @@ class ScoreTest(Sandbox):
             self.flaws(result),
             {
                 "call the plumber": ("due 2026-11-21, expected 2026-11-20",),
-                "send the tax papers": ("due on no day, expected 2026-11-13",),
+                "send the tax papers": ("due on no day, expected 2026-11-11",),
                 "buy a bike lock": ("due 2026-11-10, expected no day",),
             },
         )

@@ -27,7 +27,7 @@ yourself.
 | `no-leak` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `note` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
 | `recall` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
-| `routing` | 1.00 (3 of 3 runs) | 0.67 (1 of 3 runs) |
+| `routing` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `topic` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
 
 <!-- /results -->
@@ -70,7 +70,8 @@ a model, the eval tool's default judge: whether `no-invention` stayed honest, wh
   public file. A session without m2b has no notes to get these wrong with, so its 1.00 is what to
   expect.
 - In `routing`, the arm without m2b now and then tries Claude Code's own memory instead of
-  `TODO.md` and scores lower.
+  `TODO.md` and scores lower: 0.67 in a run earlier on the day of the table above, 1.00 in the one
+  it shows.
 
 ## How well a model files an inbox
 
@@ -89,13 +90,26 @@ how to run it.
 
 Measured on 2026-11-12 with Claude Code 2.1.322, which resolves both names to its current models.
 No run failed, left a capture in the inbox, filed a fact or a task from the capture that holds
-nothing or wrote a line no capture stands behind. In each of its runs `haiku` started a topic for
-a single person, a neighbour, where the filing rules leave the place open; `sonnet` did not.
+nothing or wrote a line no capture stands behind. `haiku` in each of its runs and `sonnet` in two
+of three started a topic for a single person, a neighbour, where the filing rules leave the place
+open, and in one run `haiku` wrote a facts line of its own for a new customer beside the two its
+captures bring.
 
-A measurement earlier that day, when three of the captures named their day without its year, had
-`haiku` at 0.97: in one of three runs it wrote two facts into their fact file and left their
-lines out of the facts list, so no session would have started with them. That is the slip to
-expect of it now and then; `sonnet` was at 1.00 there too.
+The same runs over a copy of the inbox dated a week earlier, so that the captures were ten days
+old, had `haiku` at 1.00 and `sonnet` at 0.98: in one of three runs `sonnet` wrote a phone number
+into its fact file and left its line out of the facts list, so no session would have started with
+it. A measurement earlier that day had `haiku` at 0.97 by the same slip, with two facts. That is
+the slip to expect of either model now and then.
+
+Two of the tasks name their day in words, "Am Mittwoch" and "by 27 November", and the expected day
+counts from the day of the captures; every run above gave both. Whether a model gives such a day
+at all was measured apart, with eight captures of one Monday, each one task ("On Wednesday", "Am
+Dienstag", "Tomorrow", "In zwei Wochen", "Am 11. November"), in fifteen curation runs per model
+with the captures three days old and fifteen with them ten days old. While the ingest skill asked
+for a day "only when the capture names a day (`YYYY-MM-DD` or `YYYY-MM-DD HH:MM`)", `haiku` filed
+42 of its 240 tasks on no day, 28 of them from the older captures. Since the skill says that a day
+named in words is a day, counted from the capture, it gave every day in thirty runs. `sonnet` gave
+every day before and after, and no run of either model counted from the day of the run.
 
 The inbox is tidier than a real one: short captures with one or two things each. Both models are
 at the top of it, so it shows that either files plain captures well, not which one copes better
