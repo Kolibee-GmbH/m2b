@@ -26,7 +26,7 @@ flowchart LR
 | Migrate | code, only when the store's format is older than this m2b | brings `memory/` up to the rules of this m2b, one format at a time, each checked in code; a failing one puts `memory/` back, keeps the format and ends the run with the review |
 | Harvest | code | settles the memory candidates and "Still current? ..." questions you ticked or dropped, and the proposals you kept or dropped |
 | Glean | code and one model call without tools, only with `curation.read_sessions` | reads what you typed in Claude Code since the last reading and keeps what the model proposes for your memory ([Reading your sessions](#reading-your-sessions)) |
-| Ingest | model, only with captures in the inbox | files facts into memory, tasks into your list, each capture into `corpus/YYYY/MM/` |
+| Ingest | model, only with captures in the inbox | files facts and what is going on into memory, under its topic what concerns one subject only, tasks into your list, each capture into `corpus/YYYY/MM/` |
 | Refresh | model, only when a fact is past its day | rewrites the facts whose `until` has passed |
 | Sort | model, only with `m2b curate --sort-facts` | moves facts lines of an older distillate into topics; code puts the file back if a statement changed |
 | Lint | code; the model only to repair a broken memory link with exactly one candidate | checks names, links, conflict copies and the distillate's size |
@@ -183,7 +183,9 @@ m2b curate --sort-facts    # sorts the facts of an older distillate into topics
 
 `--refresh-all` reads the evidence of every undated line and sets `until` or `since` only where a
 capture names the day. `--sort-facts` moves the lines that matter for one subject under its topic;
-code then compares the file and puts the old one back if any statement changed.
+code then compares the file and puts the old one back if any statement changed. It leaves
+`## Current` as it is: an item above the topics there moves under its topic when ingest files a
+capture about the same thing, or when you move it by hand.
 
 ## On a schedule
 

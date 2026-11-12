@@ -100,12 +100,16 @@ Read `<store>/memory/MEMORY.md`. It has two sections:
 ## Current
 
 - Planning the trip to Porto (since 2026-10-02)
+
+### Acme Ltd (Acme Ltd, Acme, Kim Lee)
+- Building the export for Acme (since 2026-11-02)
 ```
 
-A facts line is exactly `- <statement> (<fact-file>.md)`. The lines before the first `###` are
-printed at the start of every session. A `###` heading starts a topic: its name, then in
-parentheses the words that bring it in; its lines are printed only when one of those words is in
-the owner's prompt or the project folder's path, as a whole word, ignoring case. Current is a short
+A facts line is exactly `- <statement> (<fact-file>.md)`. In each section, the lines before its
+first `###` are printed at the start of every session. A `###` heading starts a topic: its name,
+then in parentheses the words that bring it in; its lines are printed only when one of those words
+is in the owner's prompt or the project folder's path, as a whole word, ignoring case. A topic can
+have a heading in each section, and headings with the same name are one topic. Current is a short
 list of what is going on; each line ends in `(since YYYY-MM-DD)`. Keep statements short, one line
 per fact, and remove old current items when they are over.
 
@@ -182,11 +186,13 @@ read its members too (the `.jpg` reading copy where there is one). Then, in this
      comes up (a customer, an organisation, a project, a group of people such as a club).
    - In any session: above the first `###` heading, never at the end of `## Facts`, where it
      would land in the last topic.
-   - Only for one subject: under that subject's topic. If there is none yet, start one at the end
-     of `## Facts`: `### <name> (<word>, <word>)`, the name at most 60 characters, with two to
-     five words that name it unambiguously, each 3 to 40 characters: the organisation's name and the short form the
-     owner uses ("Globex AG" and "Globex"), full names of its people, a project's name. Never a
-     first name or a common word alone ("Kim", "Chor", "export"); a heading without words never
+   - Only for one subject: under that subject's topic. If the topic has no heading under
+     `## Facts` yet, start one at the end of `## Facts`. A topic that stands under `## Current`
+     keeps its heading, copied character for character; a new topic gets
+     `### <name> (<word>, <word>)`, the name at most 60 characters, with two to five words that
+     name it unambiguously, each 3 to 40 characters: the organisation's name and the short form
+     the owner uses ("Globex AG" and "Globex"), full names of its people, a project's name. Never
+     a first name or a common word alone ("Kim", "Chor", "export"); a heading without words never
      brings the topic in.
    - A fact that introduces a person of an existing topic may add that person's full name to its
      words, up to five.
@@ -202,17 +208,32 @@ fact as it stands, without weighing it again.
 
 A capture with `kind: worklog` is the day's worklog, written by the worklog add-on from the
 owner's sessions. It holds no facts and no tasks to file: a program wrote it from a model's
-judgement of the sessions, and nothing in it is something the owner asked to keep. Use its topics
-only for `## Current` (what the owner is working on now; replace a line about the same work instead
-of adding one), then note and move it like any capture.
+judgement of the sessions, and nothing in it is something the owner asked to keep. Use the work
+it names only for `## Current` (what the owner is working on now; replace a line about the same
+work instead of adding one, and put each line where the paragraph on Current says, work for a
+customer under that customer's topic), then note and move it like any capture.
 
 **Current.** Something going on right now (a trip being planned, a job being started) becomes a
 line under `## Current`, unless the capture has `quiet: true`; a quiet capture is filed, but
 never brought up. The line ends in `(since YYYY-MM-DD)`, the day of the capture's `created`; a
 later capture about the same thing moves that day, so a run can ask the owner about a line no
-capture has touched for a month. A new line goes above the first `###` heading under
-`## Current`, never at the section's end: a line below such a heading belongs to that heading's
-topic and reaches only the sessions that name it.
+capture has touched for a month. Where the line goes, ask as for a fact (Facts, 3): does Claude
+need it in any session, or only when one subject comes up?
+
+- In any session (the owner's own life, family and close people, the owner's employer or firm):
+  above the first `###` heading under `## Current`, never at the section's end, where it would
+  land in the last topic.
+- Only for one subject (work for a customer, a project of an organisation, a club's concert):
+  under that subject's heading in `## Current`. If the topic has no heading there yet, start one
+  at the end of `## Current`: the topic's heading under `## Facts`, copied character for
+  character, or, for a subject without a topic, a new heading by the rules for a new topic
+  (Facts, 3).
+- A line that already stands under a topic in `## Current` stays there; change it in place.
+- A line above the first `###` that is about one subject only moves under that subject's heading
+  when a capture is about the same thing, so that you change the line or its day anyway. A line
+  no capture of this run is about stays where it is.
+- When the last line under a heading in `## Current` goes because the work is over, remove that
+  heading there too; the topic's heading under `## Facts` stays.
 
 **Tasks.** Each thing to do becomes one task. The key is one word that tells it apart from the
 capture's other tasks:

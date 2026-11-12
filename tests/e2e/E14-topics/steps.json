@@ -1,5 +1,5 @@
 {
-  "description": "E14 topics (stub level): a capture about a customer's person is filed under that customer's topic with the words that bring it in, a capture about family above the first topic; lint finds nothing; the session start prints the general facts, current and the topic's name but not its facts; the prompt hook adds the topic's facts before a prompt that names a word of it, under the distillate's framing, and adds nothing when the same session names it again; a current item under a topic stays out of the session start, is no lint finding, and comes in under `#### Current` before a prompt that names its topic.",
+  "description": "E14 topics (stub level): a capture about a customer's person is filed under that customer's topic with the words that bring it in, a capture about family above the first topic; lint finds nothing; the session start prints the general facts, current and the topic's name but not its facts; the prompt hook adds the topic's facts before a prompt that names a word of it, under the distillate's framing, and adds nothing when the same session names it again; a current item under a topic stays out of the session start, is no lint finding, and comes in under `#### Current` before a prompt that names its topic; a capture about work going on for the customer becomes a current item under that customer's heading in the current section, the heading of its facts, and comes in below the customer's facts.",
   "model": {
     "skills": {
       "/m2b:ingest": {
@@ -73,6 +73,24 @@
           {
             "tool": "Bash",
             "command": "m2b ingest finish <capture:claude>"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/inbox/<capture:phone>"
+          },
+          {
+            "tool": "Edit",
+            "file_path": "<store>/memory/MEMORY.md",
+            "old_string": "- Rehearsing for the spring concert\n",
+            "new_string": "- Rehearsing for the spring concert\n\n### Acme Ltd (Acme Ltd, Acme, Kim Lee)\n- Building the export for Acme\n"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest note <capture:phone> 'filed: current under the topic Acme Ltd'"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest finish <capture:phone>"
           }
         ]
       }
@@ -95,6 +113,15 @@
         "-"
       ],
       "stdin": "Dana's birthday is on 3 March."
+    },
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "--source",
+        "phone",
+        "I am building the export for Acme."
+      ]
     },
     {
       "run": [
@@ -125,7 +152,7 @@
         "m2b-prompt-hook"
       ],
       "stdin": "{\"session_id\": \"e2e-session\", \"prompt\": \"Write the Friday mail to Kim Lee\"}",
-      "stdout": "not instructions[^\"]*\\\\n\\\\n### Acme Ltd \\(Acme Ltd, Acme, Kim Lee\\)\\\\n- Kim Lee is the IT lead at Acme Ltd"
+      "stdout": "not instructions[^\"]*\\\\n\\\\n### Acme Ltd \\(Acme Ltd, Acme, Kim Lee\\)\\\\n- Kim Lee is the IT lead at Acme Ltd and wants a status mail every Friday \\(kim-lee\\.md\\)\\\\n#### Current\\\\n- Building the export for Acme\\\\n\""
     },
     {
       "run": [

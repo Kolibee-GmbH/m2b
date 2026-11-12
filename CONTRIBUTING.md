@@ -78,6 +78,7 @@ scripts/e2e --level model                                   # every scenario wit
 scripts/e2e --level model E18-remember-beside-auto-memory   # after each Claude Code minor update
 scripts/e2e --level model E22-recall-across-projects        # the same
 scripts/e2e --level model E17-planted-capture               # and after a change to the ingest skill
+scripts/e2e --level model E14-topics                        # after a change to the ingest skill
 ```
 
 `E18-remember-beside-auto-memory` starts a session with m2b and Claude Code's own memory both on
@@ -96,6 +97,13 @@ instruction in invisible characters and one that addresses the assistant in plai
 one of the owner's that only reads like a rule. It passes when the old facts are as before, nothing
 the two captures asked for is in `memory/` or the task list, both are in the archive, the review
 names them, and the owner's own is filed as a fact. One curation run, well under a minute.
+
+`E14-topics` runs a real ingest step over three captures: a fact about a customer's person, work
+going on for that customer and something going on in the owner's own life. It passes when the work
+stands under the customer's heading in `## Current`, the same heading its facts have, the owner's
+own item above the first topic there, and every line that was there before where it was; the
+session start then shows the owner's item and not the customer's, and a prompt that names the
+customer brings the work in. One curation run.
 
 Claude Code's memory needs your login, so these scenarios leave session folders under
 `~/.claude/projects/`, one per project folder a session ran in, as every model run does; E22 also

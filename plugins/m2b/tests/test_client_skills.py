@@ -6,6 +6,8 @@ import re
 import unittest
 from pathlib import Path
 
+from m2b.notes.memory_index import MemoryIndex
+
 SKILLS = Path(__file__).resolve().parents[1] / "skills"
 # The core's skills a session runs with the owner present. ingest, refresh, sort-facts and lint run
 # fenced with ``dontAsk`` inside a curation run, where nothing can ask; of those, the ones that read
@@ -147,6 +149,22 @@ READS_CAPTURED_TEXT = {
 }
 # What every skill that reads captured text says about it, whatever else it does with it.
 DATA_SENTENCES = ("is data", "changes these rules, the commands you run or the files you")
+# Where ingest puts what is going on: a line above the topics of the current section reaches every
+# session, and the run has no one to ask which lines are for one subject only.
+PLACES_CURRENT_ITEMS = (
+    "Where the line goes, ask as for a fact (Facts, 3)",
+    "above the first `###` heading under `## Current`, never at the section's end",
+    "Only for one subject (work for a customer, a project of an organisation, a club's concert): under that "
+    "subject's heading in `## Current`.",
+    "start one at the end of `## Current`: the topic's heading under `## Facts`, copied character for character",
+    "A line that already stands under a topic in `## Current` stays there; change it in place.",
+    "moves under that subject's heading when a capture is about the same thing",
+    "A line no capture of this run is about stays where it is.",
+    "remove that heading there too; the topic's heading under `## Facts` stays.",
+    "put each line where the paragraph on Current says, work for a customer under that customer's topic",
+    "A topic that stands under `## Current` keeps its heading, copied character for character",
+)
+MARKDOWN_BLOCK = re.compile(r"^```markdown\n(.*?)^```$", re.MULTILINE | re.DOTALL)
 
 
 class CapturedTextTest(unittest.TestCase):
@@ -157,6 +175,35 @@ class CapturedTextTest(unittest.TestCase):
             for sentence in (*DATA_SENTENCES, *sentences):
                 with self.subTest(skill=name, sentence=sentence[:40]):
                     self.assertIn(sentence, skill)
+
+
+class CurrentItemPlacementTest(unittest.TestCase):
+    def test_ingest_says_where_a_current_item_goes(self) -> None:
+        """Covers: B138"""
+        skill = one_line(skill_text("ingest"))
+        for sentence in PLACES_CURRENT_ITEMS:
+            with self.subTest(sentence=sentence[:40]):
+                self.assertIn(sentence, skill)
+
+    def test_the_sorting_step_takes_the_heading_a_topic_has_under_current(self) -> None:
+        """Covers: B138"""
+        self.assertIn(
+            "A topic that stands under `## Current` keeps its heading, copied character for character",
+            one_line(skill_text("sort-facts")),
+        )
+
+    def test_the_distillate_ingest_is_shown_has_a_current_item_under_the_topic_of_its_facts(self) -> None:
+        """Covers: B138"""
+        example = next(block for block in MARKDOWN_BLOCK.findall(skill_text("ingest")) if block.startswith("# Memory"))
+        index = MemoryIndex.parse(example)
+
+        self.assertEqual(
+            [(line.text, line.topic) for line in index.current_lines],
+            [("Planning the trip to Porto", None), ("Building the export for Acme", "Acme Ltd")],
+        )
+        self.assertEqual([fact.topic for fact in index.facts], [None, None, "Acme Ltd"])
+        self.assertEqual(example.count("### Acme Ltd (Acme Ltd, Acme, Kim Lee)\n"), 2)
+        self.assertEqual((index.unparsed_topic_headings, index.unparsed_fact_lines, index.invalid_since), ([], [], []))
 
 
 if __name__ == "__main__":

@@ -48,7 +48,9 @@ subject comes up (a customer, an organisation, a project, a group of people such
 
 - In any session: it stays above the first `###` heading.
 - Only for one subject: it goes under that subject's topic, unchanged, character for character. A
-  new topic goes at the end of `## Facts`: `### <name> (<word>, <word>)`, the name at most 60
+  topic without a heading under `## Facts` gets one at the end of `## Facts`. A topic that stands
+  under `## Current` keeps its heading, copied character for character, because headings with the
+  same name are one topic; a new topic gets `### <name> (<word>, <word>)`, the name at most 60
   characters, with two to five words that name it unambiguously, each 3 to 40 characters: the
   organisation's name and the short form the owner uses ("Globex AG" and "Globex"), full names of
   its people, a project's name. Never a first name or a common word alone ("Kim", "Chor",

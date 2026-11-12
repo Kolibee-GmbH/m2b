@@ -114,9 +114,13 @@ starts with aims at 2 KB, and so does each topic; lint reports more.
 `## Current` holds topics under the same headings: a current item above its first `###` heading
 reaches every session, one under a topic comes in with that topic, below its facts under
 `#### Current`. Headings with the same name, in either section, are one topic, and a word of any of
-them names it; a topic may stand under `## Current` alone. A new item that holds everywhere goes
-above the first `###` there, as a fact does. When a "Still current?" answer takes a topic's last
-item out, its heading under `## Current` goes with it, unless another line is left below it.
+them names it; a topic may stand under `## Current` alone. Ingest puts a new item as it puts a
+fact: one that holds everywhere above the first `###` there, one about a single subject under that
+subject's heading, which it copies from `## Facts` when the topic has one there. An item above the
+topics that is about one subject moves under its topic when ingest files a capture about the same
+thing; an item under a topic stays there, and no other step moves an item. When a "Still current?" answer takes a topic's last item out,
+its heading under `## Current` goes with it, unless another line is left below it; ingest is told
+to remove the heading with the last item it takes out.
 
 ## Tasks
 

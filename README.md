@@ -209,8 +209,9 @@ that folder turns it off for every session there and below, on this machine.
 Sessions capture what you learn about people and verbal agreements, at work too: who is who,
 which role, what was agreed. Documents of customers and what a third party told you in confidence
 are never captured. A customer's people land under that customer's topic, so their facts reach a
-session only when it is about that customer. A line under Current reaches every session, unless it
-stands under a topic there; curation does not put one there yet.
+session only when it is about that customer. What you are working on for that customer lands under
+the same topic in Current; what goes on in your own life stays above the topics there and reaches
+every session.
 
 ### Search, todos, rediscover
 

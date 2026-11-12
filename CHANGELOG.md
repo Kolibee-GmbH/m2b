@@ -13,8 +13,12 @@ All notable changes to this project are documented here. The format follows
   `### <name> (<word>, <word>)` now works as it does under `## Facts`: the items below it stay out
   of the session start and come in with the topic's facts, where the project folder's path or a
   prompt names one of its words. Until now every line under `## Current` reached every session, and
-  lint reported such a heading as an error. Curation does not write these headings yet, and puts a
-  new current item above the first of them; one you write yourself holds. The store gets format 3
+  lint reported such a heading as an error. Curation files what you are working on for one subject
+  (a customer, an organisation's project, a club) under that subject's topic there, with the
+  heading its facts have, and what goes on in your own life above the topics. An item that stands
+  above the topics and is about one subject moves under its topic when a new capture is about the
+  same thing; one you move under a topic yourself stays there. A model-level scenario, `E14-topics`, checks where a
+  real ingest step puts both kinds. The store gets format 3
   at the curating machine's next run, and nothing in `memory/` changes; update the curating machine
   first. A machine on an older m2b keeps capturing and gives every session every current item until
   it is updated ([Store format](docs/store-format.md#memory)).
