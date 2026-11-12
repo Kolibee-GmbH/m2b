@@ -11,7 +11,7 @@ from __future__ import annotations
 import datetime
 import json
 import subprocess
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -21,7 +21,7 @@ from m2b.session_remotes import ByRemote, RemoteRule, remotes_in
 from m2b_worklog import classify, periods, sessions
 from m2b_worklog.files import is_evicted
 from m2b_worklog.sources import READ, SourceState
-from m2b_worklog.sources.git import GitFacts, Runner, read_git
+from m2b_worklog.sources.git import NO_GIT_TO_START, GitFacts, Runner, read_git
 from m2b_worklog.sources.herdr_events import read_recordings
 from m2b_worklog.sources.inbox import read_inbox
 from m2b_worklog.sources.transcripts import read_transcripts
@@ -53,7 +53,8 @@ class Inputs:
     now: datetime.datetime
     # Where the core's session-start hook notes the git remotes of the folders sessions start in.
     remote_notes: Path
-    git: str = "git"
+    # The git to start for commits and remotes; None on a machine without one (sources.git.git_to_start).
+    git: str | None
     # Whether herdr runs with the recorder linked; the command asks herdr (recorder.herdr_state).
     herdr: SourceState = HERDR_NOT_CHECKED
 
@@ -76,6 +77,8 @@ class _WorkLeftOut:
 
     by_folder: classify.LeftOut
     by_remote: RemoteRule
+    # Why git names no remotes now, when the reason is the machine and not the folder.
+    no_git_to_start: bool
     unknown: set[str | None] = field(default_factory=set)
 
     def holds(self, folder: str | None) -> bool:
@@ -91,20 +94,28 @@ class _WorkLeftOut:
         if not self.unknown:
             return SourceState.read()
         one = len(self.unknown) == 1
+        why = (
+            NO_GIT_TO_START
+            if self.no_git_to_start
+            else f"{'the folder is' if one else 'the folders are'} gone or git did not answer"
+        )
         return SourceState.failed(
             f"work in {len(self.unknown)} {'folder' if one else 'folders'} is left out: no git remote is known "
-            f"for {'it' if one else 'them'} ({'the folder is' if one else 'the folders are'} gone or git did not "
-            "answer), and the profile leaves "
-            "work out by git remote"
+            f"for {'it' if one else 'them'} ({why}), and the profile leaves work out by git remote"
         )
 
 
 def _work_left_out(inputs: Inputs, run: Runner) -> _WorkLeftOut:
     named = classify.left_out(inputs.profile, inputs.home)
-    by_remote = RemoteRule(
-        named.remote_parts, inputs.remote_notes, inputs.now, lambda folder: remotes_in(folder, inputs.git, run)
-    )
-    return _WorkLeftOut(named, by_remote)
+    by_remote = RemoteRule(named.remote_parts, inputs.remote_notes, inputs.now, _asking_git(inputs.git, run))
+    return _WorkLeftOut(named, by_remote, no_git_to_start=inputs.git is None)
+
+
+def _asking_git(git: str | None, run: Runner) -> Callable[[Path], frozenset[str] | None]:
+    """What git names as a folder's remotes now; nothing on a machine without a git to start."""
+    if git is None:
+        return lambda folder: None
+    return lambda folder: remotes_in(folder, git, run)
 
 
 def read_watermark(store: Path) -> datetime.datetime | None:
@@ -268,7 +279,7 @@ def _session(
     }
 
 
-def _git_facts(folder: str | None, period: Period, git: str, run: Runner) -> GitFacts:
+def _git_facts(folder: str | None, period: Period, git: str | None, run: Runner) -> GitFacts:
     if folder is None:
         return GitFacts([], None, SourceState.failed("the session has no known folder"))
     if not Path(folder).is_dir():

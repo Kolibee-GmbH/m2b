@@ -240,6 +240,14 @@ All notable changes to this project are documented here. The format follows
   another volume than the store, a hidden temporary file stands beside the target while it is
   written. A new file of the worklog now gets the mode your umask gives, like every other file in
   the store, where it was readable by you alone before.
+- The worklog starts git only when it starts without asking you anything. On a Mac without the
+  developer tools, `/usr/bin/git` is a stand-in that opens a dialog offering to install them, and
+  the daily worklog, which runs in the background, started it for every session's commits and
+  remotes. Now it asks once per run which git there is to start, as the commit of a curation run
+  and the session-start hook already did, and without one starts none: the note says under "Could
+  not read" for each session whose folder is still there that this machine has no git to start,
+  and while you leave work out by git remote, a folder's repository is known only by what a
+  session start noted for it.
 
 ## [0.3.4] - 2026-11-11
 

@@ -23,6 +23,7 @@ from m2b_worklog import daily, ledger, writeup
 from m2b_worklog.daily import DailyError, Sources
 from m2b_worklog.paths import WorklogPaths
 from m2b_worklog.sources import SourceState
+from m2b_worklog.sources.git import NO_GIT_TO_START
 from test_facts import BY_REMOTE, GLOBEX, NOW, PROFILE, TEST_TZ, Fixture, at
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[3]
@@ -93,12 +94,13 @@ class DailyFixture(Fixture):
         self.profile: dict[str, Any] = {**PROFILE, "language": "en"}
         self.core = FakeCore(self.paths, self.store, self.profile, judged)
         self.herdr = SourceState.read()
+        self.git_to_start: str | None = "git"
 
     def run_daily(self, now: datetime.datetime = NOW) -> str:
         environ_backup = dict(os.environ)
         os.environ.update({"GIT_CONFIG_GLOBAL": str(self.base / "gitconfig"), "GIT_CONFIG_NOSYSTEM": "1"})
         try:
-            return daily.run(self.paths, self.core, now, Sources(self.projects, self.herdr))
+            return daily.run(self.paths, self.core, now, Sources(self.projects, self.herdr, self.git_to_start))
         finally:
             os.environ.clear()
             os.environ.update(environ_backup)
@@ -437,6 +439,18 @@ class StateTest(DailyFixture):
         self.assertIn(
             "## Could not read\n\n- herdr: herdr did not answer", (self.store / note).read_text(encoding="utf-8")
         )
+
+    def test_a_machine_without_a_git_to_start_is_named_in_the_note_for_each_session(self) -> None:
+        """Covers: B158"""
+        self.git_to_start = None
+        self.a_due_day()
+
+        self.run_daily()
+
+        [note] = self.worklog_notes()
+        text = (self.store / note).read_text(encoding="utf-8")
+        self.assertIn(f"## Could not read\n\n- git in {self.repo}: {NO_GIT_TO_START}\n", text)
+        self.assertNotIn("fix(export)", text)
 
     def test_work_left_out_for_a_repository_nobody_can_tell_is_named_in_the_note_by_its_count(self) -> None:
         """Covers: B153"""
@@ -920,9 +934,9 @@ else:
         launcher.chmod(0o755)
         return calls
 
-    def command(self, *arguments: str) -> subprocess.CompletedProcess[str]:
+    def command(self, *arguments: str, environ: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [str(COMMAND), *arguments], capture_output=True, text=True, env=self.environ(), timeout=60
+            [str(COMMAND), *arguments], capture_output=True, text=True, env=environ or self.environ(), timeout=60
         )
 
     def environ(self) -> dict[str, str]:
@@ -955,6 +969,28 @@ else:
         self.assertEqual([call for call in made if call[:1] == ["tasks"]], [])
         [note] = self.worklog_notes()
         self.assertIn("- herdr: herdr did not answer", (self.store / note).read_text(encoding="utf-8"))
+
+    def test_with_no_git_on_the_path_collect_and_run_say_that_the_machine_has_none_to_start(self) -> None:
+        """Covers: B158"""
+        self.launcher()
+        self.a_due_day()
+        programs = self.base / "programs"
+        programs.mkdir()
+        # All that the command's own script needs from the PATH.
+        (programs / "dirname").symlink_to(shutil.which("dirname") or "/usr/bin/dirname")
+        environ = {**self.environ(), "PATH": str(programs)}
+
+        collected = self.command("collect", "--now", NOW.isoformat(), environ=environ)
+        self.assertEqual(collected.returncode, 0, collected.stderr)
+        found = json.loads(collected.stdout)
+        (self.base / "verdict.json").write_text(json.dumps(judged(found)), encoding="utf-8")
+        ran = self.command("run", "--now", NOW.isoformat(), environ=environ)
+
+        [session] = found["sessions"]
+        self.assertEqual(session["git"], {"state": "could not read", "detail": NO_GIT_TO_START})
+        self.assertEqual(ran.returncode, 0, ran.stderr)
+        [note] = self.worklog_notes()
+        self.assertIn(f"- git in {self.repo}: {NO_GIT_TO_START}\n", (self.store / note).read_text(encoding="utf-8"))
 
     def test_state_shows_the_watermark_and_the_last_period_and_names_a_broken_file(self) -> None:
         """Covers: B87"""

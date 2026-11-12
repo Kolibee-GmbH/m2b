@@ -65,8 +65,8 @@ on this machine only, never in the store, and without the user name or token a U
 worklog takes what was noted for a folder and what git says there when it runs. What to know:
 
 - **Work whose repository nobody can tell is left out too**, while you name a remote: a folder
-  for which nothing was noted and where git says nothing, because it is gone or git does not
-  answer. It cannot be shown to be other work. The note says under "Could not read" in how many
+  for which nothing was noted and where git says nothing, because it is gone, git does not
+  answer or the machine has no git to start. It cannot be shown to be other work. The note says under "Could not read" in how many
   folders that was; it does not name them. This meets a worktree that is gone and in which no
   session has started since this machine notes remotes, and a herdr workspace in which no Claude
   Code session ever started.
@@ -229,7 +229,11 @@ Only while it is on and only on the curating machine: the herdr events its recor
 Claude Code transcripts for the period, the prompts (240 characters each) and the last 500
 characters of each session's last answer, where a question to you stands; your own git commits and
 the `origin` remote in the session folders, and every remote there while you
-[leave work out by remote](#by-git-remote); and the names of the period's captures in the inbox. A
+[leave work out by remote](#by-git-remote); and the names of the period's captures in the inbox.
+Git is started only when it starts without asking you anything: on a Mac without the developer
+tools, where `/usr/bin/git` only opens a dialog that offers to install them, the worklog starts
+none, and the note says under "Could not read" for each session whose folder is still there that
+this machine has no git to start (`xcode-select --install` installs the tools). A
 prompt loses the blocks Claude Code adds to it, such as a `<system-reminder>`, before it is cut, and
 the summary Claude Code writes after a context cut counts as no prompt. Neither does what Claude
 Code marks as sent by someone else than you: a plugin that drives the session, a finished task,

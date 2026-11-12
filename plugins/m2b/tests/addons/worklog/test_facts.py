@@ -10,15 +10,17 @@ import subprocess
 import sys
 import tempfile
 import time
+import types
 import unittest
 from pathlib import Path
 from typing import Any
 
-from m2b import session_remotes
+from m2b import git_program, session_remotes
 from m2b.redaction import redact
 from m2b_worklog import facts, schema
 from m2b_worklog.facts import FactsError, Inputs
 from m2b_worklog.sources import herdr_events
+from m2b_worklog.sources.git import GIT_TIMEOUT_SECONDS, NO_GIT_TO_START, git_to_start
 from m2b_worklog.sources.inbox import read_inbox
 from m2b_worklog.sources.transcripts import answer_text, prompt_text, read_transcripts
 from worklog_fixtures import load_recorder
@@ -138,8 +140,8 @@ class Fixture(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps({"end": moment.isoformat()}), encoding="utf-8")
 
-    def inputs(self, profile: dict[str, Any] = PROFILE) -> Inputs:
-        return Inputs(self.store, self.recordings, self.projects, self.home, profile, NOW, self.remote_notes)
+    def inputs(self, profile: dict[str, Any] = PROFILE, git: str | None = "git") -> Inputs:
+        return Inputs(self.store, self.recordings, self.projects, self.home, profile, NOW, self.remote_notes, git)
 
     def started_in(self, folder: Path, *remotes: str) -> None:
         """What the core's session-start hook noted for the folder a session started in."""
@@ -148,8 +150,10 @@ class Fixture(unittest.TestCase):
             self.remote_notes, str(folder), frozenset(remotes), when, lambda path, text: path.write_text(text)
         )
 
-    def collect(self, profile: dict[str, Any] = PROFILE, run: Any = subprocess.run) -> dict[str, Any]:
-        inputs = self.inputs(profile)
+    def collect(
+        self, profile: dict[str, Any] = PROFILE, run: Any = subprocess.run, git: str | None = "git"
+    ) -> dict[str, Any]:
+        inputs = self.inputs(profile, git)
         environ_backup = dict(os.environ)
         os.environ.update({"GIT_CONFIG_GLOBAL": str(self.base / "gitconfig"), "GIT_CONFIG_NOSYSTEM": "1"})
         try:
@@ -530,6 +534,117 @@ class CollectTest(Fixture):
 
         self.assertEqual(found["sources"]["recorder"]["state"], "could not read")
         self.assertEqual(found["sources"]["transcripts"]["state"], "could not read")
+
+
+class NoGitToStartTest(Fixture):
+    """A machine whose only git would ask the person something: none is started, and the facts say so."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.started: list[list[str]] = []
+
+    def never(self, command: list[str], **_: Any) -> Any:
+        self.started.append(command)
+        raise AssertionError(f"started {command}")
+
+    def test_on_macos_only_the_check_for_the_developer_tools_is_started_without_them(self) -> None:
+        """Covers: B158"""
+        if not git_program.APPLE_GIT_STAND_IN.exists():
+            self.skipTest("this machine has no /usr/bin/git")
+        self.a_day_of_work()
+        timeouts: list[float] = []
+
+        def no_developer_tools(command: list[str], **options: Any) -> Any:
+            self.started.append(command)
+            timeouts.append(options["timeout"])
+            return types.SimpleNamespace(returncode=2)
+
+        environ = {"PATH": str(git_program.APPLE_GIT_STAND_IN.parent)}
+        git = git_to_start(environ, platform="darwin", run=no_developer_tools)
+        [session] = self.collect(run=no_developer_tools, git=git)["sessions"]
+
+        self.assertIsNone(git)
+        self.assertEqual(self.started, [list(git_program.DEVELOPER_TOOLS_CHECK)])
+        self.assertEqual(timeouts, [GIT_TIMEOUT_SECONDS])
+        self.assertEqual(session["git"], {"state": "could not read", "detail": NO_GIT_TO_START})
+
+    def test_on_macos_the_stand_in_is_the_git_to_start_with_the_developer_tools(self) -> None:
+        """Covers: B158"""
+        if not git_program.APPLE_GIT_STAND_IN.exists():
+            self.skipTest("this machine has no /usr/bin/git")
+        environ = {"PATH": str(git_program.APPLE_GIT_STAND_IN.parent)}
+
+        git = git_to_start(environ, platform="darwin", run=lambda command, **_: types.SimpleNamespace(returncode=0))
+
+        self.assertEqual(git, str(git_program.APPLE_GIT_STAND_IN))
+
+    def test_a_machine_with_no_git_on_its_path_has_none_to_start(self) -> None:
+        """Covers: B158"""
+        empty = self.base / "no-programs"
+        empty.mkdir()
+
+        self.assertIsNone(git_to_start({"PATH": str(empty)}, run=self.never))
+        self.assertEqual(self.started, [])
+
+    def test_no_git_is_started_and_each_session_says_its_git_was_not_read(self) -> None:
+        """Covers: B158"""
+        self.a_day_of_work()
+
+        [session] = self.collect(run=self.never, git=None)["sessions"]
+
+        self.assertEqual(self.started, [])
+        self.assertEqual(session["git"], {"state": "could not read", "detail": NO_GIT_TO_START})
+        self.assertEqual(session["commits"], [])
+        # By its folder: the remote that could name a sphere is not asked for.
+        self.assertEqual(session["sphere"], "acme")
+
+    def test_a_session_whose_folder_is_gone_keeps_that_reason(self) -> None:
+        """Covers: B158"""
+        self.a_day_of_work()
+        shutil.rmtree(self.repo)
+
+        [session] = self.collect(run=self.never, git=None)["sessions"]
+
+        self.assertEqual(self.started, [])
+        self.assertEqual(
+            session["git"], {"state": "could not read", "detail": f"the folder {self.repo} no longer exists"}
+        )
+
+    def test_while_a_remote_is_named_a_repository_nothing_was_noted_for_is_unknown(self) -> None:
+        """Covers: B158"""
+        self.a_day_of_work()
+        (self.repo / "src").mkdir()
+        # Another remote than the one the profile names: with a git to start the session would stay.
+        self.git("remote", "add", "origin", "git@github.com:alex/invoices.git")
+
+        found = self.collect({**PROFILE, **BY_REMOTE}, run=self.never, git=None)
+
+        self.assertEqual(self.started, [])
+        self.assertEqual(found["sessions"], [])
+        self.assertEqual(
+            found["sources"]["repositories"],
+            {
+                "state": "could not read",
+                "detail": "work in 2 folders is left out: no git remote is known for them (this machine has no git "
+                "to start), and the profile leaves work out by git remote",
+            },
+        )
+        self.assertEqual([s["workspace"] for s in self.collect({**PROFILE, **BY_REMOTE})["sessions"]], ["w1"])
+
+    def test_what_a_session_start_noted_still_tells_a_repository(self) -> None:
+        """Covers: B158"""
+        self.a_day_of_work()
+        (self.repo / "src").mkdir()
+        self.a_second_workspace("w2", self.home / "notes")
+        self.started_in(self.repo, "git@github.com:alex/invoices.git")
+        self.started_in(self.repo / "src", "git@github.com:alex/invoices.git")
+        self.started_in(self.home / "notes", GLOBEX)
+
+        found = self.collect({**PROFILE, **BY_REMOTE}, run=self.never, git=None)
+
+        self.assertEqual(self.started, [])
+        self.assertEqual([s["workspace"] for s in found["sessions"]], ["w1"])
+        self.assertEqual(found["sources"]["repositories"], {"state": "read", "detail": ""})
 
 
 class NotRecordedTest(Fixture):

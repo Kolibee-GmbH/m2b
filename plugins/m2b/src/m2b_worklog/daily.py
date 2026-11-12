@@ -86,6 +86,8 @@ class Sources:
 
     transcripts: Path
     herdr: SourceState
+    # None on a machine without a git that starts without asking the person anything.
+    git: str | None
 
 
 def run(paths: WorklogPaths, core: Core, now: datetime.datetime, sources: Sources) -> str:
@@ -106,6 +108,7 @@ def run(paths: WorklogPaths, core: Core, now: datetime.datetime, sources: Source
         profile,
         now,
         paths.session_remotes,
+        sources.git,
         herdr=sources.herdr,
     )
     collected = facts.collect(inputs)
