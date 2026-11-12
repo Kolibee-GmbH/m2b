@@ -8,8 +8,8 @@
 # The full run covers the unit tests of the core, of each add-on and of the repository tools (with
 # python3, and on macOS also with /usr/bin/python3 when that is Python 3.9), the core once more in a
 # copy of the plugin without its add-ons, ruff, mypy,
-# the shell linter, the plugin manifest, the tests of the band (the core's mod), the B/X coverage report and
-# the end-to-end scenarios at the stub level.
+# the shell linter, the workflow linter, the plugin manifest, the tests of the band (the core's mod),
+# the B/X coverage report and the end-to-end scenarios at the stub level.
 #
 # The add-ons' tests sit in plugins/m2b/tests/addons/<add-on>/ under a folder without __init__.py, so
 # the core's discovery does not descend into them and each runs as its own suite. An add-on's suite
@@ -20,6 +20,8 @@ set -eu
 readonly RUFF_VERSION=0.16.3
 # mypy 2 no longer type-checks for Python 3.9.
 readonly MYPY_VERSION=1.19.1
+# The package on PyPI that installs actionlint; its first three numbers are actionlint's version.
+readonly ACTIONLINT_PACKAGE_VERSION=1.7.12.25
 readonly LEGACY_PYTHON=/usr/bin/python3
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
@@ -147,6 +149,18 @@ shell_checks() {
         "$PLUGIN"/bin/m2b "$PLUGIN"/bin/m2b-worklog
 }
 
+# GitHub starts no run from a workflow file it cannot read and tells no one, so a mistake in a
+# scheduled workflow shows as nothing happening.
+workflow_checks() {
+    if command -v uvx >/dev/null 2>&1; then
+        uvx --quiet --from "actionlint-py==$ACTIONLINT_PACKAGE_VERSION" actionlint .github/workflows/*.yml
+    elif command -v actionlint >/dev/null 2>&1; then
+        actionlint .github/workflows/*.yml
+    else
+        echo "actionlint not installed and uvx is missing; skipped"
+    fi
+}
+
 manifest_checks() {
     if ! command -v claude >/dev/null 2>&1; then
         echo "claude not installed; skipped"
@@ -199,6 +213,7 @@ stage core-alone core_alone
 stage ruff ruff_checks
 stage mypy mypy_checks
 stage shellcheck shell_checks
+stage workflows workflow_checks
 stage manifests manifest_checks
 stage band band_tests
 stage coverage coverage_report

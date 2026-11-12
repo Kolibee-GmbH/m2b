@@ -20,9 +20,23 @@ scripts/check                    # before every commit: everything, must end wit
 ```
 
 `scripts/check` needs [uv](https://docs.astral.sh/uv/) for the pinned versions of ruff
-and mypy, or both tools on your PATH. `shellcheck` and `claude` are used when installed; with
+and mypy, or both tools on your PATH. With uv it also lints the workflows with a pinned
+[actionlint](https://github.com/rhysd/actionlint); without uv it uses an `actionlint` on your PATH
+and skips that stage when there is none. `shellcheck` and `claude` are used when installed; with
 `CI=true` a missing `claude` ends the run at once, because the manifest and band checks need it.
-The workflow installs the Claude Code version the README names as the minimum.
+
+Two workflows run `scripts/check` on GitHub. `.github/workflows/ci.yml` runs it for every pull
+request and on `main`, with the Claude Code version the README names as the minimum.
+`.github/workflows/weekly.yml` runs it every Monday, and whenever someone starts it by hand, with
+the newest Claude Code: m2b hangs on Claude Code's plugin interface, and the weekly run meets a new
+version before a user does. It also runs the [model-level scenarios](#end-to-end-scenarios) when
+the repository has one of two secrets: `ANTHROPIC_API_KEY`, an API key that is billed per run, or
+`CLAUDE_CODE_OAUTH_TOKEN`, the token `claude setup-token` gives for a subscription. Without either,
+that job is skipped and a notice on the run says so. Started by hand, the workflow takes the names
+of the scenarios to run. A scheduled run that fails opens an issue, or adds a comment to the one
+still open; a run started by hand does not. GitHub starts scheduled runs from `main` only, and
+in a public repository it stops them after sixty days without activity until someone turns the
+workflow on again.
 
 The stage `core-alone` proves that the core stands without its add-ons. It copies `plugins/m2b`
 into a temporary folder without any part of an add-on, runs the core's unit tests in the copy and
@@ -80,6 +94,9 @@ scripts/e2e --level model E22-recall-across-projects        # the same
 scripts/e2e --level model E17-planted-capture               # and after a change to the ingest skill
 scripts/e2e --level model E14-topics                        # after a change to the ingest skill
 ```
+
+The [weekly workflow](#checks) runs all of them with the newest Claude Code, where the repository
+has an account for it.
 
 `E18-remember-beside-auto-memory` starts a session with m2b and Claude Code's own memory both on
 and checks that "remember that ..." about a person lands in m2b's inbox and not in Claude Code's
