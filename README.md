@@ -15,26 +15,29 @@
 </p>
 
 <p align="center">
-  <a href="#install"><strong>Install</strong></a> ·
-  <a href="#features">Features</a> ·
-  <a href="#add-ons">Add-ons</a> ·
-  <a href="#configure">Configure</a> ·
-  <a href="docs/getting-started.md">Getting started</a> ·
-  <a href="CHANGELOG.md">Changelog</a>
+  <a href="#install"><strong>Install</strong></a> · <a href="#how-it-works">How it works</a> ·
+  <a href="#what-runs-on-your-machine">What runs on your machine</a> · <a href="#features">Features</a> ·
+  <a href="#add-ons">Add-ons</a> · <a href="#configure">Configure</a> · <a href="docs/getting-started.md">Getting started</a> ·
+  <a href="SECURITY.md">Security</a> · <a href="CHANGELOG.md">Changelog</a>
 </p>
 
-## TL;DR
+Tell Claude Code "remember that Dana's birthday is on 3 March" in one project. A run in the
+background files the note, and from then on every session, in any project, starts knowing it. Your
+notes stay plain Markdown files in a folder you own.
 
-- You capture notes, facts and tasks from any Claude Code session or the command line. Nothing
-  is filed while you work: captures land in an inbox, written once and never edited.
-- At the next session start after a capture, a curation run files the inbox in the background:
-  facts into a small distillate, tasks into your task list, every capture into an archive by
-  month. Every new session starts with the distillate.
-- Your notes are plain Markdown files in a folder you choose: iCloud Drive, a synced folder, or
-  any local folder. Tasks live in Apple Reminders or in Markdown files next to the notes.
-- The model files your notes in a separate `claude -p` run that may call only the commands its
-  step needs, never in your session. Everything else is plain code: standard library Python, no
-  network calls of its own, no server, no database.
+What m2b adds to Claude Code's own memory, the notes Claude keeps for itself for each project:
+
+- one memory for all your projects and machines, in a folder you choose and sync as you like;
+- your words kept as you said them, and every fact pointing back to them;
+- tasks from the same sentence: "remind me to call the plumber on Friday" lands in your task list.
+
+**What it costs.** Setup is three commands and a few questions; the step behind them that writes
+the files, `m2b setup apply`, ran in 0.3 seconds (2026-11-12). A session starts with a summary of
+your notes, at most 8 KB, and about 10,000 characters of tool and skill descriptions, without a
+model call. Filing uses your Claude Code login: five notes cost US$0.013 at API prices (2026-11-08).
+
+**No server, no account, no telemetry.** [What runs on your machine](#what-runs-on-your-machine)
+says what m2b starts, when, and what leaves the machine.
 
 ![A Claude Code session in an unrelated project answers when Sam brings the plywood and where the shed key is, straight from the distillate, without a tool call; above the prompt the band asks whether planning the trip to Porto is still current, with keep and drop, and lists an overdue task to return Sam's ladder, below it the status line reads "2 in inbox · curated 08:15"](docs/images/session-start.png)
 
@@ -53,12 +56,68 @@ read about 365,000 input tokens (338,000 of them from Claude Code's prompt cache
 Claude Code put it at US$0.013 at API prices. A run with nothing to read (an empty inbox, nothing
 expiring, no memory link to repair) uses no model.
 
+## How it works
+
+One sentence, followed from your prompt into a later session. The name and the note are invented;
+the files are what m2b wrote in a run on 2026-11-12.
+
+**1. You say it.** In any session: "remember that Dana's birthday is on 3 March". Claude writes
+one file into `inbox/`, the folder for new notes, with your words as you said them. Nothing is
+filed while you work, and your words in the file are never changed. `source` says who wrote it:
+`claude` from a session, `cli` from a terminal with `m2b capture`, as here.
+
+```markdown
+---
+created: 2026-11-12T16:26:46+01:00
+source: cli
+---
+Dana's birthday is on 3 March
+```
+
+**2. A run files it.** At the next session start m2b sees a note waiting and starts a curation
+run in the background: a `claude -p` of its own, apart from your session, in which a model reads
+the inbox and may call only the commands its step needs. Here it took 13 seconds. It wrote one
+line into `memory/MEMORY.md`, the distillate:
+
+```markdown
+## Facts
+
+- Dana's birthday is on 3 March (dana.md)
+```
+
+`memory/dana.md` holds the fact and a link to the note it came from. The note moved to the
+archive, `corpus/2026/11/`, with your words as you said them. m2b marked it `curated: true` in its
+frontmatter and added two lines below your words: a marker and `filed: fact dana.md`.
+
+**3. Every later session starts with it.** A hook prints the distillate, at most 8 KB, at each
+session start, in any project, without a model call. Asked when Dana's birthday is, Claude has
+the line in front of it. The picture above shows such a session.
+
+What a note becomes is the model's reading of it, by these rules:
+
+| The note says | It becomes | For example |
+|---|---|---|
+| something that stays true | a fact: a line in the distillate and a fact file | "Dana's birthday is on 3 March" |
+| something true until a known day | a fact with that day, rewritten once the day has passed | "Sam brings the plywood on Saturday" |
+| something going on right now | a line under "Current" in the distillate; after a month without a new note about it, m2b asks whether it still holds | "I am planning the trip to Porto" |
+| something to do | a task in your task list, due on the day the note names | "remind me to call the plumber on Friday" |
+
+A note can be several of these, and a sentence that reads two ways is filed one way: "Sam brings
+the ladder back on Saturday" became a task in one run and a fact until that Saturday in another.
+The last line of the archived note says what was filed.
+
+The store is a folder you choose: iCloud Drive, a synced folder, or any local folder. Tasks live
+in Apple Reminders or in Markdown files next to the notes. Apart from the model's step, m2b is
+plain code: standard library Python, no database.
+
 ## Words used here
 
 | Word | Meaning |
 |---|---|
 | store | the folder that holds your notes: `inbox/`, `corpus/` (the archive), `memory/` |
 | capture | one note as you said it, one file in `inbox/` |
+| inbox | `inbox/` in the store: the captures no run has filed yet |
+| archive | `corpus/` in the store: every filed capture, by the month it was captured in |
 | curation run | the background run that files the inbox, on one machine per store, the curating machine |
 | distillate | `memory/MEMORY.md`: lasting facts, each pointing to its fact file in `memory/`, and under "Current" what is going on now |
 | topic | a heading in the distillate for one subject, such as a customer or a club, whose facts come in only when a session is about it |
@@ -95,6 +154,37 @@ What m2b has that Claude Code's memory does not:
 - topics, so a customer's facts reach only the sessions about that customer;
 - one store across all projects and machines, in a folder you choose and sync as you like, as
   plain Markdown you can read, back up and move without m2b.
+
+## What runs on your machine
+
+Claude Code starts m2b's programs: the hooks, the band and, from a hook, the curation run. Only
+the worklog add-on, off until its own setup, puts something outside Claude Code: a recorder in
+[herdr](https://herdr.dev), the agent runtime in which it sees which workspace is in use, and a
+timer of the operating system. After the install and before `/m2b:m2b setup`, the hooks print nothing and
+no run starts.
+
+| What | When | Model | What leaves the machine | How to turn it off |
+|---|---|---|---|---|
+| Session-start hooks | at every session start: four commands, each with a limit of 20 or 30 seconds | no | nothing by m2b. They print the distillate (at most 8 KB) and a routing rule into the session, start a curation run when one is due, keep the `m2b` command up to date and, with the worklog on, set its recording switch and keep its recorder, its link in herdr and its timer in place. Where sessions are read (below), they note the git remotes of the session's folder in a file on the machine | `m2b distillate off` in a folder keeps the distillate out of the sessions there and below; the other three commands have no switch of their own. With the plugin turned off in `/plugin`, none of the four runs |
+| Prompt hook | before every prompt: one command, with a limit of 5 seconds | no | nothing by m2b. When the prompt names a topic, it adds that topic's facts to the session, at most 4 KB; it reads the prompt and stores nothing of it | it has no switch of its own; where the distillate is off, it adds nothing |
+| Curation run | in the background, on the one machine that curates: at a session start when a capture waits or the last successful run is more than 20 hours old, on a schedule if you set one up, or with `m2b curate --force` | yes, in the steps with something to read: `claude -p` with `haiku` by default. A run with nothing to read starts no model | the captures in the inbox, your memory files, and what a step reads or searches in the archive, to the model | no switch pauses it yet. `m2b curate take-over` on another machine moves it there; with the plugin turned off in `/plugin`, no session starts one, while a schedule you set up goes on until you delete it |
+| Reading your sessions | once in a curation run, only after you said yes in setup | yes, one call that can use no tool | the distillate, your latest answers to its proposals and, for each session since the last reading, its folder, its day and the prompts you typed, with credentials redacted, to the model | `m2b config set curation.read_sessions false` |
+| Worklog add-on | only after `/m2b:worklog-setup`, on the machine that curates: herdr starts its recorder on each event, a timer starts it every five minutes, and one step of a curation run writes the day's worklog | yes, once a day with sessions | the day's prompts, the end of each session's last answer, your commit subjects and, for each session, its folder, herdr workspace, repository and time spans, with the spheres of work and customers you named in its setup, the inbox, memory and what the step searches in the archive, to the model. The recordings stay on the machine | `m2b addons off worklog` stops its model step and, from the next session start, the recording; `/m2b:worklog-setup remove` also takes the recorder out of herdr and the timer out of the operating system |
+| The band | while a session is open and mods are on in Claude Code: it asks `m2b` about once a minute and after each of your turns | no | nothing by m2b. The descriptions of its two tools, about 5,000 characters, are part of every session it runs in | it has no switch of its own; with mods off in Claude Code it does not run |
+
+m2b opens no network connection of its own and sends no telemetry. Your notes reach a model only
+through your Claude Code, under your login. In a session: the distillate, the facts of a topic a
+prompt names, and what you ask the session to look up, such as search hits from the inbox, the
+archive and memory, rediscovered notes, your open tasks and today's events. In a curation run:
+what the table says. Whoever provides the model behind your Claude Code receives them as it
+receives your sessions.
+
+A store in a synced folder also goes where that service takes it; m2b has no sync of its own.
+Tasks in Apple Reminders and events in a calendar go wherever that list or calendar syncs. In a
+store that is a git repository a run commits and never pushes.
+
+[Cost and privacy](#cost-and-privacy) says what each step hands the model.
+[SECURITY.md](SECURITY.md) says what a hostile note can do and how the model's step is fenced.
 
 ## Install
 
