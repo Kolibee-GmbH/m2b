@@ -23,26 +23,25 @@ class BeatsTest(unittest.TestCase):
             (beats[-1].seconds, beats[-1].shown, beats[-1].settles), (30, readme_demo.ANSWER_SECONDS, True)
         )
 
-    def test_the_run_is_typed_into_a_shell_and_waited_for_until_the_prompt_is_back(self) -> None:
-        beats = readme_demo.run_beats()
+    def test_the_session_whose_start_begins_the_run_types_nothing_and_waits_past_two_looks_of_the_status_line(
+        self,
+    ) -> None:
+        beats = readme_demo.start_beats()
 
-        typed = "".join(beat.keys for beat in beats)
-        self.assertEqual(typed, f"m2b curate --force{readme_images.ENTER}cat memory/MEMORY.md{readme_images.ENTER}")
-        (run,) = [beat for beat in beats if beat.shown is not None]
-        self.assertEqual(run.until, readme_demo.PROMPT_DRAWN)
+        self.assertEqual(beats[:3], readme_demo.session_beats("hi!", 30)[:3])
+        self.assertEqual("".join(beat.keys for beat in beats[3:]), "")
+        self.assertGreater(sum(beat.seconds for beat in beats), 2 * 60)
+        self.assertEqual((beats[-1].shown, beats[-1].settles), (readme_demo.RUN_SECONDS, False))
 
 
-class ShellEnvironmentTest(unittest.TestCase):
-    def test_the_shell_names_no_user_runs_this_checkout_s_m2b_and_a_real_model(self) -> None:
-        demo = readme_images.demo_environment({"PATH": "/usr/bin", "ENV": "/Users/someone/.shrc"})
+class RealModelTest(unittest.TestCase):
+    def test_the_session_that_begins_the_run_has_the_demo_machine_without_the_stand_in_for_the_model(self) -> None:
+        demo = readme_images.demo_environment({"PATH": "/usr/bin"})
 
-        shell = readme_demo.shell_environment(demo)
+        real = readme_demo.with_the_real_model(demo)
 
-        self.assertEqual(shell["PS1"], "$ ")
-        self.assertEqual(shell["PATH"], f"{readme_images.PLUGIN / 'bin'}:/usr/bin")
-        self.assertNotIn("M2B_MODEL_RUNNER", shell)
-        self.assertNotIn("ENV", shell)
-        self.assertEqual(shell["M2B_HOME"], demo["M2B_HOME"])
+        self.assertIn("M2B_MODEL_RUNNER", demo)
+        self.assertEqual(real, {key: value for key, value in demo.items() if key != "M2B_MODEL_RUNNER"})
 
 
 class BuildFirstNoteDemoTest(unittest.TestCase):
@@ -63,6 +62,20 @@ class BuildFirstNoteDemoTest(unittest.TestCase):
             self.assertTrue(act.cwd.is_dir(), act.cwd)
         self.assertEqual(sorted(path.name for path in (demo / "projects").iterdir()), ["garden-site", "invoice-tool"])
         self.assertTrue((demo / "projects" / "garden-site" / ".git").is_dir())
+
+
+class WaitingCapturesTest(unittest.TestCase):
+    def test_the_notes_left_in_the_demo_inbox_are_named_in_order(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        demo = Path(temp.name) / "sb-test-m2b-demo"
+        inbox = demo / "notes" / "inbox"
+        inbox.mkdir(parents=True)
+        for name in ("b.md", "a.md", "c.txt"):
+            (inbox / name).write_text("x", encoding="utf-8")
+
+        with mock.patch.object(readme_images, "DEMO", demo):
+            self.assertEqual(readme_demo.waiting_captures(), ["a.md", "b.md"])
 
 
 class RetimedTest(unittest.TestCase):
@@ -171,9 +184,12 @@ class RenderTest(unittest.TestCase):
         acts = readme_demo.acts_for(readme_images.demo_environment({"PATH": "/usr/bin"}))
         readme_demo.record_acts(acts, record)
 
-        self.assertEqual([entry[1].name for entry in seen], ["invoice-tool", "notes", "garden-site"])
-        self.assertEqual(seen[1][0], ("sh",))
+        self.assertEqual([entry[1].name for entry in seen], ["invoice-tool", "invoice-tool", "garden-site"])
+        self.assertEqual({entry[0] for entry in seen}, {tuple(readme_images.claude_command())})
+        self.assertIn(readme_demo.SENTENCE, seen[0][4])
+        self.assertEqual(seen[1][4], readme_images.DOWN + readme_images.ENTER)
         self.assertIn(readme_demo.QUESTION, seen[2][4])
+        self.assertEqual(["M2B_MODEL_RUNNER" in act.environ for act in acts], [True, False, True])
         self.assertEqual({entry[2:4] for entry in seen}, {(readme_demo.ROWS, readme_demo.COLUMNS)})
 
     def test_an_act_whose_command_ended_early_fails_with_what_it_drew_last(self) -> None:
@@ -204,6 +220,7 @@ class MainTest(unittest.TestCase):
         self.patch(readme_demo, "REPO_ROOT", self.gif.parent)
         self.patch(readme_demo, "build_first_note_demo", lambda environ: None)
         self.patch(readme_demo, "machine_names", lambda: MACHINE)
+        self.patch(readme_demo, "waiting_captures", lambda: [])
         self.patch(readme_images, "missing_tools", lambda tools: [])
         self.patch(readme_images, "run", render)
 
@@ -234,6 +251,15 @@ class MainTest(unittest.TestCase):
         self.assertEqual(self.rendered, [])
         self.assertFalse(self.gif.exists())
         self.assertIn("the terminal drew the home folder and the user name of this machine", said)
+
+    def test_a_note_the_run_left_in_the_inbox_becomes_no_picture(self) -> None:
+        self.patch(readme_demo, "waiting_captures", lambda: ["20300102T030405Z-claude-a1b2.md"])
+
+        status, said = self.main_after_recording(b"Saved as inbox/note.md")
+
+        self.assertEqual(status, 1)
+        self.assertEqual(self.rendered, [])
+        self.assertIn("left 20300102T030405Z-claude-a1b2.md in the inbox", said)
 
     def test_a_missing_tool_is_named_and_nothing_is_recorded(self) -> None:
         self.patch(readme_images, "missing_tools", lambda tools: ["agg"])

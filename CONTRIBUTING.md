@@ -401,15 +401,18 @@ scripts/readme-demo
 
 It needs `claude` logged in, [`agg`](https://docs.asciinema.org/manual/agg/) and `git`. It builds
 the same demo machine with an empty store and records three acts in a hidden terminal: a Claude
-Code session that is told to remember the sentence, `m2b curate --force` in a plain shell, and a
-session in a second project that is asked for it. The run in the middle uses a real model, not
-`scripts/no-model`, so the fact the last session answers with is one a curation run filed: two
-model turns and one run on your Claude Code login, about three minutes. What the picture changes
-against the recording: a session's start is cut, the model's answer and the run are shortened to a
-few seconds, and a line of words stands before each act.
+Code session that is told to remember the sentence, a second session in which nobody types and
+whose start begins the curation run in the background, and a session in a second project that is
+asked for it. That run uses a real model, not `scripts/no-model`, so the fact the last session
+answers with is one a curation run filed: two model turns and one run on your Claude Code login,
+about five minutes, two of them in the second act, because the status line looks at the store once
+a minute. What the picture changes against the recording: a session's start is cut, the model's
+answer and the wait for the run are shortened to a few seconds, and a line of words stands before
+each act.
 
-The script stops without a picture when the terminal drew your home folder, your user name or
-your host name. That check reads plain text only, so watch the picture through as well, for
-example frame by frame with `ffmpeg -i docs/images/demo.gif -vf fps=2 /tmp/demo-%03d.png`, and
-keep the file under about 2 MB; the script prints its size. `--cast <file>` also keeps the
-recording the picture is rendered from, in asciinema's format.
+The script stops without a picture when the run left the note in the inbox, or when the terminal
+drew your home folder, your user name or your host name. That check reads plain text only, so
+watch the picture through as well, for example frame by frame with
+`ffmpeg -i docs/images/demo.gif -vf fps=2 /tmp/demo-%03d.png`, and keep the file under about 2 MB;
+the script prints its size. `--cast <file>` also keeps the recording the picture is rendered from,
+in asciinema's format.

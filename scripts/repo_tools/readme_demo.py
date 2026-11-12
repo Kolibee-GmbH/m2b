@@ -1,11 +1,12 @@
 """Records the README's moving picture: one sentence followed from a prompt into a later session.
 
 Three acts, each drawn by the real programs in a hidden terminal: a Claude Code session in one demo
-project is told to remember a sentence, ``m2b curate --force`` files it with a real model, and a
-session in another project is asked for it. The demo machine, its environment and the way a session
-is started are the screenshots' (``readme_images``); the store starts empty, so the fact the last act
-answers with can only come from the run in the second. It costs two model turns and one curation run
-on the user's Claude login.
+project is told to remember a sentence, the start of the next session begins the curation run that
+files it with a real model, in the background and without a key typed, and a session in another
+project is asked for it. The demo machine, its environment and the way a session is started are the
+screenshots' (``readme_images``); the store starts empty, so the fact the last act answers with can
+only come from the run in the second. It costs two model turns and one curation run on the user's
+Claude login.
 
 What the terminals drew is kept with its times. The picture shortens the waits (a session's start, the
 model's answer, the run), puts a line of words before each act and is rendered by ``agg``.
@@ -27,7 +28,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from repo_tools import readme_images
-from repo_tools.readme_images import DOWN, ENTER, ESCAPES, IMAGES, PLUGIN, REPO_ROOT, ImagesError, Recording, Wait
+from repo_tools.readme_images import DOWN, ENTER, ESCAPES, IMAGES, REPO_ROOT, ImagesError, Recording, Wait
 
 GIF = IMAGES / "demo.gif"
 PROJECTS = {
@@ -51,13 +52,14 @@ THEME = {
     "palette": "#2e3436:#cc0000:#4e9a06:#c4a000:#3465a4:#75507b:#06989a:#d3d7cf"
     ":#555753:#ef2929:#8ae234:#fce94f:#729fcf:#ad7fa8:#34e2e2:#eeeeec",
 }
-SHELL_PROMPT = "$ "
-PROMPT_DRAWN = b"\n$ "
 KEY_SECONDS = 0.05
 LOOK_SECONDS = 1.0
 ANSWER_SECONDS = 4.0
 RUN_SECONDS = 3.0
-RUN_LIMIT_SECONDS = 240
+# The status line looks at the store when a session starts, before the run that start begins has
+# registered, and then once a minute. A run over one note takes well under a minute, so the look a
+# minute after the start shows it done; the wait passes that look with room to spare.
+RUN_WAIT_SECONDS = 105
 # A wait is over at the first spell this long without anything drawn; what is drawn later, when the
 # band looks at the store again, follows within TAIL_SECONDS.
 QUIET_SECONDS = 2.0
@@ -105,12 +107,14 @@ def typed(text: str) -> list[Beat]:
     return [Beat(KEY_SECONDS, key) for key in text]
 
 
+# Trust the demo folder and let the start settle, unseen.
+SESSION_START = (Beat(8, DOWN, shown=0), Beat(1, ENTER, shown=0), Beat(13, shown=0))
+
+
 def session_beats(prompt: str, answer_seconds: float) -> tuple[Beat, ...]:
-    """Trust the demo folder and let the start settle, unseen; then type the prompt and wait."""
+    """Start a session, then type the prompt and wait."""
     return (
-        Beat(8, DOWN, shown=0),
-        Beat(1, ENTER, shown=0),
-        Beat(13, shown=0),
+        *SESSION_START,
         Beat(LOOK_SECONDS),
         *typed(prompt),
         Beat(0.5, ENTER),
@@ -118,27 +122,16 @@ def session_beats(prompt: str, answer_seconds: float) -> tuple[Beat, ...]:
     )
 
 
-def run_beats() -> tuple[Beat, ...]:
-    """Start the run by hand and wait for the prompt to come back, then show the distillate."""
-    return (
-        Beat(LOOK_SECONDS),
-        *typed("m2b curate --force"),
-        Beat(0.4, ENTER),
-        Beat(RUN_LIMIT_SECONDS, until=PROMPT_DRAWN, shown=RUN_SECONDS),
-        Beat(LOOK_SECONDS),
-        *typed("cat memory/MEMORY.md"),
-        Beat(0.4, ENTER),
-        Beat(10, until=PROMPT_DRAWN),
-    )
+def start_beats() -> tuple[Beat, ...]:
+    """Start a session and type nothing: the run its start began files the note meanwhile, and the
+    status line under the prompt is where that shows."""
+    return (*SESSION_START, Beat(LOOK_SECONDS), Beat(RUN_WAIT_SECONDS, shown=RUN_SECONDS))
 
 
-def shell_environment(environ: Mapping[str, str]) -> dict[str, str]:
-    """The demo machine's environment for a plain shell: a prompt that names no user and no host,
-    ``m2b`` from this checkout on the PATH, and no stand-in for the model, so the run files the note."""
-    shell = {key: value for key, value in environ.items() if key not in {"M2B_MODEL_RUNNER", "ENV", "PROMPT_COMMAND"}}
-    shell["PS1"] = SHELL_PROMPT
-    shell["PATH"] = f"{PLUGIN / 'bin'}{os.pathsep}{environ.get('PATH', '')}"
-    return shell
+def with_the_real_model(environ: Mapping[str, str]) -> dict[str, str]:
+    """The demo machine's environment without the stand-in for the model, so the run a session start
+    begins files the note."""
+    return {key: value for key, value in environ.items() if key != "M2B_MODEL_RUNNER"}
 
 
 def acts_for(environ: Mapping[str, str]) -> list[Act]:
@@ -147,11 +140,11 @@ def acts_for(environ: Mapping[str, str]) -> list[Act]:
     return [
         Act("Tell Claude Code once, in any project", claude, first, environ, session_beats(SENTENCE, 45)),
         Act(
-            "A curation run files the note; it starts by itself at the next session start",
-            ("sh",),
-            readme_images.DEMO / "notes",
-            shell_environment(environ),
-            run_beats(),
+            "The next session start files the note in the background: 1 in inbox becomes 0",
+            claude,
+            first,
+            with_the_real_model(environ),
+            start_beats(),
         ),
         Act(
             "Every later session starts knowing it, in any project",
@@ -168,6 +161,11 @@ def build_first_note_demo(environ: Mapping[str, str]) -> None:
     readme_images.set_up_machine(environ)
     for name, files in PROJECTS.items():
         readme_images.make_project(readme_images.DEMO / "projects" / name, files, environ)
+
+
+def waiting_captures() -> list[str]:
+    """The notes the demo store's inbox still holds."""
+    return sorted(path.name for path in (readme_images.DEMO / "notes" / "inbox").glob("*.md"))
 
 
 def retimed(recording: Recording, beats: Sequence[Beat]) -> Events:
@@ -293,6 +291,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         build_first_note_demo(environ)
         acts = acts_for(environ)
         recordings = record_acts(acts)
+        waiting = waiting_captures()
+        if waiting:
+            raise ImagesError(
+                f"the run of the second act left {' and '.join(waiting)} in the inbox, so the last act"
+                " did not start with the note; no picture written"
+            )
         named = leaks(b"".join(drawn for recording in recordings for _, drawn in recording.chunks), machine_names())
         if named:
             raise ImagesError(f"the terminal drew {' and '.join(named)} of this machine; no picture written")

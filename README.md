@@ -20,29 +20,31 @@
   <a href="docs/commands.md">Commands</a> · <a href="SECURITY.md">Security</a> · <a href="CHANGELOG.md">Changelog</a>
 </p>
 
-![Three steps in a terminal. First, in a Claude Code session in the project invoice-tool, the prompt "remember that Dana's birthday is on 3 March" makes Claude call the m2b note tool, which saves the sentence as one file, and the status line below the prompt reads "1 in inbox". Second, in a shell, "m2b curate --force" answers "the curation run succeeded" and "inbox: 1 capture filed, 0 waiting", and the file memory/MEMORY.md then holds the line "Dana's birthday is on 3 March (dana.md)" under Facts. Third, a new Claude Code session in another project, garden-site, is asked "when is Dana's birthday?" and answers 3 March from the note dana.md, without a tool call](docs/images/demo.gif)
-<sub>One sentence from a prompt into a later session: two real Claude Code sessions and, between them, the real background run that files the note, on a demo machine with invented notes, recorded by `scripts/readme-demo`. The waits are shortened, and the run is started by hand here; in daily use the next session start begins it.</sub>
+![Three steps in a terminal. First, in a Claude Code session in the project invoice-tool, the prompt "remember that Dana's birthday is on 3 March" makes Claude call the m2b note tool, which saves the sentence as one file, and the status line below the prompt reads "1 in inbox". Second, the next Claude Code session starts in the same project and nobody types anything: its start begins a curation run in the background, and the status line goes from "1 in inbox" to "0 in inbox". Third, a new Claude Code session in another project, garden-site, is asked "when is Dana's birthday?" and answers 3 March from the note dana.md, without a tool call](docs/images/demo.gif)
+<sub>One sentence from a prompt into a later session: three real Claude Code sessions on a demo machine with invented notes, recorded by `scripts/readme-demo`. The start of the second begins the real background run that files the note; nobody types a command. The waits are shortened.</sub>
 
 Tell Claude Code "remember that Dana's birthday is on 3 March" in one project. A run in the
-background files the note, and from then on every session, in any project, starts knowing it. Your
-notes stay plain Markdown files in a folder you own.
+background files the note, and from then on every session, in any project, starts knowing it. You
+type no command for it: you say what to keep and ask for what you need. Your notes stay plain
+Markdown files in a folder you own.
 
 What m2b adds to Claude Code's own memory, the notes Claude keeps for itself for each project:
 - one memory for all your projects and machines, in a folder you choose and sync as you like;
 - your words kept as you said them, and every fact pointing back to them;
 - tasks from the same sentence: "remind me to call the plumber on Friday" lands in your task list.
 
-**What it costs.** Setup is three commands and a few questions; setup itself, started as `/m2b:setup`
-with every answer given at once, took 15 seconds (2026-11-12). A session starts with a summary of
-your notes, at most 8 KB, and about 10,000 characters of tool and skill descriptions, without a model
-call. Filing uses your Claude Code login: five notes cost US$0.013 at API prices (2026-11-08).
+**What it costs.** Setup is three slash commands in Claude Code and a few questions; setup itself,
+started as `/m2b:setup` with every answer given at once, took 15 seconds (2026-11-12). A session
+starts with a summary of your notes, at most 8 KB, and about 10,000 characters of tool and skill
+descriptions, without a model call. Filing uses your Claude Code login: five notes cost US$0.013 at
+API prices (2026-11-08).
 
 **No server, no account, no telemetry.** [What runs on your machine](#what-runs-on-your-machine)
 says what m2b starts, when, and what leaves the machine.
 
 ## Quick start
 
-In a Claude Code session:
+In a Claude Code session, three slash commands:
 
 ```
 /plugin marketplace add Kolibee-GmbH/m2b
@@ -93,22 +95,22 @@ One sentence, followed from your prompt into a later session. The name and the n
 the files are what m2b wrote in a run on 2026-11-12.
 
 **1. You say it.** In any session: "remember that Dana's birthday is on 3 March". Claude writes
-one file into `inbox/`, the folder for new notes, with your words as you said them, without the
+one file into `inbox/`, the folder for new notes, in your own words, without the
 "remember that" around them. Nothing is filed while you work, and your words in the file are never
 changed. `source` says who wrote it:
-`claude` from a session, `cli` from a terminal with `m2b capture`, as here.
+`claude` from a session, as here, `cli` from a terminal with `m2b capture`.
 
 ```markdown
 ---
-created: 2026-11-12T16:26:46+01:00
-source: cli
+created: 2026-11-12T21:58:13+01:00
+source: claude
 ---
-Dana's birthday is on 3 March
+Dana's birthday is on 3 March.
 ```
 
 **2. A run files it.** At the next session start m2b sees a note waiting and starts a curation
 run in the background: a `claude -p` of its own, apart from your session, in which a model reads
-the inbox and may call only the commands its step needs. Here it took 13 seconds. It wrote one
+the inbox and may call only the commands its step needs. Here it took 11 seconds. It wrote one
 line into `memory/MEMORY.md`, the distillate:
 
 ```markdown
@@ -285,8 +287,10 @@ files, nothing else to install. It never overwrites a store that exists: pointed
 another machine already uses, it joins it. [Getting started](docs/getting-started.md) walks
 through it, including a first run without Claude Code.
 
-Setup writes the command `~/.local/bin/m2b` for terminals and schedules. `~/.local/bin` is not on
-the `PATH` by default on macOS; add it, for example in `~/.zshrc`:
+Setup also writes the command `~/.local/bin/m2b`. Capturing, asking and filing do not need it in
+a terminal; with Markdown tasks, ticking a task does (`m2b tasks complete <id>`, below). To type
+`m2b` yourself, put `~/.local/bin` on the `PATH`; on macOS it is not there by default. For example
+in `~/.zshrc`:
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
@@ -441,8 +445,10 @@ drop buttons call the same two commands.
 
 ### Commands
 
-The ten you will use most; [Commands](docs/commands.md) has every one, and what to say instead
-of typing any.
+Capturing, asking and filing need none of these: you say what you want, and Claude calls the tool
+or the skill; ticking a Markdown task takes `m2b tasks complete <id>`. The ten typed most, the
+first two in a session and the rest in a terminal or a script; [Commands](docs/commands.md) has
+every one, and what to say instead of typing most.
 
 | Command | What it does |
 |---|---|
