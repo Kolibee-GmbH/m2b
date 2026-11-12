@@ -765,7 +765,7 @@ class _Run:
         if any(finding.code == lint.BROKEN_LINK and len(finding.candidates) == 1 for finding in scanned.findings):
             self._guarded(LINT, LINT_SKILL, LINT_RULES, token)
             return
-        if lint.fix(self.store, self.clock()):
+        if lint.fix(self.store, tasks, self.clock()):
             scanned = lint.scan(self.store, tasks)
         self.findings += [report.Finding(LINT, finding.kind, finding.text) for finding in scanned.findings]
 

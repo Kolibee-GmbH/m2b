@@ -57,9 +57,10 @@ def lint_scan(arguments: argparse.Namespace, context: Context) -> int:
 
 
 def lint_fix(arguments: argparse.Namespace, context: Context) -> int:
-    store = configured_store(load_machine_config(context.machine), context.machine)
+    config = load_machine_config(context.machine)
+    store = configured_store(config, context.machine)
     require_store_writable(store)
-    removed = lint.fix(store)
+    removed = lint.fix(store, configured_tasks(config, context.machine))
     if arguments.json:
         print_json({"removed": removed})
     else:

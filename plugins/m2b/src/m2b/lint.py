@@ -5,13 +5,15 @@ notes without ``created`` or ``source``, a ``created`` without offset (tolerated
 wrong month, refs and ``[[links]]`` that lead nowhere (B22), fact files no facts line points to
 (lines are parsed, X13), an oversized or missing distillate, topic headings that would bring their
 facts in too often or never (B48), incomplete bundles, the binary volume,
-conflict copies, tasks whose capture is gone, and evicted files, which are listed and never read
-(B6). The inbox is ingest's: what waits there is no finding (X12).
+conflict copies in the corpus and of task files (B157), tasks whose capture is gone, and evicted
+files, which are listed and never read (B6). The inbox is ingest's: what waits there is no finding
+(X12).
 
-``fix`` removes what is safe to remove without asking: conflict copies in the corpus that equal
-their original byte for byte (a looser match could delete a real note), and this product's own
-hidden temp files older than a day (X22). A broken link in ``memory/`` is repaired by the lint
-skill, from the candidates ``scan`` names; everything else is the owner's to decide.
+``fix`` removes what is safe to remove without asking: conflict copies in the corpus and of task
+files that equal their original byte for byte (a looser match could delete a real note or the
+other state of a task), and this product's own hidden temp files older than a day (X22). A broken
+link in ``memory/`` is repaired by the lint skill, from the candidates ``scan`` names; everything
+else is the owner's to decide.
 """
 
 from __future__ import annotations
@@ -29,7 +31,7 @@ from m2b.notes.frontmatter import Note, NoteFormatError, read_created
 from m2b.notes.layout import CORPUS, INBOX, MEMORY, MEMORY_INDEX, TASKS, is_journal_name
 from m2b.notes.memory_index import MAX_TOPIC_NAME, MemoryIndex, Topic, is_day, split_topics
 from m2b.notes.names import NoteName
-from m2b.store.base import Store, StoreError, fetch_command
+from m2b.store.base import ConflictCopy, Store, StoreError, fetch_command
 from m2b.tasks import markers
 from m2b.tasks.base import Tasks, TasksError
 from m2b.topic_match import MIN_WORD_CHARACTERS
@@ -104,11 +106,11 @@ def scan(store: Store, tasks: Tasks | None = None) -> LintReport:
     return report
 
 
-def fix(store: Store, now: datetime.datetime | None = None) -> list[str]:
-    """Removes identical conflict copies in the corpus and own temp files older than a day."""
+def fix(store: Store, tasks: Tasks | None = None, now: datetime.datetime | None = None) -> list[str]:
+    """Removes identical conflict copies in the corpus and of task files, and own temp files older than a day."""
     now = now or datetime.datetime.now(datetime.timezone.utc)
     removed = []
-    for copy in store.conflict_copies(CORPUS):
+    for copy in [*store.conflict_copies(CORPUS), *_task_copies_to_fix(tasks)]:
         if copy.removable:
             store.delete(copy.path)
             removed.append(copy.path)
@@ -120,6 +122,16 @@ def fix(store: Store, now: datetime.datetime | None = None) -> list[str]:
                 path.unlink()
                 removed.append(path.relative_to(store.root).as_posix())
     return sorted(removed)
+
+
+def _task_copies_to_fix(tasks: Tasks | None) -> list[ConflictCopy]:
+    """No copies while the tasks cannot be asked: ``scan`` names that, and the other fixes still run."""
+    if tasks is None:
+        return []
+    try:
+        return tasks.conflict_copies()
+    except TasksError:
+        return []
 
 
 def _evicted(report: LintReport, folder: str, evicted: list[str]) -> None:
@@ -157,21 +169,26 @@ def _corpus(store: Store, report: LintReport, corpus: _Corpus) -> None:
         if frontmatter is not None:
             _note(report, relative, frontmatter, corpus)
         _bundle(report, relative, frontmatter, stems)
-    for path, copy in sorted(copies.items()):
-        if copy.identical is True:
-            report.add("conflict-copy", INFO, path, f"{path} equals {copy.original}; lint fix removes it")
-        elif copy.identical is False:
-            report.add("conflict-copy", ACTION, path, f"{path} differs from {copy.original}; keep one of them")
-        else:
-            report.add(
-                "conflict-copy",
-                INFO,
-                path,
-                f"{path} or {copy.original} is not downloaded or cannot be read; not compared",
-            )
+    for _, copy in sorted(copies.items()):
+        _conflict_copy(report, copy)
     if binaries:
         size = sum(os.lstat(store.path(relative)).st_size for relative in binaries)
         report.add("binary-volume", INFO, CORPUS, f"{len(binaries)} binary files, {size / 1024:.1f} KB in {CORPUS}/")
+
+
+def _conflict_copy(report: LintReport, copy: ConflictCopy) -> None:
+    path = copy.path
+    if copy.identical is True:
+        report.add("conflict-copy", INFO, path, f"{path} equals {copy.original}; lint fix removes it")
+    elif copy.identical is False:
+        report.add("conflict-copy", ACTION, path, f"{path} differs from {copy.original}; keep one of them")
+    else:
+        report.add(
+            "conflict-copy",
+            INFO,
+            path,
+            f"{path} or {copy.original} is not downloaded or cannot be read; not compared",
+        )
 
 
 def _read_note(store: Store, report: LintReport, relative: str) -> keys.Frontmatter | None:
@@ -351,8 +368,11 @@ def _links(store: Store, report: LintReport, relative: str, corpus: _Corpus) -> 
 
 def _tasks(store: Store, report: LintReport, tasks: Tasks, corpus: _Corpus) -> None:
     try:
-        # Only a backend that keeps tasks as files has any; a tasks/ folder left from before a switch
-        # to another backend is no one's.
+        # Only a backend that keeps tasks as files has any of the two; a tasks/ folder left from before
+        # a switch to another backend is no one's. The copies first: they are named without reading a
+        # task, so one task that cannot be read does not hide them.
+        for copy in tasks.conflict_copies():
+            _conflict_copy(report, copy)
         for path, problem in tasks.unreadable():
             report.add("task-file", ACTION, path, f"{problem}; the task is left out until the file is fixed")
     except TasksError as error:

@@ -25,6 +25,9 @@ CAPTURE = "20261103T081200Z-cli-c3d4.md"
 NOTE = "---\ncreated: 2026-11-03T09:12:00+01:00\nsource: cli\ncurated: true\n---\nThe office opens at eight\n"
 INDEX = "# Memory\n\n## Facts\n\n- Dana's birthday is on 3 March (dana.md)\n\n## Current\n\n- Planning the trip\n"
 DANA = f"# Dana\n\n- Birthday on 3 March.\n\n## Evidence\n\n- [[{CAPTURE}]]\n"
+TASK = "tasks/a1b2c3d4e5f6.md"
+OPEN_TASK = "---\nstatus: open\n---\nCall Dana\n"
+DONE_TASK = "---\nstatus: done\ndone: 2026-11-05T08:15:00+01:00\n---\nCall Dana\n"
 
 
 class LintFixture(unittest.TestCase):
@@ -154,6 +157,7 @@ class MalformedTest(LintFixture):
         reminders = mock.Mock(spec=Tasks)
         reminders.items.return_value = []
         reminders.unreadable.return_value = []
+        reminders.conflict_copies.return_value = []
 
         self.assertEqual(self.codes(tasks=reminders), [])
 
@@ -493,6 +497,164 @@ class ConflictCopyTest(LintFixture):
             self.assertTrue((self.root / kept).exists(), kept)
 
 
+class TaskConflictCopies:
+    """Holds the tests so that discovery runs them only with a backend and its names for a copy."""
+
+    class Tests(LintFixture):
+        identical: str
+        differing: str
+        copy_of_differing: str
+
+        def setUp(self) -> None:
+            super().setUp()
+            self.write(TASK, OPEN_TASK)
+            self.tasks = MarkdownTasks(self.store)
+
+        def task_states(self) -> list[tuple[str, bool]]:
+            return [(task.id, task.completed) for task in self.tasks.items(include_completed=True)]
+
+        def test_a_copy_of_a_task_file_is_a_finding_that_says_whether_it_equals_the_task(self) -> None:
+            """Covers: B157"""
+            self.write(self.identical, OPEN_TASK)
+            self.write(self.differing, DONE_TASK)
+
+            self.assertEqual(
+                [(finding.kind, finding.path, finding.text) for finding in self.findings(tasks=self.tasks)],
+                [
+                    ("info", self.identical, f"{self.identical} equals {TASK}; lint fix removes it"),
+                    ("action", self.differing, f"{self.differing} differs from {TASK}; keep one of them"),
+                ],
+            )
+
+        def test_fix_removes_only_the_copy_that_equals_the_task_and_the_task_stays_as_it_is(self) -> None:
+            """Covers: B157"""
+            self.write(self.identical, OPEN_TASK)
+            self.write(self.differing, DONE_TASK)
+
+            removed = lint.fix(self.store, self.tasks, now=NOW)
+
+            self.assertEqual(removed, [self.identical])
+            self.assertFalse(self.store.exists(self.identical))
+            self.assertEqual(self.store.read_text(self.differing), DONE_TASK)
+            self.assertEqual(self.store.read_text(TASK), OPEN_TASK)
+            self.assertEqual(self.task_states(), [("a1b2c3d4e5f6", False)])
+
+        def test_a_copy_that_cannot_be_read_is_named_as_not_compared_and_stays(self) -> None:
+            """Covers: B157"""
+            self.write(self.identical, OPEN_TASK)
+            real_read = self.store.read_bytes
+
+            def read(relative: str) -> bytes:
+                if relative == self.identical:
+                    raise lint.StoreError(f"{relative} could not be read: Permission denied")
+                return real_read(relative)
+
+            with mock.patch.object(self.store, "read_bytes", side_effect=read):
+                findings = self.findings(tasks=self.tasks)
+                removed = lint.fix(self.store, self.tasks, now=NOW)
+
+            self.assertEqual(
+                [(finding.kind, finding.text) for finding in findings],
+                [("info", f"{self.identical} or {TASK} is not downloaded or cannot be read; not compared")],
+            )
+            self.assertEqual(removed, [])
+            self.assertTrue(self.store.exists(self.identical))
+
+        def test_a_copy_of_a_copy_is_named_against_the_copy_it_was_made_of(self) -> None:
+            """Covers: B157"""
+            self.write(self.differing, DONE_TASK)
+            self.write(self.copy_of_differing, DONE_TASK)
+
+            self.assertCountEqual(
+                [(finding.kind, finding.text) for finding in self.findings(tasks=self.tasks)],
+                [
+                    ("action", f"{self.differing} differs from {TASK}; keep one of them"),
+                    ("info", f"{self.copy_of_differing} equals {self.differing}; lint fix removes it"),
+                ],
+            )
+            self.assertEqual(lint.fix(self.store, self.tasks, now=NOW), [self.copy_of_differing])
+            self.assertEqual(self.store.read_text(self.differing), DONE_TASK)
+            self.assertEqual(self.task_states(), [("a1b2c3d4e5f6", False)])
+
+        def test_a_copy_in_a_subfolder_of_the_task_folder_is_not_named_and_stays(self) -> None:
+            """Covers: B157"""
+            copy = self.identical.replace("tasks/", "tasks/old/")
+            self.write("tasks/old/a1b2c3d4e5f6.md", OPEN_TASK)
+            self.write(copy, OPEN_TASK)
+
+            self.assertEqual(self.codes(tasks=self.tasks), [])
+            self.assertEqual(lint.fix(self.store, self.tasks, now=NOW), [])
+            self.assertTrue(self.store.exists(copy))
+
+
+class TaskConflictCopyInAFolderStoreTest(TaskConflictCopies.Tests):
+    identical = "tasks/a1b2c3d4e5f6 (Dana's conflicted copy 2026-11-05).md"
+    differing = "tasks/a1b2c3d4e5f6.sync-conflict-20261105-081500-ABCDEFG.md"
+    copy_of_differing = "tasks/a1b2c3d4e5f6.sync-conflict-20261105-081500-ABCDEFG (conflicted copy 2026-11-06).md"
+
+    def test_a_task_folder_another_backend_left_behind_keeps_its_copies_without_a_finding(self) -> None:
+        """Covers: B157"""
+        self.write(self.identical, OPEN_TASK)
+        reminders = mock.Mock(spec=Tasks)
+        reminders.items.return_value = []
+        reminders.unreadable.return_value = []
+        reminders.conflict_copies.return_value = []
+
+        self.assertEqual(self.codes(tasks=reminders), [])
+        self.assertEqual(lint.fix(self.store, reminders, now=NOW), [])
+        self.assertEqual(self.codes(), [])
+        self.assertEqual(lint.fix(self.store, now=NOW), [])
+        self.assertTrue(self.store.exists(self.identical))
+
+    def test_a_task_folder_that_cannot_be_read_is_one_finding_and_stops_no_other_fix(self) -> None:
+        """Covers: B157"""
+        copy_in_the_archive = f"corpus/2026/11/{CAPTURE.replace('.md', ' (conflicted copy 2026-11-07).md')}"
+        self.write(copy_in_the_archive, NOTE)
+        self.write(self.identical, OPEN_TASK)
+        unreachable = lint.TasksError("the task folder could not be read: Permission denied")
+
+        with mock.patch.object(self.tasks, "conflict_copies", side_effect=unreachable):
+            codes = self.codes(tasks=self.tasks)
+            removed = lint.fix(self.store, self.tasks, now=NOW)
+
+        self.assertEqual(codes, [("conflict-copy", "info", copy_in_the_archive), ("tasks-unreadable", "info", "tasks")])
+        self.assertEqual(removed, [copy_in_the_archive])
+        self.assertTrue(self.store.exists(self.identical))
+
+
+class TaskConflictCopyInAnICloudStoreTest(TaskConflictCopies.Tests):
+    store_class = ICloudStore
+    identical = "tasks/a1b2c3d4e5f6 2.md"
+    differing = "tasks/a1b2c3d4e5f6 3.md"
+    copy_of_differing = "tasks/a1b2c3d4e5f6 3 2.md"
+
+    def test_an_evicted_copy_is_named_as_not_compared_and_stays(self) -> None:
+        """Covers: B157"""
+        self.write(self.identical, OPEN_TASK)
+        self.evicted.add(self.identical)
+
+        self.assertEqual(self.codes(tasks=self.tasks), [("conflict-copy", "info", self.identical)])
+        self.assertEqual(lint.fix(self.store, self.tasks, now=NOW), [])
+        self.assertEqual(self.task_states(), [("a1b2c3d4e5f6", False)])
+
+    def test_a_copy_whose_task_is_evicted_is_named_as_not_compared_though_the_tasks_cannot_be_read(self) -> None:
+        """Covers: B157"""
+        self.write(self.identical, OPEN_TASK)
+        self.evicted.add(TASK)
+
+        findings = self.findings(tasks=self.tasks)
+
+        self.assertEqual(
+            [(finding.code, finding.kind, finding.path) for finding in findings],
+            [("conflict-copy", "info", self.identical), ("tasks-unreadable", "info", "tasks")],
+        )
+        self.assertEqual(
+            findings[0].text, f"{self.identical} or {TASK} is not downloaded or cannot be read; not compared"
+        )
+        self.assertEqual(lint.fix(self.store, self.tasks, now=NOW), [])
+        self.assertTrue(self.store.exists(self.identical))
+
+
 class TaskWithoutCaptureTest(LintFixture):
     def test_a_capture_task_whose_capture_is_gone_is_an_info_and_unreachable_tasks_say_so(self) -> None:
         tasks = MarkdownTasks(self.store)
@@ -504,6 +666,7 @@ class TaskWithoutCaptureTest(LintFixture):
 
         broken = mock.Mock()
         broken.unreadable.return_value = []
+        broken.conflict_copies.return_value = []
         broken.items.side_effect = lint.TasksError("Reminders did not answer")
         self.assertEqual(self.codes(tasks=broken), [("tasks-unreadable", "info", "tasks")])
 
@@ -566,6 +729,19 @@ class LintCommandTest(test_commands.CommandTest):
 
         self.assertEqual(code, cli.EXIT_OK, err)
         self.assertEqual(out, "removed memory/.sb-tmp-old\n")
+
+    def test_fix_removes_a_copy_of_a_task_file_that_equals_the_task(self) -> None:
+        """Covers: B157"""
+        copy = "a1b2c3d4e5f6 (conflicted copy 2026-11-05).md"
+        (self.store_root / "tasks").mkdir()
+        (self.store_root / TASK).write_text(OPEN_TASK, encoding="utf-8")
+        (self.store_root / "tasks" / copy).write_text(OPEN_TASK, encoding="utf-8")
+
+        code, out, err = self.run_command("lint", "fix")
+
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertEqual(out, f"removed tasks/{copy}\n")
+        self.assertEqual(sorted(path.name for path in (self.store_root / "tasks").iterdir()), ["a1b2c3d4e5f6.md"])
 
 
 if __name__ == "__main__":

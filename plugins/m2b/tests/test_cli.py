@@ -14,6 +14,7 @@ from unittest import mock
 
 from m2b import cli, paths
 from m2b.config import machine, profile
+from m2b.config.store_settings import KNOWN_STORE_FORMAT, save_store_settings
 from m2b.store.base import EvictedFileError, FetchError, UnsupportedStoreError
 from m2b.store.folder import FolderStore
 from m2b.store.guard import DatalessGuard
@@ -281,6 +282,17 @@ class CuratorCommandsTest(unittest.TestCase):
 
     def test_inside_a_curation_run_a_curator_command_runs(self) -> None:
         """Covers: B53"""
+        store = FolderStore(self.store, self.home / "tmp", DatalessGuard(False))
+        save_store_settings(
+            store,
+            {
+                "format": KNOWN_STORE_FORMAT,
+                "tasks": {"backend": "markdown"},
+                "curating_machine": "sb-test-m1",
+                "journal_since": "2026-03-01",
+            },
+        )
+
         code, _, err = self._main(["lint", "fix"], {"M2B_HOME": str(self.home), "M2B_CURATION_RUN": "1"})
 
         self.assertEqual(code, cli.EXIT_OK, err)

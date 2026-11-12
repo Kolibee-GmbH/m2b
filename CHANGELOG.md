@@ -15,12 +15,21 @@ All notable changes to this project are documented here. The format follows
   copy in the archive was reported as a note that is not named by the schema. Now `m2b lint`
   reports a copy in the archive as a conflict copy and `m2b lint fix` removes it when it equals its
   original byte for byte, a curation run does the same in the inbox and gives a differing text
-  copy a line that names its original, and the Markdown tasks pass a copy of a task file over,
-  without a finding. The names are
+  copy a line that names its original, and the Markdown tasks do not read a copy of a task file
+  as a second task. The names are
   `<name> (... conflicted copy ...).<ext>`, also with `in Konflikt stehende Kopie` as Dropbox
   writes it for a German account, and `<name>.sync-conflict-<date>-<time>-<device>.<ext>`, each
   only next to the file it is a copy of. There is nothing to set: every folder store recognizes
   both, and a copy that differs from its original is never removed.
+- `m2b lint` names a conflict copy of a task file, where the tasks are Markdown files, in a store
+  on either backend. A task ticked on one machine and changed on another leaves two files, and
+  until now the copy was passed over without a word: nothing said that a second state of the
+  task existed. Lint reports the copy as it reports one in the archive: as an action when it
+  differs from the task (keep one of them), as an info when it equals the task, or when the two
+  were not compared because one is not downloaded or cannot be read. `m2b lint fix` and the lint
+  step of a curation run remove a copy that equals its task byte for byte and nothing else: the
+  task and a differing copy stay as they are. With Reminders as the tasks backend a `tasks/`
+  folder left in the store is not looked at.
 - `m2b doctor` has a line `store-git`. It says whether the store folder is a git repository and,
   on the machine that curates, where the git directory lies that a run commits into and which
   git named it. `cannot commit` with the reason counts as a problem: a `.git` in the store folder

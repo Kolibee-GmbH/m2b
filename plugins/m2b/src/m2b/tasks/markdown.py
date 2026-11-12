@@ -7,7 +7,8 @@ completed but is no completion for ``completed_items``. A file the owner adds by
 without frontmatter, is an open task named by its file; a ``done`` status without a date takes
 the file's modification time. A file that cannot be read as a task (an unknown status, a date the
 codec cannot read, not UTF-8) is left out of every list, so one hand edit does not stop every task
-step of a run; lint names it (``unreadable``).
+step of a run; lint names it (``unreadable``). A sync service's conflict copy of a task file is no
+second task; lint names it and removes it when it equals the task (``conflict_copies``).
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from typing import Any
 
 from m2b.notes import layout
 from m2b.notes.frontmatter import Frontmatter, Note, NoteFormatError, parse_time, set_created
-from m2b.store.base import Store, StoreError
+from m2b.store.base import ConflictCopy, Store, StoreError
 from m2b.tasks.base import Due, Task, Tasks, TasksUnreachableError, UnknownTaskError, keep
 
 STATUS = "status"
@@ -28,6 +29,7 @@ DONE = "done"
 OPEN, COMPLETED, DROPPED = "open", "done", "dropped"
 STATUSES = (OPEN, COMPLETED, DROPPED)
 ID_BYTES = 6
+TASK_FILE_EXTENSION = ".md"
 
 
 class MarkdownTasks(Tasks):
@@ -115,6 +117,21 @@ class MarkdownTasks(Tasks):
         """The task files left out of every list, by store path, with the reason."""
         return [(path, problem) for path, _, problem in self._each() if problem is not None]
 
+    def conflict_copies(self) -> list[ConflictCopy]:
+        """The copies of task files, which lie in the folder itself.
+
+        A copy of another file there, or of any file in a subfolder, is as little a task's as that file.
+        """
+        try:
+            copies = self._store.conflict_copies(layout.TASKS)
+        except StoreError as error:
+            raise TasksUnreachableError(f"the task folder could not be read: {error}") from error
+        return [
+            copy
+            for copy in copies
+            if copy.original.rpartition("/")[0] == layout.TASKS and copy.original.endswith(TASK_FILE_EXTENSION)
+        ]
+
     def _all(self) -> list[tuple[Task, str]]:
         return [parsed for _, parsed, _ in self._each() if parsed is not None]
 
@@ -134,12 +151,14 @@ class MarkdownTasks(Tasks):
 
     def _task_files(self) -> list[str]:
         """The task files. A sync service's conflict copy is never read as a task: it is passed over
-        here, and no finding names it.
+        here, and lint names it.
         """
+        copies = {copy.path for copy in self.conflict_copies()}
         try:
-            copies = {copy.path for copy in self._store.conflict_copies(layout.TASKS)}
             return [
-                path for path in self._store.list_files(layout.TASKS) if path.endswith(".md") and path not in copies
+                path
+                for path in self._store.list_files(layout.TASKS)
+                if path.endswith(TASK_FILE_EXTENSION) and path not in copies
             ]
         except StoreError as error:
             raise TasksUnreachableError(f"the task folder could not be read: {error}") from error

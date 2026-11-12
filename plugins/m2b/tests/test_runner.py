@@ -489,6 +489,26 @@ class CleanRunTest(RunnerTest):
         self.assertEqual(self.calls(), [])
         self.assertFalse(leftover.exists())
 
+    def test_lint_removes_a_copy_of_a_task_file_that_equals_the_task_and_names_one_that_differs(self) -> None:
+        """Covers: B157"""
+        self.curating()
+        self.write("tasks/a1b2c3d4e5f6.md", "---\nstatus: open\n---\nCall Dana\n")
+        self.write("tasks/a1b2c3d4e5f6 (conflicted copy 2026-11-05).md", "---\nstatus: open\n---\nCall Dana\n")
+        differing = "tasks/a1b2c3d4e5f6.sync-conflict-20261105-081500-ABCDEFG.md"
+        self.write(differing, "---\nstatus: done\n---\nCall Dana\n")
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        self.assertEqual(self.calls(), [])
+        self.assertFalse((self.store_root / "tasks" / "a1b2c3d4e5f6 (conflicted copy 2026-11-05).md").exists())
+        self.assertTrue((self.store_root / differing).exists())
+        kept = f"{differing} differs from tasks/a1b2c3d4e5f6.md; keep one of them"
+        (review,) = self.review_tasks()
+        self.assertIn(f"lint: {kept}", review.notes)
+        record = load_run_record(self.store)
+        assert record is not None
+        self.assertEqual([(finding.kind, finding.text) for finding in record.findings], [("action", kept)])
+
     def test_a_clean_store_starts_no_model_for_lint(self) -> None:
         """Covers: B67"""
         self.curating()
