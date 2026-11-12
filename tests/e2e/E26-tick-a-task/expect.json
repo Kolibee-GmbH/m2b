@@ -1,0 +1,7 @@
+{
+ "store_files": {
+  "store.json": "{\n  \"format\": 3,\n  \"tasks\": {\"backend\": \"markdown\"},\n  \"curating_machine\": \"sb-test-e2e\",\n  \"journal_since\": \"2026-11-01\"\n}\n",
+  "profile.json": "{\n  \"version\": 1,\n  \"owner\": \"Alex\",\n  \"language\": \"en\"\n}\n",
+  "memory/MEMORY.md": "# Memory\n\n## Facts\n\n## Current\n"
+ }
+}

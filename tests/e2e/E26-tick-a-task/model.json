@@ -1,0 +1,70 @@
+{
+  "description": "E26 at the model level: the task list holds two open tasks, and a real Claude Code session is told in a plain sentence that one of them is done. The session may call the note and search tools, as any session with m2b may, and the todos skill; the skill ticks that task with the id the list gives, through the two commands its own allowed-tools cover. The other task stays open, and no note about the finished task reaches the inbox. It runs on haiku, which before the skill knew the sentence wrote such a note and left the task open. Run it after each Claude Code minor update: the answer is the model's, not m2b's code.",
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "tasks",
+        "add",
+        "Return Sam's ladder"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "tasks",
+        "add",
+        "Pick up the paint for the shed door"
+      ]
+    },
+    {
+      "run": [
+        "claude",
+        "-p",
+        "I returned Sam's ladder, tick that off.",
+        "--setting-sources",
+        "project",
+        "--plugin-dir",
+        "{core_plugin}",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Skill,mcp__m2b__note,mcp__m2b__search",
+        "--max-turns",
+        "10",
+        "--model",
+        "haiku",
+        "--output-format",
+        "stream-json",
+        "--verbose"
+      ]
+    }
+  ],
+  "invariants": [
+    {
+      "count": 2,
+      "glob": "tasks/*.md"
+    },
+    {
+      "count": 1,
+      "glob": "tasks/*.md",
+      "content": "status: done\\n(?:[a-z_]+: [^\\n]+\\n)*---\\nReturn Sam's ladder"
+    },
+    {
+      "count": 1,
+      "glob": "tasks/*.md",
+      "content": "status: open\\n(?:[a-z_]+: [^\\n]+\\n)*---\\nPick up the paint for the shed door"
+    },
+    {
+      "count": 0,
+      "glob": "inbox/*.md"
+    }
+  ]
+}

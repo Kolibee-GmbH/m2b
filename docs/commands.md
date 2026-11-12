@@ -17,6 +17,7 @@ need none of it: you say what you want kept or want to know, and the session doe
 | "put it in my calendar: dentist, Tuesday at 10" | the `capture` skill | an event in the calendar you name (macOS, with a calendar set up) |
 | "what did I note about the shed?" | the search tool, or the `search` skill | the lines that match, each with its file |
 | "what's open?", "what's on today?" | the `todos` skill | open tasks by due date, and today's events where a calendar is set up |
+| "I returned Sam's ladder, tick it off", "the paint task is done" | the `todos` skill | ticks that task in your list; asks when more than one fits |
 | "show me something old", "what did I note last spring?" | the `rediscover` skill | one or a few old notes, each with the reason it was picked |
 | "is my second brain working?" | the `m2b` skill | what m2b is and what to type; `/m2b:m2b status` and `/m2b:m2b doctor` then show the state and check the machine |
 
@@ -41,7 +42,7 @@ There are two spellings, and they are two different things:
 | `/m2b:setup` | sets this machine up, for a new store or one another machine already uses; `/m2b:m2b setup` starts it |
 | `/m2b:capture` | captures a note, a task or a calendar entry; saying "remember ..." does the same |
 | `/m2b:search` | searches archive, memory and inbox in full text |
-| `/m2b:todos` | open tasks by due date, and today's events |
+| `/m2b:todos` | open tasks by due date, and today's events; ticks a task you say is done |
 | `/m2b:rediscover` | brings one or a few old notes back into view |
 | `/m2b:worklog-setup` | sets up the worklog add-on on the curating machine; `/m2b:worklog-setup remove` turns it off and takes its parts out again ([Worklog](addons/worklog.md)) |
 
@@ -81,8 +82,8 @@ command answers as JSON with it.
 
 ### Tasks and calendar
 
-With Markdown tasks, these are how you look at a task's id and tick it; with Apple Reminders the
-Reminders app does the same.
+With Markdown tasks, these are how you look at a task's id and tick it in a terminal; with Apple
+Reminders the Reminders app does the same. In a session, saying that a task is done ticks it.
 
 | Command | What it does |
 |---|---|

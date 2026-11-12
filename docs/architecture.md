@@ -45,8 +45,9 @@ flowchart LR
 ## Three rules the code keeps
 
 1. **Clients only add.** Skills, a Shortcut you write and integrations write new files into `inbox/`
-   and new tasks; the band only ticks or drops a curator task. Only the curation run moves,
-   renames or edits, and only on the machine `store.json` names.
+   and new tasks; the todos skill ticks a task you say is done, and the band only ticks or drops a
+   curator task. Only the curation run moves, renames or edits, and only on the machine
+   `store.json` names.
 2. **"Could not look" is never "nothing there".** Every answer that depends on a backend says
    when it could not reach it; an evicted iCloud file is named, never read, never counted as
    missing.

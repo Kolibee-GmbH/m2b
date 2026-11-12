@@ -7,6 +7,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-12
+
+### Added
+
+- Say in a session that a task is done, "I returned Sam's ladder, tick it off", and the todos
+  skill ticks it, without Claude Code asking first: it finds the task in your list, asks when more
+  than one fits, and writes no note about it ([Security](SECURITY.md#the-tools-the-model-calls)
+  says how to have it ask). Until now no skill knew such a sentence; asked that way, a model
+  searched the notes or wrote a note that the task was done, and the task stayed open. A
+  model-level scenario, `E26-tick-a-task`, holds it
+  ([#20](https://github.com/Kolibee-GmbH/m2b/pull/20)).
+
+### Changed
+
+- The README no longer compares m2b with other memory projects by name; what m2b does not do
+  stands under [Limits](README.md#limits). It shows the state of the checks on `main`
+  ([#20](https://github.com/Kolibee-GmbH/m2b/pull/20)).
+- The license and the plugin's manifests name Kolibee GmbH as the holder of the copyright and as
+  the author, where they said "m2b contributors"; the license stays MIT
+  ([#20](https://github.com/Kolibee-GmbH/m2b/pull/20)).
+
 ## [0.4.0] - 2026-11-12
 
 In short:

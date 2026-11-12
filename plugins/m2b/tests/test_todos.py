@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import test_client_skills
 import test_commands
 from m2b import cli
 from m2b.calendar.base import (
@@ -370,13 +371,35 @@ class TodosSkillTest(unittest.TestCase):
         block = text.split("\n---\n", 1)[0].split("\n")[1:]
         return dict(line.split(": ", 1) for line in block if ": " in line)
 
-    def test_the_skill_may_only_run_the_todos_command(self) -> None:
-        """Checks the skill's structure, not its prose."""
+    def test_the_skill_may_only_read_the_list_and_tick_a_task(self) -> None:
+        """Covers: B165
+
+        Checks the skill's structure, not its prose."""
         fields = self.frontmatter()
 
         self.assertEqual(fields["name"], "todos")
-        self.assertEqual(fields["allowed-tools"], "Bash(m2b todos *)")
+        self.assertEqual(fields["allowed-tools"], "Bash(m2b todos *), Bash(m2b tasks complete *)")
         self.assertTrue(fields["description"])
+
+    def test_the_skill_is_offered_for_a_task_that_is_done_in_both_languages(self) -> None:
+        """Covers: B165"""
+        description = self.frontmatter()["description"]
+
+        for said in ("is done", "tick it off", "ist erledigt", "hak X ab"):
+            with self.subTest(said=said):
+                self.assertIn(said, description)
+
+    def test_the_skill_ticks_with_the_id_from_the_list_in_a_call_of_its_own(self) -> None:
+        """Covers: B165"""
+        blocks = test_client_skills.bash_examples("todos")
+
+        self.assertEqual([block.strip() for block in blocks], ["m2b todos --json", "m2b tasks complete <id>"])
+
+    def test_the_note_tool_sends_a_task_that_is_done_to_the_skill(self) -> None:
+        """Covers: B165"""
+        description = test_client_skills.tool_description("NOTE_RULES")
+
+        self.assertIn("A task the user says is done is not a note either: the skill m2b:todos ticks it.", description)
 
     def test_the_skill_reads_the_json(self) -> None:
         self.assertIn("m2b todos --json", self.skill.read_text(encoding="utf-8"))
