@@ -104,6 +104,10 @@ then the fact as it reads now, the added words in green and the removed ones in 
 through; below them where each copy of the facts from before a run lies, one for every run the
 open review covers, and how many notes it filed.
 
+![The pane after /m2b-review: the last curation run with its times, the review row "1 fact changed: Sam", the fact about Sam with the old day struck through in red and the new one in green, where the facts from before the run lie, and a "Still current?" question with keep and drop; below the pane the band with its rows and the status line](images/review.png)
+
+As text, a review with more findings and a click within its undo:
+
 ```text
 ┌──────────────────────────────────────────────────────────────┐
 │ Last curation run: succeeded, 2026-03-14 18:00 to 18:02      │
@@ -142,6 +146,10 @@ arrows scroll a long review.
 `/m2b-proposals`, or `show` on the band's row, opens the m2b pane with what waits for your answer:
 each proposal with its text, what kind of thing it is (with the due day of a commitment and the
 topic, where it has one), your own words it was taken from and the day you said them.
+
+![The pane after /m2b-proposals: three proposals from the sessions, each with keep and drop, its kind, a due day for the commitment, and the words it was taken from with the day they were said; above them "keep all"](images/proposals.png)
+
+As text, other proposals, one of them within its undo:
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐

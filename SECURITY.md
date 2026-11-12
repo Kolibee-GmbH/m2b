@@ -210,9 +210,10 @@ invisible format characters. For any other note Claude Code's ask stands, so
 text the model read elsewhere does not reach the inbox through the tool unseen. Two limits: text you
 paste into a prompt is part of that prompt, and the check covers the tool only. The `capture` skill
 still runs `m2b capture` without asking, whatever the text, so a model that follows text it read
-can note through the skill. Your own rules come first, those for the tools' names and those
+can note through the skill, and the `todos` skill runs `m2b tasks complete` without asking, so such
+a model can tick an open task. Your own rules come first, those for the tools' names and those
 for the skills' commands: `Bash(m2b capture:*)` in `permissions.ask` has Claude Code ask for every
-note, and `mcp__m2b__note` together with `Bash(m2b capture:*)` in `permissions.deny` keeps the
+note, `Bash(m2b tasks complete:*)` there has it ask before a task is ticked, and `mcp__m2b__note` together with `Bash(m2b capture:*)` in `permissions.deny` keeps the
 model from noting by either way. An organization that allows only managed permission rules adds
 its own rules for these names, because the mod cannot see that setting
 ([docs/band.md](docs/band.md#noting-and-searching-as-tools-of-the-model)).

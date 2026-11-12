@@ -1,9 +1,9 @@
 {
   "name": "m2b",
   "description": "A second brain for Claude Code: capture notes, search them, see your tasks, get a small curated distillate in every session, and keep or drop what curation proposes in a band above the prompt. One add-on, off until set up: a worklog of your agent sessions in herdr.",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "author": {
-    "name": "m2b contributors"
+    "name": "Kolibee GmbH"
   },
   "license": "MIT",
   "keywords": [

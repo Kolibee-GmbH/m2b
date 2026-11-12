@@ -2,7 +2,7 @@
   "name": "m2b",
   "description": "m2b, a second brain for Claude Code.",
   "owner": {
-    "name": "m2b contributors"
+    "name": "Kolibee GmbH"
   },
   "plugins": [
     {

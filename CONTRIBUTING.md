@@ -110,6 +110,7 @@ costs model runs, so it is not part of `scripts/check`; run it on purpose:
 scripts/e2e --level model                                   # every scenario with a model.json
 scripts/e2e --level model E18-remember-beside-auto-memory   # after each Claude Code minor update
 scripts/e2e --level model E22-recall-across-projects        # the same
+scripts/e2e --level model E26-tick-a-task                   # the same
 scripts/e2e --level model E17-planted-capture               # and after a change to the ingest skill
 scripts/e2e --level model E14-topics                        # after a change to the ingest skill
 ```
@@ -127,6 +128,12 @@ the second project's session answers from m2b. With Claude Code alone, it does n
 second session in the first project does, which shows that Claude Code's memory kept the fact and
 keeps it to that project. A step's `cwd` gives each session its own project folder. Five sessions
 on Sonnet, a few minutes.
+
+`E26-tick-a-task` puts two open tasks into the list and tells a session in a plain sentence that
+one of them is done. It passes when that task is ticked, the other is still open and no note
+reached the inbox: the todos skill ticked it, through the two commands its own allowed-tools
+cover. One session on Haiku, well under a minute; run it after a change to the todos skill or to
+the note tool's description.
 
 `E17-planted-capture` runs a real ingest step over two captures written to steer it, one with an
 instruction in invisible characters and one that addresses the assistant in plain words, and over
@@ -241,6 +248,11 @@ around them is written by hand. It refuses a run that stopped at the cost ceilin
 cases only (`--case`), a run with fewer runs than a case asks for (`--runs 1`) and a run without
 the arm without m2b, so that a try-out of these kinds does not end up on the page. Run the suite
 once and commit what it gave: a case below 1.00 goes on the page as it is.
+
+A case can check a tool of the mod and what a session answers. What a skill does through `m2b` in
+the Bash tool it cannot: in an eval run that command answers that the core is not installed, with
+the skill and the command granted. Such a behavior is held by a model-level
+[scenario](#end-to-end-scenarios), as ticking a task is by `E26-tick-a-task`.
 
 Run the evals before a release that changes a skill, a hook, a tool description, the text a
 session starts with, or the distillate's format, and commit the page with it. A release of docs or
@@ -383,14 +395,23 @@ The screenshots in `docs/images/` come from real Claude Code sessions against a 
 invented data. After a change the README pictures show, record them again:
 
 ```bash
-scripts/readme-images                # all three
-scripts/readme-images --only todos   # one
+scripts/readme-images                # all five
+scripts/readme-images --only todos   # one, with the one its store depends on
 ```
 
-It needs `claude` logged in, `node` and `npm`, Chrome or Chromium, ImageMagick and `git`, and each
-picture costs one model turn. Claude Code runs with `--setting-sources project`, m2b from this
-checkout and its own `M2B_HOME` under `/tmp/sb-test-m2b-demo`, so your settings, plugins and store
-stay out of the pictures. The answers are the model's: look at each picture before you commit it.
+It needs `claude` logged in, `node` and `npm`, Chrome or Chromium, ImageMagick and `git`. Claude
+Code runs with `--setting-sources project`, m2b from this checkout and its own `M2B_HOME` under
+`/tmp/sb-test-m2b-demo`, so your settings, plugins and store stay out of the pictures.
+
+Three pictures ask the model something and cost one model turn each (`session-start`, `capture`,
+`todos`); their answers are the model's, so look at each before you commit it. The dates in them
+follow the day of the recording: one task is due that day, one is overdue, and the reminder is
+asked for a weekday three days ahead. The other two, `review` and `proposals`, type a command of
+the band, which opens its pane without a model. Their store is the first after a curation run
+that changed a fact and proposed three things from the sessions; a scripted model plays that run,
+the stub the scenarios use, over an invented session in a Claude Code folder of the demo's own.
+Your sessions are never read, and the two pictures differ between recordings only in their dates
+and times.
 
 The moving picture at the top of the README, `docs/images/demo.gif`, follows one sentence from a
 prompt into a later session. Record it again after a change it shows:

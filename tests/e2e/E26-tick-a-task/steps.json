@@ -1,0 +1,4 @@
+{
+  "description": "E26 tick a task: a scenario for the model level, where a real session is told that a task is done. At the stub level there is no session to run, so the store stays as given.",
+  "steps": []
+}

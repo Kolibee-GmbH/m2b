@@ -58,6 +58,7 @@ It is one of the four parts of the [behavior catalog](../behavior.md), which say
 | B159 | `m2b --version` prints `m2b` and the version of the plugin's manifest and exits 0, also on a machine that is not set up | a bug report names the version, and until now it stood only in `/plugin` and in the manifest file |
 | B160 | A command that only groups actions (`m2b lint`, `m2b tasks`, `m2b setup` and the others), named without an action, prints its help with the actions and exits 0; an action it does not have stays a usage error (exit 2) | the docs name the group, and whoever types it must see what it takes instead of an error |
 | B164 | The answer of a command on a machine that is not set up is one line that begins with `m2b: not set up:` and names both ways in: `/m2b:m2b setup` in Claude Code and, without Claude Code, `m2b setup apply` with the address of the Getting started page | whoever tries m2b from a checkout has no `/m2b:m2b setup` to run, and the answer named only that |
+| B165 | The todos skill ticks a task the user says is done: it is offered for such a sentence in English and German, may run `m2b todos` and `m2b tasks complete` without asking and nothing else, and ticks with the id the list gives, in a call of its own; the note tool's description sends a task that is done to the skill | told "the ladder task is done", one model found the command by itself, one only searched the notes and one wrote a note that the task was done, which left the task open without the person seeing it |
 
 ## Defects m2b does not have
 

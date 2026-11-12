@@ -5,7 +5,15 @@ checkout (``--plugin-dir``), its own ``M2B_HOME`` and ``--setting-sources projec
 user's settings and plugins nor their real store can show up. Every byte the session draws is
 recorded, replayed into xterm.js in headless Chrome and trimmed with ImageMagick; the way of
 recording and replaying follows the live check of prismantis (MIT). A shot with a prompt is one
-real model turn on the user's Claude login.
+real model turn on the user's Claude login; a shot that types a command of the band, which opens
+its pane at once, is none.
+
+Two demo stores stand behind the shots. The everyday one holds memory, tasks and two notes waiting.
+The other is the first after a curation run that changed a fact and left proposals from the
+person's sessions waiting; a scripted model plays that run, the stub the end-to-end scenarios use,
+over invented sessions in a Claude Code folder of the demo's own, so the user's sessions are never
+read and the two pictures show the same fact and proposals on every recording, under the day's
+dates.
 
 The demo machine lives under ``/tmp/sb-test-m2b-demo``, its owner is the invented Alex, and its
 machine id is invented too. Claude Code itself still keeps its own records of these sessions in the
@@ -22,6 +30,7 @@ import os
 import pty
 import re
 import select
+import shlex
 import shutil
 import signal
 import struct
@@ -56,13 +65,25 @@ ESCAPES = re.compile(rb"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-?]*[ -/]*[@-~
 ENTER = "\r"
 
 
+EVERYDAY = "everyday"
+AFTER_A_RUN = "after-a-run"
+WEEKDAY = "{weekday}"
+WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+REMINDER_DAYS_AHEAD = 3
+
+
 @dataclass(frozen=True)
 class Shot:
+    """One picture: a session in a terminal of ``rows`` rows that types ``prompt`` and is drawn
+    ``answer_seconds`` later. ``fresh_store`` builds the demo store named by ``store`` first;
+    without it the shot runs on the store the shot before it left."""
+
     name: str
     rows: int
     answer_seconds: int
     prompt: str
     fresh_store: bool
+    store: str = EVERYDAY
 
 
 @dataclass(frozen=True)
@@ -84,17 +105,20 @@ class Recording:
     typed_at: tuple[float, ...]
 
 
-# In this order: todos runs on the store the capture left, so it lists the task just captured.
+# In this order: todos runs on the store the capture left, so it lists the task just captured, and
+# both panes show the same run. The last two type a command of the band and wait for no model.
 SHOTS = (
     Shot("session-start", 30, 30, "When does Sam bring the plywood, and where is the spare key for the shed?", True),
     Shot(
         "capture",
         34,
         45,
-        "remember that the shed roof needs 40 screws, 5 x 60 mm, and remind me on Thursday to buy them",
+        f"remember that the shed roof needs 40 screws, 5 x 60 mm, and remind me on {WEEKDAY} to buy them",
         True,
     ),
-    Shot("todos", 40, 40, "what's on my list?", False),
+    Shot("todos", 46, 40, "what's on my list?", False),
+    Shot("review", 40, 6, "/m2b-review", True, AFTER_A_RUN),
+    Shot("proposals", 40, 6, "/m2b-proposals", False, AFTER_A_RUN),
 )
 
 CORPUS = {
@@ -125,7 +149,7 @@ MEMORY = {
 ## Facts
 
 - Dana, my sister: birthday 3 March, wants a fountain pen (dana.md)
-- Sam repairs boats at the harbour; brings plywood for the shed roof on 14 November (sam.md)
+- Sam, who repairs boats at the harbour, brings plywood for the shed roof on 14 November (sam.md)
 - Spare shed key: under the blue pot by the back door (house.md)
 
 ## Current
@@ -160,16 +184,52 @@ The spare key for the shed is under the blue pot by the back door.
 - [[20261105T071000Z-claude-0d9c.md]]
 """,
 }
-# (title, due or None)
+# (title, the days from the day of the recording to the day it is due, or None): one task due today
+# and one overdue on any day the pictures are taken, which the band shows as two rows.
 TASKS = (
-    ("Pick up the paint for the shed door", "2026-11-13"),
-    ("Return Sam's ladder", "2026-11-07"),
+    ("Pick up the paint for the shed door", 0),
+    ("Return Sam's ladder", -5),
     ("Book the train to Porto", None),
 )
 INBOX = (
     "The plumber said the shed tap needs a new washer, size 3/4 inch",
     "Porto: Dana recommends the bookshop Lello, book tickets online",
 )
+
+# The store after a run. A note changes when Sam brings the plywood, and the run's ingest step
+# rewrites his line in the facts list: the review names that fact with the old and the new day.
+SAM_BEFORE = "- Sam, who repairs boats at the harbour, brings plywood for the shed roof on 14 November (sam.md)\n"
+SAM_AFTER = SAM_BEFORE.replace("14 November", "21 November")
+CHANGED_PLAN = "Sam called: he brings the plywood a week later, on Saturday 21 November"
+# What Alex typed in a session of the last day, invented, and what the run proposes from it:
+# (kind, the proposal, its words in the prompt, the days from the recording to its due day or None).
+SESSION_FOLDER = "/home/alex/projects/invoice-tool"
+SESSION_PROMPTS = (
+    "Nora Lind runs IT at Northwind and signs off the renewals, so the export has to match her template.",
+    "I promised Dana to send her the photos of the shed within three days, keep that in mind.",
+    "We agreed with Sam that he keeps the old ladder until the roof is done.",
+)
+PROPOSALS = (
+    (
+        "person",
+        "Nora Lind runs IT at Northwind and signs off the renewals.",
+        "Nora Lind runs IT at Northwind and signs off the renewals",
+        None,
+    ),
+    (
+        "commitment",
+        "Send Dana the photos of the shed.",
+        "I promised Dana to send her the photos of the shed within three days",
+        3,
+    ),
+    (
+        "agreement",
+        "Sam keeps the old ladder until the roof is done.",
+        "We agreed with Sam that he keeps the old ladder until the roof is done",
+        None,
+    ),
+)
+MODEL_STUB = PLUGIN / "tests" / "fakes" / "fake_claude.py"
 
 
 class ImagesError(Exception):
@@ -197,17 +257,60 @@ def build_demo(environ: Mapping[str, str]) -> None:
     and one curation run without a model, which asks whether the Porto trip, untouched since September,
     is still current: the band's question comes from the core, not from the worklog."""
     store = set_up_machine(environ)
-    for relative, (created, source, text) in CORPUS.items():
-        _write(store / "corpus" / relative, f"---\ncreated: {created}\nsource: {source}\n---\n{text}\n")
-    # Recent on any day the pictures are taken, so only the Porto trip is quiet enough to be asked about.
-    recent = (datetime.date.today() - datetime.timedelta(days=5)).isoformat()
-    for name, text in MEMORY.items():
-        _write(store / "memory" / name, text.replace("{recent}", recent))
-    for title, due in TASKS:
-        _m2b(environ, "tasks", "add", *(["--due", due] if due else []), title)
+    _fill(store, environ, datetime.date.today())
     for text in INBOX:
         _m2b(environ, "capture", text)
     _m2b(environ, "curate", "--force")
+    _make_demo_project(environ)
+
+
+def build_demo_after_a_run(environ: Mapping[str, str]) -> None:
+    """A fresh demo machine whose last curation run changed a fact and proposed three things from
+    Alex's sessions: the review names the fact, and the proposals wait for keep or drop.
+
+    A scripted model plays the run. It reads the sessions from a Claude Code folder of the demo's
+    own, which holds invented prompts only; reading them is on for this one run and off again
+    before any session starts, so no run a recording begins reads the user's sessions."""
+    today = datetime.date.today()
+    store = set_up_machine(environ)
+    _fill(store, environ, today)
+    _m2b(environ, "capture", CHANGED_PLAN)
+    claude_code = DEMO / "claude-code"
+    _write_sessions(claude_code, datetime.datetime.now(datetime.timezone.utc))
+    scripted = {
+        **environ,
+        "M2B_MODEL_RUNNER": str(_scripted_model(_run_script(today))),
+        "M2B_STUB_STORE": str(store),
+        "CLAUDE_CONFIG_DIR": str(claude_code),
+    }
+    _m2b(environ, "config", "set", "curation.read_sessions", "true")
+    try:
+        _m2b(scripted, "curate", "--force")
+    finally:
+        _m2b(environ, "config", "set", "curation.read_sessions", "false")
+    _make_demo_project(environ)
+
+
+STORES: Mapping[str, Callable[[Mapping[str, str]], None]] = {
+    EVERYDAY: build_demo,
+    AFTER_A_RUN: build_demo_after_a_run,
+}
+
+
+def _fill(store: Path, environ: Mapping[str, str], today: datetime.date) -> None:
+    """Filed notes, memory and tasks, the same in both demo stores."""
+    for relative, (created, source, text) in CORPUS.items():
+        _write(store / "corpus" / relative, f"---\ncreated: {created}\nsource: {source}\n---\n{text}\n")
+    # Recent on any day the pictures are taken, so only the Porto trip is quiet enough to be asked about.
+    recent = (today - datetime.timedelta(days=5)).isoformat()
+    for name, text in MEMORY.items():
+        _write(store / "memory" / name, text.replace("{recent}", recent))
+    for title, days in TASKS:
+        due = [] if days is None else ["--due", (today + datetime.timedelta(days=days)).isoformat()]
+        _m2b(environ, "tasks", "add", *due, title)
+
+
+def _make_demo_project(environ: Mapping[str, str]) -> None:
     make_project(
         PROJECT,
         {
@@ -216,6 +319,65 @@ def build_demo(environ: Mapping[str, str]) -> None:
         },
         environ,
     )
+
+
+def _write_sessions(claude_code: Path, now: datetime.datetime) -> None:
+    """One invented session an hour old, as Claude Code keeps it: a run reads what was typed since the day before."""
+    typed_at = (now - datetime.timedelta(hours=1)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    records = [
+        {
+            "type": "user",
+            "timestamp": typed_at,
+            "cwd": SESSION_FOLDER,
+            "entrypoint": "cli",
+            "promptSource": "typed",
+            "origin": {"kind": "human"},
+            "message": {"role": "user", "content": prompt},
+        }
+        for prompt in SESSION_PROMPTS
+    ]
+    folder = claude_code / "projects" / SESSION_FOLDER.replace("/", "-")
+    _write(folder / "session.jsonl", "".join(json.dumps(record) + "\n" for record in records))
+
+
+def _run_script(today: datetime.date) -> dict[str, object]:
+    """What the scripted model does in the run: the step without tools answers with the proposals,
+    and the ingest step files the one note by rewriting Sam's line and his fact file."""
+    proposals = [
+        {
+            "kind": kind,
+            "text": text,
+            "quote": quote,
+            "session": 1,
+            "topic": None,
+            "due": None if days is None else (today + datetime.timedelta(days=days)).isoformat(),
+        }
+        for kind, text, quote, days in PROPOSALS
+    ]
+    ingest = [
+        {"tool": "Bash", "command": "m2b ingest list --json"},
+        {"tool": "Edit", "file_path": "<store>/memory/MEMORY.md", "old_string": SAM_BEFORE, "new_string": SAM_AFTER},
+        {
+            "tool": "Edit",
+            "file_path": "<store>/memory/sam.md",
+            "old_string": "on Saturday 14 November",
+            "new_string": "on Saturday 21 November",
+        },
+        {"tool": "Bash", "command": "m2b ingest note <capture:cli> 'filed: fact sam.md'"},
+        {"tool": "Bash", "command": "m2b ingest finish <capture:cli>"},
+    ]
+    return {"text": {"answer": json.dumps({"proposals": proposals})}, "skills": {"/m2b:ingest": {"actions": ingest}}}
+
+
+def _scripted_model(script: Mapping[str, object]) -> Path:
+    """An executable that plays the model of a curation run from this script."""
+    folder = DEMO / "scripted-model"
+    _write(folder / "script.json", json.dumps(script))
+    runner = folder / "claude"
+    stub = " ".join(shlex.quote(str(part)) for part in (sys.executable, MODEL_STUB, folder / "script.json"))
+    runner.write_text(f'#!/bin/sh\nexec {stub} "$@"\n', encoding="utf-8")
+    runner.chmod(0o755)
+    return runner
 
 
 def set_up_machine(environ: Mapping[str, str]) -> Path:
@@ -258,9 +420,16 @@ def shots_for(only: str | None) -> list[Shot]:
     return list(SHOTS[start : index + 1])
 
 
-def steps_for(shot: Shot) -> list[tuple[float, str]]:
+def reminder_weekday(today: datetime.date) -> str:
+    """The weekday the capture shot asks to be reminded on: a few days ahead and never today, when
+    "on Thursday" could mean this day or the one a week later and the model asks which."""
+    return WEEKDAYS[(today + datetime.timedelta(days=REMINDER_DAYS_AHEAD)).weekday()]
+
+
+def steps_for(shot: Shot, today: datetime.date | None = None) -> list[tuple[float, str]]:
     """Trust the demo folder (the dialog defaults to "No, exit"), let the start settle, ask, wait."""
-    return [(8, DOWN), (1, ENTER), (14, shot.prompt), (1, ENTER), (shot.answer_seconds, "")]
+    prompt = shot.prompt.replace(WEEKDAY, reminder_weekday(today or datetime.date.today()))
+    return [(8, DOWN), (1, ENTER), (14, prompt), (1, ENTER), (shot.answer_seconds, "")]
 
 
 def record(
@@ -355,7 +524,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             xterm = _install_xterm(Path(work))
             for shot in shots_for(arguments.only):
                 if shot.fresh_store:
-                    build_demo(environ)
+                    STORES[shot.store](environ)
                 recording = Path(work) / f"{shot.name}.bin"
                 recording.write_bytes(record(claude_command(), PROJECT, environ, shot.rows, steps_for(shot)))
                 IMAGES.mkdir(parents=True, exist_ok=True)
