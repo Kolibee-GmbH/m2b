@@ -126,7 +126,7 @@ class WeeklyRunTest(unittest.TestCase):
     def test_it_installs_the_newest_claude_code_and_holds_no_version(self) -> None:
         installs = [line for line in self.text.splitlines() if CLAUDE_CODE_PACKAGE in line]
 
-        self.assertEqual(len(installs), 2)
+        self.assertEqual(len(installs), 3)
         for line in installs:
             self.assertRegex(line, rf'^ +- run: npm install --global "{CLAUDE_CODE_PACKAGE}@latest"$')
         self.assertNotIn("CLAUDE_CODE_VERSION", self.text)
@@ -135,13 +135,21 @@ class WeeklyRunTest(unittest.TestCase):
         self.assertRegex(self.text, r"(?m)^ +- run: scripts/check$")
         self.assertRegex(self.text, r"(?m)^ +scripts/e2e --level model \$SCENARIOS$")
 
-    def test_the_model_level_scenarios_run_only_where_an_account_is(self) -> None:
-        self.assertIn("\n    needs: access\n    if: needs.access.outputs.granted == 'true'\n", self.text)
+    def test_it_measures_the_fence_in_a_job_of_its_own(self) -> None:
+        self.assertIn("\n  fence:\n    needs: access\n", self.text)
+        self.assertRegex(self.text, r"(?m)^ +run: scripts/fence-probe$")
+
+    def test_the_two_jobs_that_ask_a_model_run_only_where_an_account_is(self) -> None:
+        for job in ("model-scenarios", "fence"):
+            with self.subTest(job=job):
+                self.assertIn(
+                    f"\n  {job}:\n    needs: access\n    if: needs.access.outputs.granted == 'true'\n", self.text
+                )
 
     def test_an_account_reaches_single_steps_and_never_a_whole_job(self) -> None:
         with_secret = [line for line in self.text.splitlines() if "secrets." in line]
 
-        self.assertEqual(len(with_secret), 4)
+        self.assertEqual(len(with_secret), 6)
         for line in with_secret:
             self.assertEqual(len(line) - len(line.lstrip()), STEP_ENVIRONMENT_INDENT, line)
 
@@ -149,8 +157,11 @@ class WeeklyRunTest(unittest.TestCase):
         self.assertIn("\npermissions:\n  contents: read\n", self.text)
         self.assertEqual(re.findall(r"(?m)^ *[\w-]+: write$", self.text), ["      issues: write"])
 
-    def test_only_a_failed_scheduled_run_reports(self) -> None:
-        self.assertIn("\n    if: failure() && github.event_name == 'schedule'\n", self.text)
+    def test_only_a_failed_scheduled_run_reports_and_it_waits_for_every_other_job(self) -> None:
+        self.assertIn(
+            "\n    needs: [check, model-scenarios, fence]\n    if: failure() && github.event_name == 'schedule'\n",
+            self.text,
+        )
 
 
 @unittest.skipUnless(shutil.which("bash"), "needs bash, the shell GitHub runs a step's script with")
@@ -177,6 +188,7 @@ class WeeklyFailureReportTest(unittest.TestCase):
                     "CLAUDE_CODE": claude_code,
                     "CHECK": "failure",
                     "MODEL_SCENARIOS": "skipped",
+                    "FENCE": "success",
                 },
                 check=True,
                 capture_output=True,
@@ -196,6 +208,7 @@ class WeeklyFailureReportTest(unittest.TestCase):
         self.assertIn(f"Claude Code 9.8.7 (Claude Code): {self.RUN_URL}", body)
         self.assertIn("- scripts/check: failure", body)
         self.assertIn("- the model-level scenarios: skipped", body)
+        self.assertIn("- the fence probe: success", body)
 
     def test_a_failure_while_the_issue_is_open_adds_a_comment_and_opens_no_second_issue(self) -> None:
         _, report = self._report(open_issue="12")

@@ -130,9 +130,16 @@ What the fence is not:
   proxy, a provider's credentials) and m2b's commands need it to find the store. The model has no
   call that reads it.
 - That no `CLAUDE.md` and no memory is read rests on two switches of Claude Code
-  (`CLAUDE_CODE_DISABLE_CLAUDE_MDS`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY`). Nothing in a run's output
-  proves them, so a later Claude Code that drops one would go unnoticed until someone measures
-  again. The tools and the MCP servers are checked at every run.
+  (`CLAUDE_CODE_DISABLE_CLAUDE_MDS`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY`). A curation run does not
+  check them; the tools and the MCP servers it checks at every run. `scripts/fence-probe` measures
+  the switches and part of the refusals above with a real model
+  ([CONTRIBUTING.md](CONTRIBUTING.md#whether-the-fence-still-holds)): a step that is asked to
+  break out (`cat` of a file outside the store, alone and chained to an allowed command, Read and
+  Write there and in Claude Code's memory folder, a tool the step does not have), with a random
+  word in each file it must not get, beside a control run without the switches. The weekly
+  workflow of this repository runs it with the newest Claude Code when it has an account for a
+  model, so a Claude Code that drops a switch is seen there within a week. On your machine
+  nothing sees it, and a step reads those files until a release of m2b answers it.
 - The model can still do everything its step allows, which is the subject of the section above.
 
 The step that reads your sessions has no tool at all ([Reading your sessions](#reading-your-sessions)).
