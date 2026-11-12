@@ -16,6 +16,7 @@ from m2b.config import profile
 from m2b.notes.frontmatter import Note
 from m2b.notes.names import NoteName
 from m2b.notes.trailer import MARKER_LINE, find_trailer
+from m2b.store.base import StoreReadError
 from m2b.store.folder import FolderStore
 from m2b.store.guard import DatalessGuard
 from m2b.store.icloud import ICloudStore
@@ -340,6 +341,63 @@ class ConflictCopyTest(IngestFixture):
         self.assertEqual(len(names), 3, names)
         notes = [self.read(f"inbox/{name}") for name in names]
         self.assertTrue(any("plan B" in text and "conflict copy of plan.md" in text for text in notes))
+
+
+class ConflictCopyInAFolderStoreTest(IngestFixture):
+    def test_an_identical_syncthing_copy_is_removed_and_a_different_dropbox_copy_names_its_original(self) -> None:
+        """Covers: B150"""
+        syncthing_copy = f"{CAPTURE[:-3]}.sync-conflict-20261107-091600-ABCDEFG.md"
+        self.write(f"inbox/{CAPTURE}", CAPTURED)
+        self.write(f"inbox/{syncthing_copy}", CAPTURED)
+        self.write("inbox/plan.md", "---\ncreated: 2026-11-01T10:00:00+01:00\nsource: cli\n---\nplan A\n")
+        self.write(
+            "inbox/plan (Dana's conflicted copy 2026-11-01).md",
+            "---\ncreated: 2026-11-01T10:00:00+01:00\nsource: cli\n---\nplan B\n",
+        )
+
+        report = self.normalize()
+
+        self.assertEqual(report.removed_copies, [f"inbox/{syncthing_copy}"])
+        self.assertEqual(len(report.kept_copies), 1)
+        names = self.inbox()
+        self.assertEqual(len(names), 3, names)
+        notes = [self.read(f"inbox/{name}") for name in names]
+        self.assertTrue(any("plan B" in text and "conflict copy of plan.md" in text for text in notes))
+
+    def test_a_differing_copy_that_is_not_utf8_is_reported_and_the_other_captures_go_on(self) -> None:
+        """Covers: B150"""
+        copy = "inbox/menu.sync-conflict-20261105-081500-ABCDEFG.txt"
+        self.write("inbox/menu.txt", "caf\u00e9 at nine\n".encode("latin-1"))
+        self.write(copy, "caf\u00e9 at ten\n".encode("latin-1"))
+        self.write("inbox/Shopping list.txt", "milk\nbread\n")
+
+        report = self.normalize()
+
+        self.assertEqual(report.kept_copies, [copy])
+        self.assertEqual(
+            [problem.split(" is a text file", 1)[0] for problem in report.problems], [copy, "inbox/menu.txt"]
+        )
+        self.assertNotIn("Shopping list.txt", self.inbox())
+
+    def test_a_differing_copy_whose_text_cannot_be_read_gets_no_line_and_stops_nothing(self) -> None:
+        """Covers: B150"""
+        copy = "inbox/plan (conflicted copy 2026-11-01).md"
+        self.write("inbox/plan.md", "---\ncreated: 2026-11-01T10:00:00+01:00\nsource: cli\n---\nplan A\n")
+        self.write(copy, "---\ncreated: 2026-11-01T10:00:00+01:00\nsource: cli\n---\nplan B\n")
+        self.write("inbox/Shopping list.txt", "milk\nbread\n")
+        real_read = self.store.read_text
+
+        def read(relative: str) -> str:
+            if relative == copy:
+                raise StoreReadError(f"{relative} could not be read: Permission denied")
+            return real_read(relative)
+
+        with mock.patch.object(self.store, "read_text", side_effect=read):
+            report = self.normalize()
+
+        self.assertEqual(report.kept_copies, [copy])
+        self.assertEqual([problem.split(" stays", 1)[0] for problem in report.problems], [copy])
+        self.assertNotIn("Shopping list.txt", self.inbox())
 
 
 class TaskTest(IngestFixture):

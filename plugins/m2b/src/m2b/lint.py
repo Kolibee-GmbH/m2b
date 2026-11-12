@@ -163,7 +163,12 @@ def _corpus(store: Store, report: LintReport, corpus: _Corpus) -> None:
         elif copy.identical is False:
             report.add("conflict-copy", ACTION, path, f"{path} differs from {copy.original}; keep one of them")
         else:
-            report.add("conflict-copy", INFO, path, f"{path} or {copy.original} is not downloaded; not compared")
+            report.add(
+                "conflict-copy",
+                INFO,
+                path,
+                f"{path} or {copy.original} is not downloaded or cannot be read; not compared",
+            )
     if binaries:
         size = sum(os.lstat(store.path(relative)).st_size for relative in binaries)
         report.add("binary-volume", INFO, CORPUS, f"{len(binaries)} binary files, {size / 1024:.1f} KB in {CORPUS}/")

@@ -9,6 +9,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- A store on the `folder` backend recognizes the conflict copies of Dropbox and Syncthing, as the
+  `icloud` backend recognizes iCloud's. Until now such a copy was a file like any other there: a
+  copy of a task file was a second task, a copy in the inbox was filed as a second capture, and a
+  copy in the archive was reported as a note that is not named by the schema. Now `m2b lint`
+  reports a copy in the archive as a conflict copy and `m2b lint fix` removes it when it equals its
+  original byte for byte, a curation run does the same in the inbox and gives a differing text
+  copy a line that names its original, and the Markdown tasks pass a copy of a task file over,
+  without a finding. The names are
+  `<name> (... conflicted copy ...).<ext>`, also with `in Konflikt stehende Kopie` as Dropbox
+  writes it for a German account, and `<name>.sync-conflict-<date>-<time>-<device>.<ext>`, each
+  only next to the file it is a copy of. There is nothing to set: every folder store recognizes
+  both, and a copy that differs from its original is never removed.
 - `m2b doctor` has a line `store-git`. It says whether the store folder is a git repository and,
   on the machine that curates, where the git directory lies that a run commits into and which
   git named it. `cannot commit` with the reason counts as a problem: a `.git` in the store folder
@@ -169,6 +181,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Only a file is the original of a conflict copy. A folder with that name beside the copy was
+  taken for the original, and comparing the two failed with a read error; a symlink with that
+  name that pointed at the copy compared equal to it, so the copy, the only bytes, was removed.
+- A conflict copy or an original that cannot be read no longer stops lint, the curation run's
+  look at the inbox or the Markdown tasks: the pair is not compared, the copy stays, and lint
+  says so in its finding.
 - The worklog's redaction also finds credentials as tools and environments write them: the value
   of `PGPASSWORD=...`, `SECRET_KEY: ...`, `AccountKey=...` and other names that hold password,
   secret, token or a kind of key, the password in a URL and after `curl -u name:`, and AWS access

@@ -396,7 +396,9 @@ whether a run is due.
   task is due on a day, not at a time.
 - The worklog needs [herdr](https://herdr.dev) 0.9 or later and records only the curating machine. It never books anything: its
   bookings are proposals for you to enter.
-- Sync is whatever moves the folder. m2b has no sync and no server of its own.
+- Sync is whatever moves the folder. m2b has no sync and no server of its own. It knows a
+  conflict copy by the name iCloud Drive gives it (backend `icloud`) or Dropbox and Syncthing
+  give it (backend `folder`); the copies of another service are files like any other to it.
 - Nothing captured is deleted automatically. What does get deleted: conflict copies identical
   to their original, the product's own leftover temp files and settled candidate tasks.
 

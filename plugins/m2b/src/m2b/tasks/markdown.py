@@ -133,7 +133,9 @@ class MarkdownTasks(Tasks):
         return found
 
     def _task_files(self) -> list[str]:
-        """The task files; a sync service's conflict copy is left to lint, never read as a task."""
+        """The task files. A sync service's conflict copy is never read as a task: it is passed over
+        here, and no finding names it.
+        """
         try:
             copies = {copy.path for copy in self._store.conflict_copies(layout.TASKS)}
             return [

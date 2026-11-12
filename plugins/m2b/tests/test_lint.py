@@ -396,6 +396,39 @@ class EvictedTest(LintFixture):
         self.assertIn("m2b store fetch corpus", finding.text)
 
 
+class ConflictCopyInAFolderStoreTest(LintFixture):
+    def test_a_dropbox_or_syncthing_copy_is_a_finding_and_removed_only_when_it_equals_its_original(self) -> None:
+        """Covers: B150, B21"""
+        identical = f"corpus/2026/11/{CAPTURE.replace('.md', ' (conflicted copy 2026-11-07).md')}"
+        different = f"corpus/2026/11/{CAPTURE.replace('.md', '.sync-conflict-20261107-091600-ABCDEFG.md')}"
+        self.write(identical, NOTE)
+        self.write(different, NOTE + "changed\n")
+
+        self.assertEqual(self.codes(), [("conflict-copy", "info", identical), ("conflict-copy", "action", different)])
+        self.assertEqual(lint.fix(self.store, now=NOW), [identical])
+        self.assertTrue(self.store.exists(different))
+        self.assertFalse(self.store.exists(identical))
+
+    def test_a_copy_that_cannot_be_read_is_one_finding_and_the_other_findings_stay(self) -> None:
+        """Covers: B150"""
+        copy = f"corpus/2026/11/{CAPTURE.replace('.md', '.sync-conflict-20261107-091600-ABCDEFG.md')}"
+        self.write(copy, NOTE)
+        self.write("corpus/2026/11/holiday.md", NOTE)
+        real_read = self.store.read_bytes
+
+        def read(relative: str) -> bytes:
+            if relative == copy:
+                raise lint.StoreError(f"{relative} could not be read: Permission denied")
+            return real_read(relative)
+
+        with mock.patch.object(self.store, "read_bytes", side_effect=read):
+            codes = self.codes()
+            removed = lint.fix(self.store, now=NOW)
+
+        self.assertEqual(codes, [("name", "action", "corpus/2026/11/holiday.md"), ("conflict-copy", "info", copy)])
+        self.assertEqual(removed, [])
+
+
 class ConflictCopyTest(LintFixture):
     store_class = ICloudStore
 

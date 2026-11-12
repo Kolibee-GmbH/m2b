@@ -178,6 +178,15 @@ class MarkdownTaskFilesTest(unittest.TestCase):
 
             self.assertEqual([task.id for task in tasks.items(include_completed=True)], ["a1b2c3d4e5f6"])
 
+    def test_a_dropbox_or_syncthing_copy_of_a_task_file_is_no_second_task(self) -> None:
+        """Covers: B150"""
+        done = b"---\nstatus: done\n---\nCall Dana\n"
+        self.store.create_exclusive("tasks/a1b2c3d4e5f6.md", b"---\nstatus: open\n---\nCall Dana\n")
+        self.store.create_exclusive("tasks/a1b2c3d4e5f6 (Dana's conflicted copy 2026-11-05).md", done)
+        self.store.create_exclusive("tasks/a1b2c3d4e5f6.sync-conflict-20261105-081500-ABCDEFG.md", done)
+
+        self.assertEqual([task.id for task in self.tasks.items(include_completed=True)], ["a1b2c3d4e5f6"])
+
     def test_a_due_time_with_microseconds_reads_back(self) -> None:
         due = datetime.datetime.now().astimezone() + datetime.timedelta(days=1)
 

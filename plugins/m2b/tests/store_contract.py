@@ -33,9 +33,13 @@ class Contracts:
     """Holds the contract so that test discovery does not run it without a backend."""
 
     class StoreContract(unittest.TestCase):
-        """Subclass it and set ``make_store`` to a backend constructor (root, temp folder, guard)."""
+        """Subclass it and set ``make_store`` to a backend constructor (root, temp folder, guard).
+
+        ``copy_of_plan`` is a name the backend's sync service gives a conflict copy of ``plan.md``.
+        """
 
         make_store: Callable[[Path, Path, DatalessGuard], Store]
+        copy_of_plan: str
 
         def setUp(self) -> None:
             self._temp = tempfile.TemporaryDirectory()
@@ -51,6 +55,11 @@ class Contracts:
 
         def _evict(self, relative: str) -> None:
             self.eviction.evicted.add(self.root / relative)
+
+        def _put(self, relative: str, data: bytes) -> None:
+            target = self.root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
 
         def test_a_created_file_reads_back(self) -> None:
             self.store.create_exclusive("inbox/a.md", b"Dana likes maps.\n")
@@ -182,3 +191,93 @@ class Contracts:
 
             self.assertEqual(store.check_local(["inbox"]), [])
             self.assertEqual(store.read_bytes("inbox/a.md"), b"local")
+
+        def test_a_conflict_copy_is_removable_only_when_it_equals_its_original(self) -> None:
+            """Covers: X8"""
+            self._put("inbox/plan.md", b"draft")
+            self._put(f"inbox/{self.copy_of_plan}", b"draft")
+            self._put("corpus/2026/11/plan.md", b"draft")
+            self._put(f"corpus/2026/11/{self.copy_of_plan}", b"another draft")
+
+            copies = {copy.path: (copy.original, copy.removable) for copy in self.store.conflict_copies()}
+
+            self.assertEqual(
+                copies,
+                {
+                    f"inbox/{self.copy_of_plan}": ("inbox/plan.md", True),
+                    f"corpus/2026/11/{self.copy_of_plan}": ("corpus/2026/11/plan.md", False),
+                },
+            )
+
+        def test_a_copy_counts_only_next_to_a_file_it_names_as_its_original(self) -> None:
+            """Covers: B150"""
+            self._put(f"inbox/{self.copy_of_plan}", b"draft")
+            self._put("corpus/plan.md", b"draft")
+            self._put(f"memory/{self.copy_of_plan}", b"draft")
+            (self.root / "memory" / "plan.md").mkdir()
+
+            self.assertEqual(self.store.conflict_copies(), [])
+
+        def test_conflict_copies_are_looked_for_below_the_folder_asked_for(self) -> None:
+            for folder in ("inbox", "corpus"):
+                self._put(f"{folder}/plan.md", b"draft")
+                self._put(f"{folder}/{self.copy_of_plan}", b"draft")
+
+            self.assertEqual(
+                [copy.path for copy in self.store.conflict_copies("corpus")], [f"corpus/{self.copy_of_plan}"]
+            )
+            self.assertEqual(self.store.conflict_copies("tasks"), [])
+
+        def test_an_evicted_copy_or_original_is_a_copy_that_is_never_compared(self) -> None:
+            """Covers: X8, B6"""
+            for folder in ("inbox", "corpus"):
+                self._put(f"{folder}/plan.md", b"draft")
+                self._put(f"{folder}/{self.copy_of_plan}", b"draft")
+            self._evict("inbox/plan.md")
+            self._evict(f"corpus/{self.copy_of_plan}")
+
+            with mock.patch.object(self.store, "read_bytes", side_effect=AssertionError("an evicted file was read")):
+                copies = self.store.conflict_copies()
+
+            self.assertEqual(
+                [(copy.path, copy.identical, copy.removable) for copy in copies],
+                [(f"corpus/{self.copy_of_plan}", None, False), (f"inbox/{self.copy_of_plan}", None, False)],
+            )
+
+        def test_an_evicted_folder_is_passed_over_when_looking_for_conflict_copies(self) -> None:
+            self._put("corpus/2025/03/plan.md", b"draft")
+            self._put(f"corpus/2025/03/{self.copy_of_plan}", b"draft")
+            self._put("corpus/2026/11/plan.md", b"draft")
+            self._put(f"corpus/2026/11/{self.copy_of_plan}", b"draft")
+            self._put("corpus/2024/01/plan.md", b"draft")
+            self._put(f"corpus/2024/01/{self.copy_of_plan}/inside.md", b"draft")
+            self._evict("corpus/2025/03")
+            self._evict(f"corpus/2024/01/{self.copy_of_plan}")
+
+            self.assertEqual(
+                [copy.path for copy in self.store.conflict_copies("corpus")], [f"corpus/2026/11/{self.copy_of_plan}"]
+            )
+
+        def test_a_pair_that_cannot_be_read_is_a_copy_that_is_not_compared(self) -> None:
+            """Covers: B150"""
+            self._put("inbox/plan.md", b"draft")
+            self._put(f"inbox/{self.copy_of_plan}", b"draft")
+
+            failures = [
+                ("read_bytes", StoreReadError("inbox/plan.md could not be read")),
+                ("read_bytes", FileNotFoundError("removed by the sync service since the folder was listed")),
+                ("is_evicted", FileNotFoundError("removed by the sync service since the folder was listed")),
+            ]
+            for method, error in failures:
+                with self.subTest(method=method, error=type(error).__name__):
+                    with mock.patch.object(self.store, method, side_effect=error):
+                        (copy,) = self.store.conflict_copies("inbox")
+
+                    self.assertEqual((copy.identical, copy.removable), (None, False))
+
+        def test_a_symlink_is_never_the_original_of_a_copy(self) -> None:
+            """Covers: B150"""
+            self._put(f"inbox/{self.copy_of_plan}", b"draft")
+            (self.root / "inbox" / "plan.md").symlink_to(self.root / "inbox" / self.copy_of_plan)
+
+            self.assertEqual(self.store.conflict_copies(), [])
