@@ -940,6 +940,14 @@ class DoctorTest(CommandTest):
         os.symlink(str(shutil.which("dirname")), programs / "dirname")
         self.environ["PATH"] = str(programs)
 
+    def a_git_that_refuses_with(self, reason: str) -> None:
+        """A PATH whose git ends every call with this reason. The real one words its refusal
+        differently from version to version and does not always name the path it could not use."""
+        self.no_git_on_this_machine()
+        git = Path(self.environ["PATH"]) / "git"
+        git.write_text(f"#!/bin/sh\nprintf '%s\\n' '{reason}' >&2\nexit 128\n", encoding="utf-8")
+        git.chmod(0o755)
+
     def test_a_store_folder_without_a_git_folder_is_no_repository(self) -> None:
         """Covers: B149"""
         self.set_up(calendar="none", tasks={"backend": "markdown"})
@@ -1027,12 +1035,13 @@ class DoctorTest(CommandTest):
     def test_gits_reason_is_printed_with_the_characters_that_draw_nothing_written_out(self) -> None:
         """Covers: B149"""
         self.set_up(calendar="none", tasks={"backend": "markdown"})
-        (self.store_root / ".git").write_text("gitdir: /sb-test-no\u200bwhere\U000e0041\n", encoding="utf-8")
+        (self.store_root / ".git").write_text("gitdir: /sb-test-nowhere\n", encoding="utf-8")
+        self.a_git_that_refuses_with("fatal: not a git repository: /sb-test-no\u200bwhere\U000e0041")
 
         code, line = self.store_git_line()
 
         self.assertEqual(code, cli.EXIT_PROBLEM)
-        self.assertIn("/sb-test-no<U+200B>where<U+E0041>", line)
+        self.assertIn("fatal: not a git repository: /sb-test-no<U+200B>where<U+E0041>", line)
 
     def test_the_git_directory_is_printed_with_the_characters_that_draw_nothing_written_out(self) -> None:
         """Covers: B149"""

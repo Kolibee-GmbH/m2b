@@ -86,6 +86,9 @@ class Fixture(unittest.TestCase):
         self.git("init", "-q", "-b", "main")
         self.git("config", "user.email", "alex@example.invalid")
         self.git("config", "user.name", "Alex")
+        # After a commit git tidies up in a process of its own, which would still write its lock
+        # while a test removes the repository.
+        self.git("config", "maintenance.auto", "false")
 
     def git(self, *arguments: str, when: datetime.datetime | None = None, email: str | None = None) -> None:
         environ = dict(self.git_env)
