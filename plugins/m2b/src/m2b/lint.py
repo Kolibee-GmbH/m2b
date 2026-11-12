@@ -247,13 +247,6 @@ def _index(store: Store, report: LintReport, index_path: str, files: list[str], 
             report.add(
                 "topic-heading", ACTION, index_path, f"a heading is no topic '### <name> (<word>, <word>)': {heading}"
             )
-        for heading in index.current_subheadings:
-            report.add(
-                "topic-heading",
-                ACTION,
-                index_path,
-                f"topics belong under ## Facts; one under ## Current is ignored: {heading}",
-            )
         for topic in index.topics:
             problem = _topic_problem(topic)
             if problem is not None:

@@ -7,9 +7,12 @@ section, headed ``### <name> (<word>, <word>)``: its facts come into a session o
 words is named, so what matters in one context stays out of the others. The words are the last
 parenthesised group, so a name may hold parentheses. Only ``#`` and ``##`` start a section, so a
 reader that knows nothing of topics reads their lines as facts and loses nothing. The current section
-is a plain list of what is going on. An item may end in ``(since YYYY-MM-DD)``, the day it started
-or was last confirmed, so a curation run can ask about one that went quiet; that suffix is read
-apart from the item's text. One that is no date stays in the text and is reported.
+is a list of what is going on, with topics under the same headings: an item before its first ``###``
+heading holds in every session, one under a topic comes in with that topic. Headings with one name,
+in either section, are one topic, and a word of any of them names it. An item may end in
+``(since YYYY-MM-DD)``, the day it started or was last confirmed, so a curation run can ask about one
+that went quiet; that suffix is read apart from the item's text. One that is no date stays in the
+text and is reported.
 """
 
 from __future__ import annotations
@@ -20,6 +23,9 @@ from dataclasses import dataclass, field
 
 FACTS_HEADING = "## Facts"
 CURRENT_HEADING = "## Current"
+# What a session reads above a topic's current items; in the file they stand under ``## Current``.
+CURRENT_IN_TOPIC = "#### Current"
+_TOPIC_SECTIONS = (FACTS_HEADING, CURRENT_HEADING)
 
 # Only top-level and second-level headings switch the section; deeper ones group lines in it.
 _SECTION_HEADING = re.compile(r"#{1,2} ")
@@ -48,7 +54,8 @@ class Topic:
 
 @dataclass(frozen=True)
 class TopicBlock:
-    """A topic's heading and lines, exactly as they stand in the file."""
+    """A topic as a session gets it: its heading and facts as they stand in the file, then its
+    current items under ``#### Current``. The topic holds the words of all its headings."""
 
     topic: Topic
     text: str
@@ -66,6 +73,18 @@ class TopicSplit:
 class CurrentLine:
     text: str
     since: str | None
+    # The topic it belongs to, None for an item that holds everywhere.
+    topic: str | None = None
+
+
+@dataclass
+class _TopicPart:
+    """One block of a topic in the file: its heading and the lines below it."""
+
+    topic: Topic
+    heading: str
+    is_current: bool
+    body: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -74,11 +93,10 @@ class MemoryIndex:
     current_lines: list[CurrentLine] = field(default_factory=list)
     unparsed_fact_lines: list[str] = field(default_factory=list)
     invalid_since: list[str] = field(default_factory=list)
+    # One per topic heading, so a topic that stands in both sections is here twice.
     topics: list[Topic] = field(default_factory=list)
-    # ``###`` headings in the facts section that are no topic; their facts hold everywhere.
+    # ``###`` headings in the facts or the current section that are no topic; their lines hold everywhere.
     unparsed_topic_headings: list[str] = field(default_factory=list)
-    # ``###`` headings under current, which has no topics.
-    current_subheadings: list[str] = field(default_factory=list)
 
     @property
     def current(self) -> list[str]:
@@ -94,16 +112,15 @@ class MemoryIndex:
             line = raw_line.removesuffix("\r")
             if is_section_heading(line):
                 section, topic = line.strip(), None
-            elif _GROUP_HEADING.match(line) and section == FACTS_HEADING:
+            elif _GROUP_HEADING.match(line) and section in _TOPIC_SECTIONS:
                 topic = parse_topic_heading(line)
                 if topic is not None:
                     index.topics.append(topic)
                 else:
                     index.unparsed_topic_headings.append(line)
-            elif _GROUP_HEADING.match(line) and section == CURRENT_HEADING:
-                index.current_subheadings.append(line)
             elif line.startswith("- ") and section == CURRENT_HEADING:
-                index.current_lines.append(_current_line(line, index.invalid_since))
+                name = topic.name if topic is not None else None
+                index.current_lines.append(_current_line(line, index.invalid_since, name))
             elif line.startswith("- ") and section == FACTS_HEADING:
                 parsed = parse_fact_line(line, topic.name if topic is not None else None)
                 if parsed is not None:
@@ -133,20 +150,25 @@ def is_section_heading(line: str) -> bool:
     return _SECTION_HEADING.match(line) is not None
 
 
+def ends_topic_block(line: str) -> bool:
+    """A heading of a topic's own level or above ends its block; a deeper one stays in it."""
+    return _BLOCK_END.match(line) is not None
+
+
 def current_line_text(line: str) -> str:
     """A current line's item without its ``(since ...)``, as ``MemoryIndex.current`` holds it."""
     return _current_line(line, []).text
 
 
-def _current_line(line: str, invalid: list[str]) -> CurrentLine:
+def _current_line(line: str, invalid: list[str], topic: str | None = None) -> CurrentLine:
     item = line[2:].strip()
     match = _SINCE.search(item)
     if match is None:
-        return CurrentLine(item, None)
+        return CurrentLine(item, None, topic)
     if not is_day(match.group("since").strip()):
         invalid.append(line)
-        return CurrentLine(item, None)
-    return CurrentLine(item[: match.start()].rstrip(), match.group("since").strip())
+        return CurrentLine(item, None, topic)
+    return CurrentLine(item[: match.start()].rstrip(), match.group("since").strip(), topic)
 
 
 def parse_fact_line(line: str, topic: str | None = None) -> FactLine | None:
@@ -166,39 +188,54 @@ def parse_topic_heading(line: str) -> Topic | None:
 
 
 def split_topics(text: str) -> TopicSplit:
-    """Takes each topic block out of the facts section and leaves every other line as it is.
+    """Takes each topic block out of the facts and the current section and leaves every other line as it is.
 
     What a session saw before topics existed (a title, other sections, lines the parser cannot
-    read) stays in the general view; only parsed topics come out.
+    read) stays in the general view; only parsed topics come out. Blocks under one name are one
+    topic, where the name first stands.
     """
     general: list[str] = []
-    blocks: list[TopicBlock] = []
+    parts: list[_TopicPart] = []
     section = ""
-    block: list[str] | None = None
-    topic: Topic | None = None
+    part: _TopicPart | None = None
     for segment in re.split(r"(?<=\n)", text):
         line = segment.rstrip("\r\n")
-        if block is not None and _BLOCK_END.match(line):
-            assert topic is not None
-            blocks.append(_block(topic, block))
-            block = topic = None
+        if ends_topic_block(line):
+            part = None
         if is_section_heading(line):
             section = line.strip()
-        heading = parse_topic_heading(line) if section == FACTS_HEADING and _GROUP_HEADING.match(line) else None
+        heading = parse_topic_heading(line) if section in _TOPIC_SECTIONS and _GROUP_HEADING.match(line) else None
         if heading is not None:
-            block, topic = [], heading
-        if block is not None:
-            block.append(segment)
+            part = _TopicPart(heading, segment, section == CURRENT_HEADING)
+            parts.append(part)
+        elif part is not None:
+            part.body.append(segment)
         else:
             general.append(segment)
-    if block is not None and topic is not None:
-        blocks.append(_block(topic, block))
-    return TopicSplit("".join(general), blocks)
+    by_name: dict[str, list[_TopicPart]] = {}
+    for part in parts:
+        by_name.setdefault(part.topic.name, []).append(part)
+    return TopicSplit("".join(general), [_topic_block(same_name) for same_name in by_name.values()])
 
 
-def _block(topic: Topic, segments: list[str]) -> TopicBlock:
-    """The blank lines that separate a block from the next heading are not part of it."""
-    while segments and not segments[-1].strip():
-        segments.pop()
-    text = "".join(segments)
-    return TopicBlock(topic, text if text.endswith("\n") else text + "\n")
+def _topic_block(parts: list[_TopicPart]) -> TopicBlock:
+    words = tuple(dict.fromkeys(word for part in parts for word in part.topic.words))
+    facts = [line for part in parts if not part.is_current for line in _body(part)]
+    current = [line for part in parts if part.is_current for line in _body(part)]
+    lines = [_whole_line(parts[0].heading), *facts]
+    if current:
+        lines += [f"{CURRENT_IN_TOPIC}\n", *current]
+    return TopicBlock(Topic(parts[0].topic.name, words), "".join(lines))
+
+
+def _body(part: _TopicPart) -> list[str]:
+    """A block's lines; the blank ones that separate it from the next heading are not part of it."""
+    lines = list(part.body)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return [_whole_line(line) for line in lines]
+
+
+def _whole_line(segment: str) -> str:
+    """The file's last line may lack its line end."""
+    return segment if segment.endswith("\n") else segment + "\n"

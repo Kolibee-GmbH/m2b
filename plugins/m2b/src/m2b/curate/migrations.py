@@ -23,6 +23,11 @@ the same across formats, so a machine with an older m2b still captures into a ne
 Format 2 adds ``## Earlier`` to fact files: ingest keeps a changed fact's old value there with the
 last day it held. Content of format 1 needs no change for it; the migration only raises the format,
 so an m2b that knows format 1, whose ingest and refresh do not know the section, stops curating.
+
+Format 3 lets current items stand under topics in ``## Current``, so they reach only the sessions
+that name the topic. Content of format 2 needs no change for it either; the migration only raises
+the format, so an m2b that knows format 2, whose lint reports such a heading as an error and whose
+sessions get every current item, stops curating.
 """
 
 from __future__ import annotations
@@ -50,6 +55,7 @@ def _unchanged(before: Snapshot, after: Snapshot) -> str | None:
 
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(2, "fact files may keep earlier values under ## Earlier", lambda store: None, _unchanged),
+    Migration(3, "current items may stand under topics in ## Current", lambda store: None, _unchanged),
 )
 
 

@@ -236,17 +236,36 @@ class TopicTest(LintFixture):
 
         self.assertEqual(self.codes(), [])
 
-    def test_a_heading_without_words_and_one_under_current_are_actions(self) -> None:
+    def test_a_well_formed_topic_under_current_is_fine(self) -> None:
         """Covers: B48"""
-        text = self.index_with("### Dana").replace(
-            "- Planning the trip", "### Trip (Porto, Lisbon)\n- Planning the trip"
+        self.write(
+            "memory/MEMORY.md", INDEX.replace("- Planning the trip", "### Trip (Porto, Lisbon)\n- Planning the trip")
         )
+
+        self.assertEqual(self.codes(), [])
+
+    def test_a_heading_without_words_is_an_action_in_either_section(self) -> None:
+        """Covers: B48"""
+        text = self.index_with("### Dana").replace("- Planning the trip", "### Trip\n- Planning the trip")
         self.write("memory/MEMORY.md", text)
 
         self.assertEqual(
             self.codes(),
             [("topic-heading", "action", "memory/MEMORY.md"), ("topic-heading", "action", "memory/MEMORY.md")],
         )
+
+    def test_a_topic_under_current_follows_the_rules_for_its_words_too(self) -> None:
+        """Covers: B48"""
+        self.write("memory/MEMORY.md", INDEX.replace("- Planning the trip", "### Trip (Porto)\n- Planning the trip"))
+
+        self.assertEqual(self.codes(), [("topic-words", "action", "memory/MEMORY.md")])
+
+    def test_the_size_of_a_topic_counts_its_current_items(self) -> None:
+        """Covers: B48"""
+        items = "".join(f"- Planning stage {number} of the trip to Porto and Lisbon\n" for number in range(60))
+        self.write("memory/MEMORY.md", INDEX + f"\n### Trip (Porto, Lisbon)\n{items}")
+
+        self.assertEqual(self.codes(), [("distillate-size", "info", "memory/MEMORY.md")])
 
     def test_words_that_would_match_too_much_or_never_are_actions(self) -> None:
         """Covers: B48"""

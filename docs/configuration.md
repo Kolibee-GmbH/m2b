@@ -71,7 +71,7 @@ leaves nothing to clean up.
 
 ```json
 {
-  "format": 2,
+  "format": 3,
   "tasks": {"backend": "apple-reminders", "list": "Inbox"},
   "curating_machine": "b41c-tower",
   "journal_since": "2026-11-01"

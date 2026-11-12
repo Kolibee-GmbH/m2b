@@ -350,6 +350,19 @@ class DistillateTopicsTest(HookFixture):
 
         self.assertEqual(self.body(out), f"{GENERAL}{TOPIC_LINE}Acme Ltd, Riverside Choir.\n{ACME_BLOCK}")
 
+    def test_a_current_item_under_a_topic_stays_out_until_the_project_path_names_the_topic(self) -> None:
+        """Covers: B136"""
+        export = "- Building the Acme export (since 2026-11-02)\n"
+        self.write("memory/MEMORY.md", f"{TOPICS}\n### Acme Ltd (Acme, Kim Lee)\n{export}")
+        names = f"{GENERAL}\n{TOPIC_LINE}Acme Ltd, Riverside Choir.\n"
+
+        _, elsewhere, _ = self.hook("distillate", CLAUDE_PROJECT_DIR=self.elsewhere)
+        _, at_acme, _ = self.hook("distillate", CLAUDE_PROJECT_DIR=str(self.home / "tasks" / "kim-lee-export"))
+
+        self.assertEqual(self.body(elsewhere), names)
+        self.assertNotIn("Acme export", elsewhere)
+        self.assertEqual(self.body(at_acme), f"{names}{ACME_BLOCK}#### Current\n{export}")
+
     def test_the_owners_home_folder_does_not_count_as_naming_a_topic(self) -> None:
         home = self.home / "acme"
         project = home / "code" / "lumen"

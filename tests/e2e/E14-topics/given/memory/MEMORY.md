@@ -7,3 +7,6 @@
 ## Current
 
 - Planning the trip to Porto
+
+### Riverside Choir (Riverside Choir, Petra Lang)
+- Rehearsing for the spring concert

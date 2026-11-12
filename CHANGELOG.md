@@ -9,6 +9,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- A current item can stand under a topic. In `## Current` of the distillate, a heading
+  `### <name> (<word>, <word>)` now works as it does under `## Facts`: the items below it stay out
+  of the session start and come in with the topic's facts, where the project folder's path or a
+  prompt names one of its words. Until now every line under `## Current` reached every session, and
+  lint reported such a heading as an error. Curation does not write these headings yet, and puts a
+  new current item above the first of them; one you write yourself holds. The store gets format 3
+  at the curating machine's next run, and nothing in `memory/` changes; update the curating machine
+  first. A machine on an older m2b keeps capturing and gives every session every current item until
+  it is updated ([Store format](docs/store-format.md#memory)).
 - [Evals](docs/evals.md) shows what m2b does to Claude's answers, measured: the score of each of
   the eight eval cases with m2b and without, and the model, the Claude Code version and the day of
   the run. Until now the scores a release was checked with were written down nowhere.

@@ -1,9 +1,9 @@
 {
  "store_files": {
-  "memory/MEMORY.md": "# Memory\n\n## Facts\n\n- Dana's birthday is on 3 March (dana.md)\n- Alex prefers green tea in the morning (alex.md)\n\n### Acme Ltd (Acme Ltd, Acme, Kim Lee)\n- Kim Lee is the IT lead at Acme Ltd and wants a status mail every Friday (kim-lee.md)\n\n## Current\n\n- Planning the trip to Porto\n",
+  "memory/MEMORY.md": "# Memory\n\n## Facts\n\n- Dana's birthday is on 3 March (dana.md)\n- Alex prefers green tea in the morning (alex.md)\n\n### Acme Ltd (Acme Ltd, Acme, Kim Lee)\n- Kim Lee is the IT lead at Acme Ltd and wants a status mail every Friday (kim-lee.md)\n\n## Current\n\n- Planning the trip to Porto\n\n### Riverside Choir (Riverside Choir, Petra Lang)\n- Rehearsing for the spring concert\n",
   "memory/alex.md": "# Alex\n\n- Prefers green tea in the morning.\n\n## Evidence\n\n- [[20261101T080000Z-cli-0a1b.md]]\n",
   "corpus/2026/11/20261101T080000Z-cli-0a1b.md": "---\ncreated: 2026-11-01T09:00:00+01:00\nsource: cli\nfacts_filed: true\ncurated: true\n---\nAlex prefers green tea in the morning\n<!-- m2b:curation -->\nfiled: fact alex.md\n",
-  "store.json": "{\n  \"format\": 2,\n  \"tasks\": {\"backend\": \"markdown\"},\n  \"curating_machine\": \"sb-test-e2e\",\n  \"journal_since\": \"2026-11-01\"\n}\n",
+  "store.json": "{\n  \"format\": 3,\n  \"tasks\": {\"backend\": \"markdown\"},\n  \"curating_machine\": \"sb-test-e2e\",\n  \"journal_since\": \"2026-11-01\"\n}\n",
   "profile.json": "{\n  \"version\": 1,\n  \"owner\": \"Alex\",\n  \"language\": \"en\"\n}\n",
   "state/core/candidates.json": "{\n  \"format\": 1,\n  \"candidates\": {}\n}\n"
  },

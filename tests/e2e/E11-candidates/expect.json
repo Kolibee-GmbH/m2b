@@ -1,6 +1,6 @@
 {
   "store_files": {
-    "store.json": "{\n  \"format\": 2,\n  \"tasks\": {\"backend\": \"markdown\"},\n  \"curating_machine\": \"sb-test-e2e\",\n  \"journal_since\": \"2026-11-01\"\n}\n",
+    "store.json": "{\n  \"format\": 3,\n  \"tasks\": {\"backend\": \"markdown\"},\n  \"curating_machine\": \"sb-test-e2e\",\n  \"journal_since\": \"2026-11-01\"\n}\n",
     "inbox/20261107T020000Z-candidate-c3c3.md": "---\ncreated: 2026-11-07T03:00:00+01:00\nsource: candidate\nfrom_candidate: cccc00000003\n---\nRobin lives in Lyon\n",
     "profile.json": "{\n  \"version\": 1,\n  \"owner\": \"Alex\",\n  \"language\": \"en\"\n}\n"
   },

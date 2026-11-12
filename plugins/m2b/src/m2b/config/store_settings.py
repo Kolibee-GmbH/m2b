@@ -12,7 +12,7 @@ from m2b.config.json_file import read_store_json_object, write_store_json_object
 from m2b.store.base import Store
 
 STORE_SETTINGS_FILE_NAME = "store.json"
-KNOWN_STORE_FORMAT = 2
+KNOWN_STORE_FORMAT = 3
 
 _FORMAT_ONE_KEYS = frozenset({"format", "tasks", "curating_machine", "journal_since"})
 _FORMAT_ONE_TASKS_KEYS = frozenset({"backend", "list", "timeout_seconds"})
@@ -25,6 +25,7 @@ _FORMAT_ONE_TASKS_KEYS = frozenset({"backend", "list", "timeout_seconds"})
 KEYS_BY_FORMAT: dict[int, tuple[frozenset[str], frozenset[str]]] = {
     1: (_FORMAT_ONE_KEYS, _FORMAT_ONE_TASKS_KEYS),
     2: (_FORMAT_ONE_KEYS, _FORMAT_ONE_TASKS_KEYS),
+    3: (_FORMAT_ONE_KEYS, _FORMAT_ONE_TASKS_KEYS),
 }
 
 TASKS_BACKENDS = ("apple-reminders", "markdown")

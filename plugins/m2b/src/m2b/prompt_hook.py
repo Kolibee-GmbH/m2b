@@ -1,4 +1,4 @@
-"""The prompt hook: before every prompt, the facts of each topic the prompt names (B49).
+"""The prompt hook: before every prompt, the facts and current items of each topic the prompt names (B49).
 
 Claude Code runs it on ``UserPromptSubmit`` and adds what it prints as ``additionalContext``. A
 topic comes in when one of its words is in the prompt or in the project folder's path, once per

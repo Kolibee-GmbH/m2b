@@ -52,4 +52,6 @@ when a run happens.
 Update the curating machine first. A machine whose m2b knows an older store format than the store
 has reads the store and captures into it, but refuses to curate it and says to update m2b; its
 `m2b doctor` names the format as the problem. The curating machine, once updated, migrates the
-store at the start of its next run.
+store at the start of its next run. Until the other machine is updated, its sessions get what its
+own version knows: beside a store of format 3, every current item, also one that stands under a
+topic.

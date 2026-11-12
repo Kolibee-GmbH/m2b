@@ -1,5 +1,5 @@
 {
-  "description": "E21 earlier values: a store of format 1 gets format 2 at the next curation run, and nothing in memory/ changes, because format 2 only adds `## Earlier` to fact files. The run records the step migrate-2 and succeeds.",
+  "description": "E21 an older store: a store of format 1 gets format 3 at the next curation run, one step per format, and nothing in memory/ changes, because format 2 only adds `## Earlier` to fact files and format 3 only lets current items stand under topics. The run records the steps migrate-2 and migrate-3 and succeeds.",
   "steps": [
     {
       "run": [

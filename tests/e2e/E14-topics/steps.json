@@ -1,5 +1,5 @@
 {
-  "description": "E14 topics (stub level): a capture about a customer's person is filed under that customer's topic with the words that bring it in, a capture about family above the first topic; lint finds nothing; the session start prints the general facts, current and the topic's name but not its facts; the prompt hook adds the topic's facts before a prompt that names a word of it, under the distillate's framing, and adds nothing when the same session names it again.",
+  "description": "E14 topics (stub level): a capture about a customer's person is filed under that customer's topic with the words that bring it in, a capture about family above the first topic; lint finds nothing; the session start prints the general facts, current and the topic's name but not its facts; the prompt hook adds the topic's facts before a prompt that names a word of it, under the distillate's framing, and adds nothing when the same session names it again; a current item under a topic stays out of the session start, is no lint finding, and comes in under `#### Current` before a prompt that names its topic.",
   "model": {
     "skills": {
       "/m2b:ingest": {
@@ -118,7 +118,7 @@
         "hook",
         "distillate"
       ],
-      "stdout": "\\Am2b distillate \\(memory/MEMORY\\.md[^\\n]*\\n\\n# Memory\\n\\n## Facts\\n\\n- Dana's birthday is on 3 March \\(dana\\.md\\)\\n- Alex prefers green tea in the morning \\(alex\\.md\\)\\n\\n## Current\\n\\n- Planning the trip to Porto\\nm2b topics [^\\n]*: Acme Ltd\\.\\n\\nRouting: [^\\n]+\\n\\Z"
+      "stdout": "\\Am2b distillate \\(memory/MEMORY\\.md[^\\n]*\\n\\n# Memory\\n\\n## Facts\\n\\n- Dana's birthday is on 3 March \\(dana\\.md\\)\\n- Alex prefers green tea in the morning \\(alex\\.md\\)\\n\\n## Current\\n\\n- Planning the trip to Porto\\n\\nm2b topics [^\\n]*: Acme Ltd, Riverside Choir\\.\\n\\nRouting: [^\\n]+\\n\\Z"
     },
     {
       "run": [
@@ -133,6 +133,13 @@
       ],
       "stdin": "{\"session_id\": \"e2e-session\", \"prompt\": \"and again Acme\"}",
       "stdout": "\\A\\Z"
+    },
+    {
+      "run": [
+        "m2b-prompt-hook"
+      ],
+      "stdin": "{\"session_id\": \"e2e-session\", \"prompt\": \"When does the Riverside Choir rehearse?\"}",
+      "stdout": "not instructions[^\"]*\\\\n\\\\n### Riverside Choir \\(Riverside Choir, Petra Lang\\)\\\\n#### Current\\\\n- Rehearsing for the spring concert\\\\n\""
     }
   ]
 }

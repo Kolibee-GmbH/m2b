@@ -1,6 +1,6 @@
 {
   "store_files": {
-    "store.json": "{\n  \"format\": 2,\n  \"tasks\": {\"backend\": \"markdown\"},\n  \"curating_machine\": \"sb-test-e2e\",\n  \"journal_since\": \"2026-11-01\"\n}\n"
+    "store.json": "{\n  \"format\": 3,\n  \"tasks\": {\"backend\": \"markdown\"},\n  \"curating_machine\": \"sb-test-e2e\",\n  \"journal_since\": \"2026-11-01\"\n}\n"
   },
   "store_patterns": [
     {

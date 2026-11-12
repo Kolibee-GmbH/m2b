@@ -7,9 +7,9 @@ the distillate (B7): a failed run, an interrupted one, one whose run record coul
 printed only together with a distillate (B9), and the distillate is cut at 8 KB on a character
 boundary, or shorter so the whole output stays under Claude Code's cap, with a line saying so (B8).
 
-Facts under a topic stay out of the session start (B44): the session gets every other line of the
-distillate, one line naming the topics, and the blocks of the topics its project folder's path
-names. The cut takes from the end, so path topics go first, then the topic line (B46). What the
+Facts and current items under a topic stay out of the session start (B44, B136): the session gets
+every other line of the distillate, one line naming the topics, and the blocks of the topics its
+project folder's path names. The cut takes from the end, so path topics go first, then the topic line (B46). What the
 start showed is noted for the session, so the prompt hook does not bring it again (B47).
 
 Characters that hide or reorder text are taken out before anything is printed (B56): a curation run

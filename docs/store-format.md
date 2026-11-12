@@ -84,6 +84,9 @@ copy when the format needs one (HEIC as JPEG on macOS), and a sidecar `<stem>.md
 ## Current
 
 - Planning the trip to Porto (since 2026-10-02)
+
+### Acme Ltd (Acme, Kim Lee)
+- Building the export for Acme (since 2026-11-02)
 ```
 
 A facts line is `- <statement> (<fact file>)`. A fact file such as `memory/dana.md` holds the
@@ -101,12 +104,19 @@ reader, and lint reports one that is no date.
 Facts before the first `###` heading hold everywhere: every session starts with them. A topic is a
 group inside `## Facts`, headed `### <name> (<word>, <word>)`; the words are the last
 parenthesised group, two to five of them, each 3 to 40 characters, and the name at most 60. A
-session start lists the topics by name and brings in a topic's facts only when one of its words is
+session start lists the topics by name and brings in a topic's facts and current items only when one of its words is
 in the project folder's path, or, before a prompt, when the prompt names one; a word matches whole
 and regardless of case. A new fact that holds everywhere goes
 above the first `###`, because a line added at the end of `## Facts` would land in the last topic.
 A reader that knows nothing of topics reads their lines as ordinary facts. What every session
 starts with aims at 2 KB, and so does each topic; lint reports more.
+
+`## Current` holds topics under the same headings: a current item above its first `###` heading
+reaches every session, one under a topic comes in with that topic, below its facts under
+`#### Current`. Headings with the same name, in either section, are one topic, and a word of any of
+them names it; a topic may stand under `## Current` alone. A new item that holds everywhere goes
+above the first `###` there, as a fact does. When a "Still current?" answer takes a topic's last
+item out, its heading under `## Current` goes with it, unless another line is left below it.
 
 ## Tasks
 
@@ -218,3 +228,4 @@ capturing into a newer store.
 |---|---|---|
 | 1 | builds before 0.1.0 | dated facts and current items, topics in the distillate, a fact that ends on a day in a file of its own |
 | 2 | 0.1.0 | a changed fact's old value under `## Earlier` in its fact file; the migration changes nothing, so an m2b that knows only format 1 stops curating |
+| 3 | 0.4.0 | current items under topics in `## Current`; the migration changes nothing, so an m2b that knows only format 2, whose lint reports such a heading, stops curating |

@@ -30,6 +30,8 @@ INDEX = """# Memory
 - Planning the trip to Porto (since 2026-10-02)
 """
 PORTO = QuietCurrent("Planning the trip to Porto", "2026-10-02")
+ACME_EXPORT = QuietCurrent("Building the Acme export", "2026-10-01")
+ACME_UNDER_CURRENT = "\n### Acme Ltd (Acme, Kim Lee)\n- Building the Acme export (since 2026-10-01)\n"
 LIST = "markdown:"
 
 
@@ -49,6 +51,13 @@ class CurrentCheckTest(unittest.TestCase):
 
     def questions(self) -> list[Task]:
         return self.tasks.items(marker=markers.CURRENT, include_completed=True)
+
+    def drop(self, item: QuietCurrent) -> None:
+        """Asks about ``item``, answers with a drop and lets the next run apply it."""
+        ask(self.store, self.tasks, [item], PREFIX, task_list=LIST)
+        [question] = [task for task in self.questions() if not task.dropped]
+        self.tasks.drop(question.id)
+        settle(self.store, self.tasks, TODAY, task_list=LIST)
 
     def test_a_quiet_item_becomes_one_question_however_often_it_is_asked(self) -> None:
         """Covers: B42"""
@@ -134,6 +143,46 @@ class CurrentCheckTest(unittest.TestCase):
         settle(self.store, self.tasks, TODAY, task_list=LIST)
 
         self.assertNotIn("Porto", self.index().read_text(encoding="utf-8"))
+
+    def test_a_topics_last_item_dropped_takes_its_heading_under_current_with_it(self) -> None:
+        """Covers: B137"""
+        lumen = "\n### Lumen (Lumen, Ben Ortiz)\n- Auditing Lumen's backups (since 2026-11-10)\n"
+        for after_acme in (lumen, ""):
+            with self.subTest(after_acme=after_acme):
+                self.index().write_text(INDEX + ACME_UNDER_CURRENT + after_acme, encoding="utf-8")
+                self.drop(ACME_EXPORT)
+
+                self.assertEqual(self.index().read_text(encoding="utf-8"), INDEX + after_acme)
+
+    def test_a_topic_that_keeps_an_item_keeps_its_heading_and_the_one_under_facts_stays(self) -> None:
+        """Covers: B137"""
+        facts = "### Acme Ltd (Acme, Kim Lee)\n- Kim Lee leads Acme's IT (kim-lee.md)\n\n"
+        index = INDEX.replace("## Current", f"{facts}## Current")
+        other = "- Writing the Acme offer (since 2026-11-12)\n"
+        self.index().write_text(index + ACME_UNDER_CURRENT + other, encoding="utf-8")
+        self.drop(ACME_EXPORT)
+
+        self.assertEqual(self.index().read_text(encoding="utf-8"), f"{index}\n### Acme Ltd (Acme, Kim Lee)\n{other}")
+
+    def test_a_ticked_question_about_an_item_under_a_topic_dates_it_where_it_stands(self) -> None:
+        """Covers: B137"""
+        self.index().write_text(INDEX + ACME_UNDER_CURRENT, encoding="utf-8")
+        ask(self.store, self.tasks, [ACME_EXPORT], PREFIX, task_list=LIST)
+        [question] = self.questions()
+        self.tasks.complete(question.id)
+
+        settle(self.store, self.tasks, TODAY, task_list=LIST)
+
+        self.assertEqual(
+            self.index().read_text(encoding="utf-8"),
+            INDEX + ACME_UNDER_CURRENT.replace("2026-10-01", "2026-11-20"),
+        )
+
+    def test_a_heading_that_is_no_topic_stays_when_its_last_item_goes(self) -> None:
+        self.index().write_text(INDEX.replace("- Planning", "### Trips\n- Planning"), encoding="utf-8")
+        self.drop(PORTO)
+
+        self.assertTrue(self.index().read_text(encoding="utf-8").endswith("### Trips\n"))
 
     def test_an_answer_applies_to_every_line_with_the_item(self) -> None:
         twice = INDEX + "- Planning the trip to Porto (since 2026-09-01)\n"

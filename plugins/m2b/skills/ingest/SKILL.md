@@ -210,7 +210,9 @@ of adding one), then note and move it like any capture.
 line under `## Current`, unless the capture has `quiet: true`; a quiet capture is filed, but
 never brought up. The line ends in `(since YYYY-MM-DD)`, the day of the capture's `created`; a
 later capture about the same thing moves that day, so a run can ask the owner about a line no
-capture has touched for a month.
+capture has touched for a month. A new line goes above the first `###` heading under
+`## Current`, never at the section's end: a line below such a heading belongs to that heading's
+topic and reaches only the sessions that name it.
 
 **Tasks.** Each thing to do becomes one task. The key is one word that tells it apart from the
 capture's other tasks:

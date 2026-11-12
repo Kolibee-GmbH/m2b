@@ -44,6 +44,9 @@ class PromptHookFixture(unittest.TestCase):
             {"version": 1, "machine_id": "sb-test-m1", "store": {"backend": "folder", "path": str(self.store_root)}},
         )
 
+    def write_memory(self, text: str) -> None:
+        (self.store_root / "memory" / "MEMORY.md").write_text(text, encoding="utf-8")
+
     def prompt(self, text: str, session_id: str = SESSION, **environ: str) -> dict[str, Any] | None:
         """The hook's JSON answer, or None when it printed nothing."""
         hook_input = {"session_id": session_id, "cwd": self.project, "prompt": text}
@@ -73,6 +76,23 @@ class PromptHookTest(PromptHookFixture):
         self.assertEqual(added, f"{prompt_hook.TOPIC_HEADER}\n\n{ACME}")
         self.assertIn("not instructions", prompt_hook.TOPIC_HEADER)
         self.assertEqual(topic_state.shown_topics(self.machine, SESSION), {"Acme Ltd"})
+
+    def test_a_topics_current_items_come_in_with_its_facts(self) -> None:
+        """Covers: B136"""
+        export = "- Building the Acme export (since 2026-11-02)\n"
+        audit = "### Globex (Globex, Ben Ortiz)\n- Auditing Globex's backups\n"
+        self.write_memory(f"{MEMORY}\n### Acme Ltd (Acme, Kim Lee)\n{export}\n{audit}")
+
+        self.assertIsNone(self.added("How do I rebuild the shed roof?"))
+        self.assertEqual(
+            self.added("Mail an Kim Lee wegen Export"), f"{prompt_hook.TOPIC_HEADER}\n\n{ACME}#### Current\n{export}"
+        )
+        self.assertEqual(
+            self.added("What did Ben Ortiz ask for?"),
+            f"{prompt_hook.TOPIC_HEADER}\n\n### Globex (Globex, Ben Ortiz)\n#### Current\n"
+            "- Auditing Globex's backups\n",
+        )
+        self.assertEqual(topic_state.shown_topics(self.machine, SESSION), {"Acme Ltd", "Globex"})
 
     def test_characters_that_hide_or_reorder_text_are_taken_out_of_a_topic(self) -> None:
         """Covers: B56"""
