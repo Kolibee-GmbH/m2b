@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from m2b import cli, launcher, paths, topic_state
+from m2b import addons, cli, launcher, paths, topic_state
 from m2b.config import machine
 from m2b.curate import machine_state
 from m2b.hooks import (
@@ -702,20 +702,22 @@ class RunRecordTest(unittest.TestCase):
 class HooksManifestTest(unittest.TestCase):
     manifest = Path(__file__).resolve().parents[1] / "hooks" / "hooks.json"
 
-    def test_session_start_runs_the_core_hooks_then_the_addons_through_the_plugin_commands(self) -> None:
+    def test_session_start_runs_the_core_hooks_then_only_commands_of_the_addons(self) -> None:
+        """Which command an add-on runs there is for its own suite to check: the core stands without it."""
         manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
         hooks = manifest["hooks"]["SessionStart"]
         commands = [hook["command"] for entry in hooks for hook in entry["hooks"]]
 
         self.assertEqual(
-            commands,
+            commands[:3],
             [
                 '"${CLAUDE_PLUGIN_ROOT}"/bin/m2b hook distillate',
                 '"${CLAUDE_PLUGIN_ROOT}"/bin/m2b hook nudge',
                 '"${CLAUDE_PLUGIN_ROOT}"/bin/m2b hook launcher',
-                '"${CLAUDE_PLUGIN_ROOT}"/bin/m2b-worklog hook session-start',
             ],
         )
+        of_an_addon = tuple(f'"${{CLAUDE_PLUGIN_ROOT}}"/bin/m2b-{name} ' for name in addons.addon_names())
+        self.assertEqual([command for command in commands[3:] if not command.startswith(of_an_addon)], [])
         self.assertTrue(all(hook["type"] == "command" for entry in hooks for hook in entry["hooks"]))
         self.assertEqual(manifest["modules"], ["./register.tsx"])
 

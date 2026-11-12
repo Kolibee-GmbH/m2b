@@ -9,6 +9,9 @@ Claude Code writes into a prompt exist once. The other exception is the prompt h
 command instead of loading every command; it never writes to the store. The model never touches the store except
 through a fenced run that may call only the commands its step lists.
 
+The core needs no add-on. Every `scripts/check` proves it: the core's unit tests, and the end-to-end
+scenarios that turn no add-on on, run in a copy of the plugin without the add-on's parts.
+
 ```mermaid
 flowchart LR
   skills[Skills: capture, search, todos, rediscover, setup] --> cli[m2b command]
@@ -31,10 +34,10 @@ flowchart LR
 | `plugins/m2b/skills/` | one folder per skill; the ones a curation run starts (`ingest`, `refresh`, `sort-facts`, `lint`, `worklog-verdict`) say so in their description |
 | `plugins/m2b/hooks/` | `hooks.json` (session-start commands, the prompt hook and the band mod), `register.tsx` and its helpers (the band) |
 | `plugins/m2b/recorder/` | the worklog's herdr recorder, copied out of the plugin when set up |
-| `plugins/m2b/tests/` | core tests, with `tests/band/` the band's; `tests/addons/<add-on>/` the add-ons' |
+| `plugins/m2b/tests/` | core tests, with `tests/band/` the band's; `tests/addons/<add-on>/` the add-ons', which also hold what an add-on has to keep of the core's rules, so that the core's tests read no file of an add-on |
 | `tests/e2e/` | end-to-end scenarios against a temporary store |
 | `tests/glean/` | an invented day of typed prompts, which `scripts/glean-eval` asks a model about |
-| `scripts/` | `check` (the whole proof), `e2e`, `trigger-check`, `glean-eval`, `no-model`, `readme-images`, `evals-page` |
+| `scripts/` | `check` (the whole proof), `e2e`, `trigger-check`, `glean-eval`, `no-model`, `readme-images`, `evals-page`; `repo_tools/core_alone.py` lists what in the plugin's folder belongs to each add-on and runs the core without it |
 
 ## Three rules the code keeps
 

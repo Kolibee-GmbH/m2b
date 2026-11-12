@@ -905,12 +905,14 @@ class AddonStepTest(RunnerTest):
         self.assertEqual((record.findings, record.addons), ((), ()))
         self.assertEqual(self.review_tasks(), [])
 
-    def test_the_real_addon_steps_are_this_plugins_own_commands(self) -> None:
+    def test_each_real_addon_step_names_a_slot_and_a_command_in_this_plugins_bin_folder(self) -> None:
+        """That the command is there is for the add-on's suite to check: the core stands without it."""
         steps = {addon.name: addon.step for addon in addons.ADDONS if addon.step}
         self.assertEqual(set(steps), {"worklog"})
         for step in steps.values():
             assert step is not None
-            self.assertTrue((launcher.PLUGIN_ROOT / step.command[0]).is_file(), step.command)
+            self.assertIn(step.slot, addons.CURATION_SLOTS)
+            self.assertEqual(PurePosixPath(step.command[0]).parent, PurePosixPath("bin"), step.command)
 
 
 class JournalStepTest(RunnerTest):

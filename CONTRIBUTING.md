@@ -24,6 +24,19 @@ and mypy, or both tools on your PATH. `shellcheck` and `claude` are used when in
 `CI=true` a missing `claude` ends the run at once, because the manifest and band checks need it.
 The workflow installs the Claude Code version the README names as the minimum.
 
+The stage `core-alone` proves that the core stands without its add-ons. It copies `plugins/m2b`
+into a temporary folder without any part of an add-on, runs the core's unit tests in the copy and
+then the end-to-end scenarios that turn no add-on on. A core test that reads an add-on's file, or
+a core command that needs one, passes in the checkout, where the add-on is always present, and
+fails there. A core module that imports an add-on fails there too; in the checkout only
+`plugins/m2b/tests/test_package_boundaries.py` says so. The parts of each add-on are listed in `ADDON_PARTS`
+(`scripts/repo_tools/core_alone.py`), and a new one goes into that list: a test fails for a path
+or hook command that carries the add-on's name and is missing there, and for a new entry at the
+top of the plugin's folder until it is named as the core's or as an add-on's. What an add-on has
+to keep of the core's rules (its skills, its hook command, its step in the core's catalogue, what
+it imports from the core) is tested in its own suite, `plugins/m2b/tests/addons/<add-on>/`, which
+may use the fixtures of the core's tests. The core's tests use nothing of an add-on.
+
 ## Behavior coverage
 
 Each behavior the product promises has an ID (B1 and up, X1 and up) in the behavior

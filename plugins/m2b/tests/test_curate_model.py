@@ -113,7 +113,9 @@ class FencedCommandTest(unittest.TestCase):
         )
 
 
-class ModelCommandTest(test_commands.CommandTest):
+class ModelCommandFixture(test_commands.CommandTest):
+    """``m2b curate model`` with the scripted model in ``claude``'s place; an add-on's suite uses it too."""
+
     def setUp(self) -> None:
         super().setUp()
         self.set_up()
@@ -136,6 +138,8 @@ class ModelCommandTest(test_commands.CommandTest):
     def curate_model(self, *arguments: str) -> tuple[int, str, str]:
         return self.run_command("curate", "model", *arguments)
 
+
+class ModelCommandTest(ModelCommandFixture):
     def test_the_curation_model_and_turn_limit_come_from_the_config(self) -> None:
         raw = json.loads(self.machine.config_file.read_text(encoding="utf-8"))
         raw["curation"] = {"model": "sonnet", "max_turns": 2}
@@ -194,14 +198,6 @@ class ModelCommandTest(test_commands.CommandTest):
         self.assertNotIn(Path(call["cwd"]).resolve(), [Path.cwd().resolve(), self.store_root.resolve()])
         self.assertEqual(call["environment"]["M2B_CURATION_RUN"], "1")
         self.assertRegex(call["environment"]["M2B_RUN_TOKEN"], r"^[0-9a-f]{32}$")
-
-    def test_an_addon_skill_runs_from_this_plugin_alone(self) -> None:
-        code, _, err = self.curate_model("--skill", "m2b:worklog-verdict", "--allow", "Read")
-
-        self.assertEqual(code, cli.EXIT_OK, err)
-        arguments = self.calls()[0]["arguments"]
-        plugin_dirs = [arguments[i + 1] for i, argument in enumerate(arguments) if argument == "--plugin-dir"]
-        self.assertEqual(plugin_dirs, [str(launcher.PLUGIN_ROOT)])
 
     def test_an_unknown_skill_or_one_of_a_plugin_not_loaded_exits_2(self) -> None:
         for skill in ("m2b:nothing-here", "worklog:verdict", "search", "m2b:../search"):
