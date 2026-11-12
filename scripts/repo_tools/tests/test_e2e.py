@@ -176,6 +176,15 @@ class ScenarioTest(unittest.TestCase):
 
         self.assertTrue(result.passed, result.problems)
 
+    def test_store_in_an_argument_is_the_scenarios_store_folder(self) -> None:
+        write = "import pathlib, sys\n(pathlib.Path(sys.argv[1]) / 'inbox/seen.md').write_text('found')\n"
+        self._given_steps([{"run": [sys.executable, "-c", write, "{store}"]}])
+        self._expect({"inbox/note.md": "Dana likes maps.\n", "inbox/seen.md": "found"})
+
+        result = e2e.run_scenario(self.scenario, self.environ)
+
+        self.assertTrue(result.passed, result.problems)
+
     def test_a_scenario_runs_the_commands_of_the_plugin_folder_it_is_given(self) -> None:
         other = Path(self._temp.name) / "other-plugin"
         write = (

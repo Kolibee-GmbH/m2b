@@ -112,6 +112,14 @@ class ParseTest(unittest.TestCase):
         with self.assertRaises(InvalidConfigError):
             machine.parse_machine_config(_config(curation={"read_sessions": "yes"}), HOME)
 
+    def test_committing_a_run_is_on_until_the_config_turns_it_off(self) -> None:
+        """Covers: B139"""
+        self.assertTrue(machine.parse_machine_config(_config(), HOME).curation.git_commit)
+        config = machine.parse_machine_config(_config(curation={"git_commit": False}), HOME)
+        self.assertFalse(config.curation.git_commit)
+        with self.assertRaises(InvalidConfigError):
+            machine.parse_machine_config(_config(curation={"git_commit": "no"}), HOME)
+
     def test_the_curation_model_and_turn_limit_default_to_a_small_model_and_100(self) -> None:
         config = machine.parse_machine_config(_config(), HOME)
         self.assertEqual((config.curation.model, config.curation.max_turns), ("haiku", 100))

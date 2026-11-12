@@ -17,7 +17,7 @@ schedule can start it too, for days without a session ([On a schedule](#on-a-sch
 
 ```mermaid
 flowchart LR
-  pre[Preflight] --> migrate[Migrate] --> harvest[Harvest] --> glean[Glean] --> before[before_ingest] --> ingest[Ingest] --> afteri[after_ingest] --> refresh[Refresh] --> sort[Sort] --> lint[Lint] --> journal[Journal] --> after[after_journal] --> proposals[Proposals task] --> review[Review task]
+  pre[Preflight] --> migrate[Migrate] --> harvest[Harvest] --> glean[Glean] --> before[before_ingest] --> ingest[Ingest] --> afteri[after_ingest] --> refresh[Refresh] --> sort[Sort] --> lint[Lint] --> journal[Journal] --> after[after_journal] --> proposals[Proposals task] --> review[Review task] --> commit[Commit]
 ```
 
 | Step | Done by | What it does |
@@ -33,11 +33,12 @@ flowchart LR
 | Journal | code | adds the tasks you completed to the month's `corpus/YYYY/MM/YYYYMM-done.md` |
 | Proposals task | code | one task in your list while proposals from your sessions wait for your answer, completed once none waits |
 | Review task | code | one task in your list when something needs you |
+| Commit | code, only when the store folder is a git repository | one git commit of what changed in the store while the run ran ([A commit per run](#a-commit-per-run)) |
 
 `before_ingest`, `after_ingest` and `after_journal` are where an add-on can hook in; the worklog
 runs before ingest. A step that fails is reported in the review task and the run goes on. When
-only an add-on's step, the reading of the sessions or the proposals task failed, the run still
-counts as succeeded: the inbox is filed and the next run is due at the usual time, so neither an
+only an add-on's step, the reading of the sessions, the proposals task or the commit failed, the
+run still counts as succeeded: the inbox is filed and the next run is due at the usual time, so neither an
 add-on that keeps failing nor a transcript m2b cannot read holds back the core.
 
 Each model step runs fenced: `claude -p` from an empty folder, with `--setting-sources project`,
@@ -63,6 +64,47 @@ step:
   text (bidirectional controls, zero-width spaces, tag characters) is undone and fails; a capture
   still in the inbox is marked so the next run files its facts again. The session-start and prompt
   hooks remove the same characters before the distillate reaches a session.
+
+## A commit per run
+
+A run rewrites `memory/` and moves captures by itself. If you keep the store in a git repository,
+each run ends with one commit, and `git revert <commit>` takes that run back. m2b does this when
+the store folder itself is the top of a git work tree (you ran `git init` in the store folder) and
+git is on the curating machine. It never makes the repository for you; without one nothing changes
+and nothing is reported.
+
+What the commit holds:
+
+- every visible file that changed in the store while the run ran: the facts it wrote, the captures
+  it moved, task files, the finished run record. A run keeps no list of its own writes, so a
+  capture you took in those minutes is in it too;
+- nothing else. What you left uncommitted or staged stays as it is, hidden files stay out, and so
+  does a file git ignores, unless the repository tracks it already. An edit of yours in a file the
+  run also wrote goes in with that file.
+
+A run that changed nothing but its own record makes no commit; the record goes in with the next
+one. A run stopped at preflight or before its end makes none either, and what it changed stays in
+the work tree for you to look at.
+
+The commit is m2b's own. Author and committer are `m2b <m2b@localhost>`, so `git log --author=m2b`
+lists the runs, and the message says when the run started and how its steps ended. m2b writes no
+git configuration, never pushes, runs no hook and signs nothing, because a run has nobody to
+answer a prompt; the filters your repository sets for adding a file (encryption, line endings) do
+run. It commits onto HEAD as it is, whatever branch that is. In the middle of a merge, rebase,
+cherry-pick, revert or bisect of yours, or when HEAD moved while it worked, it does not commit.
+
+A commit that fails never fails the run: it is the failed step `commit` in the review task and in
+the run record. The next run commits what changes while it runs, not what the uncommitted one left.
+
+In a synced folder git is handed only files that are on this machine. A changed file that is not
+downloaded is left out, and a `.gitignore` or `.gitattributes` that is not downloaded stops the
+commit and names the command that fetches it. Keep the repository's own files out of a synced
+folder: `git init --separate-git-dir <a folder outside>` in the store folder leaves only a small
+`.git` file there. A sync service that evicts or duplicates files inside `.git` breaks a
+repository, whoever commits into it; m2b's git never downloads such a file, it fails, and the
+review says so.
+
+`m2b config set curation.git_commit false` on the curating machine turns the commit off.
 
 ## Reading your sessions
 

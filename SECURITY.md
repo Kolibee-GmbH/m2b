@@ -18,6 +18,15 @@ The model runs only fenced: from an empty folder, without your settings or other
 exactly the commands and store paths its step lists, and nothing else allowed. A tool call outside
 that list is denied and reported in the run's review task.
 
+When the store folder is a git repository, a curation run starts `git` there to commit what it
+changed ([docs/curation.md](docs/curation.md#a-commit-per-run)). git is given the changed files by
+name and is asked for nothing that reaches a remote: m2b never pushes or fetches. For these calls
+it points git's hooks folder at nothing and turns the file-system monitor off, so neither a hook
+nor a monitor program of the repository runs. What does run is a filter the repository's configuration or your own names
+for adding a file, as with your own `git add`. The configuration in the store's `.git` is
+therefore as trusted as your own: keep the store in a repository only you write to, and
+`curation.git_commit: false` in the machine config keeps m2b from starting git at all.
+
 ## Untrusted input
 
 A capture is text from wherever it came: a share sheet, a shortcut, an integration writing into

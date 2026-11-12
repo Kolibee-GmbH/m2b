@@ -9,6 +9,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- A curation run ends with one git commit when you keep the store in a git repository: run
+  `git init` in the store folder, and from then on `git revert <commit>` takes one run back. The
+  commit holds what changed in the store while the run ran, and nothing else of what you left
+  uncommitted or staged (a file the run also wrote goes in as it is on disk); its author is `m2b <m2b@localhost>`, so `git log --author=m2b` lists the
+  runs. m2b makes no repository, writes no git configuration, never pushes, runs no hook and signs
+  nothing; a commit that fails is reported in the review task and never fails the run. In a synced
+  folder git gets only files that are on this machine, so nothing is downloaded for a commit.
+  Without a repository in the store folder nothing changes, and `curation.git_commit: false` in
+  the machine config turns it off ([A commit per run](docs/curation.md#a-commit-per-run)).
 - A current item can stand under a topic. In `## Current` of the distillate, a heading
   `### <name> (<word>, <word>)` now works as it does under `## Facts`: the items below it stay out
   of the session start and come in with the topic's facts, where the project folder's path or a

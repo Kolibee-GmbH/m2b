@@ -12,7 +12,9 @@ A scenario is a folder under ``tests/e2e/`` with:
   ``stdout``, when given, is a regular expression searched for in the step's standard output.
   ``"save": {"task": "<regex with one group>"}`` keeps the group from the step's output, and a later
   step's ``{task}`` in its arguments is replaced by it (a generated id, for example). ``{core_plugin}``
-  is always the core plugin's folder, for a step that starts a Claude Code session with it.
+  is always the core plugin's folder, for a step that starts a Claude Code session with it, and
+  ``{store}`` the scenario's store folder, for a step that prepares it with another program
+  (``git init``).
   ``"cwd": "<name>"`` runs the step in a folder of that name beside the scenario's working folder,
   made on first use, so two sessions can stand for two projects; without it a step runs in the
   working folder.
@@ -215,7 +217,7 @@ def _run_steps(
     saved: dict[str, str] | None = None,
     plugin: Path = CORE_PLUGIN,
 ) -> list[str]:
-    """Runs the steps in order; what they save is added to ``saved``, which starts with ``core_plugin``."""
+    """Runs the steps in order; what they save is added to ``saved``, which also holds ``core_plugin``."""
     problems = []
     if saved is None:
         saved = {}
@@ -348,6 +350,7 @@ def run_scenario(
             json.dumps(isolated_machine_config(store, level, location.backend), indent=2) + "\n", encoding="utf-8"
         )
 
+        saved = {"store": str(store)}
         environment = dict(environ)
         environment[HOME_VARIABLE] = str(home)
         environment["M2B_CORE_ROOT"] = str(plugin)
@@ -356,7 +359,6 @@ def run_scenario(
             environment.pop(MODEL_RUNNER_VARIABLE, None)
             environment.pop(MODEL_STUB_STORE_VARIABLE, None)
             script = _read_json(scenario / MODEL_FILE)
-            saved: dict[str, str] = {}
             result.problems += _run_steps(script["steps"], environment, work, MODEL_STEP_TIMEOUT_SECONDS, saved, plugin)
             if not result.problems:
                 result.problems += check_invariants(script["invariants"], visible_store_files(store), saved)
@@ -370,7 +372,7 @@ def run_scenario(
             stub = _model_stub(sandbox, scenario_steps.get("model", {"actions": []}), plugin)
             environment[MODEL_RUNNER_VARIABLE] = str(stub)
             environment[MODEL_STUB_STORE_VARIABLE] = str(store)
-            result.problems += _run_steps(scenario_steps["steps"], environment, work, plugin=plugin)
+            result.problems += _run_steps(scenario_steps["steps"], environment, work, saved=saved, plugin=plugin)
             expect = _read_json(scenario / "expect.json")
             result.problems += compare_store(
                 expect["store_files"], visible_store_files(store), expect.get("store_patterns", [])

@@ -33,6 +33,12 @@ just before its model step (``memory_guard``): refresh is held to its due facts,
 have their removed and rewritten facts lines listed in the review, and a line holding characters
 that hide text undoes any of them. A runner stopped by SIGTERM still checks; a run that never
 finished is checked by the next one, against the copy of ``memory/`` it saved.
+
+A run in a store that is a git repository ends with one commit of what changed while it ran
+(``run_commit``). The commit comes after the review and the finished record, so both are in it; the
+record therefore names it only when it failed, and then the review is written once more to say so.
+A failed commit never fails the run. A run stopped at preflight, or stopped before its end, commits
+nothing: what it changed stays in the work tree.
 """
 
 from __future__ import annotations
@@ -57,7 +63,7 @@ from m2b.config.store_settings import (
     load_store_settings,
     write_store_format,
 )
-from m2b.curate import glean_step, machine_state, memory_guard, migrations, model, report
+from m2b.curate import glean_step, machine_state, memory_guard, migrations, model, report, run_commit
 from m2b.curate.due import check_due
 from m2b.harvest import HarvestReport, harvest
 from m2b.journal import write_journal
@@ -107,6 +113,7 @@ LINT = "lint"
 JOURNAL = "journal"
 PROPOSALS = "proposals"
 REVIEW = "review"
+COMMIT = "commit"
 # A failure between preflight and review that belongs to no step.
 RUN = "run"
 
@@ -277,9 +284,15 @@ class _Run:
     # Changed facts lines: those of earlier runs the owner has not seen yet, and this run's.
     carried_changes: list[report.Finding] = field(default_factory=list)
     fact_changes: list[report.Finding] = field(default_factory=list)
+    # Where the run is committed, and the store's listing from before its first write; without a
+    # repository there is neither, and with one the listing is missing only when it failed.
+    repository: run_commit.Repository | None = None
+    listed_before: run_commit.StoreListing | None = None
+    not_listed: str = ""
 
     def run(self) -> RunOutcome:
         started = self.clock()
+        self._list_before_the_run()
         try:
             tasks, locale = self._preflight(started)
         # Whatever stops preflight is recorded, then raised again for the exit code.
@@ -292,7 +305,55 @@ class _Run:
         findings = self._run_steps(tasks, locale)
         self._keep_changes()
         self._step(REVIEW, lambda: update_review(tasks, findings, self.failures, started, locale), reported=False)
-        return self._finish(started, findings)
+        record = self._finish(started, findings)
+        problem = self._commit(started)
+        if problem is not None:
+            record = self._tell_of_failed_commit(
+                problem, record, lambda: update_review(tasks, findings, self.failures, started, locale)
+            )
+        return _outcome(record)
+
+    def _list_before_the_run(self) -> None:
+        """Finds the repository a run is committed into and lists the store as the run found it."""
+        if not self.config.curation.git_commit:
+            return
+        try:
+            self.repository = run_commit.find_repository(self.store, self.environ, self.lock.pass_fds)
+            if self.repository is not None:
+                self.listed_before = run_commit.listing(self.store)
+        except (OSError, StoreError) as error:
+            self.not_listed = f"the store could not be listed before the run: {error}"
+
+    def _commit(self, started: datetime.datetime) -> str | None:
+        """Why the run is not committed although the store is a git repository; None when it is, or
+        when there was nothing to commit or nothing to commit into."""
+        if self.not_listed:
+            return self.not_listed
+        if self.repository is None or self.listed_before is None:
+            return None
+        text = run_commit.message(started, self.steps)
+        try:
+            run_commit.commit(self.repository, self.listed_before, text, self.machine.temp_dir, (RUN_RECORD,))
+        except (run_commit.CommitError, OSError, StoreError) as error:
+            return str(error) or type(error).__name__
+        return None
+
+    def _tell_of_failed_commit(self, problem: str, record: RunRecord, review: Callable[[], object]) -> RunRecord:
+        """Puts a commit that failed into the review and the record, which were written before it."""
+        self.steps.append(StepResult(COMMIT, FAILED, problem))
+        self.failures.append(StepFailure(COMMIT, problem))
+        # A task list that fails here failed the review step too, or the record still says it.
+        with contextlib.suppress(Exception):
+            review()
+        message = "; ".join(part for part in (record.message, f"{COMMIT}: {problem}") if part)
+        told = dataclasses.replace(record, steps=tuple(self.steps), message=message)
+        try:
+            self._write(told)
+        except RunRecordWriteError as error:
+            machine_state.log_event(
+                self.machine, machine_state.UNRECORDED, f"{error}; {COMMIT}: {problem}", self.clock()
+            )
+        return told
 
     def _preflight(self, started: datetime.datetime) -> tuple[Tasks, Locale]:
         machine_state.clear_leftovers(self.machine, started)
@@ -841,10 +902,10 @@ class _Run:
         if end.returncode != 0:
             raise StepError(end.failure())
 
-    def _finish(self, started: datetime.datetime, findings: list[report.Finding]) -> RunOutcome:
-        """A failed core step fails the run (B13, B63); a failed add-on step, a failed reading of the
-        sessions and a task for the waiting proposals that could not be brought up to date only
-        reach the review.
+    def _finish(self, started: datetime.datetime, findings: list[report.Finding]) -> RunRecord:
+        """The finished record, written. A failed core step fails the run (B13, B63); a failed add-on
+        step, a failed reading of the sessions and a task for the waiting proposals that could not
+        be brought up to date only reach the review.
 
         Such a failure that does not clear by itself must not hold back the filing of the inbox
         with the backoff, nor keep the run due at every session start.
@@ -854,10 +915,7 @@ class _Run:
         state = FAILED if any(step.name not in self.forgiven_steps for step in failed) else SUCCEEDED
         record = self._record(state, started, finished_at=self.clock(), message=message, findings=tuple(findings))
         self._close(record, message or "the run succeeded")
-        if state == SUCCEEDED and message:
-            forgiven = f"the curation run succeeded; a step that does not fail it failed, see the review: {message}"
-            return RunOutcome(state, forgiven, record)
-        return RunOutcome(state, message or "the curation run succeeded", record)
+        return record
 
     def _close(self, record: RunRecord, message: str) -> None:
         """Writes the finished record, moves the backoff and logs the outcome once."""
@@ -924,6 +982,14 @@ def refresh_rules(due_files: Sequence[str], fixed: Sequence[str] = REFRESH_RULES
     for relative in due_files:
         rules += [f"Read(<store>/{relative})", f"Edit(<store>/{relative})"]
     return rules
+
+
+def _outcome(record: RunRecord) -> RunOutcome:
+    """What the caller is told of a finished run."""
+    if record.state == SUCCEEDED and record.message:
+        forgiven = "the curation run succeeded; a step that does not fail it failed, see the review: "
+        return RunOutcome(record.state, forgiven + record.message, record)
+    return RunOutcome(record.state, record.message or "the curation run succeeded", record)
 
 
 def _expired_note(expired: int) -> str:

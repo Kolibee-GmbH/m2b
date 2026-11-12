@@ -1,0 +1,167 @@
+{
+  "description": "E25 the store is a git repository: Alex runs `git init` in the store folder and commits it; a capture comes in; `m2b curate --force` files it and ends with one commit by m2b that holds the filed capture, the list of candidates the first run starts and the finished run record, and leaves `git status` clean; a second run that has nothing to do makes no commit.",
+  "model": {
+    "skills": {
+      "/m2b:ingest": {
+        "actions": [
+          {
+            "tool": "Bash",
+            "command": "m2b ingest list --json"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest note <capture:cli> 'filed: nothing to file'"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest finish <capture:cli>"
+          }
+        ]
+      }
+    }
+  },
+  "steps": [
+    {
+      "run": [
+        "git",
+        "-C",
+        "{store}",
+        "init",
+        "-q",
+        "-b",
+        "main"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      }
+    },
+    {
+      "run": [
+        "git",
+        "-C",
+        "{store}",
+        "-c",
+        "user.name=Alex",
+        "-c",
+        "user.email=alex@example.com",
+        "add",
+        "--all"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      }
+    },
+    {
+      "run": [
+        "git",
+        "-C",
+        "{store}",
+        "-c",
+        "user.name=Alex",
+        "-c",
+        "user.email=alex@example.com",
+        "commit",
+        "-q",
+        "-m",
+        "the store as Alex keeps it"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "Dana likes old maps"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdout": "\\Athe curation run succeeded\\n\\Z"
+    },
+    {
+      "run": [
+        "git",
+        "-C",
+        "{store}",
+        "log",
+        "--format=%an <%ae>|%s"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdout": "\\Am2b <m2b@localhost>\\|m2b: curation run \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}\\nAlex <alex@example\\.com>\\|the store as Alex keeps it\\n\\Z"
+    },
+    {
+      "run": [
+        "git",
+        "-C",
+        "{store}",
+        "show",
+        "--name-status",
+        "--format=",
+        "--no-renames",
+        "HEAD"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdout": "\\AA\\tcorpus/\\d{4}/\\d{2}/\\d{8}T\\d{6}Z-cli-[0-9a-f]{4}\\.md\\nA\\tstate/core/candidates\\.json\\nA\\tstate/core/last-run\\.json\\n\\Z"
+    },
+    {
+      "run": [
+        "git",
+        "-C",
+        "{store}",
+        "status",
+        "--porcelain"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdout": "\\A\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdout": "\\Athe curation run succeeded\\n\\Z"
+    },
+    {
+      "run": [
+        "git",
+        "-C",
+        "{store}",
+        "rev-list",
+        "--count",
+        "HEAD"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdout": "\\A2\\n\\Z"
+    }
+  ]
+}
