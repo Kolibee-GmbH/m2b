@@ -11,7 +11,8 @@ In short:
 
 - A curation run can read what you typed in Claude Code and propose what belongs in your memory;
   nothing is filed before you keep it ([Reading your sessions](docs/curation.md#reading-your-sessions)).
-- With the store in a git repository, each run ends with one commit
+- With the store in a git repository, each run ends with one commit, and `git revert` on it puts
+  back what the run changed, the captures it filed included
   ([A commit per run](docs/curation.md#a-commit-per-run)).
 - A run's model steps are fenced more tightly, and what a capture says is treated as data
   ([Security](SECURITY.md)).
@@ -69,6 +70,12 @@ In short:
   folder git gets only files that are on this machine, so nothing is downloaded for a commit.
   Without a repository in the store folder nothing changes, and `curation.git_commit: false` in
   the machine config turns it off ([A commit per run](docs/curation.md#a-commit-per-run)).
+  A capture that came in after your last commit is a file git does not know, so before its first
+  step a run commits such captures where they wait, in a commit of their own
+  (`m2b: captures before the curation run ...`): only files in `inbox/` that git does not know,
+  nothing you staged or changed. Reverting the run's commit then puts such a capture back into
+  `inbox/` instead of deleting it from the store folder
+  ([Taking a run back](docs/curation.md#taking-a-run-back) names what a revert does not put back).
 - A current item can stand under a topic. In `## Current` of the distillate, a heading
   `### <name> (<word>, <word>)` now works as it does under `## Facts`: the items below it stay out
   of the session start and come in with the topic's facts, where the project folder's path or a

@@ -35,7 +35,7 @@ flowchart LR
 | Journal | code | adds the tasks you completed to the month's `corpus/YYYY/MM/YYYYMM-done.md` |
 | Proposals task | code | one task in your list while proposals from your sessions wait for your answer, completed once none waits |
 | Review task | code | one task in your list when something needs you |
-| Commit | code, only when the store folder is a git repository | one git commit of what changed in the store while the run ran ([A commit per run](#a-commit-per-run)) |
+| Commit | code, only when the store folder is a git repository | one git commit of what changed in the store while the run ran, and before the first step one of the captures git does not know yet ([A commit per run](#a-commit-per-run)) |
 
 `before_ingest`, `after_ingest` and `after_journal` are where an add-on can hook in; the worklog
 runs before ingest. A step that fails is reported in the review task and the run goes on. When
@@ -90,12 +90,21 @@ What the commit holds:
   does a file git ignores, unless the repository tracks it already. An edit of yours in a file the
   run also wrote goes in with that file.
 
-A run that changed nothing but its own record makes no commit; the record goes in with the next
-one. A run stopped at preflight or before its end makes none either, and what it changed stays in
-the work tree for you to look at.
+A capture that reached the inbox after your last commit is a file git does not know yet. Before
+its first step a run commits such captures where they wait, in a commit of their own
+(`m2b: captures before the curation run <start>`). The run's commit then holds the move out of the
+inbox, and reverting it puts the capture back there. That first commit holds only files in
+`inbox/` that git does not know and that were there when the run began: no capture you staged,
+none you changed after committing it, nothing outside `inbox/`, no hidden or ignored file, and no
+capture that is not downloaded. With no such capture in the inbox, a run is one commit.
 
-The commit is m2b's own. Author and committer are `m2b <m2b@localhost>`, so `git log --author=m2b`
-lists the runs, and the message says when the run started and how its steps ended. m2b writes no
+A run that changed nothing but its own record makes no commit; the record goes in with the next
+one. A run stopped at preflight makes none either. A run stopped later leaves the commit of the
+waiting captures, if there were any, and what its steps changed stays in the work tree for you to
+look at.
+
+Both commits are m2b's own. Author and committer are `m2b <m2b@localhost>`, so `git log --author=m2b`
+lists them, and the run's message says when the run started and how its steps ended. m2b writes no
 git configuration, never pushes, runs no hook and signs nothing, because a run has nobody to
 answer a prompt; the filters your repository sets for adding a file (encryption, line endings) do
 run. It commits onto HEAD as it is, whatever branch that is. In the middle of a merge, rebase,
@@ -103,6 +112,28 @@ cherry-pick, revert or bisect of yours, or when HEAD moved while it worked, it d
 
 A commit that fails never fails the run: it is the failed step `commit` in the review task and in
 the run record. The next run commits what changes while it runs, not what the uncommitted one left.
+When the commit of the waiting captures failed, the review and the record say so, in the run's
+commit too, because reverting that commit would then remove the captures the run filed instead of
+putting them back.
+
+### Taking a run back
+
+`git revert <the run's commit>` puts back what the run changed: the captures it filed are in
+`inbox/` again, with the exceptions below, and `memory/`, the task files and the run record are as
+they were before it. The
+next run files those captures again. Revert the commit named `m2b: curation run ...`, not the one
+of the captures before it. Tasks in Apple Reminders are not in the store, so they stay as the run
+left them.
+
+- git refuses the revert while `state/core/last-run.json` holds a change that is not committed.
+  That is the case after a later run that had nothing to do: it wrote its record and made no
+  commit. `git restore state/core/last-run.json` drops that record; then revert.
+- A capture you changed after committing it comes back as you committed it. The text the run
+  filed is in the run's commit: `git show <commit>:corpus/YYYY/MM/<file>`.
+- A capture that came in while the run was already under way, and that the run still filed, is
+  not put back: git did not know it when the run began. `git show` has it in the same way.
+- A capture you staged and did not commit is not put back either. m2b commits nothing you staged,
+  so the run's commit has that capture only where it was filed; `git show` has it there.
 
 In a synced folder git is handed only files that are on this machine. A changed file that is not
 downloaded is left out, and a `.gitignore` or `.gitattributes` that is not downloaded stops the

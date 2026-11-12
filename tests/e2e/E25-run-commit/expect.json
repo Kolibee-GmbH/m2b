@@ -1,6 +1,6 @@
 {
   "store_files": {
-    "memory/MEMORY.md": "# Memory\n\n## Facts\n\n## Current\n",
+    "memory/MEMORY.md": "# Memory\n\n## Facts\n\n- Dana likes old maps (dana.md)\n\n## Current\n",
     "store.json": "{\n  \"format\": 3,\n  \"tasks\": {\"backend\": \"markdown\"},\n  \"curating_machine\": \"sb-test-e2e\",\n  \"journal_since\": \"2026-11-01\"\n}\n",
     "profile.json": "{\n  \"version\": 1,\n  \"owner\": \"Alex\",\n  \"language\": \"en\"\n}\n",
     "state/core/candidates.json": "{\n  \"format\": 1,\n  \"candidates\": {}\n}\n"
@@ -8,7 +8,11 @@
   "store_patterns": [
     {
       "path": "corpus/*/*/????????T??????Z-cli-????.md",
-      "content": "\\-\\-\\-\\\ncreated: [^\\n]+\\\nsource:\\ cli\\\ncurated:\\ true\\\n\\-\\-\\-\\\nDana\\ likes\\ old\\ maps\\\n<!\\-\\-\\ m2b:curation\\ \\-\\->\\\nfiled:\\ nothing\\ to\\ file\\\n"
+      "content": "\\-\\-\\-\\\ncreated: [^\\n]+\\\nsource:\\ cli\\\nfacts_filed:\\ true\\\ncurated:\\ true\\\n\\-\\-\\-\\\nDana\\ likes\\ old\\ maps\\\n<!\\-\\-\\ m2b:curation\\ \\-\\->\\\nfiled:\\ fact\\ dana\\.md\\\n"
+    },
+    {
+      "path": "memory/dana.md",
+      "content": "\\#\\ Dana\\\n\\\n\\-\\ Likes\\ old\\ maps\\.\\\n\\\n\\#\\#\\ Evidence\\\n\\\n\\-\\ \\[\\[\\d{8}T\\d{6}Z-cli-[0-9a-f]{4}\\.md\\]\\]\\\n"
     },
     {
       "path": "state/core/last-run.json",

@@ -37,8 +37,16 @@ finished is checked by the next one, against the copy of ``memory/`` it saved.
 A run in a store that is a git repository ends with one commit of what changed while it ran
 (``run_commit``). The commit comes after the review and the finished record, so both are in it; the
 record therefore names it only when it failed, and then the review is written once more to say so.
-A failed commit never fails the run. A run stopped at preflight, or stopped before its end, commits
-nothing: what it changed stays in the work tree.
+A failed commit never fails the run. A run stopped at preflight, or stopped before its end, is not
+committed: what it changed stays in the work tree.
+
+Before its first step such a run commits the captures in the inbox that git does not know, so that
+reverting the run's commit puts them back into the inbox instead of deleting them. That commit
+comes after preflight, which downloads the inbox, and it stays when the run is stopped later: it
+holds the captures as they waited and nothing a step did. When it fails, it is the failed step
+``commit`` from then on, so the review and the record the run's commit holds say so; when the
+run's own commit is not made either, that one is named alone, because without it there is nothing
+to revert.
 """
 
 from __future__ import annotations
@@ -308,6 +316,7 @@ class _Run:
         except Exception as error:
             self._stop_at_preflight(started, error)
             raise
+        self._commit_waiting_captures(started)
         self.carried_changes = self._carried_changes(tasks)
         self._check_interrupted()
         self.started = started
@@ -333,6 +342,30 @@ class _Run:
         except (OSError, StoreError) as error:
             self.not_listed = f"the store could not be listed before the run: {error}"
 
+    def _commit_waiting_captures(self, started: datetime.datetime) -> None:
+        """Commits the captures git does not know, before a step files them.
+
+        A failure is a failed step from here on, one that leaves the run succeeded: the review and
+        the finished record are written with it, so the run's commit holds both as they are.
+        """
+        if self.repository is None or self.listed_before is None:
+            return
+        text = run_commit.captures_message(started)
+        try:
+            run_commit.commit_waiting_captures(self.repository, self.listed_before, text, self.machine.temp_dir)
+            return
+        except run_commit.StaleIndexError as error:
+            problem = str(error)
+        except (run_commit.CommitError, OSError, StoreError) as error:
+            reason = str(error) or type(error).__name__
+            problem = (
+                "the captures in the inbox were not committed before the run, so reverting the run's commit "
+                f"removes those it filed instead of putting them back: {reason}"
+            )
+        self.forgiven_steps.add(COMMIT)
+        self.steps.append(StepResult(COMMIT, FAILED, problem))
+        self.failures.append(StepFailure(COMMIT, problem))
+
     def _commit(self, started: datetime.datetime) -> str | None:
         """Why the run is not committed although the store is a git repository; None when it is, or
         when there was nothing to commit or nothing to commit into."""
@@ -340,22 +373,31 @@ class _Run:
             return self.not_listed
         if self.repository is None or self.listed_before is None:
             return None
-        text = run_commit.message(started, self.steps)
+        # The message names the run's steps; a commit of the captures that failed is none of them.
+        text = run_commit.message(started, [step for step in self.steps if step.name != COMMIT])
         try:
             run_commit.commit(self.repository, self.listed_before, text, self.machine.temp_dir, (RUN_RECORD,))
+        except run_commit.StaleIndexError as error:
+            # The commit is made, so a failed commit of the captures still says what a revert does.
+            return str(error)
         except (run_commit.CommitError, OSError, StoreError) as error:
+            self._forget_failed_commit_of_the_captures()
             return str(error) or type(error).__name__
         return None
 
+    def _forget_failed_commit_of_the_captures(self) -> None:
+        """Without a commit of the run there is nothing to revert, so its failure is named alone."""
+        self.steps = [step for step in self.steps if step.name != COMMIT]
+        self.failures = [failure for failure in self.failures if failure.step != COMMIT]
+
     def _tell_of_failed_commit(self, problem: str, record: RunRecord, review: Callable[[], object]) -> RunRecord:
-        """Puts a commit that failed into the review and the record, which were written before it."""
+        """Puts a commit of the run that failed into the review and the record, which were written before it."""
         self.steps.append(StepResult(COMMIT, FAILED, problem))
         self.failures.append(StepFailure(COMMIT, problem))
         # A task list that fails here failed the review step too, or the record still says it.
         with contextlib.suppress(Exception):
             review()
-        message = "; ".join(part for part in (record.message, f"{COMMIT}: {problem}") if part)
-        told = dataclasses.replace(record, steps=tuple(self.steps), message=message)
+        told = dataclasses.replace(record, steps=tuple(self.steps), message=self._failed_steps())
         try:
             self._write(told)
         except RunRecordWriteError as error:
@@ -920,11 +962,15 @@ class _Run:
         with the backoff, nor keep the run due at every session start.
         """
         failed = [step for step in self.steps if step.result == FAILED]
-        message = "; ".join(f"{step.name}: {step.detail}" for step in failed)
+        message = self._failed_steps()
         state = FAILED if any(step.name not in self.forgiven_steps for step in failed) else SUCCEEDED
         record = self._record(state, started, finished_at=self.clock(), message=message, findings=tuple(findings))
         self._close(record, message or "the run succeeded")
         return record
+
+    def _failed_steps(self) -> str:
+        """The failed steps with their reasons, as the record's message names them."""
+        return "; ".join(f"{step.name}: {step.detail}" for step in self.steps if step.result == FAILED)
 
     def _close(self, record: RunRecord, message: str) -> None:
         """Writes the finished record, moves the backoff and logs the outcome once."""

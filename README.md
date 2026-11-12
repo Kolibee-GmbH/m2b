@@ -324,7 +324,7 @@ while the curating machine has no session for days ([On a schedule](docs/curatio
 The model reads only when there is something to read: new captures, or a fact past the day it
 was true until, such as an appointment. A step that fails is reported and the run goes on; the
 review task in your list says what needs you. If the store folder is a git repository, each run
-ends with one commit you can revert ([A commit per run](docs/curation.md#a-commit-per-run)). [The curation run](docs/curation.md) lists its
+ends with one commit, and reverting it puts back what the run changed, the captures it filed included ([Taking a run back](docs/curation.md#taking-a-run-back) names the exceptions). [The curation run](docs/curation.md) lists its
 steps, the one-off runs for a distillate moved over from another tool, and the status line.
 
 ### What a run asks you

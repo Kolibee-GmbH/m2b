@@ -25,7 +25,8 @@ that list is denied and reported in the run's review task
 ([The fence around a model step](#the-fence-around-a-model-step)).
 
 When the store folder is a git repository, a curation run starts `git` there to commit what it
-changed ([docs/curation.md](docs/curation.md#a-commit-per-run)). git is given the changed files by
+changed and, before its first step, the captures in the inbox that git does not know yet
+([docs/curation.md](docs/curation.md#a-commit-per-run)). git is given those files by
 name and is asked for nothing that reaches a remote: m2b never pushes or fetches. For these calls
 it points git's hooks folder at nothing and turns the file-system monitor off, so neither a hook
 nor a monitor program of the repository runs. What does run is a filter the repository's configuration or your own names

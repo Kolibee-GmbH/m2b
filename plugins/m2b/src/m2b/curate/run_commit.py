@@ -5,6 +5,15 @@ one commit, which ``git revert`` takes back. m2b makes no repository, changes no
 and never pushes: without a ``.git`` in the store folder, or without git on the machine, nothing
 here runs and nothing is said.
 
+A capture that came in after the last commit is a file git does not know. Filed by the run, it
+would be in the run's commit only as a new file of the archive, and a revert would delete it
+instead of putting it back into the inbox. So the captures git does not know are committed where
+they wait, in a commit of their own before the run's first step (``commit_waiting_captures``):
+the files of the inbox that are neither in the index nor in HEAD, and nothing else. A capture git
+knows is left as it is, changed or not, like everything the owner has not committed. Only a
+capture the run's listing holds goes in, because the run's commit takes a path out of the inbox
+by that listing: one that came in later would stay in the repository's inbox after it was filed.
+
 The commit holds what changed in the store while the run ran. A run has no list of its own writes,
 because model steps and child processes write too, so the store is listed with each file's size
 and modification time before the run's first write and again after its last one, without opening
@@ -41,12 +50,15 @@ import subprocess
 import sys
 import tempfile
 import time
-from collections.abc import Callable, Collection, Mapping, Sequence
+import unicodedata
+from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 from m2b.git_program import usable_git
+from m2b.notes.layout import INBOX
 from m2b.run_record import FAILED, SKIPPED, SUCCEEDED, StepResult
 from m2b.store.base import Store, fetch_command
 
@@ -80,12 +92,19 @@ UNFINISHED_OPERATIONS = {
 SHOWN_ID_LENGTH = 12
 # ``--replace``: a file where a folder was, or a folder where a file was, takes the old entry's place.
 UPDATE_INDEX = ("update-index", "-z", "--add", "--remove", "--replace", "--stdin")
+# For paths that must be new to the index: without ``--replace`` a path that would take a tracked
+# file's or folder's place stops the command instead of taking the tracked entry out.
+ADD_TO_INDEX = ("update-index", "-z", "--add", "--remove", "--stdin")
 
 Runner = Callable[..., Any]
 
 
 class CommitError(Exception):
     """The run could not be committed; the text says why."""
+
+
+class StaleIndexError(CommitError):
+    """The commit is made, but the owner's index was not brought up to date for its paths."""
 
 
 @dataclass(frozen=True)
@@ -235,7 +254,16 @@ def message(started: datetime.datetime, steps: Sequence[StepResult]) -> Message:
         names = [step.name for step in steps if step.result == result]
         if names:
             lines.append(f"{result}: {', '.join(names)}")
-    return Message(f"m2b: curation run {started.astimezone():%Y-%m-%d %H:%M}", "\n".join(lines))
+    return Message(f"m2b: curation run {_minute(started)}", "\n".join(lines))
+
+
+def captures_message(started: datetime.datetime) -> Message:
+    """The message of the commit before a run, which names the run by its start as the run's own does."""
+    return Message(f"m2b: captures before the curation run {_minute(started)}", "")
+
+
+def _minute(moment: datetime.datetime) -> str:
+    return f"{moment.astimezone():%Y-%m-%d %H:%M}"
 
 
 def commit(
@@ -265,6 +293,54 @@ def commit(
         return None
     _refuse_evicted_rule_files(store, written)
     _refuse_unfinished_operation(git_directory(repository))
+    with _index_of_head(repository, temp_dir) as (head, index):
+        paths = [*_not_ignored(repository, index, written), *removed]
+        repository.call(UPDATE_INDEX, index, [path for path in paths if path not in no_reason_alone])
+        if _written_tree(repository, index) == _tree_without_the_run(repository, head):
+            return None
+        repository.call(UPDATE_INDEX, index, paths)
+        tree = _written_tree(repository, index)
+    return _commit_onto(repository, head, tree, paths, text, "the run is", "the files of the run")
+
+
+def commit_waiting_captures(repository: Repository, before: StoreListing, text: Message, temp_dir: Path) -> str | None:
+    """Commits the captures in the inbox that git does not know; the commit's id, or None without one.
+
+    Those are the files below ``inbox/`` that ``before``, the run's listing, holds and that are on
+    this machine, not hidden, not ignored, and neither in the owner's index nor in HEAD. A file in
+    one of the two is the owner's to commit: staged, changed since its commit, or taken out of the
+    index, it stays as it is. Without such a capture nothing is committed, and an unfinished merge
+    of the owner's is no failure then. The listing leaves out what lies behind a link to a folder,
+    so an inbox that is such a link has no capture to commit here.
+    """
+    store = repository.store
+    waiting = [path for path in store.scan(INBOX).files if path in before.files]
+    if not waiting:
+        return None
+    directory = git_directory(repository)
+    unstaged = _unknown_to(repository, None, waiting)
+    if not unstaged:
+        return None
+    with _index_of_head(repository, temp_dir) as (head, index):
+        unknown = _unknown_to(repository, index, unstaged)
+        if not unknown:
+            return None
+        _refuse_evicted_rule_files(store, unknown)
+        captures = _not_ignored(repository, index, unknown)
+        if not captures:
+            return None
+        _refuse_unfinished_operation(directory)
+        repository.call(ADD_TO_INDEX, index, captures)
+        tree = _written_tree(repository, index)
+        # A capture that was removed since the inbox was read leaves nothing to commit.
+        if tree == _tree_without_the_run(repository, head):
+            return None
+    return _commit_onto(repository, head, tree, captures, text, "the captures are", "them")
+
+
+@contextmanager
+def _index_of_head(repository: Repository, temp_dir: Path) -> Iterator[tuple[str | None, Path]]:
+    """HEAD's commit, None on a branch without one, and its tree in a temporary index outside the store."""
     _, found = repository.call(["rev-parse", "--verify", "--quiet", "HEAD^{commit}"], allowed=(0, 1))
     head = found.strip() or None
     temp_dir.mkdir(parents=True, exist_ok=True)
@@ -272,12 +348,22 @@ def commit(
         index = Path(work) / "index"
         if head is not None:
             repository.call(["read-tree", head], index)
-        paths = [*_not_ignored(repository, index, written), *removed]
-        repository.call(UPDATE_INDEX, index, [path for path in paths if path not in no_reason_alone])
-        if _written_tree(repository, index) == _tree_without_the_run(repository, head):
-            return None
-        repository.call(UPDATE_INDEX, index, paths)
-        tree = _written_tree(repository, index)
+        yield head, index
+
+
+def _commit_onto(
+    repository: Repository,
+    head: str | None,
+    tree: str,
+    paths: Sequence[str],
+    text: Message,
+    committed: str,
+    shown_as_changed: str,
+) -> str:
+    """Makes ``tree`` the commit after ``head`` and brings the owner's index up to date for ``paths``.
+
+    ``committed`` and ``shown_as_changed`` name the commit in the one failure that leaves it made.
+    """
     parent = ["-p", head] if head is not None else []
     body = ["-m", text.body] if text.body else []
     # ``--no-gpg-sign``: a git before 2.22 signs in commit-tree when ``commit.gpgSign`` is set.
@@ -288,9 +374,9 @@ def commit(
         # The owner's index still holds these paths as they were; only they are brought up to date.
         repository.call(UPDATE_INDEX, paths=paths)
     except CommitError as error:
-        raise CommitError(
-            f"the run is committed as {new[:SHOWN_ID_LENGTH]}, but the repository's index was not brought "
-            f"up to date, so git status shows the files of the run as changed: {error}"
+        raise StaleIndexError(
+            f"{committed} committed as {new[:SHOWN_ID_LENGTH]}, but the repository's index was not brought "
+            f"up to date, so git status shows {shown_as_changed} as changed: {error}"
         ) from error
     return new
 
@@ -338,6 +424,34 @@ def _not_ignored(repository: Repository, index: Path, paths: Sequence[str]) -> l
     code, printed = repository.call(["check-ignore", "-z", "--stdin"], index, literal, allowed=(0, 1))
     ignored = {found[2:] for found in printed.split("\0") if found} if code == 0 else set()
     return [path for path in paths if path not in ignored]
+
+
+def _unknown_to(repository: Repository, index: Path | None, paths: Sequence[str]) -> list[str]:
+    """The paths of the inbox an index knows nothing of: the temporary one, or the owner's for None.
+
+    git reads the index alone for this and no file of the work tree. Names are compared in one
+    Unicode form and without their letter case: a git that composes names keeps ``ü`` as one
+    character where the folder may spell it as two, and a folder that ignores case shows a tracked
+    ``Note.md`` as ``note.md`` once it is renamed. Both are files git knows, and so is a path where
+    the index holds a folder, or below a file the index holds. Taking one name too many for known
+    only leaves a capture out.
+    """
+    printed = repository.call(["ls-files", "-z", "--cached", "--", INBOX], index)[1]
+    known = {_compared(path) for path in printed.split("\0") if path}
+    known_folders = {folder for path in known for folder in _folders_above(path)}
+    return [
+        path
+        for path in paths
+        if _compared(path) not in known | known_folders and known.isdisjoint(_folders_above(_compared(path)))
+    ]
+
+
+def _compared(path: str) -> str:
+    return unicodedata.normalize("NFC", path).casefold()
+
+
+def _folders_above(path: str) -> set[str]:
+    return {folder.as_posix() for folder in PurePosixPath(path).parents}
 
 
 def _written_tree(repository: Repository, index: Path) -> str:
