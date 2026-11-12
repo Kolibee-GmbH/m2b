@@ -304,7 +304,7 @@ def _given_transcripts(scenario: Path, claude_config: Path) -> None:
         target.write_text(source.read_text(encoding="utf-8").replace(AN_HOUR_AGO, written), encoding="utf-8")
 
 
-def _model_stub(sandbox: Path, script: Mapping[str, Any], plugin: Path) -> Path:
+def model_stub(sandbox: Path, script: Mapping[str, Any], plugin: Path) -> Path:
     """A ``claude`` for this scenario: the stub with the scenario's model actions."""
     actions = sandbox / "model.json"
     actions.write_text(json.dumps(script), encoding="utf-8")
@@ -369,7 +369,7 @@ def run_scenario(
             environment["M2B_HERDR"] = str(sandbox / "no-herdr")
             environment["M2B_LAUNCHCTL"] = str(sandbox / "no-launchctl")
             environment["M2B_SYSTEMCTL"] = str(sandbox / "no-systemctl")
-            stub = _model_stub(sandbox, scenario_steps.get("model", {"actions": []}), plugin)
+            stub = model_stub(sandbox, scenario_steps.get("model", {"actions": []}), plugin)
             environment[MODEL_RUNNER_VARIABLE] = str(stub)
             environment[MODEL_STUB_STORE_VARIABLE] = str(store)
             result.problems += _run_steps(scenario_steps["steps"], environment, work, saved=saved, plugin=plugin)

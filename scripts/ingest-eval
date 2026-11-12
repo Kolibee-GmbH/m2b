@@ -1,0 +1,8 @@
+#!/bin/sh
+# Measures how well a model files an invented inbox of twenty captures, with a real curation run
+# per model on your own Claude login, for example: scripts/ingest-eval --model haiku --runs 1
+set -eu
+
+repo_root=$(cd "$(dirname "$0")/.." && pwd)
+PYTHONPATH="$repo_root/scripts:$repo_root/plugins/m2b/src${PYTHONPATH:+:$PYTHONPATH}" \
+    exec python3 -m repo_tools.ingest_eval "$@"

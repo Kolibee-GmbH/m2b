@@ -145,7 +145,7 @@ shell_checks() {
         return 0
     fi
     shellcheck scripts/check scripts/e2e scripts/e2e-shortcut-setup scripts/evals-page scripts/glean-eval \
-        scripts/no-model scripts/readme-images \
+        scripts/ingest-eval scripts/no-model scripts/readme-images \
         "$PLUGIN"/bin/m2b "$PLUGIN"/bin/m2b-worklog
 }
 

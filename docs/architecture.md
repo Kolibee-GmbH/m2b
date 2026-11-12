@@ -38,7 +38,8 @@ flowchart LR
 | `plugins/m2b/tests/` | core tests, with `tests/band/` the band's; `tests/addons/<add-on>/` the add-ons', which also hold what an add-on has to keep of the core's rules, so that the core's tests read no file of an add-on |
 | `tests/e2e/` | end-to-end scenarios against a temporary store |
 | `tests/glean/` | an invented day of typed prompts, which `scripts/glean-eval` asks a model about |
-| `scripts/` | `check` (the whole proof), `e2e`, `trigger-check`, `glean-eval`, `no-model`, `readme-images`, `evals-page`; `repo_tools/core_alone.py` lists what in the plugin's folder belongs to each add-on and runs the core without it |
+| `tests/ingest/` | an invented store and inbox, which `scripts/ingest-eval` has a model file in a real curation run |
+| `scripts/` | `check` (the whole proof), `e2e`, `trigger-check`, `glean-eval`, `ingest-eval`, `no-model`, `readme-images`, `evals-page`; `repo_tools/core_alone.py` lists what in the plugin's folder belongs to each add-on and runs the core without it |
 
 ## Three rules the code keeps
 

@@ -71,3 +71,33 @@ a model, the eval tool's default judge: whether `no-invention` stayed honest, wh
   expect.
 - In `routing`, the arm without m2b now and then tries Claude Code's own memory instead of
   `TODO.md` and scores lower.
+
+## How well a model files an inbox
+
+The cases above ask what m2b does to a session. This number is about the curation run:
+`scripts/ingest-eval` gives a model an invented inbox of twenty captures, in English and German,
+in a real curation run, and counts how many of the twenty things they should leave behind (facts,
+things going on, tasks) are there afterwards, and how many are right in every detail the filing
+rules decide: above the first topic or under the right one, the link to the capture, a task's
+day. [CONTRIBUTING.md](../CONTRIBUTING.md#how-well-a-model-files-an-inbox) says what counts and
+how to run it.
+
+| Model | Found | Right | Runs |
+|---|---|---|---|
+| haiku, the default | 1.00 | 1.00 | 3 |
+| sonnet | 1.00 | 1.00 | 3 |
+
+Measured on 2026-11-12 with Claude Code 2.1.322, which resolves both names to its current models.
+No run failed, left a capture in the inbox, filed a fact or a task from the capture that holds
+nothing or wrote a line no capture stands behind. In each of its runs `haiku` started a topic for
+a single person, a neighbour, where the filing rules leave the place open; `sonnet` did not.
+
+A measurement earlier that day, when three of the captures named their day without its year, had
+`haiku` at 0.97: in one of three runs it wrote two facts into their fact file and left their
+lines out of the facts list, so no session would have started with them. That is the slip to
+expect of it now and then; `sonnet` was at 1.00 there too.
+
+The inbox is tidier than a real one: short captures with one or two things each. Both models are
+at the top of it, so it shows that either files plain captures well, not which one copes better
+with long or ambiguous ones. A run over the twenty captures took about two minutes with `haiku`
+and eighty seconds with `sonnet`.

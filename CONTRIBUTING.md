@@ -216,6 +216,59 @@ and no word of a prompt. What you typed goes to the model on your own login, as 
 typed it. The model gets neither your memory nor your captures, so it also proposes what your
 second brain knows already. A file inside this repository is refused.
 
+## How well a model files an inbox
+
+The ingest skill tells a model what in a capture is a fact, a task or something going on, and
+where each goes. How well a model follows it is what `curation.model` buys, and
+`scripts/ingest-eval` measures it with real curation runs.
+
+`tests/ingest/` is an invented store (`given/`) and an invented inbox (`inbox.json`): twenty
+captures of one day, in English and German, each with what it should leave behind. That is twenty
+things: eleven facts (about the owner and people, under a topic that exists, under one that so far
+has only current items, under a new one, and one that replaces an older value), two things going
+on, and seven tasks, four with a day (one from `follow_up`) and three without. Each day is written
+out with its year, so the count does not depend on the day you run it. One capture holds nothing
+to file. For each run the tool copies the store into a sandbox,
+puts the captures into its inbox and runs `m2b curate --force` there, with its own `M2B_HOME` and
+the model as `curation.model`, so the skill, the fence and the commands are the ones an
+installation runs. Then it reads the store with the core's own parsers and counts:
+
+```bash
+scripts/ingest-eval                          # haiku and sonnet, three curation runs each
+scripts/ingest-eval --model haiku --runs 1
+```
+
+An expectation is found when a facts line, a current item or a task of its capture holds its
+words. They are regular expressions, because a model words its lines its own way and in the
+store's language. It is right when the details the skill decides hold too: the line stands above
+the first topic or under the named one, its fact file links the capture, a current item carries
+the capture's day, a task its day or none, and a replaced value is gone from the facts list and
+kept under `## Earlier`. Where the skill leaves room, as for a neighbour, the place is not judged.
+
+Per run the tool prints how many of the twenty were found and how many were right, and each
+deviation by name: what was missed (and the fact file that holds it, when only the facts list
+lacks it), what is wrong about a found one, and each new line, task or
+topic no expectation accounts for, a line or task with the capture it came from. Such an extra may
+be a good split of one capture into two lines or noise; that is yours to read, and it does not
+count. Four things fail a run whatever its numbers: a new line or task that names no capture of
+the inbox, a fact or a task filed from the capture that holds nothing (a current item names no
+capture, so one made of it is an extra like any other), a capture that is not in the archive
+afterwards, and a curation run that failed, which a denied call does to it. A model meets the bar
+with 0.80 right over all its runs and no such run.
+
+The runs raise `curation.max_turns` to 400, because twenty captures at once take about a hundred
+tool calls, and the default of a hundred turns leaves no room for that. Six runs, three at a
+time, take a few minutes on your own login, so this is not part of `scripts/check`; run it after
+a change to the ingest skill, to the commands it calls or to the distillate's format, and before
+changing the default model, and write what it gave into [Evals](docs/evals.md#how-well-a-model-files-an-inbox)
+by hand. The stores of the runs stay in your
+temp folder until the next call, for a look at what a model wrote. Like every model run, each
+leaves a session folder under `~/.claude/projects/`:
+
+```bash
+rm -rf ~/.claude/projects/*sb-test-m2b-ingest-eval*
+```
+
 ## Releasing
 
 Claude Code installs a plugin by its version number. `/plugin update` compares the installed
