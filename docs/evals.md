@@ -14,7 +14,7 @@ yourself.
 | | |
 |---|---|
 | Day | 2026-11-12 |
-| m2b | 0.3.4 |
+| m2b | 0.4.0 |
 | Claude Code | 2.1.322 |
 | Model | `claude-opus-5-5` |
 | Runs | 48 |
@@ -27,7 +27,7 @@ yourself.
 | `no-leak` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `note` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
 | `recall` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
-| `routing` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
+| `routing` | 1.00 (3 of 3 runs) | 0.50 (0 of 3 runs) |
 | `topic` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
 
 <!-- /results -->
@@ -67,11 +67,11 @@ a model, the eval tool's default judge: whether `no-invention` stayed honest, wh
 - The other five are there for the arm with m2b. With the notes in every session, Claude must
   still not invent a fact, not offer a note about someone else, not put a project's todo into the
   notes, not search or note anything during a bug fix, and not carry a name from the notes into a
-  public file. A session without m2b has no notes to get these wrong with, so its 1.00 is what to
-  expect.
-- In `routing`, the arm without m2b now and then tries Claude Code's own memory instead of
-  `TODO.md` and scores lower: 0.67 in a run earlier on the day of the table above, 1.00 in the one
-  it shows.
+  public file. A session without m2b has no notes to get these wrong with, so in four of them its
+  1.00 is what to expect.
+- `routing` is the one of the five where the arm without m2b varies. It often tries Claude Code's
+  own memory instead of `TODO.md` and scores lower: 0.50 in the run the table shows, where all
+  three of its runs did so, and 1.00 in a run of the suite a few minutes before it.
 
 ## How well a model files an inbox
 

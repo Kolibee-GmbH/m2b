@@ -374,7 +374,8 @@ match, however many commits came since. A change reaches users only with a relea
 
    The tag starts `.github/workflows/release.yml`. It checks that the tag names the version in
    `plugin.json` and sits on `main`, and publishes a GitHub release with that version's section
-   of the changelog as its notes.
+   of the changelog as its notes. A link in the section to a file of the repository, such as
+   `(docs/curation.md#pausing)`, points to that file at the tag in the notes.
 
 ## README images
 

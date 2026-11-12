@@ -222,5 +222,78 @@ class WeeklyFailureReportTest(unittest.TestCase):
         self.assertIn("Claude Code (version unknown): ", report[report.index("--body") + 1])
 
 
+RELEASED_CHANGELOG = """\
+# Changelog
+
+## [Unreleased]
+
+- Not released yet ([Later](docs/later.md)).
+
+## [9.8.7] - 2030-01-02
+
+In short:
+
+- Background runs can pause ([Pausing](docs/curation.md#pausing)).
+
+### Added
+
+- A page lists every command ([Commands](docs/commands.md)); [Security](SECURITY.md) names it
+  ([#7](https://github.example/acme/m2b/pull/7)).
+
+## [9.8.6] - 2030-01-01
+
+### Fixed
+
+- An older fix ([Old](docs/old.md)).
+"""
+RELEASE_NOTES = """\
+
+In short:
+
+- Background runs can pause ([Pausing](https://github.com/acme/m2b/blob/v9.8.7/docs/curation.md#pausing)).
+
+### Added
+
+- A page lists every command ([Commands](https://github.com/acme/m2b/blob/v9.8.7/docs/commands.md)); \
+[Security](https://github.com/acme/m2b/blob/v9.8.7/SECURITY.md) names it
+  ([#7](https://github.example/acme/m2b/pull/7)).
+
+"""
+
+
+@unittest.skipUnless(
+    all(shutil.which(tool) for tool in ("bash", "awk", "sed")), "needs bash, awk and sed, as the step's script does"
+)
+class ReleaseNotesTest(unittest.TestCase):
+    def _notes(self, tag: str) -> subprocess.CompletedProcess[str]:
+        """Runs the script of the step that writes the notes, in a folder with an invented changelog."""
+        (script,) = [block for block in _script_blocks(_text("release.yml")) if "CHANGELOG.md" in block]
+        with tempfile.TemporaryDirectory(prefix="sb-test-") as folder:
+            (Path(folder) / "CHANGELOG.md").write_text(RELEASED_CHANGELOG, encoding="utf-8")
+            done = subprocess.run(
+                [shutil.which("bash") or "bash", "-e", "-c", script],
+                cwd=folder,
+                env={"PATH": os.environ["PATH"], "GITHUB_REF_NAME": tag, "GITHUB_REPOSITORY": "acme/m2b"},
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            notes = Path(folder) / "notes.md"
+            done.stdout = notes.read_text(encoding="utf-8") if notes.is_file() else ""
+        return done
+
+    def test_the_notes_are_the_section_of_the_tag_with_its_links_to_files_written_out_at_the_tag(self) -> None:
+        done = self._notes("v9.8.7")
+
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout, RELEASE_NOTES)
+
+    def test_a_tag_the_changelog_has_no_section_for_fails_the_step(self) -> None:
+        done = self._notes("v9.9.0")
+
+        self.assertNotEqual(done.returncode, 0)
+        self.assertEqual(done.stdout, "")
+
+
 if __name__ == "__main__":
     unittest.main()
