@@ -168,6 +168,21 @@ test('the search tool searches each term on its own and marks the hits as data f
   ])
 })
 
+test('what the tools hand the model holds no character that draws nothing, and the joiners stay', async ($, on) => {
+  // Covers: B143
+  const fake = new FakeM2b()
+  fake.searchHits = [
+    { path: 'memory/sam.md', line: 3, text: 'Ply\u180fwood\u2065 \ufff0off\u{1bca0}cuts\u{1d173}\u{e0fff} \u2764\ufe0f' },
+    { path: 'memory/dana.md', line: 4, text: 'Dana \u{1f469}\u200d\u{1f4bb} codes, \u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645' },
+  ]
+  await start($, on, fake)
+  const answer = await called($, SEARCH, { terms: ['plywood'] })
+  expect(resultOf(answer).split('\n').slice(2)).toEqual([
+    'memory/sam.md:3: Plywood offcuts \u2764',
+    'memory/dana.md:4: Dana \u{1f469}\u200d\u{1f4bb} codes, \u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645',
+  ])
+})
+
 test('the search tool says what it could not search, and nothing found is not could not look', async ($, on) => {
   // Covers: B104
   const fake = new FakeM2b()

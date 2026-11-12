@@ -9,6 +9,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `m2b doctor` has a line `prompt-hook`. The hook that brings a topic's facts before a prompt says
+  nothing when it fails, so that no prompt waits or breaks for it; one that never worked looked
+  the same as a prompt that named no topic. Doctor now starts it the way Claude Code does, within
+  the same time limit, and reports `answers`, or `does not answer` with the reason (the distillate
+  is not downloaded, the config is broken, Python is not found), or `missing`.
+- A curation run started in the background, at a session start or with `m2b curate --detach`,
+  keeps what it writes on standard error in `~/.local/state/m2b/detached-run.err`, replaced at
+  each such start. Until now that output was discarded, and a run that died before it could write
+  its record left no reason behind.
 - A curation run ends with one git commit when you keep the store in a git repository: run
   `git init` in the store folder, and from then on `git revert <commit>` takes one run back. The
   commit holds what changed in the store while the run ran, and nothing else of what you left
@@ -76,6 +85,19 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- A curation step that fails over what it wrote to `memory/` names the line by its file and line
+  number ("line 5 written to memory/MEMORY.md holds U+200B"), no longer by its text, and does not
+  name a file the step added, whose name the model chose. The reason is printed at the next
+  session start as a notice of m2b's own, above the line that marks the distillate as data, so a
+  quoted line carried whatever a capture had made the model write into every session. Those
+  notices now go out without invisible characters, like the distillate below them.
+- The session-start and prompt hooks take every character that draws nothing out of the
+  distillate before a session reads it, not only those that hide or reorder text: also soft
+  hyphens, fillers, direction marks and variation selectors, which can carry bytes nobody sees.
+  The core and the band now keep one table of these characters (what Unicode calls default
+  ignorable, without the two joiners emoji and several scripts need), so the model's search tool
+  and the hooks remove the same ones. What undoes a curation step stays as it was: a selector
+  after an emoji or a soft hyphen in a pasted text is no reason to fail a run.
 - `m2b search` answers with what is curated first: hits from `memory/` (the distillate, then the
   fact files), then from the archive, then from the inbox, and in the archive and the inbox the
   newest note first, by the time in the note's name. Before, hits came in the order the files are

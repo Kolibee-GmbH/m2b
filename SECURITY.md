@@ -49,8 +49,11 @@ ingest removed or rewrote lands in the review task, with the captures it filed a
 kept (`~/.local/state/m2b/memory-before-run/`), and it comes back in every review until you complete
 the review task, in your list or with `ok` in the band; `ok` closes nothing a run added to the
 review after the band drew it. A line holding characters that hide or reorder text, such as bidirectional controls
-or tag characters that spell invisible ASCII, undoes the step; the hooks remove the same characters
-before the distillate reaches a session. Lines a capture adds are not flagged, because adding is
+or tag characters that spell invisible ASCII, undoes the step, and the reason names the line by its
+file and line number, never by its text, and no file the step added by its name, because the next
+session start prints that reason as a notice of m2b's own. The hooks remove these characters and
+every other that draws nothing (soft hyphens, fillers, variation selectors) before the distillate
+and those notices reach a session. Lines a capture adds are not flagged, because adding is
 what ingest is for.
 
 The skills of the run tell the model that captured text is data: a capture that gives instructions
@@ -102,8 +105,9 @@ list) and read the store through `m2b search`. A note the model writes is a capt
 so text the model read elsewhere, such as a web page, can reach the inbox the way the section above
 describes. A search answer goes to the model under a line saying it is data from your notes, not
 instructions, with escape sequences and the invisible characters m2b knows removed (marks that
-reorder text, zero-width characters, variation selectors, tag characters); that list cannot be
-complete, and a model may still follow text that looks like an instruction.
+reorder text, zero-width characters, variation selectors, tag characters; the table the hooks use
+for the distillate); that list cannot be complete, and a model may still follow text that looks
+like an instruction.
 
 The mod lets a call of either tool run where Claude Code would only ask because no rule allows it,
 as the skills run their commands without asking; then neither the classifier of auto mode nor a

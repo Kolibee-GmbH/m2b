@@ -1,5 +1,6 @@
 """``doctor``: one line per backend, the reminders-cli version, the recorded executables,
-whether the launcher finds m2b in Claude Code's plugin list, and whether a session ran the band.
+whether the launcher finds m2b in Claude Code's plugin list, whether the prompt hook answers, and
+whether a session ran the band.
 
 The reminders-cli line appears only when the store's tasks live in Apple Reminders. A ``claude``
 that setup could not find is named with the command that records it; it is needed only on the
@@ -18,11 +19,12 @@ import json
 import os
 import re
 import shutil
+import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from m2b import claude_code, launcher
+from m2b import claude_code, launcher, prompt_hook
 from m2b.calendar.base import CalendarError, CalendarNotConfigured
 from m2b.commands import Context
 from m2b.commands.backends import configured_calendar, configured_store, configured_tasks
@@ -40,7 +42,10 @@ FOUND, MISSING, UNKNOWN, NOT_INSTALLED = "found", "missing", "version unknown", 
 NOT_RECORDED = "not recorded"
 UNUSABLE = "not usable for curation"
 APPLE_REMINDERS = "apple-reminders"
-PROBLEMS = (NOT_REACHABLE, MISSING, NEWER, UNUSABLE)
+ANSWERS, SILENT = "answers", "does not answer"
+PROBLEMS = (NOT_REACHABLE, MISSING, NEWER, UNUSABLE, SILENT)
+PROMPT_HOOK_COMMAND = "bin/m2b-prompt-hook"
+NO_TOPIC_FACTS = "so no topic's facts come in before a prompt"
 _HOMEBREW_VERSION = re.compile(r"/reminders-cli/([^/]+)/")
 PROBE_FAILURES = (ConfigError, StoreUnreachableError, StoreError, TasksError, CalendarError, OSError)
 SEEN, NOT_SEEN = "seen", "not seen"
@@ -78,6 +83,7 @@ def doctor(arguments: argparse.Namespace, context: Context) -> int:
         *[_executable(name, path) for name, path in sorted(config.executables.items())],
         *([] if "claude" in config.executables else [_claude_not_recorded()]),
         claude_code_check(context.environ),
+        prompt_hook_check(context.environ),
         band_check(context.machine),
     ]
     if arguments.json:
@@ -104,6 +110,52 @@ def claude_code_check(environ: Mapping[str, str]) -> Check:
         f"{listing} lists no user-scope m2b@m2b, so ~/.local/bin/m2b and everything outside Claude Code that "
         "calls it cannot find m2b; install it for your user with /plugin, from the marketplace named m2b",
     )
+
+
+def prompt_hook_check(environ: Mapping[str, str], plugin_root: Path = launcher.PLUGIN_ROOT) -> Check:
+    """Whether the plugin has Claude Code run the prompt hook, and whether the hook gets to the topics.
+
+    The hook says nothing when it fails, so that no prompt waits or breaks for it. Here it is
+    started as Claude Code starts it and within the time ``hooks.json`` gives it, asked to check
+    itself: then it says what it would swallow. Whether Claude Code runs it cannot be asked.
+    """
+    name = "prompt-hook"
+    hooks_file = plugin_root / "hooks" / "hooks.json"
+    timeout = _prompt_hook_timeout(hooks_file)
+    if timeout is None:
+        return Check(name, MISSING, f"{hooks_file} names no hook that runs {PROMPT_HOOK_COMMAND}, {NO_TOPIC_FACTS}")
+    command = plugin_root / PROMPT_HOOK_COMMAND
+    try:
+        result = subprocess.run(
+            [str(command), prompt_hook.CHECK_ARGUMENT],
+            env=dict(environ),
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return Check(
+            name, SILENT, f"{command} took longer than the {timeout:g} s Claude Code gives it, {NO_TOPIC_FACTS}"
+        )
+    except OSError as error:
+        return Check(name, MISSING, f"{command} could not be started: {error}, {NO_TOPIC_FACTS}")
+    said = (result.stdout.strip() or result.stderr.strip() or f"exit code {result.returncode}").splitlines()[-1]
+    if result.returncode != 0:
+        return Check(name, SILENT, f"{said}; {NO_TOPIC_FACTS}")
+    return Check(name, ANSWERS, said)
+
+
+def _prompt_hook_timeout(hooks_file: Path) -> float | None:
+    """The seconds Claude Code gives the prompt hook, or None when the plugin's hooks do not name it."""
+    try:
+        groups = json.loads(hooks_file.read_text(encoding="utf-8"))["hooks"]["UserPromptSubmit"]
+        hooks = [hook for group in groups for hook in group["hooks"]]
+        timeouts = [hook["timeout"] for hook in hooks if PROMPT_HOOK_COMMAND in hook["command"]]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return float(timeouts[0]) if timeouts and isinstance(timeouts[0], (int, float)) else None
 
 
 def band_check(machine: MachinePaths) -> Check:

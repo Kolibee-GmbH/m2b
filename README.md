@@ -371,6 +371,8 @@ whether a run is due.
   `m2b config set executables.claude "$(command -v claude)"`.
 - **The session start says the last run failed.** The review task in your list names the step
   and the cause. Fix it and run `m2b curate --force`.
+- **A topic's facts do not come in when you name it.** The hook that brings them says nothing when
+  it fails. `m2b doctor` starts it and says in its line `prompt-hook` why it does not answer.
 - **`curating` for a long time.** A run is going on; each model step is stopped after
   `curation.model_timeout_minutes` (15). When it ends, its outcome is added to
   `~/.local/state/m2b/run.log`.

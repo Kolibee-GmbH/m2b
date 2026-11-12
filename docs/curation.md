@@ -62,8 +62,11 @@ step:
   line can be copied back from there.
 - **Any model step**, sorting included, that writes a line holding characters that hide or reorder
   text (bidirectional controls, zero-width spaces, tag characters) is undone and fails; a capture
-  still in the inbox is marked so the next run files its facts again. The session-start and prompt
-  hooks remove the same characters before the distillate reaches a session.
+  still in the inbox is marked so the next run files its facts again. The failure names the file,
+  the line number and the characters, not the line's text, and not a file the step added. The
+  session-start and prompt hooks
+  remove these characters and every other that draws nothing (soft hyphens, fillers, variation
+  selectors) before the distillate reaches a session.
 
 ## A commit per run
 
@@ -281,6 +284,11 @@ command is still needed for the model steps), name the checkout in the line:
 `m2b status` shows when the last run started and how it ended; a run that found nothing due shows
 as `last attempt: not due at ...`, so you can see the schedule reached m2b. The machine's run log
 is `~/.local/state/m2b/run.log`; a run that could not even write its record leaves its cause there.
+
+A run m2b starts in the background, at a session start or with `m2b curate --detach`, has no
+terminal and no log of yours to print to. What it writes on standard error is kept in
+`~/.local/state/m2b/detached-run.err`, replaced each time such a run starts; look there when a
+run left neither a record nor a line in the run log.
 
 ## The status line
 

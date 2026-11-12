@@ -8,14 +8,17 @@ import io
 import json
 import os
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 from m2b import cli, paths
 from m2b.calendar.base import local_midnight
+from m2b.commands import doctor
 from m2b.config import machine, profile
 from m2b.config.store_settings import KNOWN_STORE_FORMAT, save_store_settings
 from m2b.store.folder import FolderStore
@@ -715,6 +718,112 @@ class DoctorTest(CommandTest):
         self.assertEqual(checks["executable claude"]["state"], "missing")
         self.assertEqual(sum(c["name"] == "executable claude" for c in answer["json"]["checks"]), 1)
         self.assertEqual(checks["store"]["state"], "reachable")
+
+    def prompt_hook_line(self) -> tuple[int, str]:
+        code, out, _ = self.run_command("doctor")
+        return code, next(line for line in out.splitlines() if line.startswith("prompt-hook: "))
+
+    def test_doctor_starts_the_prompt_hook_and_says_that_it_answers(self) -> None:
+        """Covers: B146"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        index = self.store_root / "memory" / "MEMORY.md"
+        index.parent.mkdir(exist_ok=True)
+        index.write_text("# Memory\n\n## Facts\n\n### Acme (Acme)\n- Kim leads IT (kim.md)\n", encoding="utf-8")
+
+        self.assertEqual(self.prompt_hook_line(), (cli.EXIT_OK, "prompt-hook: answers (topics in the distillate: 1)"))
+
+    def test_a_prompt_hook_that_cannot_read_the_distillate_is_a_problem_with_its_reason(self) -> None:
+        """Covers: B146"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        index = self.store_root / "memory" / "MEMORY.md"
+        if index.exists():
+            index.unlink()
+        index.mkdir(parents=True)
+
+        code, line = self.prompt_hook_line()
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        self.assertTrue(line.startswith("prompt-hook: does not answer ("), line)
+        self.assertIn("MEMORY.md", line)
+        self.assertTrue(line.endswith("; so no topic's facts come in before a prompt)"), line)
+
+    def plugin_with(self, hooks: dict[str, Any] | None, script: str | None) -> Path:
+        """A plugin folder with these hooks and this prompt hook, either left out when None."""
+        root = Path(tempfile.mkdtemp(prefix="sb-test-plugin-", dir=self.bin.parent))
+        (root / "hooks").mkdir()
+        (root / "bin").mkdir()
+        if hooks is not None:
+            (root / "hooks" / "hooks.json").write_text(json.dumps({"hooks": hooks}), encoding="utf-8")
+        if script is not None:
+            command = root / "bin" / "m2b-prompt-hook"
+            command.write_text(script, encoding="utf-8")
+            command.chmod(0o755)
+        return root
+
+    @staticmethod
+    def registered(timeout: int = 5) -> dict[str, Any]:
+        command = '"${CLAUDE_PLUGIN_ROOT}"/bin/m2b-prompt-hook'
+        return {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": command, "timeout": timeout}]}]}
+
+    def test_a_plugin_whose_hooks_do_not_name_the_prompt_hook_is_a_problem(self) -> None:
+        """Covers: B146"""
+        other = {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": "bin/other", "timeout": 5}]}]}
+        for hooks in (None, {}, other, {"UserPromptSubmit": "broken"}):
+            with self.subTest(hooks=hooks):
+                check = doctor.prompt_hook_check(self.environ, self.plugin_with(hooks, "#!/bin/sh\necho ready\n"))
+
+                self.assertEqual(check.state, "missing")
+                self.assertIn("hooks.json names no hook that runs bin/m2b-prompt-hook", check.detail)
+
+    def test_a_prompt_hook_that_cannot_be_started_is_a_problem(self) -> None:
+        """Covers: B146"""
+        check = doctor.prompt_hook_check(self.environ, self.plugin_with(self.registered(), None))
+
+        self.assertEqual(check.state, "missing")
+        self.assertIn("bin/m2b-prompt-hook could not be started: ", check.detail)
+
+    def test_it_is_started_with_check_and_its_last_line_is_the_reason(self) -> None:
+        """Covers: B146"""
+        script = "#!/bin/sh\necho starting\necho \"asked with: $*\"\necho 'the store is gone' >&2\nexit 3\n"
+        said = doctor.prompt_hook_check(self.environ, self.plugin_with(self.registered(), script))
+        self.assertEqual(said.state, "does not answer")
+        self.assertEqual(said.detail, "asked with: --check; so no topic's facts come in before a prompt")
+
+    def test_a_prompt_hook_that_says_nothing_is_named_by_its_standard_error_or_its_exit_code(self) -> None:
+        for script, reason in (
+            ("#!/bin/sh\necho 'python3: not found' >&2\nexit 127\n", "python3: not found"),
+            ("#!/bin/sh\nexit 4\n", "exit code 4"),
+        ):
+            with self.subTest(reason=reason):
+                check = doctor.prompt_hook_check(self.environ, self.plugin_with(self.registered(), script))
+
+                self.assertEqual(check.state, "does not answer")
+                self.assertEqual(check.detail, f"{reason}; so no topic's facts come in before a prompt")
+
+    def test_a_prompt_hook_slower_than_claude_code_allows_is_a_problem(self) -> None:
+        """Covers: B146"""
+        root = self.plugin_with(self.registered(timeout=7), "#!/bin/sh\necho ready\n")
+
+        allowed: list[float] = []
+
+        def too_slow(command: list[str], **options: Any) -> None:
+            allowed.append(options["timeout"])
+            raise subprocess.TimeoutExpired(command, options["timeout"])
+
+        with mock.patch("m2b.commands.doctor.subprocess.run", side_effect=too_slow):
+            check = doctor.prompt_hook_check(self.environ, root)
+
+        self.assertEqual(allowed, [7])
+        self.assertEqual(check.state, "does not answer")
+        self.assertIn("bin/m2b-prompt-hook took longer than the 7 s Claude Code gives it", check.detail)
+
+    def test_the_skills_that_run_doctor_name_every_state_that_is_a_problem(self) -> None:
+        skills = Path(__file__).resolve().parents[1] / "skills"
+        for skill in ("m2b", "setup"):
+            body = (skills / skill / "SKILL.md").read_text(encoding="utf-8")
+            for state in doctor.PROBLEMS:
+                with self.subTest(skill=skill, state=state):
+                    self.assertIn(f"`{state}`", body)
 
     def test_a_missing_store_is_reported_and_the_other_checks_still_run(self) -> None:
         self.set_up()

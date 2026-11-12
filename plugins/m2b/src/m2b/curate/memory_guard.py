@@ -16,6 +16,12 @@ compares afterwards:
   Every facts line they removed or rewrote and every fact file they emptied or removed goes into the
   review task, with where the copy of ``memory/`` from before the run is kept.
 
+Why a step failed is said without the line's text: by file, line number and, for a hidden
+character, its code point. A file the step added is not named either, because the model chose its
+name. The reason goes into the run record, and the session start prints it as a notice of m2b's
+own, above the line that marks the distillate as data; a quoted line or a chosen name would carry
+whatever a capture made the model write into every session, in m2b's voice.
+
 The copy from before the run lives in machine state, never in the store (``machine_state``).
 """
 
@@ -30,7 +36,7 @@ from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from m2b.notes.characters import strip_unsafe, unsafe_characters
+from m2b.notes.characters import unsafe_characters
 from m2b.notes.layout import MEMORY, MEMORY_INDEX
 from m2b.notes.memory_index import (
     CURRENT_HEADING,
@@ -47,6 +53,7 @@ _SHOWN_CHARACTERS = 120
 _GROUP_HEADING = "### "
 # Tag characters spell whole words; three of them name the kind, the rest would flood the finding.
 _NAMED_CHARACTERS = 3
+_ADDED_FILE = "a file the step added to memory/"
 
 
 @dataclass(frozen=True)
@@ -105,12 +112,15 @@ class Snapshot:
         return None if data is None else data.decode("utf-8", errors="replace")
 
 
-def unsafe_line(before: Snapshot, after: Snapshot) -> str | None:
-    """Why the step must be undone: the first line it wrote that holds an unsafe character."""
+def unsafe_line(before: Snapshot, after: Snapshot, added_files_stay: bool = False) -> str | None:
+    """Why the step must be undone: the first line it wrote that holds an unsafe character.
+
+    A file the step added is named only where it stays (``added_files_stay``): what an interrupted
+    run left is reported in the review, and the owner has to find the file.
+    """
     for path in sorted(after.files):
-        new_lines = _lines(after.text(path))
         unchanged = Counter(_lines(before.text(path)))
-        for line in new_lines:
+        for number, line in enumerate(_lines(after.text(path)), start=1):
             if unchanged[line] > 0:
                 unchanged[line] -= 1
                 continue
@@ -118,8 +128,8 @@ def unsafe_line(before: Snapshot, after: Snapshot) -> str | None:
             if names:
                 more = len(names) - _NAMED_CHARACTERS
                 listed = ", ".join(names[:_NAMED_CHARACTERS]) + (f" and {more} more" if more > 0 else "")
-                shown = _shown(strip_unsafe(line))
-                return f'a line written to {path} holds {listed}, which hide or reorder text: "{shown}"'
+                where = path if added_files_stay or path in before.files else _ADDED_FILE
+                return f"line {number} written to {where} holds {listed}, which hide or reorder text"
     return None
 
 
@@ -133,21 +143,25 @@ def refresh_problem(before: Snapshot, after: Snapshot, files: Collection[str], c
             if path in before.files and path not in after.files:
                 return f"the refresh step removed {path}, a due fact file it may only rewrite"
             continue
-        if before.files.get(path) != after.files.get(path):
-            verb = "added" if path not in before.files else "removed" if path not in after.files else "changed"
-            return f"the refresh step {verb} {path}, which is not due"
+        if path not in before.files:
+            return f"the refresh step wrote {_ADDED_FILE}, where it may only rewrite the due fact files"
+        if before.files[path] != after.files.get(path):
+            return f"the refresh step {'changed' if path in after.files else 'removed'} {path}, which is not due"
     names = {PurePosixPath(path).name for path in allowed}
     old = _refresh_view(before.text(INDEX_PATH), names, set(current))
     new = _refresh_view(after.text(INDEX_PATH), names, set(current))
     if old == new:
         return None
-    for tag, old_start, old_end, new_start, new_end in difflib.SequenceMatcher(
-        a=old, b=new, autojunk=False
-    ).get_opcodes():
+    # One entry of a view is one line, so a place in the old view is a line of the file as it was
+    # before the step, and as it is again once the step is undone.
+    for tag, old_start, _, _, _ in difflib.SequenceMatcher(a=old, b=new, autojunk=False).get_opcodes():
         if tag == "equal":
             continue
-        line = (old[old_start:old_end] or new[new_start:new_end])[0].lstrip("\0")
-        return f'the refresh step changed the line "{_shown(line)}" in {INDEX_PATH}, which belongs to no due fact'
+        if tag == "insert":
+            did = f"added a line below line {old_start}" if old_start else "added a line above line 1"
+        else:
+            did = f"{'removed' if tag == 'delete' else 'changed'} line {old_start + 1}"
+        return f"the refresh step {did} of {INDEX_PATH}, which belongs to no due fact"
     return None
 
 

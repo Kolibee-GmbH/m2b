@@ -18,6 +18,41 @@ export function plainLine(text: string): string {
   return text.replace(ESCAPE_SEQUENCE, '').replace(LINE_BREAKS_AND_TABS, ' ').replace(INVISIBLE_CONTROLS, '')
 }
 
+// What draws nothing, as the core knows it (`src/m2b/notes/characters.py` holds the same table, and
+// a test of the core compares the two): Unicode's default ignorable code points without the
+// zero-width joiner and non-joiner, which emoji and several scripts need. Among them the variation
+// selectors, which can carry bytes no one sees, and the tag characters, which spell ASCII no font
+// draws.
+const HIDDEN_RANGES: readonly (readonly [number, number])[] = [
+  [0x00ad, 0x00ad], // soft hyphen
+  [0x034f, 0x034f], // combining grapheme joiner
+  [0x061c, 0x061c], // Arabic letter mark
+  [0x115f, 0x1160], // Hangul fillers
+  [0x17b4, 0x17b5], // Khmer inherent vowels
+  [0x180b, 0x180f], // Mongolian variation selectors and vowel separator
+  [0x200b, 0x200b], // zero-width space
+  [0x200e, 0x200f], // direction marks
+  [0x202a, 0x202e], // bidirectional embeddings and overrides
+  [0x2060, 0x206f], // word joiner, invisible operators, isolates, deprecated format controls
+  [0x3164, 0x3164], // Hangul filler
+  [0xfe00, 0xfe0f], // variation selectors
+  [0xfeff, 0xfeff], // byte order mark
+  [0xffa0, 0xffa0], // halfwidth Hangul filler
+  [0xfff0, 0xfff8], // reserved
+  [0x1bca0, 0x1bca3], // shorthand format controls
+  [0x1d173, 0x1d17a], // musical format controls
+  [0xe0000, 0xe0fff], // tag characters, variation selectors supplement
+]
+const HIDDEN = new RegExp(
+  `[${HIDDEN_RANGES.map(([first, last]) => `\\u{${first.toString(16)}}-\\u{${last.toString(16)}}`).join('')}]`,
+  'gu',
+)
+
+/** The text as a model gets it: without any character that draws nothing. */
+export function withoutHidden(text: string): string {
+  return text.replace(HIDDEN, '')
+}
+
 // Every control and format character, and whatever else a terminal draws with no width: the marks
 // that reorder text, the zero-width characters, the byte order mark, soft hyphens, variation
 // selectors and tag characters. By Unicode property, so the list cannot fall behind.

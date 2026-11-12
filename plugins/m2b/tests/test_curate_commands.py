@@ -7,6 +7,7 @@ import datetime
 import json
 import os
 import signal
+import stat
 import subprocess
 import time
 
@@ -146,6 +147,58 @@ class DetachTest(test_runner.RunnerTest):
         (command,) = started
         self.assertEqual(command[-2:], ["curate", "--force"])
         self.assertFalse((self.store_root / RUN_RECORD).exists())
+
+    def start_writing(self, said: bytes) -> tuple[int, str]:
+        """``curate --detach`` with a run that writes ``said`` on its standard error; the exit code and stderr."""
+
+        def fake_start(command: list[str], **options: object) -> object:
+            self.assertEqual(options["stdout"], subprocess.DEVNULL)
+            errors = options["stderr"]
+            assert isinstance(errors, int)
+            os.write(errors, said)
+            return _Started()
+
+        with test_runner.mock.patch("m2b.curate.detach.subprocess.Popen", side_effect=fake_start):
+            code, _, err = self.run_command("curate", "--force", "--detach")
+        return code, err
+
+    def test_what_the_background_run_says_on_standard_error_is_kept_for_the_owner_alone(self) -> None:
+        """Covers: B145"""
+        self.curating()
+
+        code, err = self.start_writing(b"Traceback: the run broke\n")
+
+        self.assertEqual(code, cli.EXIT_OK, err)
+        kept = machine_state.detached_errors(self.machine)
+        self.assertEqual(kept, self.machine.state_dir / "detached-run.err")
+        self.assertEqual(kept.read_bytes(), b"Traceback: the run broke\n")
+        self.assertEqual(stat.S_IMODE(kept.stat().st_mode), 0o600)
+
+    def test_each_start_replaces_what_the_start_before_left(self) -> None:
+        """Covers: B145"""
+        self.curating()
+        self.start_writing(b"the first run said a great deal more than the second\n")
+
+        self.start_writing(b"the second run\n")
+
+        self.assertEqual(machine_state.detached_errors(self.machine).read_bytes(), b"the second run\n")
+
+    def test_a_run_whose_standard_error_cannot_be_kept_starts_all_the_same(self) -> None:
+        """Covers: B145"""
+        self.curating()
+        machine_state.detached_errors(self.machine).mkdir(parents=True)
+        outputs: list[object] = []
+
+        def fake_start(command: list[str], **options: object) -> object:
+            outputs.append(options["stderr"])
+            return _Started()
+
+        with test_runner.mock.patch("m2b.curate.detach.subprocess.Popen", side_effect=fake_start):
+            code, out, err = self.run_command("curate", "--force", "--detach")
+
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertIn("started in the background", out)
+        self.assertEqual(outputs, [subprocess.DEVNULL])
 
     def test_refresh_all_reaches_the_run(self) -> None:
         outcome = runner.RunOutcome(SUCCEEDED, "the curation run succeeded")

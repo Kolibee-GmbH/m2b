@@ -4,14 +4,18 @@ The start returns at once (B11), so it can only say what it checked before: this
 no run holds the lock, and a run is due unless forced. It reads ``store.json`` only when it is on
 this machine; downloading it is the run's preflight, which a session start must not wait for. The
 background run is started with ``--force``, because the due check was just made here, in a new
-session with nothing open to the session that started it, from the machine state folder.
+session with nothing open to the session that started it, from the machine state folder. What it
+writes on standard error is kept there (``machine_state.detached_errors``); what it prints is the
+outcome, which the run log has.
 """
 
 from __future__ import annotations
 
+import contextlib
 import datetime
+import os
 import subprocess
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 
 from m2b import launcher
@@ -62,22 +66,40 @@ def start_detached(
         if not due.due:
             return Start(NOT_DUE, f"no curation run is due: {due.reason}")
     machine.state_dir.mkdir(parents=True, exist_ok=True)
-    process = subprocess.Popen(
-        launcher.core_command(
-            [
-                "curate",
-                "--force",
-                *(["--refresh-all"] if refresh_all else []),
-                *(["--sort-facts"] if sort_facts else []),
-            ]
-        ),
-        cwd=machine.state_dir,
-        env=dict(environ),
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
+    with _kept_errors(machine) as errors:
+        process = subprocess.Popen(
+            launcher.core_command(
+                [
+                    "curate",
+                    "--force",
+                    *(["--refresh-all"] if refresh_all else []),
+                    *(["--sort-facts"] if sort_facts else []),
+                ]
+            ),
+            cwd=machine.state_dir,
+            env=dict(environ),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=errors,
+            start_new_session=True,
+        )
     return Start(
         STARTED, f"a curation run started in the background (process {process.pid}); m2b status shows how it goes"
     )
+
+
+@contextlib.contextmanager
+def _kept_errors(machine: MachinePaths) -> Iterator[int]:
+    """Where the run's standard error goes: the file of this start, emptied, for the owner alone.
+
+    A file that cannot be opened must not keep a run from starting; then the errors are discarded.
+    """
+    try:
+        descriptor = os.open(machine_state.detached_errors(machine), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    except OSError:
+        yield subprocess.DEVNULL
+        return
+    try:
+        yield descriptor
+    finally:
+        os.close(descriptor)

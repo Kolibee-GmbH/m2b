@@ -68,7 +68,7 @@ from m2b.curate.due import check_due
 from m2b.harvest import HarvestReport, harvest
 from m2b.journal import write_journal
 from m2b.locale import Locale, load_locale
-from m2b.notes.characters import strip_unsafe
+from m2b.notes.characters import with_hidden_written_out, without_hidden
 from m2b.notes.layout import (
     CORPUS,
     INBOX,
@@ -1017,15 +1017,16 @@ def _interrupted_changes(copy: Path, store: Store) -> list[report.Finding]:
     except (OSError, StoreError) as error:
         text = f"{run} could not be checked: memory/ could not be compared with its copy {copy}: {error}"
         return [report.Finding(RUN, report.ACTION, text)]
-    # The lines are shown as the owner reads them: a character that hides text stays out of the review.
+    # The lines are shown as the owner reads them: a character that draws nothing stays out of the review.
     records = memory_guard.fact_change_list(before, after)
     findings = [
-        report.Finding(RUN, report.ACTION, f"{run}: {strip_unsafe(change.described())}", _without_unsafe(change))
+        report.Finding(RUN, report.ACTION, f"{run}: {without_hidden(change.described())}", _shown_change(change))
         for change in records
     ]
-    problem = memory_guard.unsafe_line(before, after)
+    problem = memory_guard.unsafe_line(before, after, added_files_stay=True)
     if problem is not None:
-        findings.insert(0, report.Finding(RUN, report.ACTION, f"{run}: {problem}"))
+        # The file is still there, and its name must be the one the owner finds on disk.
+        findings.insert(0, report.Finding(RUN, report.ACTION, f"{run}: {with_hidden_written_out(problem)}"))
     if not findings:
         return []
     check = f"memory/ as it was before that run is in {copy}; check the changes above"
@@ -1035,13 +1036,13 @@ def _interrupted_changes(copy: Path, store: Store) -> list[report.Finding]:
     ]
 
 
-def _without_unsafe(change: memory_guard.FactChange) -> dict[str, object]:
-    """The change as data, its lines without the characters that hide text, as the review shows them."""
+def _shown_change(change: memory_guard.FactChange) -> dict[str, object]:
+    """The change as data, its lines without the characters that draw nothing, as the review shows them."""
     data = change.as_json()
     for side in ("before", "after"):
         value = data[side]
         if isinstance(value, str):
-            data[side] = strip_unsafe(value)
+            data[side] = without_hidden(value)
     return data
 
 

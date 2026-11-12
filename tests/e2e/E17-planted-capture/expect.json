@@ -12,7 +12,7 @@
  "store_patterns": [
   {
    "path": "tasks/????????????.md",
-   "content": "---\nstatus: open\n.*\n---\n[^\n]+\nm2b:review\n.*The step ingest failed: a line written to memory/MEMORY\\.md holds U\\+E006F.*the captures it filed are in the archive: 20261107T080000Z-cli-7a8b\\.md\n"
+   "content": "---\nstatus: open\n.*\n---\n[^\n]+\nm2b:review\n.*The step ingest failed: line 5 written to memory/MEMORY\\.md holds U\\+E006F.*the captures it filed are in the archive: 20261107T080000Z-cli-7a8b\\.md\n"
   },
   {
    "path": "state/core/last-run.json",

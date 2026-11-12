@@ -11,6 +11,9 @@ the store, because the store syncs to other machines.
 - **The last attempt** ``last-attempt.json``: a run that was not due, overwritten each time. It is
   an attempt, not an outcome, so it stays out of the run log; ``m2b status`` shows it, so a
   scheduled run that found nothing to do still shows it reached m2b.
+- **The background run's errors** ``detached-run.err``: what the last run started in the
+  background wrote on standard error, replaced at each such start. A run that dies before it can
+  write a run record or a line of the run log leaves its reason nowhere else.
 - **The backoff** ``backoff.json``: after a failed run the next attempt waits 1, then 4, then 20
   hours, so a failure that does not clear by itself does not start a model run at every session
   start; a successful run removes it.
@@ -54,6 +57,7 @@ LOCK_FILE = "curate.lock"
 RUN_LOG = "run.log"
 BACKOFF_FILE = "backoff.json"
 ATTEMPT_FILE = "last-attempt.json"
+DETACHED_ERRORS = "detached-run.err"
 MEMORY_BEFORE_RUN = "memory-before-run"
 MEMORY_CHANGES = "memory-changes.json"
 MEMORY_UNCHECKED = "memory-unchecked.json"
@@ -86,6 +90,10 @@ def backoff_file(machine: MachinePaths) -> Path:
 
 def attempt_file(machine: MachinePaths) -> Path:
     return machine.state_dir / ATTEMPT_FILE
+
+
+def detached_errors(machine: MachinePaths) -> Path:
+    return machine.state_dir / DETACHED_ERRORS
 
 
 def memory_copies(machine: MachinePaths) -> Path:

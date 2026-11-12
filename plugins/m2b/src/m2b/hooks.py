@@ -12,8 +12,10 @@ every other line of the distillate, one line naming the topics, and the blocks o
 project folder's path names. The cut takes from the end, so path topics go first, then the topic line (B46). What the
 start showed is noted for the session, so the prompt hook does not bring it again (B47).
 
-Characters that hide or reorder text are taken out before anything is printed (B56): a curation run
-refuses lines that hold them, and this catches one written past it, by hand or by another tool.
+Characters that draw nothing are taken out of the distillate and of the notices before they are
+printed (B143, B144): a curation run refuses the lines that hide or reorder text with them (B56),
+and this catches one written past it, by hand or by another tool, and the characters a run lets
+stand.
 """
 
 from __future__ import annotations
@@ -33,7 +35,7 @@ from m2b.config.machine import MachineConfig
 from m2b.curate import machine_state
 from m2b.curate.detach import NOT_DOWNLOADED, start_detached
 from m2b.hook_input import HookInput
-from m2b.notes.characters import strip_unsafe
+from m2b.notes.characters import without_hidden
 from m2b.notes.layout import MEMORY, MEMORY_INDEX
 from m2b.notes.memory_index import TopicBlock, split_topics
 from m2b.paths import MachinePaths
@@ -112,7 +114,8 @@ def _print_distillate(
 ) -> list[str]:
     """Prints the notices and the session's view of the distillate; gives back the topics it showed."""
     store = open_store(config.store, machine.temp_dir)
-    notices = "".join(f"m2b: {line}\n" for line in _run_notices(store, machine, config.machine_id))
+    # A notice can name a file or repeat an error, and neither is m2b's own text.
+    notices = "".join(f"m2b: {without_hidden(line)}\n" for line in _run_notices(store, machine, config.machine_id))
     print(notices, end="")
     text = _distillate_text(store)
     if text is None:
@@ -288,7 +291,7 @@ def _unrecorded(event: machine_state.LogEvent | None) -> list[str]:
 def _distillate_text(store: Store) -> str | None:
     """The distillate, or None with one printed line saying why there is none."""
     try:
-        return strip_unsafe(store.read_bytes(MEMORY_INDEX_PATH).decode("utf-8", errors="replace"))
+        return without_hidden(store.read_bytes(MEMORY_INDEX_PATH).decode("utf-8", errors="replace"))
     except EvictedFileError:
         print(f"m2b: the distillate is not downloaded to this machine; run: {fetch_command(MEMORY_INDEX_PATH)}")
     except FileNotFoundError:
