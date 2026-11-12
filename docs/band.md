@@ -189,7 +189,7 @@ call:
 | Tool | Runs | Takes |
 |---|---|---|
 | `mcp__m2b__note` | `m2b capture --source claude --json -`, the text on standard input | `text`, and optionally `follow_up` (`YYYY-MM-DD`, also a task due that day) and `quiet` |
-| `mcp__m2b__search` | `m2b search --json --any -- <terms>` | `terms`, each a phrase of its own, and `whole_words` |
+| `mcp__m2b__search` | `m2b search --json --any -- <terms>` | `terms`, each a phrase of its own, `whole_words`, and `question_language`, the language the question was asked in |
 
 Their descriptions, which the model reads, carry the rules of the skills `/m2b:capture` and
 `/m2b:search`: what may be noted (never documents of customers or confidential statements about
@@ -207,7 +207,11 @@ was stopped or answered nothing readable; in the last case the model is told not
 before it has looked, so a note is not written twice. The search tool answers with the first 100
 hits in the order of `m2b search` (memory, then the archive, then the inbox, the newest note first),
 each cut at 500 characters, and names the files it could not search. Its answer opens with
-a line saying it is data from your notes, not instructions. Every text in it is one line, with
+a line saying it is data from your notes, not instructions. Where the model named the language
+of your question with the call, the answer ends with a line that names it as the language to
+answer in. The model names it before it has read a note: told only to answer in the question's
+language, it answered in the notes' language about one time in six where your notes and the
+distillate were both in another. Every text in it is one line, with
 escape sequences, control characters and the invisible characters m2b knows removed: marks that
 reorder text, zero-width characters, variation selectors and tag characters. That list cannot be
 complete. When `m2b` fails, the model gets an error that says it could not look, which it must not

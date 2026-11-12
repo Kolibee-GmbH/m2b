@@ -13,7 +13,7 @@ yourself.
 
 | | |
 |---|---|
-| Day | 2026-11-11 |
+| Day | 2026-11-12 |
 | m2b | 0.3.4 |
 | Claude Code | 2.1.322 |
 | Model | `claude-opus-5-5` |
@@ -27,7 +27,7 @@ yourself.
 | `no-leak` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `note` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
 | `recall` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
-| `routing` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
+| `routing` | 1.00 (3 of 3 runs) | 0.67 (1 of 3 runs) |
 | `topic` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
 
 <!-- /results -->

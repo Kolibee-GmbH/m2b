@@ -188,6 +188,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- A question in one language over notes in another is answered in the language of the question.
+  The search tool's description and the skill `search` already said so, and a session still
+  answered an English question in German about one time in six where the distillate and the
+  note were both German. The search tool now takes `question_language`, the language the
+  question was asked in, and its result ends with a line that names it as the language to
+  answer in. With it, 100 of 100 sessions on Sonnet answered in English; a sentence alone, at the
+  end of the result or at the session's start, did not change the rate. The skill's command,
+  used where the mod does not run, answered in English in 30 of 30 and is unchanged.
 - Only a file is the original of a conflict copy. A folder with that name beside the copy was
   taken for the original, and comparing the two failed with a read error; a symlink with that
   name that pointed at the copy compared equal to it, so the copy, the only bytes, was removed.
