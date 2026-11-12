@@ -8,16 +8,14 @@ curator's own output, so they are never a source of the next worklog. A file tha
 from __future__ import annotations
 
 import datetime
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from m2b_worklog.files import is_evicted
 from m2b_worklog.sources import READ, SourceState
 
 INBOX = "inbox"
 NOT_SOURCES = frozenset({"worklog", "candidate"})
-# macOS marks a file whose contents live only in the cloud (sys/stat.h SF_DATALESS).
-SF_DATALESS = 0x40000000
 
 
 @dataclass(frozen=True)
@@ -53,10 +51,6 @@ def read_inbox(store: Path, start: datetime.datetime, end: datetime.datetime) ->
     except OSError as error:
         return InboxFacts(found, SourceState.failed(str(error)))
     return InboxFacts(found, SourceState(READ, f"{evicted} not downloaded" if evicted else ""))
-
-
-def is_evicted(path: Path) -> bool:
-    return bool(getattr(os.lstat(path), "st_flags", 0) & SF_DATALESS)
 
 
 def _frontmatter(text: str) -> dict[str, str]:

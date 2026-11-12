@@ -224,6 +224,13 @@ Code's own folder: the one `CLAUDE_CONFIG_DIR` names, or `~/.claude` when that v
 | `inbox/` in the store | the day's note, with `source: worklog` and `kind: worklog` |
 | `state/addons/worklog/` in the store | `ledger.json` (the record), `ledger.csv` and `ledger.xlsx` (rebuilt every day, not for editing), `watermark.json` (where the next period starts), `intent.json` (only while a worklog is being written, so a rerun after a crash finishes the same plan) |
 
+A file in the store is written whole, with the code the core writes the store with: from a temporary
+file in `~/.local/state/m2b/tmp/`, so the service that syncs the store sees neither half a file nor
+a leftover of the worklog. Only when that folder is on another volume than the store, a hidden
+temporary file stands beside the target while it is written. On the machine, the recorder copy, the
+timer's files, the switch, the facts and the accepted verdict are replaced whole too, each from a
+hidden temporary file beside it.
+
 The recorder writes only while the m2b plugin is installed and on in Claude Code and the switch says
 `on`. The worklog's session-start hook sets the switch: on while the worklog is on, this machine
 curates and the recorder is installed, off otherwise. So a take-over by another machine or `m2b

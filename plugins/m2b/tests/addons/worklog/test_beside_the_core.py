@@ -1,5 +1,6 @@
 """Where the worklog meets the core: its step in the core's catalogue, its command at session start,
-its skills under the rules the core's skills keep, and the two core modules it imports.
+its skills under the rules the core's skills keep, the core modules it imports and the temp folder
+it shares with the core.
 
 The core's suite checks none of this, so that it passes in a plugin without the worklog. The rules
 and fixtures come from the core's tests, which an add-on's suite may use; the core's never uses an
@@ -10,17 +11,44 @@ from __future__ import annotations
 import ast
 import json
 import os
+import tempfile
 import unittest
+from pathlib import Path
 
 import test_client_skills as skill_rules
 import test_curate_model
 import test_package_boundaries as boundaries
 from m2b import addons, cli, launcher
+from m2b.paths import MachinePaths
+from m2b_worklog.paths import WorklogPaths
 from worklog_fixtures import PLUGIN_ROOT
 
 SESSION_START_COMMAND = '"${CLAUDE_PLUGIN_ROOT}"/bin/m2b-worklog hook session-start'
-# Each knowledge that must exist once: how credentials are found, and what Claude Code writes into a transcript.
-IMPORTED_FROM_THE_CORE = ("redaction", "claude_code")
+# Each knowledge that must exist once: how credentials are found, what Claude Code writes into a
+# transcript, how a file is written whole into a synced folder, and how an evicted file is told.
+IMPORTED_FROM_THE_CORE = ("redaction", "claude_code", "atomic_file", "store.guard")
+
+
+def sources_an_import_runs(module: str) -> list[Path]:
+    """The module's file and the ``__init__`` of each package on the way to it."""
+    *packages, name = module.split(".")
+    folder = boundaries.SOURCES / boundaries.CORE
+    sources = [folder / "__init__.py"]
+    for package in packages:
+        folder = folder / package
+        sources.append(folder / "__init__.py")
+    return [*sources, folder / f"{name}.py"]
+
+
+def core_modules_imported_by(source: Path) -> set[str]:
+    """What the file imports of the core; a relative import is one, whatever it names."""
+    imported: set[str] = set()
+    for node in ast.walk(ast.parse(source.read_text(encoding="utf-8"), str(source))):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            imported.add(f"{boundaries.CORE}.{node.module or ''}" if node.level else node.module or "")
+    return boundaries.of_package(imported, boundaries.CORE)
 
 
 class CatalogueTest(unittest.TestCase):
@@ -72,29 +100,32 @@ class FencedRunTest(test_curate_model.ModelCommandFixture):
 
 
 class ImportsTest(unittest.TestCase):
-    def test_the_worklog_imports_from_the_core_only_the_redaction_and_claude_codes_format(self) -> None:
+    def test_the_worklog_imports_from_the_core_only_the_modules_named_here(self) -> None:
         imported = boundaries.of_package(boundaries.imported_modules(boundaries.WORKLOG), boundaries.CORE)
 
         self.assertEqual(imported, {f"{boundaries.CORE}.{module}" for module in IMPORTED_FROM_THE_CORE})
 
-    def test_what_the_worklog_imports_imports_nothing_of_the_core_so_it_reaches_no_store(self) -> None:
+    def test_what_the_worklog_imports_imports_nothing_else_of_the_core(self) -> None:
         for module in IMPORTED_FROM_THE_CORE:
-            with self.subTest(module=module):
-                source = boundaries.SOURCES / boundaries.CORE / f"{module}.py"
-                tree = ast.parse(source.read_text(encoding="utf-8"))
-                imported = {
-                    name
-                    for node in ast.walk(tree)
-                    for name in (
-                        [alias.name for alias in node.names]
-                        if isinstance(node, ast.Import)
-                        else [node.module or ""]
-                        if isinstance(node, ast.ImportFrom)
-                        else []
-                    )
-                }
+            for source in sources_an_import_runs(module):
+                with self.subTest(module=module, source=source.name):
+                    self.assertEqual(core_modules_imported_by(source), set())
 
-                self.assertEqual(boundaries.of_package(imported, boundaries.CORE), set())
+    def test_the_helper_that_reads_imports_knows_a_core_import_in_each_form(self) -> None:
+        forms = ("import m2b.config", "from m2b.store import base", "from . import base", "from .base import Store")
+        for form in forms:
+            with self.subTest(form=form), tempfile.TemporaryDirectory() as folder:
+                source = Path(folder) / "module.py"
+                source.write_text(f"import os\n{form}\n", encoding="utf-8")
+
+                self.assertTrue(core_modules_imported_by(source))
+
+
+class TempFolderTest(unittest.TestCase):
+    def test_the_worklogs_temp_folder_is_the_cores_which_the_core_clears_of_leftovers(self) -> None:
+        home = Path("/home/alex")
+
+        self.assertEqual(WorklogPaths(home).temp_dir, MachinePaths(home).temp_dir)
 
 
 if __name__ == "__main__":

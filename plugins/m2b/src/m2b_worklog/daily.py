@@ -18,7 +18,9 @@ the facts since the watermark, has the model judge them through ``m2b curate mod
 6. the intent is removed.
 
 A rerun that finds an intent carries out that plan, not a new one, so each missing piece is written
-once and nothing twice (B28). Nothing is written outside the inbox and ``state/addons/worklog/``:
+once and nothing twice (B28). Each piece reaches the store whole, through the core's code: from a
+temporary file in the machine's temp folder, or a hidden one beside the target when that folder is
+on another volume (B135). Nothing is written outside the inbox and ``state/addons/worklog/``:
 bookings are proposals, because a wrong one ends up on an invoice, and the worklog adds no task and
 proposes nothing for memory (B129).
 """
@@ -35,11 +37,10 @@ from typing import Any
 
 from m2b_worklog import facts, ledger, verdict, writeup
 from m2b_worklog.core import Core
-from m2b_worklog.files import create_file, replace_file
+from m2b_worklog.files import create_in_store, is_evicted, replace_file, replace_in_store
 from m2b_worklog.paths import WorklogPaths
 from m2b_worklog.sources import READ as SOURCE_READ
 from m2b_worklog.sources import SourceState
-from m2b_worklog.sources.inbox import is_evicted
 
 STATE_DIR = "state/addons/worklog"
 INTENT = "intent.json"
@@ -92,7 +93,7 @@ def run(paths: WorklogPaths, core: Core, now: datetime.datetime, sources: Source
     folder = store / STATE_DIR
     intent = read_intent(folder)
     if intent is not None:
-        return "worklog: resumed; " + carry_out(store, intent)
+        return "worklog: resumed; " + carry_out(store, intent, paths.temp_dir)
     watermark = facts.read_watermark(store)
     if watermark is not None and now - watermark < DUE_AFTER:
         return f"worklog: not due, the last one ended {watermark.isoformat(timespec='minutes')}"
@@ -104,7 +105,7 @@ def run(paths: WorklogPaths, core: Core, now: datetime.datetime, sources: Source
     ledger.refuse_overlap(ledger.read(folder), period["start"], period["end"], _blocks_as_spans(collected))
     if _nothing_to_judge(collected):
         start, end = collected["period"]["start"], collected["period"]["end"]
-        _write_watermark(folder, end, writeup.period_id(start, end))
+        _write_watermark(folder, end, writeup.period_id(start, end), paths.temp_dir)
         return f"worklog: no sessions since {start}, nothing to judge"
     language = str(profile.get("language") or "en")
     hand_to_model(paths, store, language, collected)
@@ -116,17 +117,17 @@ def run(paths: WorklogPaths, core: Core, now: datetime.datetime, sources: Source
         clear_handed(paths)
     plan = writeup.build(collected, judged, language)
     intent = {"version": INTENT_VERSION, "plan": plan.as_json()}
-    _write_intent(folder, intent)
-    return "worklog: " + carry_out(store, intent)
+    _write_intent(folder, intent, paths.temp_dir)
+    return "worklog: " + carry_out(store, intent, paths.temp_dir)
 
 
-def carry_out(store: Path, intent: Mapping[str, Any]) -> str:
+def carry_out(store: Path, intent: Mapping[str, Any], temp_dir: Path) -> str:
     folder = store / STATE_DIR
     plan = writeup.Plan.from_json(intent["plan"])
-    wrote_note = _write_note(store, plan)
-    added = ledger.add(folder, plan.period_id, plan.start, plan.end, plan.spans)
-    ledger.export(folder)
-    _move_watermark(folder, plan)
+    wrote_note = _write_note(store, plan, temp_dir)
+    added = ledger.add(folder, plan.period_id, plan.start, plan.end, plan.spans, temp_dir)
+    ledger.export(folder, temp_dir)
+    _move_watermark(folder, plan, temp_dir)
     (folder / INTENT).unlink()
     parts = [
         f"note {'written' if wrote_note else 'already there'}: inbox/{plan.note_name}",
@@ -250,14 +251,14 @@ def _read_verdict(paths: WorklogPaths, collected: Mapping[str, Any]) -> dict[str
     return dict(judged)
 
 
-def _write_note(store: Path, plan: writeup.Plan) -> bool:
+def _write_note(store: Path, plan: writeup.Plan, temp_dir: Path) -> bool:
     """False when the note is in the inbox or already filed into the corpus by an earlier ingest."""
     end = datetime.datetime.fromisoformat(plan.end).astimezone(datetime.timezone.utc)
     if (store / "corpus" / f"{end:%Y}" / f"{end:%m}" / plan.note_name).exists():
         return False
     inbox = store / "inbox"
     inbox.mkdir(exist_ok=True)
-    return create_file(inbox / plan.note_name, plan.note_text.encode("utf-8"))
+    return create_in_store(inbox / plan.note_name, plan.note_text.encode("utf-8"), temp_dir)
 
 
 def _nothing_to_judge(collected: Mapping[str, Any]) -> bool:
@@ -271,16 +272,16 @@ def _nothing_to_judge(collected: Mapping[str, Any]) -> bool:
     return all(source["state"] == SOURCE_READ for source in collected["sources"].values())
 
 
-def _move_watermark(folder: Path, plan: writeup.Plan) -> None:
-    _write_watermark(folder, plan.end, plan.period_id)
+def _move_watermark(folder: Path, plan: writeup.Plan, temp_dir: Path) -> None:
+    _write_watermark(folder, plan.end, plan.period_id, temp_dir)
 
 
-def _write_watermark(folder: Path, end: str, period: str) -> None:
+def _write_watermark(folder: Path, end: str, period: str, temp_dir: Path) -> None:
     folder.mkdir(parents=True, exist_ok=True)
     mark = {"version": WATERMARK_VERSION, "end": end, "period": period}
-    replace_file(folder / "watermark.json", (json.dumps(mark) + "\n").encode())
+    replace_in_store(folder / "watermark.json", (json.dumps(mark) + "\n").encode(), temp_dir)
 
 
-def _write_intent(folder: Path, intent: Mapping[str, Any]) -> None:
+def _write_intent(folder: Path, intent: Mapping[str, Any], temp_dir: Path) -> None:
     folder.mkdir(parents=True, exist_ok=True)
-    replace_file(folder / INTENT, (json.dumps(intent, ensure_ascii=False, indent=1) + "\n").encode())
+    replace_in_store(folder / INTENT, (json.dumps(intent, ensure_ascii=False, indent=1) + "\n").encode(), temp_dir)

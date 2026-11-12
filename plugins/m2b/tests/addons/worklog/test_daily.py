@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+from m2b import atomic_file
 from m2b_worklog import daily, ledger, writeup
 from m2b_worklog.daily import DailyError, Sources
 from m2b_worklog.paths import WorklogPaths
@@ -221,7 +222,7 @@ class WriteTest(DailyFixture):
         folder = self.store / STATE
         first = (folder / "ledger.csv").read_bytes(), (folder / "ledger.xlsx").read_bytes()
 
-        ledger.export(folder)
+        ledger.export(folder, self.paths.temp_dir)
 
         self.assertEqual(((folder / "ledger.csv").read_bytes(), (folder / "ledger.xlsx").read_bytes()), first)
         rows = list(csv.DictReader(io.StringIO(first[0].decode("utf-8"))))
@@ -259,7 +260,7 @@ class WriteTest(DailyFixture):
         }
         (folder / "ledger.json").write_text(json.dumps(old), encoding="utf-8")
 
-        ledger.export(folder)
+        ledger.export(folder, self.paths.temp_dir)
 
         [row] = list(csv.DictReader(io.StringIO((folder / "ledger.csv").read_text(encoding="utf-8"))))
         self.assertEqual((row["minutes"], row["minutes_present"]), ("60", ""))
@@ -272,11 +273,20 @@ class LedgerOverlapTest(DailyFixture):
     def test_a_span_overlapping_one_of_the_same_session_is_refused_and_nothing_is_added(self) -> None:
         """Covers: B87"""
         folder = self.store / STATE
-        ledger.add(folder, "p1", at(9).isoformat(), at(12).isoformat(), [self.span("s1", at(10), at(11))])
+        ledger.add(
+            folder, "p1", at(9).isoformat(), at(12).isoformat(), [self.span("s1", at(10), at(11))], self.paths.temp_dir
+        )
         before = (folder / "ledger.json").read_bytes()
 
         with self.assertRaises(ledger.LedgerError) as caught:
-            ledger.add(folder, "p2", at(9).isoformat(), at(13).isoformat(), [self.span("s1", at(10, 30), at(12))])
+            ledger.add(
+                folder,
+                "p2",
+                at(9).isoformat(),
+                at(13).isoformat(),
+                [self.span("s1", at(10, 30), at(12))],
+                self.paths.temp_dir,
+            )
 
         self.assertIn("s1", str(caught.exception))
         self.assertIn(at(10).isoformat(), str(caught.exception))
@@ -286,7 +296,9 @@ class LedgerOverlapTest(DailyFixture):
     def test_a_period_that_only_touches_the_last_one_is_added(self) -> None:
         """Covers: B87"""
         folder = self.store / STATE
-        ledger.add(folder, "p1", at(9).isoformat(), at(11).isoformat(), [self.span("s1", at(10), at(11))])
+        ledger.add(
+            folder, "p1", at(9).isoformat(), at(11).isoformat(), [self.span("s1", at(10), at(11))], self.paths.temp_dir
+        )
 
         added = ledger.add(
             folder,
@@ -294,6 +306,7 @@ class LedgerOverlapTest(DailyFixture):
             at(11).isoformat(),
             at(13).isoformat(),
             [self.span("s2", at(11), at(12)), self.span("s1", at(11), at(12))],
+            self.paths.temp_dir,
         )
 
         self.assertTrue(added)
@@ -303,11 +316,11 @@ class LedgerOverlapTest(DailyFixture):
         # A workspace reopened under a new id: the same minutes come back under another session key.
         folder = self.store / STATE
         held = [self.span("workspace:w2:", at(10), at(11))]
-        ledger.add(folder, "p1", at(9).isoformat(), at(12).isoformat(), held)
+        ledger.add(folder, "p1", at(9).isoformat(), at(12).isoformat(), held, self.paths.temp_dir)
 
         with self.assertRaises(ledger.LedgerError) as caught:
             again = [self.span("workspace:w1:", at(10), at(11))]
-            ledger.add(folder, "p2", at(8).isoformat(), at(13).isoformat(), again)
+            ledger.add(folder, "p2", at(8).isoformat(), at(13).isoformat(), again, self.paths.temp_dir)
 
         self.assertIn(f"the period from {at(9).isoformat()} to {at(12).isoformat()}", str(caught.exception))
 
@@ -707,6 +720,15 @@ class RerunTest(DailyFixture):
 
         self.assertIn("m2b store fetch state/addons/worklog/ledger.json downloads it", str(raised.exception))
 
+    def test_an_evicted_intent_stops_the_worklog_and_names_the_fetch_command(self) -> None:
+        (self.store / STATE).mkdir(parents=True)
+        (self.store / STATE / "intent.json").write_text("{}", encoding="utf-8")
+
+        with mock.patch.object(daily, "is_evicted", return_value=True), self.assertRaises(DailyError) as raised:
+            self.run_daily()
+
+        self.assertIn("m2b store fetch state/addons/worklog/intent.json downloads it", str(raised.exception))
+
     def test_an_unreadable_intent_stops_the_worklog(self) -> None:
         (self.store / STATE).mkdir(parents=True)
         (self.store / STATE / "intent.json").write_text("{", encoding="utf-8")
@@ -765,6 +787,68 @@ class RerunTest(DailyFixture):
         self.run_daily()
 
         self.assertEqual(self.worklog_notes(), [f"inbox/{name}"])
+
+
+class WholeWritesTest(DailyFixture):
+    """Each piece reaches the store whole, from a temporary file in the machine's temp folder (B135)."""
+
+    @contextmanager
+    def last_steps_into_the_store(
+        self, break_off_at: str | None = None
+    ) -> Iterator[list[tuple[str, Path, dict[str, bytes]]]]:
+        """Each last step of a write into the store: the file, its temporary file, the store at that moment."""
+        seen: list[tuple[str, Path, dict[str, bytes]]] = []
+
+        def recording(real: Callable[..., None]) -> Callable[..., None]:
+            def last_step(source: Any, target: Any) -> None:
+                if self.store in Path(target).parents:
+                    name = Path(target).relative_to(self.store).as_posix()
+                    seen.append((name, Path(source), self.store_files()))
+                    if name == break_off_at:
+                        raise Crash(name)
+                real(source, target)
+
+            return last_step
+
+        with (
+            mock.patch.object(atomic_file.os, "replace", recording(os.replace)),
+            mock.patch.object(atomic_file.os, "link", recording(os.link)),
+        ):
+            yield seen
+
+    def test_every_piece_of_a_worklog_reaches_the_store_from_the_machines_temp_folder(self) -> None:
+        """Covers: B135"""
+        self.a_due_day()
+        held = set(self.store_files())
+
+        with self.last_steps_into_the_store() as seen:
+            self.run_daily()
+
+        [note] = self.worklog_notes()
+        state = [
+            f"{STATE.as_posix()}/{name}" for name in ("ledger.json", "ledger.csv", "ledger.xlsx", "watermark.json")
+        ]
+        written = [f"{STATE.as_posix()}/intent.json", note, *state]
+        self.assertEqual([name for name, _, _ in seen], written)
+        for index, (name, temporary, store_at_that_moment) in enumerate(seen):
+            with self.subTest(piece=name):
+                self.assertEqual(temporary.parent, self.paths.temp_dir)
+                self.assertEqual(sorted(store_at_that_moment), sorted({*held, *written[:index]}))
+        self.assertEqual(list(self.paths.temp_dir.iterdir()), [])
+
+    def test_a_worklog_broken_off_in_the_middle_of_a_write_leaves_the_store_as_it_was(self) -> None:
+        """Covers: B135"""
+        self.a_due_day()
+        ledger_file = f"{STATE.as_posix()}/ledger.json"
+
+        with self.last_steps_into_the_store(break_off_at=ledger_file) as seen, self.assertRaises(Crash):
+            self.run_daily()
+
+        _, _, store_before_the_last_step = seen[-1]
+        self.assertEqual(self.store_files(), store_before_the_last_step)
+        self.assertNotIn(ledger_file, store_before_the_last_step)
+        self.assertIn("resumed", self.run_daily())
+        self.assertEqual(len(self.ledger_periods()), 1)
 
 
 class CommandTest(DailyFixture):

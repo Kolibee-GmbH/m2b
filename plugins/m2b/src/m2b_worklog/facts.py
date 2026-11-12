@@ -17,10 +17,11 @@ from pathlib import Path
 from typing import Any
 
 from m2b_worklog import classify, periods, sessions
+from m2b_worklog.files import is_evicted
 from m2b_worklog.sources import READ, SourceState
 from m2b_worklog.sources.git import GitFacts, Runner, read_git
 from m2b_worklog.sources.herdr_events import read_recordings
-from m2b_worklog.sources.inbox import is_evicted, read_inbox
+from m2b_worklog.sources.inbox import read_inbox
 from m2b_worklog.sources.transcripts import read_transcripts
 
 FACTS_VERSION = 1

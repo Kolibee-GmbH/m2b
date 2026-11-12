@@ -27,8 +27,7 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
 
-from m2b_worklog.files import replace_file
-from m2b_worklog.sources.inbox import is_evicted
+from m2b_worklog.files import is_evicted, replace_in_store
 
 LEDGER_VERSION = 1
 LEDGER = "ledger.json"
@@ -73,7 +72,7 @@ def read(folder: Path) -> dict[str, Any]:
     return ledger
 
 
-def add(folder: Path, period: str, start: str, end: str, spans: Sequence[Mapping[str, Any]]) -> bool:
+def add(folder: Path, period: str, start: str, end: str, spans: Sequence[Mapping[str, Any]], temp_dir: Path) -> bool:
     """Adds the period's spans; False when the ledger holds the period already."""
     ledger = read(folder)
     if period in ledger["periods"]:
@@ -81,7 +80,7 @@ def add(folder: Path, period: str, start: str, end: str, spans: Sequence[Mapping
     refuse_overlap(ledger, start, end, spans)
     ledger["periods"][period] = {"start": start, "end": end, "spans": [dict(span) for span in spans]}
     folder.mkdir(parents=True, exist_ok=True)
-    replace_file(folder / LEDGER, (json.dumps(ledger, ensure_ascii=False, indent=1) + "\n").encode())
+    replace_in_store(folder / LEDGER, (json.dumps(ledger, ensure_ascii=False, indent=1) + "\n").encode(), temp_dir)
     return True
 
 
@@ -118,10 +117,10 @@ def _moment(text: Any) -> datetime.datetime:
     return datetime.datetime.fromisoformat(str(text))
 
 
-def export(folder: Path) -> None:
+def export(folder: Path, temp_dir: Path) -> None:
     rows = _rows(read(folder))
-    replace_file(folder / CSV_EXPORT, _csv(rows))
-    replace_file(folder / XLSX_EXPORT, _xlsx(rows))
+    replace_in_store(folder / CSV_EXPORT, _csv(rows), temp_dir)
+    replace_in_store(folder / XLSX_EXPORT, _xlsx(rows), temp_dir)
 
 
 def _rows(ledger: Mapping[str, Any]) -> list[list[str]]:

@@ -90,6 +90,13 @@ All notable changes to this project are documented here. The format follows
   worklog gives a note. Before, it joined any name to `inbox/`, so a changed `intent.json` in the
   synced store could create a file outside the store on the machine that curates. Such a file now
   counts as unreadable and nothing is written.
+- The worklog no longer puts a temporary file into the store's folder while it writes its note, the
+  ledger, the two exports, the watermark or `intent.json`. It writes them with the code the core
+  writes the store with, from a temporary file in `~/.local/state/m2b/tmp/`, so a synced store sees
+  neither half a file of the worklog nor a leftover after a crash; only when that folder is on
+  another volume than the store, a hidden temporary file stands beside the target while it is
+  written. A new file of the worklog now gets the mode your umask gives, like every other file in
+  the store, where it was readable by you alone before.
 
 ## [0.3.4] - 2026-11-11
 

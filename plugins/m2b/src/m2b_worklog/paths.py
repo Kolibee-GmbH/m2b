@@ -34,6 +34,11 @@ class WorklogPaths:
         return self.run_dir / "verdict-draft.json"
 
     @property
+    def temp_dir(self) -> Path:
+        """The core's folder for temporary files, in no store; the core clears it of what a crash left."""
+        return self.home / ".local" / "state" / "m2b" / "tmp"
+
+    @property
     def switch(self) -> Path:
         return self.state_dir / SWITCH_FILE
 
