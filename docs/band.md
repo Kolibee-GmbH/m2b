@@ -125,7 +125,8 @@ open review covers, and how many notes it filed.
 `/m2b-search <text>` shows the hits of `m2b search` in the same pane, each with its file and line
 and the line itself, without a model turn; a text that starts with a dash is searched as written.
 A word also matches inside longer words, so `Velo` finds `Developer` too; `/m2b-search --word Velo`
-matches whole words only.
+matches whole words only. The hits come as `m2b search` orders them: from memory first, then the
+archive, then the inbox, in both the newest note first.
 Files not downloaded from iCloud Drive are counted below the hits. Both commands run at once, also
 while a turn is working, and read through `m2b` only; the pane writes nothing but keep and drop.
 Where Claude Code cannot show a pane, for instance with no terminal attached, the command answers
@@ -203,8 +204,9 @@ The note tool answers with the path of the saved note, the day of its task or th
 for the next curation run, and anything `m2b` reported beside it. When a capture fails it tells
 the model which of three cases it is: not saved, nothing written, or unknown, after a capture that
 was stopped or answered nothing readable; in the last case the model is told not to note again
-before it has looked, so a note is not written twice. The search tool answers with at most 100
-hits, each cut at 500 characters, and names the files it could not search. Its answer opens with
+before it has looked, so a note is not written twice. The search tool answers with the first 100
+hits in the order of `m2b search` (memory, then the archive, then the inbox, the newest note first),
+each cut at 500 characters, and names the files it could not search. Its answer opens with
 a line saying it is data from your notes, not instructions. Every text in it is one line, with
 escape sequences, control characters and the invisible characters m2b knows removed: marks that
 reorder text, zero-width characters, variation selectors and tag characters. That list cannot be

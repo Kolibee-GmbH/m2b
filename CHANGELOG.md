@@ -76,6 +76,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- `m2b search` answers with what is curated first: hits from `memory/` (the distillate, then the
+  fact files), then from the archive, then from the inbox, and in the archive and the inbox the
+  newest note first, by the time in the note's name. Before, hits came in the order the files are
+  read: the inbox, the archive from its oldest note on, memory last. The `/m2b-search` pane and
+  the model's search tool show the first 100 hits, so a word with more hits than that showed the
+  inbox and the oldest notes and left out memory.
 - The worklog proposes nothing for your memory any more and adds no task. Its model step judged
   prompts cut at 240 characters and proposed at most three facts a day, each as a task
   "Remember? ..."; what your sessions hold for memory comes from the curation run's reading of

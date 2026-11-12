@@ -217,7 +217,8 @@ every session.
 
 "What did I note about the shed?", "what's open?", "show me something old": the `search`,
 `todos` and `rediscover` skills answer from the store. Search is full text over archive, memory
-and inbox; the skill searches a word together with its translation, so a note written in German
+and inbox; hits from memory come first, then the archive, then the inbox, in both the newest note
+first. The skill searches a word together with its translation, so a note written in German
 answers a question asked in English. Todos lists overdue, this week and undated tasks, and today's events when a calendar
 is set up. Rediscover brings one or a few old notes back, each with its reason, also for "what
 did I note last spring?". A file iCloud Drive has not downloaded is named, never read and never

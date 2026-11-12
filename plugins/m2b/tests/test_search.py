@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -66,7 +67,7 @@ class SearchTest(SearchFixture):
 
         found = [hit.path for hit in search(self.store, "acme").hits]
 
-        self.assertEqual(found, ["inbox/b.md", "corpus/2026/11/a.md", "memory/MEMORY.md", "memory/dana.md"])
+        self.assertEqual(found, ["memory/MEMORY.md", "memory/dana.md", "corpus/2026/11/a.md", "inbox/b.md"])
 
     def test_a_note_filed_from_the_inbox_into_the_corpus_during_the_search_is_still_found(self) -> None:
         self.write("inbox/20261105T080000Z-cli-abcd.md", "Dana\n")
@@ -106,7 +107,7 @@ class SearchTest(SearchFixture):
         hits = search(self.store, "lawn mower", "Rasenmäher").hits
 
         self.assertEqual(
-            [(hit.path, hit.line) for hit in hits], [("inbox/a.md", 1), ("inbox/a.md", 2), ("memory/b.md", 1)]
+            [(hit.path, hit.line) for hit in hits], [("memory/b.md", 1), ("inbox/a.md", 1), ("inbox/a.md", 2)]
         )
 
     def test_whole_words_holds_for_each_term(self) -> None:
@@ -236,6 +237,152 @@ class SearchTest(SearchFixture):
         self.assertEqual(result.fetch_commands(), ["m2b store fetch 'inbox/plan for Acme.md'"])
 
 
+class SearchOrderTest(SearchFixture):
+    def paths_found(self) -> list[str]:
+        return [hit.path for hit in search(self.store, "dana").hits]
+
+    def test_hits_come_from_memory_then_the_archive_then_the_inbox(self) -> None:
+        """Covers: B142"""
+        self.write("inbox/20261109T080000Z-cli-aaaa.md", "Dana called\n")
+        self.write("corpus/2026/10/20261012T081500Z-cli-bbbb.md", "Dana likes old maps.\n")
+        self.write("memory/dana.md", "# Dana\n")
+
+        self.assertEqual(
+            self.paths_found(),
+            ["memory/dana.md", "corpus/2026/10/20261012T081500Z-cli-bbbb.md", "inbox/20261109T080000Z-cli-aaaa.md"],
+        )
+
+    def test_the_distillate_comes_before_the_fact_files_and_those_come_by_name(self) -> None:
+        """Covers: B142"""
+        for name in ("dana.md", "MEMORY.md", "Acme.md", "2026-plans.md", "alex.md", "old/MEMORY.md"):
+            self.write(f"memory/{name}", "Dana\n")
+
+        self.assertEqual(
+            self.paths_found(),
+            [
+                "memory/MEMORY.md",
+                "memory/2026-plans.md",
+                "memory/Acme.md",
+                "memory/alex.md",
+                "memory/dana.md",
+                "memory/old/MEMORY.md",
+            ],
+        )
+
+    def test_in_the_archive_and_the_inbox_the_newest_note_comes_first_by_the_time_in_its_name(self) -> None:
+        """Covers: B142"""
+        newest_first = [
+            "corpus/2026/11/20261103T120001Z-cli-dddd.md",
+            "corpus/2026/11/20261103T120000Z-cli-aaaa.md",
+            "corpus/2026/11/20261103T120000Z-phone-bbbb.md",
+            "corpus/2026/10/20261012T081500Z-cli-eeee.md",
+            "corpus/2025/12/20251224T180000Z-cli-cccc.md",
+            "inbox/20261109T070000Z-cli-ffff.md",
+            "inbox/20261108T070000Z-cli-9999.md",
+        ]
+        for position, relative in enumerate(newest_first):
+            self.write(relative, "Dana\n")
+            # A synced folder gives a file the time it arrived: here the newest note changed first.
+            changed = 1_700_000_000 + position * 86_400
+            os.utime(self.root / relative, (changed, changed))
+
+        self.assertEqual(self.paths_found(), newest_first)
+
+    def test_the_time_in_the_name_decides_not_the_month_folder_a_note_lies_in(self) -> None:
+        """Covers: B142"""
+        self.write("corpus/2026/11/20261031T233000Z-cli-aaaa.md", "Dana\n")
+        self.write("corpus/2026/10/20261031T234500Z-cli-bbbb.md", "Dana\n")
+
+        self.assertEqual(
+            self.paths_found(),
+            ["corpus/2026/10/20261031T234500Z-cli-bbbb.md", "corpus/2026/11/20261031T233000Z-cli-aaaa.md"],
+        )
+
+    def test_a_months_journal_comes_after_the_notes_of_its_month_and_before_older_notes(self) -> None:
+        """Covers: B142"""
+        self.write("corpus/2026/10/202610-done.md", "- write to Dana\n")
+        self.write("corpus/2026/10/20261031T220000Z-cli-bbbb.md", "Dana\n")
+        self.write("corpus/2026/11/202611-done.md", "- call Dana\n")
+        self.write("corpus/2026/11/20261101T000500Z-cli-aaaa.md", "Dana\n")
+        self.write("corpus/2026/11/20261101T000000Z-cli-cccc.md", "Dana\n")
+
+        self.assertEqual(
+            self.paths_found(),
+            [
+                "corpus/2026/11/20261101T000500Z-cli-aaaa.md",
+                "corpus/2026/11/20261101T000000Z-cli-cccc.md",
+                "corpus/2026/11/202611-done.md",
+                "corpus/2026/10/20261031T220000Z-cli-bbbb.md",
+                "corpus/2026/10/202610-done.md",
+            ],
+        )
+
+    def test_a_file_without_a_time_in_its_name_comes_after_every_dated_one_by_path(self) -> None:
+        """Covers: B142"""
+        for relative in (
+            "corpus/2026/11/readme.md",
+            "corpus/0000/01/000001-done.md",
+            "corpus/2019/01/20190105T070000Z-cli-bbbb.md",
+            "corpus/1969/07/19690720T201700Z-cli-dddd.md",
+            "inbox/shopping list.md",
+            "inbox/Notes.txt",
+            "inbox/20261340T250000Z-cli-cccc.md",
+            "inbox/20261109T070000Z-cli-aaaa 2.md",
+            "inbox/20261109T070000Z-cli-aaaa.md",
+        ):
+            self.write(relative, "Dana\n")
+
+        self.assertEqual(
+            self.paths_found(),
+            [
+                "corpus/2019/01/20190105T070000Z-cli-bbbb.md",
+                "corpus/1969/07/19690720T201700Z-cli-dddd.md",
+                "corpus/0000/01/000001-done.md",
+                "corpus/2026/11/readme.md",
+                "inbox/20261109T070000Z-cli-aaaa.md",
+                "inbox/20261109T070000Z-cli-aaaa 2.md",
+                "inbox/20261340T250000Z-cli-cccc.md",
+                "inbox/Notes.txt",
+                "inbox/shopping list.md",
+            ],
+        )
+
+    def test_the_hits_of_one_file_stay_together_in_line_order(self) -> None:
+        """Covers: B142"""
+        self.write("inbox/20261109T070000Z-cli-aaaa.md", "Dana called\nno name here\nDana again\n")
+        self.write("memory/dana.md", "# Dana\nBirthday: 3 March\nDana likes old maps.\n")
+
+        self.assertEqual(
+            [(hit.path, hit.line) for hit in search(self.store, "dana").hits],
+            [
+                ("memory/dana.md", 1),
+                ("memory/dana.md", 3),
+                ("inbox/20261109T070000Z-cli-aaaa.md", 1),
+                ("inbox/20261109T070000Z-cli-aaaa.md", 3),
+            ],
+        )
+
+    def test_the_files_left_out_are_listed_as_they_were_read_not_in_the_order_of_the_hits(self) -> None:
+        for relative in ("inbox/a.md", "inbox/b.md", "corpus/2026/11/c.md", "corpus/2026/11/d.md", "memory/e.md"):
+            self.write(relative, "Dana\n")
+        self.write("memory/f.md", "Dana\n")
+        for relative in ("inbox/a.md", "corpus/2026/11/c.md", "memory/e.md"):
+            self.evict(relative)
+        real_read = self.store.read_bytes
+
+        def read_bytes(relative: str) -> bytes:
+            if relative in ("inbox/b.md", "corpus/2026/11/d.md"):
+                raise StoreReadError(f"{relative} could not be read: permission denied")
+            return real_read(relative)
+
+        with mock.patch.object(self.store, "read_bytes", read_bytes):
+            result = search(self.store, "dana")
+
+        self.assertEqual([hit.path for hit in result.hits], ["memory/f.md"])
+        self.assertEqual(result.evicted, ["corpus/2026/11/c.md", "inbox/a.md", "memory/e.md"])
+        self.assertEqual([item.path for item in result.unreadable], ["inbox/b.md", "corpus/2026/11/d.md"])
+
+
 class SearchCommandTest(unittest.TestCase):
     def setUp(self) -> None:
         self._temp = tempfile.TemporaryDirectory()
@@ -277,6 +424,26 @@ class SearchCommandTest(unittest.TestCase):
 
         self.assertEqual(code, cli.EXIT_OK, err)
         self.assertEqual(out, "memory/dana.md:2: Birthday: 3 March\n")
+
+    def test_hits_print_curated_first_then_the_archive_and_the_inbox_newest_first(self) -> None:
+        """Covers: B142"""
+        self.set_up()
+        self.write("inbox/20261109T080000Z-cli-aaaa.md", "Dana called\n")
+        self.write("corpus/2026/10/20261012T081500Z-cli-bbbb.md", "Dana likes old maps.\n")
+        self.write("corpus/2026/11/20261103T120000Z-cli-cccc.md", "Dana moved to Lisbon.\n")
+        self.write("memory/dana.md", "# Dana\n")
+        in_order = [
+            "memory/dana.md",
+            "corpus/2026/11/20261103T120000Z-cli-cccc.md",
+            "corpus/2026/10/20261012T081500Z-cli-bbbb.md",
+            "inbox/20261109T080000Z-cli-aaaa.md",
+        ]
+
+        _, text, _ = self.run_command("search", "dana")
+        _, answer, _ = self.run_command("search", "--json", "dana")
+
+        self.assertEqual([line.split(":")[0] for line in text.splitlines()], in_order)
+        self.assertEqual([hit["path"] for hit in json.loads(answer)["hits"]], in_order)
 
     def test_several_words_are_searched_as_one_phrase(self) -> None:
         """Covers: B68"""

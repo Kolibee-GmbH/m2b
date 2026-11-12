@@ -22,8 +22,14 @@ def journal_name(year: int, month: int) -> str:
     return f"{year:04d}{month:02d}-done.md"
 
 
+def journal_month(name: str) -> tuple[int, int] | None:
+    """The year and month in the name of a month's journal, or None for any other name."""
+    match = _JOURNAL_NAME.match(name)
+    return (int(match.group(1)), int(match.group(2))) if match else None
+
+
 def is_journal_name(name: str) -> bool:
-    return _JOURNAL_NAME.match(name) is not None
+    return journal_month(name) is not None
 
 
 def waiting_on_evicted(files: Iterable[str], evicted: Iterable[str]) -> set[str]:
