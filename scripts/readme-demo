@@ -1,0 +1,9 @@
+#!/bin/sh
+# Records the README's moving picture, docs/images/demo.gif: one sentence from a prompt into a later
+# session, drawn by real Claude Code sessions and a real curation run against a demo store with
+# invented data. Needs claude (logged in), agg and git; it costs two model turns and one curation
+# run. Watch the picture through before committing it.
+set -eu
+
+repo_root=$(cd "$(dirname "$0")/.." && pwd)
+PYTHONPATH="$repo_root/scripts${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m repo_tools.readme_demo "$@"

@@ -390,3 +390,25 @@ It needs `claude` logged in, `node` and `npm`, Chrome or Chromium, ImageMagick a
 picture costs one model turn. Claude Code runs with `--setting-sources project`, m2b from this
 checkout and its own `M2B_HOME` under `/tmp/sb-test-m2b-demo`, so your settings, plugins and store
 stay out of the pictures. The answers are the model's: look at each picture before you commit it.
+
+The moving picture at the top of the README, `docs/images/demo.gif`, follows one sentence from a
+prompt into a later session. Record it again after a change it shows:
+
+```bash
+scripts/readme-demo
+```
+
+It needs `claude` logged in, [`agg`](https://docs.asciinema.org/manual/agg/) and `git`. It builds
+the same demo machine with an empty store and records three acts in a hidden terminal: a Claude
+Code session that is told to remember the sentence, `m2b curate --force` in a plain shell, and a
+session in a second project that is asked for it. The run in the middle uses a real model, not
+`scripts/no-model`, so the fact the last session answers with is one a curation run filed: two
+model turns and one run on your Claude Code login, about three minutes. What the picture changes
+against the recording: a session's start is cut, the model's answer and the run are shortened to a
+few seconds, and a line of words stands before each act.
+
+The script stops without a picture when the terminal drew your home folder, your user name or
+your host name. That check reads plain text only, so watch the picture through as well, for
+example frame by frame with `ffmpeg -i docs/images/demo.gif -vf fps=2 /tmp/demo-%03d.png`, and
+keep the file under about 2 MB; the script prints its size. `--cast <file>` also keeps the
+recording the picture is rendered from, in asciinema's format.

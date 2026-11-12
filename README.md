@@ -3,9 +3,8 @@
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.png">
     <img src="docs/images/logo-light.png" alt="m2b" width="230">
   </picture>
+  <br><em>A second brain for Claude Code. The right context in every session.</em>
 </p>
-
-<p align="center"><em>A second brain for Claude Code. The right context in every session.</em></p>
 
 <p align="center">
   <a href="https://github.com/Kolibee-GmbH/m2b/releases"><img src="https://img.shields.io/github/v/release/Kolibee-GmbH/m2b?style=flat-square" alt="Release"></a>
@@ -21,12 +20,14 @@
   <a href="docs/commands.md">Commands</a> · <a href="SECURITY.md">Security</a> · <a href="CHANGELOG.md">Changelog</a>
 </p>
 
+![Three steps in a terminal. First, in a Claude Code session in the project invoice-tool, the prompt "remember that Dana's birthday is on 3 March" makes Claude call the m2b note tool, which saves the sentence as one file, and the status line below the prompt reads "1 in inbox". Second, in a shell, "m2b curate --force" answers "the curation run succeeded", and the file memory/MEMORY.md then holds the line "Dana's birthday is on 3 March (dana.md)" under Facts. Third, a new Claude Code session in another project, garden-site, is asked "when is Dana's birthday?" and answers 3 March from the note dana.md, without a tool call](docs/images/demo.gif)
+<sub>One sentence from a prompt into a later session: two real Claude Code sessions and, between them, the real background run that files the note, on a demo machine with invented notes, recorded by `scripts/readme-demo`. The waits are shortened, and the run is started by hand here; in daily use the next session start begins it.</sub>
+
 Tell Claude Code "remember that Dana's birthday is on 3 March" in one project. A run in the
 background files the note, and from then on every session, in any project, starts knowing it. Your
 notes stay plain Markdown files in a folder you own.
 
 What m2b adds to Claude Code's own memory, the notes Claude keeps for itself for each project:
-
 - one memory for all your projects and machines, in a folder you choose and sync as you like;
 - your words kept as you said them, and every fact pointing back to them;
 - tasks from the same sentence: "remind me to call the plumber on Friday" lands in your task list.
@@ -134,7 +135,8 @@ belong in its repository and its `CLAUDE.md`; m2b is for what has no repository.
 |---|---|---|---|
 | `CLAUDE.md` | instructions and facts for one project | in the repository | you, by hand |
 | Claude Code's memory | short notes Claude keeps for itself | Claude Code's own files, per project or user | Claude, in the session |
-| A notes MCP server | whatever the server stores | the server | the model, in the session |
+| [obsidian-second-brain](https://github.com/eugeniughelbur/obsidian-second-brain) | what a chat or a source you feed it says, as linked notes on people, projects, decisions and tasks | your Obsidian vault: Markdown files on your computer | the model in your session, on its commands that save, ingest and capture and with each answer (its "Two-Output Rule"); if you turn them on, a headless run after each context compaction and scheduled agents |
+| [basic-memory](https://github.com/basicmachines-co/basic-memory) | notes with observations and relations, which form a knowledge graph | Markdown files on your disk with a local SQLite index, or the project's paid cloud | the model in your session, through the tools of an MCP server, and you in any editor |
 | m2b | your notes, facts and tasks across all projects, as plain files you own | a folder you choose, synced as you like | you capture; a curation run files |
 
 ### m2b or Claude Code's auto memory
@@ -154,6 +156,35 @@ What m2b has that Claude Code's memory does not:
 - topics, so a customer's facts reach only the sessions about that customer;
 - one store across all projects and machines, in a folder you choose and sync as you like, as
   plain Markdown you can read, back up and move without m2b.
+
+### m2b or another memory project
+
+Two public projects also keep what Claude Code should remember as Markdown files you own, and both
+do more than m2b in several ways. The table is from their READMEs as read on 2026-11-12:
+[obsidian-second-brain](https://github.com/eugeniughelbur/obsidian-second-brain/blob/addf151ebb4c98c681ad8bd15e102ab6dad6caf8/README.md)
+as of its commit `addf151`,
+[basic-memory](https://github.com/basicmachines-co/basic-memory/blob/b056f8e57013de9c0791e37678fe0c74caf47ffa/README.md)
+as of `b056f8e`. Their code was not read, both change quickly, and "not stated" means that README
+does not say.
+
+| | obsidian-second-brain | basic-memory | m2b |
+|---|---|---|---|
+| Works with | Claude Code, Codex CLI, Gemini CLI, OpenCode, Hermes, Pi, Grok Bot and any Agent Skills harness | any MCP client: Claude Desktop, Claude Code, Codex, Cursor, VS Code, ChatGPT | Claude Code only |
+| Runs on | macOS, Linux and Windows | macOS, Windows and Linux are named for Claude Desktop | macOS 14 or newer and Linux, not Windows |
+| Search | keyword search without setup; search by meaning as an option, with a local or a hosted embedding model | full text and by meaning, ranked together; reranking as an option | full text only: a note is found by the words it holds |
+| Takes in | chats, links, PDFs, Word files, voice memos, screenshots, YouTube videos, web research | what the model writes in a chat and what you write in an editor; imports of Claude and ChatGPT conversations | what you ask it to remember; after a yes in setup also proposals from what you typed in your sessions |
+| Connects notes | rewrites existing pages when a source comes in, resolves contradictions, writes pages that name patterns across sources | observations and relations between notes, a graph the model follows link by link | no links between notes: one fact file per subject, pointing to the notes it came from |
+| Other devices | a Telegram bot as an option, to capture from a phone, with your Anthropic API key and a poller on your computer; the vault syncs with Obsidian Sync, iCloud, Syncthing or Git | the paid cloud: web, mobile and desktop with sync, snapshots and backups, US$15 a month for as long as you stay subscribed when you sign up during its beta (regular price US$19); a local install syncs by Git, Syncthing or the like | whatever syncs the folder; a phone captures through a shortcut you write ([Integrations](docs/integrations.md)), m2b has no app |
+| Several people or agents | Crew: one logbook that Claude Code, Codex, Cursor and Grok Bot share | Teams: a shared cloud workspace | one person |
+| Where notes are filed | in your session; as options, after each context compaction by a headless `claude -p` with `--dangerously-skip-permissions` and the tools Read, Write, Edit, Glob and Grep, and by four scheduled agents | in your session, by the model through the server's tools | in a run of its own, apart from your session, in which the model may call only the commands its step needs |
+| Facts that stop being true | every stored fact is timeless, dated or a pointer, checked by a linter; a changed fact keeps when it was true and when the vault learned it | not stated | a fact can carry the day it ends and is rewritten once that day has passed |
+| Tasks | saved as notes and on kanban boards in the vault | not stated | Apple Reminders or Markdown files |
+| Network and telemetry | the vault commands need no API key; some research commands need your keys for Grok, Perplexity or Gemini; telemetry is not stated | anonymous events about the promotion of its cloud and logins to it, off with `BASIC_MEMORY_NO_PROMOS=1`; checks for updates every 24 hours and installs them, for `uv tool` and Homebrew installs, unless turned off | no network connection of its own, no telemetry |
+| License | MIT | AGPL-3.0 | MIT |
+
+Take one of them when you need another agent than Claude Code, Windows, search by meaning,
+sources beyond your own sentences, or notes that link to each other. m2b is the narrower tool: it
+keeps what you say, files it outside your session and puts a summary in front of every session.
 
 ## What runs on your machine
 

@@ -40,7 +40,7 @@ flowchart LR
 | `tests/glean/` | an invented day of typed prompts, which `scripts/glean-eval` asks a model about |
 | `tests/ingest/` | an invented store and inbox, which `scripts/ingest-eval` has a model file in a real curation run |
 | `tests/fence/` | the skill `scripts/fence-probe` starts as a curation step: the calls a step must not be able to make |
-| `scripts/` | `check` (the whole proof), `e2e`, `trigger-check`, `glean-eval`, `ingest-eval`, `fence-probe`, `no-model`, `readme-images`, `evals-page`; `repo_tools/core_alone.py` lists what in the plugin's folder belongs to each add-on and runs the core without it |
+| `scripts/` | `check` (the whole proof), `e2e`, `trigger-check`, `glean-eval`, `ingest-eval`, `fence-probe`, `no-model`, `readme-images`, `readme-demo`, `evals-page`; `repo_tools/core_alone.py` lists what in the plugin's folder belongs to each add-on and runs the core without it |
 
 ## Three rules the code keeps
 

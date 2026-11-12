@@ -23,6 +23,10 @@ In short:
 
 ### Added
 
+- The README opens with a moving picture that follows one sentence from a prompt, through a
+  curation run, into a session in another project; `scripts/readme-demo` records it from real
+  sessions against a demo store with invented notes. Its comparison names two public projects,
+  obsidian-second-brain and basic-memory, and says where each does more than m2b.
 - A store on the `folder` backend recognizes the conflict copies of Dropbox and Syncthing, as the
   `icloud` backend recognizes iCloud's. Until now such a copy was a file like any other there: a
   copy of a task file was a second task, a copy in the inbox was filed as a second capture, and a
