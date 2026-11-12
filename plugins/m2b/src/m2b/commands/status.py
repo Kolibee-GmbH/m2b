@@ -32,7 +32,7 @@ from m2b.config.errors import ConfigError
 from m2b.config.machine import MachineConfig, load_machine_config
 from m2b.config.store_settings import describe_format, format_state, load_store_settings
 from m2b.curate import machine_state
-from m2b.curate.due import check_due
+from m2b.curate.due import PAUSED_NOTE, check_due
 from m2b.glean import KINDS
 from m2b.notes.layout import INBOX
 from m2b.paths import MachinePaths
@@ -82,6 +82,7 @@ def status_answer(config: MachineConfig, context: Context, tasks_check: Check | 
         answer["due"] = {"due": due.due, "reason": due.reason}
     else:
         answer["due"] = None
+    answer["paused"] = config.curation.paused
     checked_at, backends = _backends(config, context, now, tasks_check)
     answer["backends"] = backends
     answer["backends_checked_at"] = checked_at
@@ -164,7 +165,8 @@ def _proposal_answers(store: Store, config: MachineConfig, now: datetime.datetim
 
 
 def _last_attempt(machine: MachinePaths, run: dict[str, Any]) -> dict[str, str] | None:
-    """A run that was not due after the last recorded run, so a scheduled attempt shows it reached m2b."""
+    """An attempt after the last recorded run that started none, because none was due or the machine
+    is paused, so a scheduled attempt shows it reached m2b."""
     attempt = machine_state.last_attempt(machine)
     if attempt is None or attempt.time is None:
         return None
@@ -218,6 +220,8 @@ def _print_text(answer: dict[str, Any]) -> None:
         print(f"due: asked on {curating}, the curating machine")
     else:
         print(f"due: {'yes' if due['due'] else 'no'} ({due['reason']})")
+    if answer["paused"]:
+        print(f"paused: {PAUSED_NOTE}")
     for name, check in answer["backends"].items():
         print(f"{name}: {check['state']}" + (f" ({check['detail']})" if check.get("detail") else ""))
     store_format = answer.get("store_format")

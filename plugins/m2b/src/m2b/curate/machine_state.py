@@ -8,9 +8,10 @@ the store, because the store syncs to other machines.
 - **The run log** ``run.log``: one JSON line per run outcome, rotated to ``run.log.1`` at 1 MB.
   It is the only trace of a refusal on a machine that does not curate, and of a run whose run
   record could not be written (``unrecorded``), which the session-start hook shows from here.
-- **The last attempt** ``last-attempt.json``: a run that was not due, overwritten each time. It is
-  an attempt, not an outcome, so it stays out of the run log; ``m2b status`` shows it, so a
-  scheduled run that found nothing to do still shows it reached m2b.
+- **The last attempt** ``last-attempt.json``: a run that was not due, or was asked for on a
+  paused machine without being forced, overwritten each time. It is an attempt, not an outcome,
+  so it stays out of the run log; ``m2b status`` shows it, so a scheduled run that started
+  nothing still shows it reached m2b.
 - **The background run's errors** ``detached-run.err``: what the last run started in the
   background wrote on standard error, replaced at each such start. A run that dies before it can
   write a run record or a line of the run log leaves its reason nowhere else.
@@ -74,6 +75,7 @@ UNRECORDED = "unrecorded"
 SUCCEEDED = "succeeded"
 FAILED = "failed"
 NOT_DUE = "not_due"
+PAUSED = "paused"
 
 
 def lock_file(machine: MachinePaths) -> Path:
@@ -339,7 +341,8 @@ def load_backoff(machine: MachinePaths) -> Backoff | None:
 
 
 def record_attempt(machine: MachinePaths, kind: str, message: str, now: datetime.datetime) -> None:
-    """Overwrites the last attempt; a run that is not due writes it instead of a run log line."""
+    """Overwrites the last attempt; a run that is not due, or not forced on a paused machine, writes
+    it instead of a run log line."""
     data = json.dumps({"time": now.isoformat(), "kind": kind, "message": message}, ensure_ascii=False) + "\n"
     replace_atomically(attempt_file(machine), data.encode("utf-8"), machine.temp_dir)
 

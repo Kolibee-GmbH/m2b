@@ -120,6 +120,14 @@ class ParseTest(unittest.TestCase):
         with self.assertRaises(InvalidConfigError):
             machine.parse_machine_config(_config(curation={"git_commit": "no"}), HOME)
 
+    def test_curation_is_not_paused_until_the_config_says_so(self) -> None:
+        """Covers: B161"""
+        self.assertFalse(machine.parse_machine_config(_config(), HOME).curation.paused)
+        config = machine.parse_machine_config(_config(curation={"paused": True}), HOME)
+        self.assertTrue(config.curation.paused)
+        with self.assertRaises(InvalidConfigError):
+            machine.parse_machine_config(_config(curation={"paused": "yes"}), HOME)
+
     def test_the_curation_model_and_turn_limit_default_to_a_small_model_and_100(self) -> None:
         config = machine.parse_machine_config(_config(), HOME)
         self.assertEqual((config.curation.model, config.curation.max_turns), ("haiku", 100))

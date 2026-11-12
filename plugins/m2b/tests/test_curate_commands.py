@@ -248,6 +248,32 @@ class DetachTest(test_runner.RunnerTest):
         self.assertIn("already running", out)
         start.assert_not_called()
 
+    def test_detach_on_a_paused_machine_starts_nothing_unless_forced(self) -> None:
+        """Covers: B161"""
+        self.curating(curation={"paused": True})
+        self.capture()
+
+        with test_runner.mock.patch("m2b.curate.detach.subprocess.Popen", return_value=_Started()) as start:
+            code, out, _ = self.run_command("curate", "--detach")
+            start.assert_not_called()
+            forced_code, forced_out, _ = self.run_command("curate", "--force", "--detach")
+
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertIn("paused", out)
+        self.assertEqual(forced_code, cli.EXIT_OK)
+        self.assertIn("started in the background", forced_out)
+        start.assert_called_once()
+
+    def test_curate_without_force_on_a_paused_machine_says_so_and_exits_0(self) -> None:
+        """Covers: B161"""
+        self.curating(curation={"paused": True})
+        self.capture()
+
+        code, out, err = self.run_command("curate")
+
+        self.assertEqual((code, err), (cli.EXIT_OK, ""))
+        self.assertIn("curation is paused: no curation run starts by itself", out)
+
 
 class TakeOverTest(test_runner.RunnerTest):
     def test_take_over_names_this_machine_and_lists_the_addons_that_were_on_there(self) -> None:

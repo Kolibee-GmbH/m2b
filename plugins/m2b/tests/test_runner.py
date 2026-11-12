@@ -710,6 +710,32 @@ class PreflightTest(RunnerTest):
         self.assertEqual(outcome.state, runner.NOT_DUE)
         self.assertEqual(self.calls(), [])
 
+    def test_a_paused_machine_runs_nothing_by_itself_and_records_the_attempt(self) -> None:
+        """Covers: B161"""
+        self.curating(curation={"paused": True})
+        self.capture()
+
+        outcome = self.run_curate(force=False)
+
+        self.assertEqual(outcome.state, runner.PAUSED)
+        self.assertIn("m2b config set curation.paused false", outcome.message)
+        self.assertEqual(self.calls(), [])
+        self.assertTrue((self.store_root / "inbox" / "20261107T070000Z-cli-a1b2.md").exists())
+        self.assertFalse((self.store_root / RUN_RECORD).exists())
+        attempt = machine_state.last_attempt(self.machine)
+        assert attempt is not None
+        self.assertEqual((attempt.kind, attempt.time), (machine_state.PAUSED, START))
+
+    def test_a_paused_machine_still_runs_when_the_run_is_asked_for_by_hand(self) -> None:
+        """Covers: B161"""
+        for asked in ({"force": True}, {"force": False, "refresh_all": True}, {"force": False, "sort_facts": True}):
+            with self.subTest(asked=asked):
+                self.curating(curation={"paused": True})
+
+                outcome = self.run_curate(**asked)
+
+                self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+
     def test_a_run_that_is_not_due_records_the_attempt_naming_the_last_success(self) -> None:
         """A scheduled run that finds nothing to do still shows that it reached m2b."""
         self.curating()

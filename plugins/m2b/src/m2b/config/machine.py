@@ -57,6 +57,10 @@ class CurationSettings:
     # (``curate.run_commit``). On, because the repository is the owner's own doing; this is the way
     # to keep one there and say no.
     git_commit: bool = True
+    # Whether this machine starts no run by itself: none at a session start, none from a schedule.
+    # A run asked for by hand (``m2b curate --force``) still runs, so the owner can pause the
+    # background work and file the inbox when it suits.
+    paused: bool = False
 
 
 @dataclass(frozen=True)
@@ -138,7 +142,7 @@ def _executables(fields: Fields) -> Mapping[str, str]:
 
 def _curation(fields: Fields) -> CurationSettings:
     fields.reject_unknown(
-        ("model_timeout_minutes", "model", "max_turns", "max_budget_usd", "read_sessions", "git_commit")
+        ("model_timeout_minutes", "model", "max_turns", "max_budget_usd", "read_sessions", "git_commit", "paused")
     )
     return CurationSettings(
         model_timeout_minutes=fields.integer("model_timeout_minutes", default=DEFAULT_MODEL_TIMEOUT_MINUTES),
@@ -147,6 +151,7 @@ def _curation(fields: Fields) -> CurationSettings:
         max_budget_usd=_budget(fields),
         read_sessions=fields.boolean("read_sessions", default=False),
         git_commit=fields.boolean("git_commit", default=True),
+        paused=fields.boolean("paused", default=False),
     )
 
 

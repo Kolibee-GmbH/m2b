@@ -7,6 +7,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+In short:
+
+- A curation run can read what you typed in Claude Code and propose what belongs in your memory;
+  nothing is filed before you keep it ([Reading your sessions](docs/curation.md#reading-your-sessions)).
+- With the store in a git repository, each run ends with one commit
+  ([A commit per run](docs/curation.md#a-commit-per-run)).
+- A run's model steps are fenced more tightly, and what a capture says is treated as data
+  ([Security](SECURITY.md)).
+- `curation.paused` pauses the background runs on a machine ([Pausing](docs/curation.md#pausing)),
+  `m2b --version` prints the version, and [Commands](docs/commands.md) lists every command.
+- A folder store recognizes the conflict copies of Dropbox and Syncthing, and a current item can
+  stand under a topic, which makes the store format 3 ([Store format](docs/store-format.md#formats)).
+
 ### Added
 
 - A store on the `folder` backend recognizes the conflict copies of Dropbox and Syncthing, as the
@@ -118,9 +131,30 @@ All notable changes to this project are documented here. The format follows
   proposals and one sentence like the dropped ones, `haiku` and `sonnet` proposed that sentence in
   six of six answers without the examples and in none of six with them, and found all twenty
   planted statements either way; `scripts/glean-eval --without-examples` measures the day without them.
+- `m2b config set curation.paused true` pauses curation on a machine: no session start and no
+  schedule starts a run there until the setting is `false` again. Until now the only ways to stop
+  the background runs were to turn the plugin off, which also takes capture and the distillate
+  away, or to move curation to another machine. A paused machine still captures, its sessions
+  still get the distillate, and `m2b curate --force` still files the inbox when you ask for it;
+  `m2b status` has a line `paused`, and a scheduled `m2b curate` shows there as
+  `last attempt: paused at ...` ([Pausing](docs/curation.md#pausing)).
+- [Commands](docs/commands.md) is a new page with everything you can say, type after a slash or
+  run as `m2b`: what to say in a session, the skills (`/m2b:search`) and the band's commands
+  (`/m2b-search`) with what tells them apart, every `m2b` command with one line, and the exit
+  codes. The README lists the ten used most, `m2b tasks list` and `m2b tasks complete <id>` among
+  them, which is how a Markdown task is ticked.
+- `m2b --version` prints the version, also on a machine that is not set up. The bug template asks
+  for it.
+- A command that groups actions, such as `m2b lint`, `m2b tasks` or `m2b setup`, prints its help
+  when it is named without an action. Until now it ended with a usage error and exit code 2.
 
 ### Changed
 
+- [Getting started](docs/getting-started.md) says after each step in Claude Code what you should
+  see and what to do when you do not, and which session knows a new fact: the session start after
+  a capture starts the run, and the session after that one starts with the fact. The times in it
+  are measured: 15 seconds for a setup with every answer given at once, 13 seconds for a run over
+  one capture.
 - `m2b search` prints nothing from the store with a character that draws nothing, as text and
   with `--json`: zero-width characters, marks that reorder text, variation selectors, soft
   hyphens and tag characters are gone from a hit's text, the joiners emoji and several scripts

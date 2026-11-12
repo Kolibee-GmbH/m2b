@@ -16,11 +16,11 @@ nor a model. Both end with a first capture, a curation run and a first search.
    /plugin install m2b@m2b
    ```
 
-   Until m2b is published, add the marketplace from a checkout instead:
-   `/plugin marketplace add <path to the checkout>`, then the same install. A new version reaches
-   you through `/plugin marketplace update m2b` and `/plugin update m2b@m2b`, see
-   [Updating](../README.md#updating); installed from a checkout, run `git pull` in it first,
-   because the marketplace is that folder and updating it fetches nothing.
+   A new version reaches you through `/plugin marketplace update m2b` and
+   `/plugin update m2b@m2b`, see [Updating](../README.md#updating). To install from a checkout
+   instead, for example to try a branch, add it as the marketplace:
+   `/plugin marketplace add <path to the checkout>`, then the same install; before an update run
+   `git pull` in it, because the marketplace is that folder and updating it fetches nothing.
 
 2. Run setup in a session and answer its questions:
 
@@ -39,6 +39,12 @@ nor a model. Both end with a first capture, a curation run and a first search.
    Running it again with the same answers changes nothing. After the core, it offers the one
    add-on, the worklog.
 
+   **You should see** setup end with the lines of `m2b doctor`, one per part, among them
+   `store: reachable` and `tasks: reachable`. Started as `/m2b:setup` with every answer in the same
+   prompt, setup took 15 seconds (2026-11-12, with the model `sonnet`); answered one by one it
+   takes as long as your answers do. **If not:** a line that says `not reachable`, `missing` or `not installed` comes
+   with what to do, and `/m2b:m2b doctor` repeats the check at any time.
+
    Outside Claude Code, the `m2b` command is that launcher. If `~/.local/bin` is not on your
    `PATH` (it is not by default on macOS), add it, for example in `~/.zshrc`:
 
@@ -49,26 +55,56 @@ nor a model. Both end with a first capture, a curation run and a first search.
    Inside a Claude Code session you can also run a command with a leading `!`, such as
    `!m2b status`.
 
-3. Capture something. In any session: "remember that the spare key is under the blue pot".
-   Start a new session: nothing is filed yet, the note waits in `inbox/`.
+3. Capture something. In any session:
 
-4. Curate. The run starts by itself at the next session start; to start it now:
-
-   ```bash
-   m2b curate --force
+   ```
+   remember that the spare key is under the blue pot
    ```
 
-   It takes about a minute for a few captures. `m2b curate --force --detach` runs it in the
-   background instead.
+   **You should see** a short confirmation; its words are the model's. What does not vary: the
+   note is one new file in the store's `inbox/`, `!m2b status` begins with `inbox: 1`, and with
+   the band the status line below the prompt reads `1 in inbox`. Nothing is filed yet.
+   **If not:** when Claude answered without noting anything, say that you want it kept
+   ("remember ...", "note ..."), or type `/m2b-note the spare key is under the blue pot`, which
+   asks no model. When the answer is that m2b is not set up, go back to step 2.
 
-   The fact goes into `memory/MEMORY.md`, the capture into `corpus/YYYY/MM/`. The next session
-   starts with the fact.
+4. Start a new session. Its start is what starts the curation run, in the background and on your
+   Claude Code login; you type nothing. The run took 13 seconds for this one capture and 26 for
+   three (2026-11-12, with the model `haiku`).
 
-5. Search: "what did I note about the spare key?", or from a terminal:
+   **You should see** nothing in the conversation: the run is silent. `!m2b status` says
+   `run: running ...` while it goes on, then `run: succeeded ...` and `inbox: 0`; the status line
+   reads `curating`, then `0 in inbox · curated 17:26` with the time the run ended. The note has
+   moved from `inbox/` to `corpus/YYYY/MM/`, and `memory/MEMORY.md` has a line with the fact.
+
+   This session started before the run ended, so the fact is not among what it was given at its
+   start. Asked for the spare key, it still answers, by searching: search reads the inbox too.
+
+   **If not:** `!m2b status` says in its line `due` whether a run is due and why not, and in a
+   line `paused` when you paused this machine. `!m2b curate --force` runs it now, in front of you,
+   and says how it ended; add `--detach` to run it in the background instead. After a run that
+   failed, the review task in your list names the step and the cause
+   ([Troubleshooting](../README.md#troubleshooting)).
+
+5. Start one more session and ask:
+
+   ```
+   where is the spare key?
+   ```
+
+   **You should see** the answer without a tool call before it: this session was given the fact
+   at its start, in the distillate. From a terminal, the same store answers a search:
 
    ```bash
    m2b search -- "spare key"
    ```
+
+   It prints each line that matches with its file: the fact in `memory/`, the note in `corpus/`.
+   **If not:** look for the line in `memory/MEMORY.md`. When it is missing, the run filed the
+   note another way, which `!m2b todos` and the files under `memory/` show; a sentence that names
+   a day can become a task instead of a fact. When the line is there and the session does not
+   know it, `m2b doctor` says in its line `band` whether the latest session ran m2b's hooks, and
+   `m2b distillate on` turns the distillate back on in a folder where it was turned off.
 
 From the next session on, while Claude Code has mods on, [the band](band.md) above the prompt
 shows what curation asks you to keep or drop, and `m2b doctor` says whether it ran. With it come
@@ -98,9 +134,8 @@ m2b proposals drop <id>
 This path runs on Linux and macOS with the `folder` store and `markdown` tasks. It is how you try
 m2b on a server, in a container, or before installing it in Claude Code.
 
-1. Get the code and put the core's command on your `PATH`. Until m2b is published, use a checkout
-   or an archive of this repository unpacked to `~/src/m2b` (not `~/m2b`, which is where setup's
-   quick start puts a store). `M2B_CORE_ROOT` tells the launcher to run the core from this checkout
+1. Get the code and put the core's command on your `PATH`. Clone the repository to `~/src/m2b`
+   (not `~/m2b`, which is where setup's quick start puts a store). `M2B_CORE_ROOT` tells the launcher to run the core from this checkout
    instead of from Claude Code's plugin folder:
 
    ```bash

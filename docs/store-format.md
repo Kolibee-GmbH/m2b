@@ -1,4 +1,6 @@
-# Store format, version 2
+# Store format
+
+This page describes format 3, the current one; [Formats](#formats) lists what changed and when.
 
 The store is a plain folder. Everything in it is a text file you can read and back up with any
 tool; m2b has no database and no hidden index. `STORE.md` in the store repeats the rules an

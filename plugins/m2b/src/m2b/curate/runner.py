@@ -64,7 +64,7 @@ from m2b.config.store_settings import (
     write_store_format,
 )
 from m2b.curate import glean_step, machine_state, memory_guard, migrations, model, report, run_commit
-from m2b.curate.due import check_due
+from m2b.curate.due import PAUSED_MESSAGE, check_due
 from m2b.harvest import HarvestReport, harvest
 from m2b.journal import write_journal
 from m2b.locale import Locale, load_locale
@@ -166,6 +166,7 @@ CODE_STEPS_MARGIN = datetime.timedelta(minutes=10)
 NOT_CURATING = "not-curating"
 ALREADY_RUNNING = "already-running"
 NOT_DUE = "not-due"
+PAUSED = "paused"
 
 
 class RunRecordWriteError(StoreError):
@@ -223,8 +224,16 @@ def curate(
     sort_facts: bool = False,
 ) -> RunOutcome:
     """Runs curation once when this machine curates, no run holds the lock and one is due (or forced,
-    which ``refresh_all`` and ``sort_facts`` imply)."""
+    which ``refresh_all`` and ``sort_facts`` imply).
+
+    A paused machine (``curation.paused``) runs only when forced; asked otherwise, as a schedule
+    does, it reads nothing of the store and records the attempt, so the schedule shows it got here.
+    """
     config = load_machine_config(machine)
+    asked_by_hand = force or refresh_all or sort_facts
+    if config.curation.paused and not asked_by_hand:
+        machine_state.record_attempt(machine, machine_state.PAUSED, PAUSED_MESSAGE, clock())
+        return RunOutcome(PAUSED, PAUSED_MESSAGE)
     store = open_store(config.store, machine.temp_dir)
     try:
         store.fetch([STORE_SETTINGS_FILE_NAME], fetch_timeout_seconds)
@@ -242,7 +251,7 @@ def curate(
         return RunOutcome(NOT_CURATING, message)
     if machine_state.lock_is_held(machine):
         return RunOutcome(ALREADY_RUNNING, "a curation run is already running on this machine")
-    if not force and not refresh_all and not sort_facts:
+    if not asked_by_hand:
         due = check_due(store, machine, clock())
         if not due.due:
             machine_state.record_attempt(machine, machine_state.NOT_DUE, due.reason, clock())

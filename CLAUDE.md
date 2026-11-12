@@ -15,9 +15,9 @@ Calendar via JavaScript for Automation); Linux with the folder store and Markdow
 
 ## Current Status
 
-0.2.0 is the current release, written up in [CHANGELOG.md](CHANGELOG.md); the repository is not
-published yet. New changes go under `## [Unreleased]`; how a release is made is in
-[CONTRIBUTING.md](CONTRIBUTING.md#releasing).
+[CHANGELOG.md](CHANGELOG.md) names the current release and what each one changed; the version
+itself stands in `plugins/m2b/.claude-plugin/plugin.json`. New changes go under `## [Unreleased]`;
+how a release is made is in [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## Project Instructions
 

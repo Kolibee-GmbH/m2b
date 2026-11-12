@@ -141,6 +141,36 @@ class StatusTest(test_runner.RunnerTest):
         )
         self.assertIn(f"last attempt: not due at {_iso(tried)}", out)
 
+    def test_a_paused_machine_says_so_beside_what_is_due(self) -> None:
+        """Covers: B161"""
+        self.curating(curation={"paused": True})
+        self.capture()
+
+        status = self.status()
+        _, out, _ = self.run_command("status")
+
+        self.assertTrue(status["paused"])
+        self.assertEqual(status["due"]["due"], True)
+        self.assertIn("paused: no curation run starts by itself on this machine", out)
+
+    def test_a_scheduled_attempt_on_a_paused_machine_shows_as_the_last_attempt(self) -> None:
+        """Covers: B161"""
+        self.curating(curation={"paused": True})
+
+        self.run_command("curate")
+        _, out, _ = self.run_command("status")
+
+        self.assertIn("last attempt: paused at ", out)
+
+    def test_a_machine_that_is_not_paused_has_no_line_about_it(self) -> None:
+        self.curating()
+
+        status = self.status()
+        _, out, _ = self.run_command("status")
+
+        self.assertFalse(status["paused"])
+        self.assertNotIn("paused", out)
+
     def test_an_attempt_older_than_the_last_run_is_not_shown(self) -> None:
         self.curating()
         now = datetime.datetime.now().astimezone()

@@ -220,6 +220,29 @@ class CommandLineTest(unittest.TestCase):
     def test_an_unknown_command_is_a_usage_error(self) -> None:
         self.assertEqual(self._run("fly").returncode, cli.EXIT_USAGE)
 
+    def test_version_prints_the_version_of_the_plugin_manifest_also_without_a_config(self) -> None:
+        """Covers: B159"""
+        manifest = json.loads((SOURCE_ROOT.parent / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+
+        result = self._run("--version")
+
+        self.assertEqual((result.returncode, result.stderr), (cli.EXIT_OK, ""))
+        self.assertEqual(result.stdout, f"m2b {manifest['version']}\n")
+
+    def test_a_command_that_groups_actions_prints_its_help_when_named_alone(self) -> None:
+        """Covers: B160"""
+        for group, actions in (("lint", ("scan", "fix")), ("tasks", ("list", "complete")), ("setup", ("apply",))):
+            with self.subTest(group=group):
+                result = self._run(group)
+
+                self.assertEqual((result.returncode, result.stderr), (cli.EXIT_OK, ""))
+                self.assertIn(f"usage: m2b {group}", result.stdout)
+                for action in actions:
+                    self.assertIn(action, result.stdout)
+
+    def test_an_unknown_action_of_a_group_stays_a_usage_error(self) -> None:
+        self.assertEqual(self._run("lint", "polish").returncode, cli.EXIT_USAGE)
+
 
 class CuratorCommandsTest(unittest.TestCase):
     """The commands that move, rename or edit store files belong to the curation run alone."""

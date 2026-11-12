@@ -7,6 +7,7 @@ import re
 import unittest
 from pathlib import Path
 
+from m2b import cli
 from m2b.addons import addon_names
 
 from repo_tools import coverage_check, evals_page
@@ -15,6 +16,12 @@ REPO = Path(__file__).resolve().parents[3]
 ADDONS_PAGE = REPO / "docs" / "addons.md"
 ADDON_PAGES = REPO / "docs" / "addons"
 BEHAVIOR_ENTRY = REPO / "docs" / "behavior.md"
+COMMANDS_PAGE = REPO / "docs" / "commands.md"
+PLUGIN = REPO / "plugins" / "m2b"
+# The first cell of a table row that shows an ``m2b`` command: the words up to its first argument.
+COMMAND_ROW = re.compile(r"^\| `m2b((?: [a-z][a-z-]*)+)[ `]", re.MULTILINE)
+# A slash command the band's mod registers.
+BAND_COMMAND = re.compile(r"^  name: '(m2b-[a-z-]+)',$", re.MULTILINE)
 # A Markdown link or image to a relative target, without its #anchor or title.
 RELATIVE_LINK = re.compile(r"\]\((?!https?:|mailto:|#)<?([^)#\s>]+)>?(?:#[^)\s]*)?(?:\s+\"[^\"]*\")?\)")
 # The same in HTML, as the README's header uses.
@@ -56,6 +63,35 @@ class BehaviorCatalogTest(unittest.TestCase):
         self.assertEqual(
             [part.name for part in parts if "](../behavior.md)" not in part.read_text(encoding="utf-8")], []
         )
+
+
+class CommandsPageTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.page = COMMANDS_PAGE.read_text(encoding="utf-8")
+
+    def test_the_page_has_a_row_for_every_command_help_lists_and_for_no_other(self) -> None:
+        documented = sorted(path.strip() for path in COMMAND_ROW.findall(self.page))
+
+        self.assertEqual(documented, sorted(cli.command_paths()))
+
+    def test_the_page_names_every_skill_with_a_colon(self) -> None:
+        skills = sorted(skill.parent.name for skill in (PLUGIN / "skills").glob("*/SKILL.md"))
+
+        self.assertTrue(skills)
+        self.assertEqual([name for name in skills if f"`/m2b:{name}`" not in self.page], [])
+
+    def test_the_page_names_every_command_of_the_band_with_a_dash(self) -> None:
+        commands = sorted(
+            name for source in (PLUGIN / "hooks").glob("*.ts*") for name in BAND_COMMAND.findall(source.read_text())
+        )
+
+        self.assertEqual(len(commands), 4, commands)
+        self.assertEqual([name for name in commands if f"`/{name}" not in self.page], [])
+
+    def test_the_readme_links_the_page(self) -> None:
+        readme = (REPO / "README.md").read_text(encoding="utf-8")
+
+        self.assertTrue("](docs/commands.md" in readme, "README.md does not link docs/commands.md")
 
 
 class EvalsPageTest(unittest.TestCase):

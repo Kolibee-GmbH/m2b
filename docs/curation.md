@@ -12,6 +12,8 @@ in which only a step failed that does not fail the run ([The steps](#the-steps))
 succeeded and starts no wait. A
 schedule can start it too, for days without a session ([On a schedule](#on-a-schedule)), and
 `m2b curate --force` starts it now; add `--detach` to get your terminal back while it runs.
+On a machine you paused, a run starts only when you ask for one, with `--force`, `--refresh-all`
+or `--sort-facts` ([Pausing](#pausing)).
 
 ## The steps
 
@@ -248,13 +250,33 @@ code then compares the file and puts the old one back if any statement changed. 
 `## Current` as it is: an item above the topics there moves under its topic when ingest files a
 capture about the same thing, or when you move it by hand.
 
+## Pausing
+
+To keep a machine from starting runs by itself, for example while a subscription's limit is
+nearly used up or while you look at what the last run did:
+
+```bash
+m2b config set curation.paused true
+```
+
+From then on no session start on this machine starts a run, and a scheduled `m2b curate` does
+nothing and exits 0. Everything else goes on: captures reach the inbox, sessions get the
+distillate, and `m2b curate --force` files the inbox when you ask for it, as do the one-off runs
+`--refresh-all` and `--sort-facts`. `m2b status` has a line
+`paused` while the setting is on, and shows a scheduled attempt as `last attempt: paused at ...`.
+`m2b config set curation.paused false` ends the pause; the next session start then starts the run
+that is due.
+
+The setting is this machine's. It does not move curation: while the curating machine is paused,
+no other machine files the inbox ([Several machines](several-machines.md)).
+
 ## On a schedule
 
 Most setups need no schedule: the next session start on the curating machine files what waits. A
 schedule helps when captures reach the inbox while that machine starts no Claude Code session for
 days, for example captures from a second machine, or an integration such as a Shortcut that
 writes into the inbox. A scheduled `m2b curate` that is not due does nothing and exits 0, so it
-is safe to run daily.
+is safe to run daily; on a paused machine ([Pausing](#pausing)) it does nothing either.
 
 A schedule calls the launcher `~/.local/bin/m2b`, which setup wrote with the absolute path of
 `python3`; the model steps use the absolute paths of `claude` and `reminders` that setup recorded,

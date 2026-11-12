@@ -638,6 +638,17 @@ class NudgeHookTest(HookFixture):
         self.assertEqual(result, (0, "", ""))
         start.assert_not_called()
 
+    def test_on_a_paused_machine_a_waiting_capture_starts_no_run_and_the_hook_says_nothing(self) -> None:
+        """Covers: B161"""
+        self.curating()
+        machine.set_machine_config_value(self.machine, "curation.paused", True)
+        self.write("inbox/20261107T070000Z-cli-a1b2.md", "x")
+
+        result, start = self.nudge()
+
+        self.assertEqual(result, (0, "", ""))
+        start.assert_not_called()
+
     def test_a_store_json_that_is_not_downloaded_is_one_line(self) -> None:
         self.curating()
         self.eviction.evicted.add(self.store_root / "store.json")

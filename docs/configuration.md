@@ -51,6 +51,7 @@ An example with invented values:
 | `curation.max_turns` | the turns one model step may take before it stops and is reported | 100 |
 | `curation.read_sessions` | whether a curation run on this machine reads what you typed in Claude Code since the last reading and keeps what a model proposes from it for your memory; of a session the profile's `worklog_leave_out` names, by its folder or by a git remote of its repository, or in a folder of `distillate.skip_under`, nothing reaches the model | `false` |
 | `curation.git_commit` | whether a curation run on this machine ends with a git commit of what it changed, when the store folder is the top of a git work tree ([A commit per run](curation.md#a-commit-per-run)); without a repository there the setting does nothing | `true` |
+| `curation.paused` | whether this machine starts no curation run by itself: none at a session start, none from a schedule. `m2b curate --force` still runs one, captures keep reaching the inbox, and `m2b status` says `paused` ([Pausing](curation.md#pausing)) | `false` |
 | `band.due_tasks` | whether the band shows your tasks due today or overdue below the candidates | `true` |
 | `distillate.skip_under` | folders, absolute or starting with `~/`, in and below which sessions get no distillate; `m2b distillate off` and `on` change it | none |
 | `addons.<add-on>.on` | whether an add-on runs on this machine: `worklog` | off |
