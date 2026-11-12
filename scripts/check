@@ -9,7 +9,7 @@
 # python3, and on macOS also with /usr/bin/python3 when that is Python 3.9), the core once more in a
 # copy of the plugin without its add-ons, ruff, mypy,
 # the shell linter, the workflow linter, the plugin manifest, the tests of the band (the core's mod),
-# the B/X coverage report and the end-to-end scenarios at the stub level.
+# the B/X coverage check and the end-to-end scenarios at the stub level.
 #
 # The add-ons' tests sit in plugins/m2b/tests/addons/<add-on>/ under a folder without __init__.py, so
 # the core's discovery does not descend into them and each runs as its own suite. An add-on's suite
@@ -178,7 +178,7 @@ band_tests() {
     claude plugin test "$PLUGIN"
 }
 
-coverage_report() {
+coverage_check() {
     PYTHONPATH="$repo_root/scripts" python3 -m repo_tools.coverage_check
 }
 
@@ -216,7 +216,7 @@ stage shellcheck shell_checks
 stage workflows workflow_checks
 stage manifests manifest_checks
 stage band band_tests
-stage coverage coverage_report
+stage coverage coverage_check
 stage e2e scripts/e2e --level stub
 
 if [ -n "$failed_stages" ]; then

@@ -61,15 +61,26 @@ may use the fixtures of the core's tests. The core's tests use nothing of an add
 ## Behavior coverage
 
 Each behavior the product promises has an ID (B1 and up, X1 and up) in the behavior
-catalog, [`docs/behavior.md`](docs/behavior.md). A test names the behaviors it
-pins in its docstring:
+catalog. [`docs/behavior.md`](docs/behavior.md) is its entry; the rules stand in four parts in
+`docs/behavior/`: `core.md`, `curation.md`, `band.md` and `worklog.md`. A new rule goes into the
+part of what it is about, as the entry sorts them, and gets a number no rule has, one above the
+highest of all four parts:
+
+```bash
+grep -rhoE "^\| B[0-9]+" docs/behavior/ | sort -V | tail -1    # the same with X for a defect
+```
+
+A test names the behaviors it pins in its docstring:
 
 ```python
 def test_a_name_collision_draws_a_new_suffix(self) -> None:
     """Covers: B2"""
 ```
 
-`scripts/check` lists every behavior that no test names yet.
+`scripts/check` fails while a rule has no test, a test names an ID no rule has, or an ID stands
+twice. A rule in `worklog.md` needs a test in the add-on's own suite,
+`plugins/m2b/tests/addons/worklog/`, and a rule of the three other parts a test outside it: the
+core is proven in a copy of the plugin without its add-ons, and there the add-on's tests are gone.
 
 ## Store format
 

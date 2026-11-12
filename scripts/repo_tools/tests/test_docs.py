@@ -1,4 +1,5 @@
-"""The documentation's own promises: a page for every add-on, and links that lead somewhere."""
+"""The documentation's own promises: a page for every add-on, an entry to every part of the behavior
+catalog, and links that lead somewhere."""
 
 from __future__ import annotations
 
@@ -8,11 +9,12 @@ from pathlib import Path
 
 from m2b.addons import addon_names
 
-from repo_tools import evals_page
+from repo_tools import coverage_check, evals_page
 
 REPO = Path(__file__).resolve().parents[3]
 ADDONS_PAGE = REPO / "docs" / "addons.md"
 ADDON_PAGES = REPO / "docs" / "addons"
+BEHAVIOR_ENTRY = REPO / "docs" / "behavior.md"
 # A Markdown link or image to a relative target, without its #anchor or title.
 RELATIVE_LINK = re.compile(r"\]\((?!https?:|mailto:|#)<?([^)#\s>]+)>?(?:#[^)\s]*)?(?:\s+\"[^\"]*\")?\)")
 # The same in HTML, as the README's header uses.
@@ -38,6 +40,22 @@ class AddonsPageTest(unittest.TestCase):
         readme = (REPO / "README.md").read_text(encoding="utf-8")
 
         self.assertTrue("](docs/addons.md)" in readme, "README.md does not link docs/addons.md")
+
+
+class BehaviorCatalogTest(unittest.TestCase):
+    def test_the_entry_links_every_part_and_holds_no_rule(self) -> None:
+        entry = BEHAVIOR_ENTRY.read_text(encoding="utf-8")
+        parts = [part.stem for part in coverage_check.BEHAVIOR_CATALOG.glob("*.md")]
+
+        self.assertEqual([name for name in parts if f"](behavior/{name}.md)" not in entry], [])
+        self.assertEqual(coverage_check.rule_ids(entry), [])
+
+    def test_every_part_links_the_entry(self) -> None:
+        parts = sorted(coverage_check.BEHAVIOR_CATALOG.glob("*.md"))
+
+        self.assertEqual(
+            [part.name for part in parts if "](../behavior.md)" not in part.read_text(encoding="utf-8")], []
+        )
 
 
 class EvalsPageTest(unittest.TestCase):
