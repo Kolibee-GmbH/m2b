@@ -73,9 +73,29 @@ class StoreRulesTest(unittest.TestCase):
         )
 
 
+class StepToolsTest(unittest.TestCase):
+    def test_a_step_has_the_tools_its_rules_name_and_write_with_edit(self) -> None:
+        """Covers: B147"""
+        rules = ["Bash(m2b ingest *)", "Bash(m2b search *)", "Read(//store/inbox/**)", "Edit(//store/memory/**)"]
+
+        self.assertEqual(model.step_tools(rules), ["Bash", "Read", "Edit", "Write"])
+
+    def test_a_read_rule_brings_neither_glob_nor_grep_and_another_tool_only_itself(self) -> None:
+        """Covers: B147"""
+        self.assertEqual(model.step_tools(["Read(//store/memory/**)"]), ["Read"])
+        self.assertEqual(
+            model.step_tools(["Read", "Grep", "WebFetch(domain:example.com)"]), ["Read", "Grep", "WebFetch"]
+        )
+        self.assertEqual(model.step_tools([]), [])
+
+    def test_a_rule_that_does_not_parse_is_refused(self) -> None:
+        with self.assertRaises(model.FenceError):
+            model.step_tools(["read everything"])
+
+
 class FencedCommandTest(unittest.TestCase):
     def test_the_fenced_form(self) -> None:
-        """Covers: B61"""
+        """Covers: B61, B147"""
         command = model.fenced_command(
             "/opt/claude",
             "m2b:worklog-verdict",
@@ -99,6 +119,12 @@ class FencedCommandTest(unittest.TestCase):
                 "40",
                 "--plugin-dir",
                 "/plugins/m2b",
+                "--tools",
+                "Bash,Read",
+                "--strict-mcp-config",
+                "--disallowedTools",
+                "mcp__*",
+                "--no-session-persistence",
                 "--permission-mode",
                 "dontAsk",
                 "--permission-prompts",
@@ -126,8 +152,9 @@ class ModelCommandFixture(test_commands.CommandTest):
         self.environ["M2B_PYTHON"] = sys.executable
         self.environ[STUB_STORE_VARIABLE] = str(self.store_root)
 
-    def stub(self, actions: list[dict[str, Any]], outcome: str = "success") -> None:
-        self.actions.write_text(json.dumps({"actions": actions, "outcome": outcome}), encoding="utf-8")
+    def stub(self, actions: list[dict[str, Any]], outcome: str = "success", start: object = None) -> None:
+        script = {"actions": actions, "outcome": outcome, **({} if start is None else {"start": start})}
+        self.actions.write_text(json.dumps(script), encoding="utf-8")
 
     def calls(self) -> list[dict[str, Any]]:
         calls_file = Path(f"{self.actions}.calls")
@@ -199,6 +226,95 @@ class ModelCommandTest(ModelCommandFixture):
         self.assertEqual(call["environment"]["M2B_CURATION_RUN"], "1")
         self.assertRegex(call["environment"]["M2B_RUN_TOKEN"], r"^[0-9a-f]{32}$")
 
+    def test_the_step_reads_no_claude_md_and_no_memory_of_claude_code(self) -> None:
+        """Covers: B147"""
+        self.environ["CLAUDE_CODE_DISABLE_CLAUDE_MDS"] = "0"
+
+        self.curate_model("--skill", "m2b:search", "--allow", "Read")
+
+        environment = self.calls()[0]["environment"]
+        self.assertEqual(environment["CLAUDE_CODE_DISABLE_CLAUDE_MDS"], "1")
+        self.assertEqual(environment["CLAUDE_CODE_DISABLE_AUTO_MEMORY"], "1")
+
+    def test_a_session_that_starts_with_another_tool_is_stopped_before_it_acts(self) -> None:
+        """Covers: B147"""
+        (self.store_root / "memory").mkdir()
+        write = {"tool": "Write", "file_path": "<store>/memory/notes.md", "content": "Dana likes tea\n"}
+        started_with = {"tools": ["Read", "Edit", "Write", "SendMessage", "Agent"]}
+        self.stub([{"sleep": 5}, write], start=started_with)
+
+        started = time.monotonic()
+        code, _, err = self.curate_model(
+            "--skill", "m2b:search", "--allow", "Edit(<store>/memory/**)", "--allow", "Read"
+        )
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        self.assertLess(time.monotonic() - started, 4)
+        self.assertIn("Claude Code gave the model step the tools Agent, SendMessage, which its fence leaves out", err)
+        self.assertFalse((self.store_root / "memory" / "notes.md").exists())
+
+    def test_a_session_that_starts_with_an_mcp_server_is_stopped(self) -> None:
+        """Covers: B147"""
+        self.stub([], start={"mcp_servers": [{"name": "claude.ai Mail", "status": "pending"}]})
+
+        code, _, err = self.curate_model("--skill", "m2b:search", "--allow", "Read")
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        self.assertIn("gave the model step the MCP server claude.ai-Mail, which its fence leaves out", err)
+
+    def test_what_a_session_has_beyond_its_fence_is_named_briefly(self) -> None:
+        """Covers: B147"""
+        more = ["Agent", "CronCreate", "CronList", "ListAgents", "Monitor", "SendMessage", "Workflow"]
+        self.stub([], start={"tools": ["Read", *reversed(more)], "mcp_servers": [{"status": "pending"}]})
+
+        code, _, err = self.curate_model("--skill", "m2b:search", "--allow", "Read")
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        self.assertIn(
+            "the tools Agent, CronCreate, CronList, ListAgents, Monitor and 2 more and the MCP server without a name, ",
+            err,
+        )
+
+    def test_a_run_that_does_not_say_which_tools_it_had_fails(self) -> None:
+        """Covers: B147"""
+        for start in ("silent", {"tools": None}, {"mcp_servers": None}, {"mcp_servers": "none"}):
+            with self.subTest(start=start):
+                self.stub([], start=start)
+
+                code, _, err = self.curate_model("--skill", "m2b:search", "--allow", "Read")
+
+                self.assertEqual(code, cli.EXIT_PROBLEM)
+                self.assertIn("did not say which tools and MCP servers it had", err)
+
+    def test_a_run_without_a_login_still_says_so_when_it_did_not_say_its_tools(self) -> None:
+        self.stub([], outcome="not-logged-in", start="silent")
+
+        code, _, err = self.curate_model("--skill", "m2b:search", "--allow", "Read")
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        self.assertIn("Not logged in", err)
+        self.assertNotIn("which tools", err)
+
+    def test_a_call_of_a_tool_the_step_does_not_have_fails_it_like_a_denial(self) -> None:
+        """Covers: B147"""
+        self.stub(
+            [
+                {"tool": "WebFetch", "url": "https://example.com/a?b"},
+                {"tool": "Grep", "pattern": "tea", "path": "<store>/corpus"},
+                {"tool": "Read", "file_path": "<store>/corpus/x.md"},
+            ]
+        )
+
+        code, out, err = self.curate_model("--skill", "m2b:search", "--allow", "Read(<store>/corpus/**)")
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        self.assertIn(
+            'action: search: the model step m2b:search was denied WebFetch: {"url": "https://example.com/a?b"}', out
+        )
+        self.assertIn("action: search: the model step m2b:search was denied Grep: tea", out)
+        self.assertNotIn("denied Read", out)
+        self.assertIn("denied 2 tool call", err)
+
     def test_an_unknown_skill_or_one_of_a_plugin_not_loaded_exits_2(self) -> None:
         for skill in ("m2b:nothing-here", "worklog:verdict", "search", "m2b:../search"):
             with self.subTest(skill=skill):
@@ -236,7 +352,7 @@ class ModelCommandTest(ModelCommandFixture):
         self.assertEqual(code, cli.EXIT_PROBLEM)
         self.assertIn("denied Read", out)
 
-    def test_a_read_rule_also_covers_glob_and_grep_on_their_path(self) -> None:
+    def test_glob_and_grep_come_only_with_a_rule_of_their_own_which_allows_them_on_every_path(self) -> None:
         (self.store_root / "corpus").mkdir()
         self.stub(
             [
@@ -245,7 +361,7 @@ class ModelCommandTest(ModelCommandFixture):
             ]
         )
 
-        code, _, err = self.curate_model("--skill", "m2b:search", "--allow", "Read(<store>/corpus/**)")
+        code, _, err = self.curate_model("--skill", "m2b:search", "--allow", "Glob", "--allow", "Grep")
 
         self.assertEqual(code, cli.EXIT_OK, err)
 
@@ -489,6 +605,16 @@ class TextStepTest(test_commands.CommandTest):
         self.assertFalse(Path(call["cwd"]).exists())
         self.assertEqual(call["environment"]["M2B_CURATION_RUN"], "1")
 
+    def test_the_step_reads_no_claude_md_and_no_memory_of_claude_code(self) -> None:
+        """Covers: B147"""
+        self.set_up()
+
+        model.text_step(load_machine_config(self.machine), self.machine, self.environ, "read this", "x")
+
+        environment = self.call()["environment"]
+        self.assertEqual(environment["CLAUDE_CODE_DISABLE_CLAUDE_MDS"], "1")
+        self.assertEqual(environment["CLAUDE_CODE_DISABLE_AUTO_MEMORY"], "1")
+
     def test_claude_comes_from_the_config_without_the_runner_variable(self) -> None:
         runner = self.environ.pop(model.MODEL_RUNNER_VARIABLE)
         self.set_up(executables={"claude": runner})
@@ -510,7 +636,12 @@ class TimeoutTest(unittest.TestCase):
 
         started = time.monotonic()
         run = model.run_model(
-            [sys.executable, str(FAKE_CLAUDE), str(actions)], work, dict(os.environ), timeout_seconds=1, grace_seconds=1
+            [sys.executable, str(FAKE_CLAUDE), str(actions)],
+            [],
+            work,
+            dict(os.environ),
+            timeout_seconds=1,
+            grace_seconds=1,
         )
 
         self.assertLess(time.monotonic() - started, 10)
@@ -535,7 +666,7 @@ class NestedStopTest(unittest.TestCase):
         work.mkdir()
         inner = (
             "import os, sys; from pathlib import Path; from m2b.curate import model; "
-            f"model.run_model([sys.executable, {str(FAKE_CLAUDE)!r}, {str(actions)!r}], Path({str(work)!r}), "
+            f"model.run_model([sys.executable, {str(FAKE_CLAUDE)!r}, {str(actions)!r}], [], Path({str(work)!r}), "
             "dict(os.environ), timeout_seconds=600)"
         )
         environ = {**os.environ, "PYTHONPATH": str(launcher.PLUGIN_ROOT / "src")}

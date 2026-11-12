@@ -24,6 +24,7 @@ import contextlib
 import datetime
 import json
 import os
+import re
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -39,7 +40,7 @@ from m2b.notes.characters import without_hidden
 from m2b.notes.layout import MEMORY, MEMORY_INDEX
 from m2b.notes.memory_index import TopicBlock, split_topics
 from m2b.paths import MachinePaths
-from m2b.run_record import FAILED, RUN_RECORD, RunRecordError, is_interrupted, load_run_record
+from m2b.run_record import FAILED, RUN_RECORD, RunRecord, RunRecordError, is_interrupted, load_run_record
 from m2b.store.base import EvictedFileError, Store, StoreError, fetch_command
 from m2b.store.factory import open_store
 from m2b.topic_match import names_topic_in_path, project_place
@@ -52,6 +53,8 @@ MAX_DISTILLATE_BYTES = 8 * 1024
 # read, so the whole output stays below this, with room for the cut line.
 OUTPUT_LIMIT = 9_500
 STALE_AFTER = datetime.timedelta(days=3)
+# A step's name as the core and the add-ons write it; a record names its steps in a synced file.
+_STEP_NAME = re.compile(r"[a-z][a-z0-9-]{0,39}")
 # Enough for an overview; beyond it the line itself would crowd the session start.
 MAX_TOPIC_NAMES = 40
 
@@ -114,7 +117,7 @@ def _print_distillate(
 ) -> list[str]:
     """Prints the notices and the session's view of the distillate; gives back the topics it showed."""
     store = open_store(config.store, machine.temp_dir)
-    # A notice can name a file or repeat an error, and neither is m2b's own text.
+    # A notice can name a machine or a file, and neither is m2b's own text.
     notices = "".join(f"m2b: {without_hidden(line)}\n" for line in _run_notices(store, machine, config.machine_id))
     print(notices, end="")
     text = _distillate_text(store)
@@ -251,23 +254,23 @@ def _run_notices(store: Store, machine: MachinePaths, this_machine: str) -> list
         record = load_run_record(store)
     except EvictedFileError:
         record_notice = f"the run record is not downloaded to this machine; run: {fetch_command(RUN_RECORD)}"
-        return [*_unrecorded(unrecorded), record_notice]
+        return [*_unrecorded(machine, unrecorded), record_notice]
     except (RunRecordError, StoreError) as error:
-        return [*_unrecorded(unrecorded), str(error)]
+        return [*_unrecorded(machine, unrecorded), str(error)]
     if record is None:
-        return _unrecorded(unrecorded)
+        return _unrecorded(machine, unrecorded)
     # A run record written after the logged failure is newer news.
     if unrecorded is not None and (unrecorded.time is None or unrecorded.time > record.last_activity):
-        notices += _unrecorded(unrecorded)
+        notices += _unrecorded(machine, unrecorded)
     if is_interrupted(record, now()):
         notices.append(
             f"the curation run on {record.machine_id} that started at {_when(record.started_at)} did not finish; "
             "the next run starts over."
         )
     if record.state == FAILED:
-        detail = f": {record.message}" if record.message else ""
         notices.append(
-            f"the last curation run on {record.machine_id} failed at {_when(record.last_activity)}{detail}. "
+            f"the last curation run on {record.machine_id} failed at {_when(record.last_activity)}"
+            f"{_in_its_steps(record)}; m2b status says why. "
             "The next run tries again; run m2b doctor if it keeps failing."
         )
     if now() - record.last_activity > STALE_AFTER:
@@ -282,10 +285,21 @@ def _run_notices(store: Store, machine: MachinePaths, this_machine: str) -> list
     return notices
 
 
-def _unrecorded(event: machine_state.LogEvent | None) -> list[str]:
+def _in_its_steps(record: RunRecord) -> str:
+    """The steps that failed, by name. Why they failed stays in the record: a reason can repeat what
+    a model, a command or a file name said, and a notice stands above the line that marks the
+    distillate as data."""
+    names = [step.name for step in record.steps if step.result == FAILED and _STEP_NAME.fullmatch(step.name)]
+    if not names:
+        return ""
+    return " in " + (names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}")
+
+
+def _unrecorded(machine: MachinePaths, event: machine_state.LogEvent | None) -> list[str]:
     if event is None:
         return []
-    return [f"the last curation run on this machine left no run record: {event.message}"]
+    log = machine_state.run_log(machine)
+    return [f"the last curation run on this machine left no run record; the last line of {log} says why."]
 
 
 def _distillate_text(store: Store) -> str | None:

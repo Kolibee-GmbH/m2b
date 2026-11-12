@@ -16,7 +16,8 @@ cover).
 
 The model runs only fenced: from an empty folder, without your settings or other plugins, with
 exactly the commands and store paths its step lists, and nothing else allowed. A tool call outside
-that list is denied and reported in the run's review task.
+that list is denied and reported in the run's review task
+([The fence around a model step](#the-fence-around-a-model-step)).
 
 When the store folder is a git repository, a curation run starts `git` there to commit what it
 changed ([docs/curation.md](docs/curation.md#a-commit-per-run)). git is given the changed files by
@@ -50,8 +51,10 @@ kept (`~/.local/state/m2b/memory-before-run/`), and it comes back in every revie
 the review task, in your list or with `ok` in the band; `ok` closes nothing a run added to the
 review after the band drew it. A line holding characters that hide or reorder text, such as bidirectional controls
 or tag characters that spell invisible ASCII, undoes the step, and the reason names the line by its
-file and line number, never by its text, and no file the step added by its name, because the next
-session start prints that reason as a notice of m2b's own. The hooks remove these characters and
+file and line number, never by its text, and no file the step added by its name. Of a failed run
+the next session start says, as a notice of m2b's own, when it failed and in which steps, never
+why: a reason can repeat what a model, a command or a file name said, so it stays in the run
+record, where `m2b status` and the review task show it. The hooks remove these characters and
 every other that draws nothing (soft hyphens, fillers, variation selectors) before the distillate
 and those notices reach a session. Lines a capture adds are not flagged, because adding is
 what ingest is for.
@@ -73,6 +76,54 @@ looks like an instruction. So:
   repository, a backup with history);
 - `m2b distillate off` keeps the distillate out of projects where it must not appear, on the
   machine you run it on.
+
+## The fence around a model step
+
+A curation step that files, refreshes, sorts or lints is a headless Claude Code session,
+`claude -p`, started with what its step needs and nothing more. Measured with Claude Code 2.1.322
+on 2026-11-12, in a sandbox with files planted outside the store:
+
+- Every command outside the step's list was denied, read-only ones too (`cat`, `ls`, `printenv`,
+  `env`, `curl`), as was a listed command with a second one behind `;` or inside `$(...)`.
+  So were reading a file outside the step's store paths, inside the store too, writing one
+  outside the store or into the step's working folder, and fetching or searching the web.
+- The session has only the tools its step's rules name: Bash, Read, Edit and Write for a step of
+  the core. Without that list Claude Code gave the session some twenty more, and those that ask no
+  permission ran: the step listed the other Claude sessions on the machine and started a subagent,
+  and its call to send a session a message failed only because it was tried with a name no
+  session has. Now these tools are not there.
+- No MCP server is started. Without that, the connectors of your claude.ai account (mail, calendar,
+  documents) were part of the step's session; the one call tried was denied.
+- No `CLAUDE.md` is read and Claude Code keeps no memory for the step. Without that, every
+  `CLAUDE.md` in a folder above the step's working folder was in the model's context, with the
+  files under a `.claude/rules/` there; the working folder lies under your home folder, so your
+  own `~/.claude/CLAUDE.md` was among them. And a write into the memory folder Claude Code keeps
+  for the step's working folder ran although no rule named it; whether that write is refused now
+  was not tried.
+- No transcript is kept, so what a step read from your store is not written a second time under
+  `~/.claude/projects/`.
+
+m2b does not take this on trust. Claude Code names the session's tools and MCP servers in a line
+it prints before the model's first answer; a session that has more than its step's list is stopped
+at that line, and the step fails with the names. A call of a tool the session does not have fails the step and is
+reported like a denied call.
+
+What the fence is not:
+
+- It is Claude Code's permission system, not a sandbox of the operating system. The `m2b` commands
+  a step may run are m2b's own code and run with your rights; a step that may run `m2b search`
+  (ingest, lint, the refresh steps of `m2b curate --refresh-all`, the worklog's daily step) can
+  search the whole store, whatever folders its read rules name.
+- The step gets your environment, because Claude Code needs it to reach its model (a login, a
+  proxy, a provider's credentials) and m2b's commands need it to find the store. The model has no
+  call that reads it.
+- That no `CLAUDE.md` and no memory is read rests on two switches of Claude Code
+  (`CLAUDE_CODE_DISABLE_CLAUDE_MDS`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY`). Nothing in a run's output
+  proves them, so a later Claude Code that drops one would go unnoticed until someone measures
+  again. The tools and the MCP servers are checked at every run.
+- The model can still do everything its step allows, which is the subject of the section above.
+
+The step that reads your sessions has no tool at all ([Reading your sessions](#reading-your-sessions)).
 
 ## Reading your sessions
 

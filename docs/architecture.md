@@ -51,7 +51,9 @@ flowchart LR
    missing.
 3. **The model is fenced.** A model step runs `claude -p` from an empty folder with
    `--setting-sources project`, this plugin alone, `--permission-mode dontAsk`, the step's rules,
-   `curation.model` and `curation.max_turns`. A denied call fails the step and reaches the review.
+   only the tools those rules name, no MCP server, no `CLAUDE.md`, no transcript,
+   `curation.model` and `curation.max_turns`. A denied call fails the step and reaches the review,
+   and a session that Claude Code starts with more tools than the step's is stopped at once.
    A step that only reads a text and answers gets no plugin and no tool at all, and one turn.
    What a step did to `memory/` is compared in code with a snapshot from just before it
    (`curate/memory_guard.py`): refresh is held to its due facts, ingest and lint have the facts

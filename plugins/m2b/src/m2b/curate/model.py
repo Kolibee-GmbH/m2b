@@ -11,6 +11,28 @@ pre-approved) and ``--allowedTools`` from the step. ``<store>`` at the start of 
 ``Edit`` rule names the configured store, so ``Read(<store>/inbox/**)`` covers the real folder.
 The run's ``result`` line lists the tool calls the fence denied.
 
+The session has only the tools the step's rules name (``--tools``, ``step_tools``), no MCP server
+(``--strict-mcp-config`` and a deny rule for every ``mcp__`` tool), keeps no transcript
+(``--no-session-persistence``: what the step read from the store is not written a second time
+under Claude Code's folder) and reads no ``CLAUDE.md`` and no memory of Claude Code's own
+(``FENCE_ENVIRONMENT``). Measured with Claude Code 2.1.322 on 2026-11-12, because
+``dontAsk`` denies only what asks: without these a step had some twenty more tools. Of those,
+listing the other Claude sessions on the machine and starting a subagent ran without asking, a
+message to such a session was stopped by no permission (it was tried with a name no session has),
+and a write into Claude Code's memory folder for the step's working folder ran although no rule
+named it. The connectors of the person's claude.ai account were part of the session, waiting to
+connect. And every ``CLAUDE.md`` in a folder above the working folder was in the model's context,
+the person's own ``~/.claude/CLAUDE.md`` among them, since the working folder lies under their
+home folder. Every command outside the rules was denied either way, read-only ones too (``cat``,
+``ls``, ``printenv``), so the environment is handed on as it is: the model has no way to read it,
+and a proxy or a provider's credentials in it are what the run needs.
+
+The fence is not taken on trust: before the model's first answer Claude Code prints a line that
+names the session's tools and MCP servers (after the lines of the plugin's session-start hooks),
+and a run that has more than it was to have is stopped right there; a run that ends well without
+having said so fails too. A call of a tool the session does not have
+is counted with the denials, because Claude Code refuses it without listing it.
+
 Measured with Claude Code 2.1.319 on 2026-11-07: the store is not passed
 with ``--add-dir``, because an added folder is readable as a whole and would void the step's Read
 rules; and a path rule for writing is ``Edit(...)``, because ``Write(<path>)`` leaves the Write
@@ -56,6 +78,16 @@ CURATION_RUN_VARIABLE = "M2B_CURATION_RUN"
 REFRESH_ALL_VARIABLE = "M2B_REFRESH_ALL"
 MODEL_RUNNER_VARIABLE = "M2B_MODEL_RUNNER"
 STORE_PLACEHOLDER = "<store>"
+# The tools a rule gives a step: an Edit rule is the one Claude Code reads for the Write tool too.
+# A Read rule gives Read alone. No step searches with Glob or Grep; they come only with a rule of
+# their own, and such a rule cannot name the store, so it allows them on every path.
+TOOLS_OF_A_RULE = {"Edit": ("Edit", "Write")}
+NO_MCP_TOOL = "mcp__*"
+# Claude Code's switches for a child that is to read nothing but its step: no CLAUDE.md, of the
+# folders above the working folder or of the person, and no memory of its own.
+FENCE_ENVIRONMENT = {"CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"}
+NAMES_SHOWN = 5
+UNPROVEN = "the model run did not say which tools and MCP servers it had, so its fence is unproven"
 PATH_RULE_TOOLS = ("Read", "Edit")
 RESULT_TEXT_LENGTH = 200
 DEFAULT_GRACE_SECONDS = 5.0
@@ -151,6 +183,19 @@ def check_skill(skill: str, plugin_dirs: Mapping[str, Path]) -> str:
     return name
 
 
+def step_tools(rules: Sequence[str]) -> list[str]:
+    """The tools a step's rules can allow, each once, in the order the rules name them."""
+    tools: list[str] = []
+    for rule in rules:
+        match = _RULE.fullmatch(rule)
+        if match is None:
+            raise FenceError(f"{rule!r} is not a tool rule like Read or Bash(m2b search *)")
+        for tool in TOOLS_OF_A_RULE.get(match.group(1), (match.group(1),)):
+            if tool not in tools:
+                tools.append(tool)
+    return tools
+
+
 def fenced_command(
     executable: str,
     skill: str,
@@ -166,6 +211,8 @@ def fenced_command(
         command += ["--max-budget-usd", f"{max_budget_usd:g}"]
     for plugin_dir in plugin_dirs:
         command += ["--plugin-dir", str(plugin_dir)]
+    command += ["--tools", ",".join(step_tools(rules)), "--strict-mcp-config", "--disallowedTools", NO_MCP_TOOL]
+    command += ["--no-session-persistence"]
     # Nobody answers a prompt in this run: Claude Code's flag for a scheduled job, beside dontAsk.
     command += ["--permission-mode", "dontAsk", "--permission-prompts", "none", "--allowedTools", *rules]
     command += ["--output-format", "stream-json", "--verbose"]
@@ -184,6 +231,7 @@ def text_command(executable: str, instruction: str, model: str, max_budget_usd: 
 
 def run_fenced(
     command: Sequence[str],
+    tools: Sequence[str],
     temp_dir: Path,
     environ: Mapping[str, str],
     timeout_seconds: float,
@@ -192,7 +240,7 @@ def run_fenced(
 ) -> ModelRun:
     """Runs the command from a new empty folder inside ``temp_dir``, removed afterwards."""
     with empty_folder(temp_dir) as work:
-        return run_model(command, work, environ, timeout_seconds, grace_seconds, pass_fds)
+        return run_model(command, tools, work, environ, timeout_seconds, grace_seconds, pass_fds)
 
 
 @contextlib.contextmanager
@@ -204,23 +252,50 @@ def empty_folder(temp_dir: Path) -> Iterator[Path]:
         yield Path(work)
 
 
+class _OutsideTheFenceError(Exception):
+    """Claude Code gave the session more than the step was to have."""
+
+
 def run_model(
     command: Sequence[str],
+    tools: Sequence[str],
     cwd: Path,
     environ: Mapping[str, str],
     timeout_seconds: float,
     grace_seconds: float = DEFAULT_GRACE_SECONDS,
     pass_fds: Sequence[int] = (),
 ) -> ModelRun:
-    """Runs the model under ``run_supervised`` and reads its ``result`` line."""
+    """Runs the model under ``run_supervised``, holds its session to ``tools`` and reads its ``result`` line.
+
+    A session that starts with another tool or with an MCP server is stopped at the line of its
+    output that says so, which comes before the model's first answer. A call of a tool the session does not have is a
+    denial like those of the ``result`` line.
+    """
     result: dict[str, object] | None = None
+    said_its_tools = False
+    missing_tools: list[Denial] = []
 
     def read(raw: bytes) -> None:
-        nonlocal result
-        result = _result_in(raw) or result
+        nonlocal result, said_its_tools
+        message = _message_in(raw)
+        if message is None:
+            return
+        if message.get("type") == "system" and message.get("subtype") == "init":
+            beyond = _beyond_the_fence(message, tools)
+            if beyond:
+                raise _OutsideTheFenceError(beyond)
+            said_its_tools = True
+        elif message.get("type") == "assistant":
+            missing_tools.extend(_calls_of_other_tools(message, tools))
+        elif message.get("type") == "result":
+            result = message
 
-    end = run_supervised(command, cwd, environ, timeout_seconds, grace_seconds, pass_fds, read)
-    denials = _denials(result)
+    started = time.monotonic()
+    try:
+        end = run_supervised(command, cwd, environ, timeout_seconds, grace_seconds, pass_fds, read)
+    except _OutsideTheFenceError as error:
+        return ModelRun(str(error), (), time.monotonic() - started)
+    denials = (*_denials(result), *missing_tools)
     if end.timed_out:
         return ModelRun(f"timed out after {_duration(timeout_seconds)}", denials, end.seconds)
     if result is not None:
@@ -232,6 +307,8 @@ def run_model(
             return ModelRun(f"the model run stopped at {limit}", denials, end.seconds)
         if result.get("is_error") or result.get("subtype") != "success":
             return ModelRun(_failure(result), denials, end.seconds)
+        if not said_its_tools:
+            return ModelRun(UNPROVEN, denials, end.seconds)
         return ModelRun(None, denials, end.seconds)
     if end.returncode != 0:
         return ModelRun(end.failure(), denials, end.seconds)
@@ -403,9 +480,9 @@ def model_step(
         curation.max_turns,
         curation.max_budget_usd,
     )
-    step_environ = {**environ, CURATION_RUN_VARIABLE: "1", report.RUN_TOKEN_VARIABLE: token}
+    step_environ = {**environ, **FENCE_ENVIRONMENT, CURATION_RUN_VARIABLE: "1", report.RUN_TOKEN_VARIABLE: token}
     timeout = config.curation.model_timeout_minutes * 60
-    run = run_fenced(command, machine.temp_dir, step_environ, timeout, pass_fds=pass_fds)
+    run = run_fenced(command, step_tools(rules), machine.temp_dir, step_environ, timeout, pass_fds=pass_fds)
     for denial in run.denials:
         text = f"the model step {skill} was denied {denial}"
         report.add_finding(machine, token, report.Finding(step, report.ACTION, text))
@@ -424,7 +501,7 @@ def text_step(
     executable = environ.get(MODEL_RUNNER_VARIABLE) or config.executables.get("claude", "claude")
     curation = config.curation
     command = text_command(executable, instruction, curation.model, curation.max_budget_usd)
-    step_environ = {**environ, CURATION_RUN_VARIABLE: "1"}
+    step_environ = {**environ, **FENCE_ENVIRONMENT, CURATION_RUN_VARIABLE: "1"}
     timeout = curation.model_timeout_minutes * 60
     with empty_folder(machine.temp_dir) as work:
         return run_text(command, text, work, step_environ, timeout, pass_fds=pass_fds)
@@ -469,14 +546,59 @@ def _signal_group(pid: int, signal_number: int) -> None:
         os.killpg(pid, signal_number)
 
 
-def _result_in(raw: bytes) -> dict[str, object] | None:
+def _message_in(raw: bytes) -> dict[str, object] | None:
     try:
         message = json.loads(raw.decode("utf-8", errors="replace"))
     except ValueError:
         return None
-    if isinstance(message, dict) and message.get("type") == "result":
-        return message
-    return None
+    return message if isinstance(message, dict) else None
+
+
+def _beyond_the_fence(start: Mapping[str, object], tools: Sequence[str]) -> str | None:
+    """What the session has beyond the step's tools, as the reason to stop it, or None."""
+    started_with, servers = start.get("tools"), start.get("mcp_servers")
+    # A server that is not connected yet has no tool in the list, so only its own field shows it.
+    if not isinstance(started_with, list) or not isinstance(servers, list):
+        return UNPROVEN
+    beyond = [
+        _named("the tool", "the tools", [str(tool) for tool in started_with if tool not in tools]),
+        _named("the MCP server", "the MCP servers", [_server_name(server) for server in servers]),
+    ]
+    found = " and ".join(part for part in beyond if part)
+    if not found:
+        return None
+    return f"Claude Code gave the model step {found}, which its fence leaves out; the step was stopped at its start"
+
+
+def _named(one: str, several: str, names: Sequence[str]) -> str:
+    if not names:
+        return ""
+    shown = ", ".join(_one_word(name) for name in sorted(names)[:NAMES_SHOWN])
+    more = f" and {len(names) - NAMES_SHOWN} more" if len(names) > NAMES_SHOWN else ""
+    return f"{one if len(names) == 1 else several} {shown}{more}"
+
+
+def _one_word(name: str) -> str:
+    return "-".join(name.split())[:60] or "without a name"
+
+
+def _server_name(server: object) -> str:
+    return str(server.get("name") or "") if isinstance(server, dict) else str(server)
+
+
+def _list(value: object) -> list[object]:
+    return value if isinstance(value, list) else []
+
+
+def _calls_of_other_tools(message: Mapping[str, object], tools: Sequence[str]) -> list[Denial]:
+    """The tool calls of this line of the output for a tool the session does not have."""
+    body = message.get("message")
+    content = body.get("content") if isinstance(body, dict) else None
+    calls = []
+    for block in _list(content):
+        if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") not in tools:
+            calls.append(Denial(_one_word(str(block.get("name") or "a tool")), _denial_detail(block.get("input"))))
+    return calls
 
 
 def _denials(result: Mapping[str, object] | None) -> tuple[Denial, ...]:
@@ -485,16 +607,20 @@ def _denials(result: Mapping[str, object] | None) -> tuple[Denial, ...]:
     for entry in raw if isinstance(raw, list) else []:
         if not isinstance(entry, dict):
             continue
-        tool_input = entry.get("tool_input")
-        tool_input = tool_input if isinstance(tool_input, dict) else {}
-        detail = tool_input.get("command") or tool_input.get("file_path") or tool_input.get("pattern")
-        if detail is None and tool_input:
-            detail = json.dumps(tool_input, ensure_ascii=False)
-        text = " ".join(str(detail or "").split())
-        if len(text) > DENIAL_DETAIL_CHARACTERS:
-            text = text[: DENIAL_DETAIL_CHARACTERS - 3] + "..."
-        denials.append(Denial(str(entry.get("tool_name") or "a tool"), text))
+        denials.append(Denial(str(entry.get("tool_name") or "a tool"), _denial_detail(entry.get("tool_input"))))
     return tuple(denials)
+
+
+def _denial_detail(tool_input: object) -> str:
+    """What a refused call was for, in one line: its command, file or pattern, else its whole input."""
+    tool_input = tool_input if isinstance(tool_input, dict) else {}
+    detail = tool_input.get("command") or tool_input.get("file_path") or tool_input.get("pattern")
+    if detail is None and tool_input:
+        detail = json.dumps(tool_input, ensure_ascii=False)
+    text = " ".join(str(detail or "").split())
+    if len(text) > DENIAL_DETAIL_CHARACTERS:
+        text = text[: DENIAL_DETAIL_CHARACTERS - 3] + "..."
+    return text
 
 
 def _duration(seconds: float) -> str:

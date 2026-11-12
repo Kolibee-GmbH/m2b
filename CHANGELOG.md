@@ -87,10 +87,30 @@ All notable changes to this project are documented here. The format follows
 
 - A curation step that fails over what it wrote to `memory/` names the line by its file and line
   number ("line 5 written to memory/MEMORY.md holds U+200B"), no longer by its text, and does not
-  name a file the step added, whose name the model chose. The reason is printed at the next
-  session start as a notice of m2b's own, above the line that marks the distillate as data, so a
-  quoted line carried whatever a capture had made the model write into every session. Those
-  notices now go out without invisible characters, like the distillate below them.
+  name a file the step added, whose name the model chose. `m2b status` and the review task show
+  that reason to a session that asks, and a quoted line carried whatever a capture had made the
+  model write. The notices at session start now go out without invisible characters, like the
+  distillate below them.
+- The session start says of a failed curation run when it failed and in which steps ("failed at
+  2026-11-07 03:05 in ingest; m2b status says why"), no longer why. The reason can repeat what a
+  model said when its run broke, the end of what an add-on's command printed or a file's name, and
+  the notice stands in m2b's own voice above the line that marks the distillate as data.
+  `m2b status` and the review task show the reason as before. Of a run that left no record the
+  notice names the run log, and of a run record that cannot be read it quotes no value.
+- A curation step's Claude Code session is fenced more tightly. It has only the tools its step's
+  rules name (Bash, Read, Edit and Write for the steps of the core), no MCP server, no `CLAUDE.md`
+  and no memory of Claude Code's own, and it keeps no transcript. Measured with Claude Code
+  2.1.322, a step had some twenty more tools until now, and those that ask no permission ran: it
+  listed the other Claude sessions on the machine, and no permission kept it from messaging one.
+  The connectors of your claude.ai account were part of a step's session, your own
+  `~/.claude/CLAUDE.md` was in every step's context, so an instruction you wrote for your sessions
+  reached the step that files your notes too, and each step left a transcript under
+  `~/.claude/projects/`. Commands and files outside a step's rules were denied before as they are
+  now. m2b checks what Claude Code gives the session: a step whose session starts with another
+  tool or an MCP server is stopped and fails with their names, and a call of a tool the step does
+  not have fails it like a denied call. An executable you put in `claude`'s place with
+  `M2B_MODEL_RUNNER` has to print the line that names its tools and MCP servers
+  ([SECURITY.md](SECURITY.md#the-fence-around-a-model-step)).
 - The session-start and prompt hooks take every character that draws nothing out of the
   distillate before a session reads it, not only those that hide or reorder text: also soft
   hyphens, fillers, direction marks and variation selectors, which can carry bytes nobody sees.

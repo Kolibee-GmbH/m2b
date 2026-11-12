@@ -12,6 +12,12 @@ rule covers Edit and Write, a ``Write(<path>)`` rule covers nothing, and a path 
 ``//path/**`` form. That a ``Read(...)`` rule also covers Glob and Grep follows Claude Code's
 documentation and was not measured.
 
+As measured with Claude Code 2.1.322 on 2026-11-12, the session has only the tools ``--tools``
+names and says so in a line before the model's first answer, with its MCP servers; a call of any
+other tool is refused as a tool that does not exist, which is no denial of the ``result`` line.
+``"start"`` in a script replaces what that line says (``{"tools": [...], "mcp_servers": [...]}``), for a Claude Code
+that gives a session more than it was asked for, and ``"start": "silent"`` leaves the line out.
+
 The actions file: ``{"actions": [...], "outcome": "success"}``, or for a curation run with several
 model steps ``{"skills": {"/m2b:ingest": {"actions": [...]}, "/m2b:lint": {...}}}``, chosen by the
 prompt (a skill not listed does nothing and succeeds); a skill's entry may also be a list of such
@@ -61,8 +67,16 @@ OPTIONS_WITH_VALUES = (
     "--max-turns",
     "--model",
     "--tools",
+    "--disallowedTools",
 )
 FAKE_MODEL = "fake-model"
+SEEN_VARIABLES = (
+    "M2B_CURATION_RUN",
+    "M2B_RUN_TOKEN",
+    "M2B_REFRESH_ALL",
+    "CLAUDE_CODE_DISABLE_CLAUDE_MDS",
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY",
+)
 STORE_VARIABLE = "M2B_STUB_STORE"
 COVERED_BY = {"Read": ("Read", "Glob", "Grep"), "Edit": ("Edit", "Write")}
 SHELL_OPERATORS = re.compile(r"^[;&|<>()]+$")
@@ -251,9 +265,7 @@ def main(argv: list[str]) -> int:
             "arguments": arguments,
             "cwd": os.getcwd(),
             "cwd_entries": sorted(os.listdir(".")),
-            "environment": {
-                key: os.environ.get(key) for key in ("M2B_CURATION_RUN", "M2B_RUN_TOKEN", "M2B_REFRESH_ALL")
-            },
+            "environment": {key: os.environ.get(key) for key in SEEN_VARIABLES},
         }
         if without_tools:
             seen["stdin"] = sys.stdin.buffer.read().decode("utf-8", errors="replace")
@@ -267,7 +279,13 @@ def main(argv: list[str]) -> int:
     os.environ["PATH"] = os.pathsep.join([*bins, os.environ.get("PATH", "")])
     store = os.environ.get(STORE_VARIABLE, "")
     captures: dict[str, str] = {}
-    _emit({"type": "system", "subtype": "init", "cwd": os.getcwd(), "skills": []})
+    tools = [tool for tool in parsed.get("tools", "").split(",") if tool] if "tools" in parsed else None
+    start = script.get("start", {})
+    # The plugin's session-start hooks speak before the session says what it has.
+    _emit({"type": "system", "subtype": "hook_started", "hook_event": "SessionStart"})
+    if start != "silent":
+        says = {"tools": tools or [], "mcp_servers": [], **start}
+        _emit({"type": "system", "subtype": "init", "cwd": os.getcwd(), "skills": [], **says})
     denials = []
     # As Claude Code does, a tool call past --max-turns ends the run with error_max_turns.
     max_turns = int(parsed["max_turns"]) if "max_turns" in parsed else None
@@ -297,7 +315,9 @@ def main(argv: list[str]) -> int:
                 },
             }
         )
-        if allowed(action, parsed["allowed"]):
+        if tools is not None and action["tool"] not in tools:
+            content, is_error = f"Error: No such tool available: {action['tool']}.", True
+        elif allowed(action, parsed["allowed"]):
             content, is_error = _carry_out(action)
         else:
             denials.append({"tool_name": action["tool"], "tool_use_id": tool_use_id, "tool_input": tool_input})

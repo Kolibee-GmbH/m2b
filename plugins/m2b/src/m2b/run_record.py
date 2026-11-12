@@ -95,7 +95,7 @@ def load_run_record(store: Store) -> RunRecord | None:
             raise ValueError("it is not a JSON object")
         state = raw.get("state")
         if state not in STATES:
-            raise ValueError(f"unknown state {state!r}")
+            raise ValueError("its state is none of " + ", ".join(STATES))
         return RunRecord(
             state=str(state),
             machine_id=_one_line(raw.get("machine_id")) or "an unknown machine",
@@ -198,7 +198,7 @@ def _time(value: object, key: str) -> datetime.datetime:
     try:
         moment = parse_time(value)
     except ValueError as error:
-        raise ValueError(f"{key} {value!r} is not a time like 2026-11-07T03:00:00+01:00") from error
+        raise ValueError(f"{key} is not a time like 2026-11-07T03:00:00+01:00") from error
     if moment.utcoffset() is None:
-        raise ValueError(f"{key} {value!r} has no offset")
+        raise ValueError(f"{key} has no offset")
     return moment

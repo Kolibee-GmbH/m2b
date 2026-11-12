@@ -69,7 +69,7 @@
         "hook",
         "distillate"
       ],
-      "stdout": "\\Am2b: the last curation run on sb-test-e2e failed at [^\\n]+: ingest: "
+      "stdout": "\\Am2b: the last curation run on sb-test-e2e failed at [^\\n]+ in ingest; m2b status says why\\. "
     },
     {
       "run": [
