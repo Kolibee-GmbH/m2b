@@ -395,14 +395,23 @@ The screenshots in `docs/images/` come from real Claude Code sessions against a 
 invented data. After a change the README pictures show, record them again:
 
 ```bash
-scripts/readme-images                # all three
-scripts/readme-images --only todos   # one
+scripts/readme-images                # all five
+scripts/readme-images --only todos   # one, with the one its store depends on
 ```
 
-It needs `claude` logged in, `node` and `npm`, Chrome or Chromium, ImageMagick and `git`, and each
-picture costs one model turn. Claude Code runs with `--setting-sources project`, m2b from this
-checkout and its own `M2B_HOME` under `/tmp/sb-test-m2b-demo`, so your settings, plugins and store
-stay out of the pictures. The answers are the model's: look at each picture before you commit it.
+It needs `claude` logged in, `node` and `npm`, Chrome or Chromium, ImageMagick and `git`. Claude
+Code runs with `--setting-sources project`, m2b from this checkout and its own `M2B_HOME` under
+`/tmp/sb-test-m2b-demo`, so your settings, plugins and store stay out of the pictures.
+
+Three pictures ask the model something and cost one model turn each (`session-start`, `capture`,
+`todos`); their answers are the model's, so look at each before you commit it. The dates in them
+follow the day of the recording: one task is due that day, one is overdue, and the reminder is
+asked for a weekday three days ahead. The other two, `review` and `proposals`, type a command of
+the band, which opens its pane without a model. Their store is the first after a curation run
+that changed a fact and proposed three things from the sessions; a scripted model plays that run,
+the stub the scenarios use, over an invented session in a Claude Code folder of the demo's own.
+Your sessions are never read, and the two pictures differ between recordings only in their dates
+and times.
 
 The moving picture at the top of the README, `docs/images/demo.gif`, follows one sentence from a
 prompt into a later session. Record it again after a change it shows:

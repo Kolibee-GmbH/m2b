@@ -90,7 +90,7 @@ nor a model. Both end with a first capture, a curation run and a first search.
    `the curation run succeeded` and `inbox: 1 capture filed, 0 waiting`; add `--detach` to run it
    in the background instead. After a run that
    failed, the review task in your list names the step and the cause
-   ([Troubleshooting](../README.md#troubleshooting)).
+   ([Troubleshooting](troubleshooting.md)).
 
 5. Start one more session and ask:
 

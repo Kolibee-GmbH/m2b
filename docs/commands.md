@@ -63,8 +63,8 @@ do not do their work there. The first three start a curation run in the backgrou
 
 ## The `m2b` command
 
-Setup writes `~/.local/bin/m2b`. On macOS that folder is not on the `PATH` by default; the
-[README](../README.md#install) has the line to add. `m2b --help` lists the commands, `m2b <command>
+Setup writes `~/.local/bin/m2b`. On macOS that folder is not on the `PATH` by default;
+[Getting started](getting-started.md#in-claude-code) has the line to add. `m2b --help` lists the commands, `m2b <command>
 --help` the options of one, `m2b --version` prints the version. A command that groups actions,
 such as `m2b tasks`, prints its help when named alone. Where a line below has `[--json]`, the
 command answers as JSON with it.
