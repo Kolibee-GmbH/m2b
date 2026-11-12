@@ -142,7 +142,10 @@ All notable changes to this project are documented here. The format follows
   The connectors of your claude.ai account were part of a step's session, your own
   `~/.claude/CLAUDE.md` was in every step's context, so an instruction you wrote for your sessions
   reached the step that files your notes too, and each step left a transcript under
-  `~/.claude/projects/`. Commands and files outside a step's rules were denied before as they are
+  `~/.claude/projects/`. A step can no longer read or change a file in Claude Code's own folder
+  either: Claude Code allows that in the memory folder it keeps for a session's project without
+  any rule, and where your home folder is a git repository, that is the memory your sessions
+  there start with. Other commands and files outside a step's rules were denied before as they are
   now. m2b checks what Claude Code gives the session: a step whose session starts with another
   tool or an MCP server is stopped and fails with their names, and a call of a tool the step does
   not have fails it like a denied call. An executable you put in `claude`'s place with

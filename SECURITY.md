@@ -102,9 +102,16 @@ on 2026-11-12, in a sandbox with files planted outside the store:
 - No `CLAUDE.md` is read and Claude Code keeps no memory for the step. Without that, every
   `CLAUDE.md` in a folder above the step's working folder was in the model's context, with the
   files under a `.claude/rules/` there; the working folder lies under your home folder, so your
-  own `~/.claude/CLAUDE.md` was among them. And a write into the memory folder Claude Code keeps
-  for the step's working folder ran although no rule named it; whether that write is refused now
-  was not tried.
+  own `~/.claude/CLAUDE.md` was among them.
+- A step can neither read nor change a file in the folder Claude Code keeps its own files in
+  (`~/.claude`, or where `CLAUDE_CONFIG_DIR` puts it): the folder is denied by path. The two
+  switches above do not do that. Claude Code allows reading and writing in the memory folder it
+  keeps for a session's project without any rule, and with both switches set a step read, wrote
+  and edited files there; the memory folder of another project was refused. That folder belongs
+  to the step's working folder or to a git repository above it, so on a machine whose home folder
+  is a git repository it is the memory of that repository: every later session started in a
+  folder of the home folder that is in no repository of its own starts with it. With the deny
+  rule the same calls were refused and reported.
 - No transcript is kept, so what a step read from your store is not written a second time under
   `~/.claude/projects/`.
 

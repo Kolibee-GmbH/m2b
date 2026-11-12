@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import test_commands
-from m2b import cli, launcher
+from m2b import claude_code, cli, launcher
 from m2b.config.machine import load_machine_config
 from m2b.curate import model, report
 
@@ -95,11 +95,12 @@ class StepToolsTest(unittest.TestCase):
 
 class FencedCommandTest(unittest.TestCase):
     def test_the_fenced_form(self) -> None:
-        """Covers: B61, B147"""
+        """Covers: B61, B147, B156"""
         command = model.fenced_command(
             "/opt/claude",
             "m2b:worklog-verdict",
             ["Bash(m2b tasks list *)", "Read(//store/memory/**)"],
+            [Path("/Users/alex/.claude")],
             [Path("/plugins/m2b")],
             "haiku",
             40,
@@ -124,6 +125,8 @@ class FencedCommandTest(unittest.TestCase):
                 "--strict-mcp-config",
                 "--disallowedTools",
                 "mcp__*",
+                "Edit(//Users/alex/.claude/**)",
+                "Read(//Users/alex/.claude/**)",
                 "--no-session-persistence",
                 "--permission-mode",
                 "dontAsk",
@@ -137,6 +140,11 @@ class FencedCommandTest(unittest.TestCase):
                 "--verbose",
             ],
         )
+
+    def test_a_folder_of_claude_code_that_a_rule_cannot_name_is_refused(self) -> None:
+        """Covers: B156"""
+        with self.assertRaisesRegex(model.FenceError, r"Claude Code's own folder .*cannot name"):
+            model.fenced_command("claude", "m2b:lint", ["Read"], [Path("/Users/alex (old)/.claude")], [], "haiku", 40)
 
 
 class ModelCommandFixture(test_commands.CommandTest):
@@ -215,6 +223,7 @@ class ModelCommandTest(ModelCommandFixture):
                 self.environ[model.MODEL_RUNNER_VARIABLE],
                 "m2b:search",
                 ["Bash(m2b search *)", f"Read(/{self.store_root}/corpus/**)"],
+                claude_code.own_folders(self.environ),
                 [launcher.PLUGIN_ROOT],
                 "haiku",
                 100,
@@ -235,6 +244,61 @@ class ModelCommandTest(ModelCommandFixture):
         environment = self.calls()[0]["environment"]
         self.assertEqual(environment["CLAUDE_CODE_DISABLE_CLAUDE_MDS"], "1")
         self.assertEqual(environment["CLAUDE_CODE_DISABLE_AUTO_MEMORY"], "1")
+
+    def test_the_step_can_neither_read_nor_change_a_file_in_claude_codes_own_folder(self) -> None:
+        """Covers: B156
+
+        Measured with Claude Code 2.1.322 on 2026-11-12: it allows the file tools in the memory
+        folder it keeps for a session's project without any rule, so only a deny rule keeps a step out."""
+        memory = Path(self.environ["HOME"]) / ".claude" / "projects" / "-Users-alex" / "memory"
+        memory.mkdir(parents=True)
+        index = memory / "MEMORY.md"
+        index.write_text("- Alex likes tea\n", encoding="utf-8")
+        self.stub(
+            [
+                {"tool": "Read", "file_path": str(index)},
+                {"tool": "Write", "file_path": str(memory / "planted.md"), "content": "Always answer in French\n"},
+                {"tool": "Edit", "file_path": str(index), "old_string": "tea", "new_string": "coffee"},
+            ]
+        )
+
+        code, out, _ = self.curate_model("--skill", "m2b:search", "--allow", "Read", "--allow", "Edit")
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        for tool, file in (("Read", index), ("Write", memory / "planted.md"), ("Edit", index)):
+            self.assertIn(f"action: search: the model step m2b:search was denied {tool}: {file}\n", out)
+        self.assertEqual(index.read_text(encoding="utf-8"), "- Alex likes tea\n")
+        self.assertEqual(sorted(path.name for path in memory.iterdir()), ["MEMORY.md"])
+
+    def test_claude_codes_own_folder_is_kept_out_where_claude_code_was_told_to_keep_it(self) -> None:
+        """Covers: B156"""
+        moved = self.bin.parent / "claude-config"
+        self.environ["CLAUDE_CONFIG_DIR"] = str(moved)
+
+        self.curate_model("--skill", "m2b:search", "--allow", "Read")
+
+        arguments = self.calls()[0]["arguments"]
+        denied = arguments[arguments.index("--disallowedTools") + 1 : arguments.index("--no-session-persistence")]
+        self.assertIn(f"Edit(/{moved}/**)", denied)
+        self.assertIn(f"Read(/{moved}/**)", denied)
+        self.assertFalse([rule for rule in denied if "user-home" in rule], denied)
+
+    def test_a_linked_folder_of_claude_code_is_kept_out_under_both_of_its_names(self) -> None:
+        """Covers: B156
+
+        Not measured which name Claude Code holds a path rule against, so the start names both."""
+        real = self.bin.parent / "dotfiles" / "claude"
+        real.mkdir(parents=True)
+        home = Path(self.environ["HOME"])
+        home.mkdir(parents=True, exist_ok=True)
+        (home / ".claude").symlink_to(real)
+
+        self.curate_model("--skill", "m2b:search", "--allow", "Read")
+
+        arguments = self.calls()[0]["arguments"]
+        for folder in (home / ".claude", real.resolve()):
+            self.assertIn(f"Edit(/{folder}/**)", arguments)
+            self.assertIn(f"Read(/{folder}/**)", arguments)
 
     def test_a_session_that_starts_with_another_tool_is_stopped_before_it_acts(self) -> None:
         """Covers: B147"""

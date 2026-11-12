@@ -15,6 +15,9 @@ documentation and was not measured.
 As measured with Claude Code 2.1.322 on 2026-11-12, the session has only the tools ``--tools``
 names and says so in a line before the model's first answer, with its MCP servers; a call of any
 other tool is refused as a tool that does not exist, which is no denial of the ``result`` line.
+A call that a rule of ``--disallowedTools`` names is denied whatever allows it: measured that day
+against what Claude Code itself allows in the folder it keeps its memory in; that such a rule
+also beats one of ``--allowedTools`` follows Claude Code's documentation and was not measured.
 ``"start"`` in a script replaces what that line says (``{"tools": [...], "mcp_servers": [...]}``), for a Claude Code
 that gives a session more than it was asked for, and ``"start": "silent"`` leaves the line out.
 
@@ -67,8 +70,8 @@ OPTIONS_WITH_VALUES = (
     "--max-turns",
     "--model",
     "--tools",
-    "--disallowedTools",
 )
+OPTIONS_WITH_RULES = {"--allowedTools": "allowed", "--disallowedTools": "disallowed"}
 FAKE_MODEL = "fake-model"
 SEEN_VARIABLES = (
     "M2B_CURATION_RUN",
@@ -84,7 +87,7 @@ _RULE = re.compile(r"^([A-Za-z][A-Za-z0-9_]*)(?:\((.*)\))?$", re.DOTALL)
 
 
 def parse_arguments(arguments: list[str]) -> dict[str, Any]:
-    parsed: dict[str, Any] = {"plugin_dirs": [], "allowed": [], "flags": []}
+    parsed: dict[str, Any] = {"plugin_dirs": [], "allowed": [], "disallowed": [], "flags": []}
     index = 0
     while index < len(arguments):
         argument = arguments[index]
@@ -94,10 +97,10 @@ def parse_arguments(arguments: list[str]) -> dict[str, Any]:
         elif argument == "--plugin-dir":
             parsed["plugin_dirs"].append(arguments[index + 1])
             index += 2
-        elif argument == "--allowedTools":
+        elif argument in OPTIONS_WITH_RULES:
             index += 1
             while index < len(arguments) and not arguments[index].startswith("--"):
-                parsed["allowed"].append(arguments[index])
+                parsed[OPTIONS_WITH_RULES[argument]].append(arguments[index])
                 index += 1
         else:
             parsed["flags"].append(argument)
@@ -125,7 +128,8 @@ def _command_allowed(command: str, specifier: str) -> bool:
     return command == specifier
 
 
-def allowed(action: dict[str, Any], rules: list[str]) -> bool:
+def covered(action: dict[str, Any], rules: list[str]) -> bool:
+    """Whether one of the rules names this call: by its tool alone, by its command or by its path."""
     tool = action["tool"]
     for rule in rules:
         match = _RULE.match(rule)
@@ -317,7 +321,7 @@ def main(argv: list[str]) -> int:
         )
         if tools is not None and action["tool"] not in tools:
             content, is_error = f"Error: No such tool available: {action['tool']}.", True
-        elif allowed(action, parsed["allowed"]):
+        elif covered(action, parsed["allowed"]) and not covered(action, parsed["disallowed"]):
             content, is_error = _carry_out(action)
         else:
             denials.append({"tool_name": action["tool"], "tool_use_id": tool_use_id, "tool_input": tool_input})

@@ -51,7 +51,8 @@ flowchart LR
    missing.
 3. **The model is fenced.** A model step runs `claude -p` from an empty folder with
    `--setting-sources project`, this plugin alone, `--permission-mode dontAsk`, the step's rules,
-   only the tools those rules name, no MCP server, no `CLAUDE.md`, no transcript,
+   only the tools those rules name, no MCP server, no `CLAUDE.md`, no transcript, Claude Code's
+   own folder denied,
    `curation.model` and `curation.max_turns`. A denied call fails the step and reaches the review,
    and a session that Claude Code starts with more tools than the step's is stopped at once.
    A step that only reads a text and answers gets no plugin and no tool at all, and one turn.

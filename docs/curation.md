@@ -44,7 +44,8 @@ add-on that keeps failing nor a transcript m2b cannot read holds back the core.
 Each model step runs fenced: `claude -p` from an empty folder, with `--setting-sources project`,
 m2b alone as plugin, `--permission-mode dontAsk`, and allowed only the commands and paths of its
 step. Its session has only the tools those rules name and no MCP server, reads no `CLAUDE.md`,
-yours included, and keeps no transcript; a session that starts with more is stopped, and the step
+yours included, keeps no transcript and can neither read nor change a file in Claude Code's own
+folder; a session that starts with more is stopped, and the step
 fails ([SECURITY.md](../SECURITY.md#the-fence-around-a-model-step) says what was measured). It uses `curation.model` (`haiku` by default) and stops after `curation.max_turns` tool
 calls or `curation.model_timeout_minutes`. The reading of the sessions asks the same model in
 another form: the instruction as the prompt, the text on standard input, no tool at all and one

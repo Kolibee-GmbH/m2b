@@ -23,6 +23,11 @@ beyond that, each with what breaks when it changes:
   prompt but a slash command as unmarked and gives none of them, and the worklog takes every
   prompt as the owner's again; a record that changed in another way is not recognised and reads
   as no prompt.
+- The folder itself (``own_folders``): the start of every model step that has tools denies Read
+  and Edit there (``curate.model.fenced_command``), because Claude Code allows the file tools in
+  the memory folder it keeps under ``projects/`` for a session's project without any rule. When
+  Claude Code keeps its files elsewhere, the rules name the wrong folder and a step can read and
+  write that memory folder again.
 - The mod API (``hooks/register.tsx``): the band, early-access API; when it changes, the band
   shows nothing and everything else works.
 
@@ -83,6 +88,12 @@ def installed_plugins_file(environ: Mapping[str, str]) -> Path:
 def transcripts_folder(environ: Mapping[str, str]) -> Path:
     """Where Claude Code keeps a folder of transcripts per project folder."""
     return _claude_folder(environ) / "projects"
+
+
+def own_folders(environ: Mapping[str, str]) -> list[Path]:
+    """The folder Claude Code keeps its own files in, as it is named and, where a link leads to it, as it resolves."""
+    named = _claude_folder(environ)
+    return list(dict.fromkeys([named, named.resolve()]))
 
 
 def _claude_folder(environ: Mapping[str, str]) -> Path:

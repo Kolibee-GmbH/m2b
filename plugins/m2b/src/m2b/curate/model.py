@@ -17,15 +17,25 @@ The session has only the tools the step's rules name (``--tools``, ``step_tools`
 under Claude Code's folder) and reads no ``CLAUDE.md`` and no memory of Claude Code's own
 (``FENCE_ENVIRONMENT``). Measured with Claude Code 2.1.322 on 2026-11-12, because
 ``dontAsk`` denies only what asks: without these a step had some twenty more tools. Of those,
-listing the other Claude sessions on the machine and starting a subagent ran without asking, a
-message to such a session was stopped by no permission (it was tried with a name no session has),
-and a write into Claude Code's memory folder for the step's working folder ran although no rule
-named it. The connectors of the person's claude.ai account were part of the session, waiting to
+listing the other Claude sessions on the machine and starting a subagent ran without asking, and
+a message to such a session was stopped by no permission (it was tried with a name no session
+has). The connectors of the person's claude.ai account were part of the session, waiting to
 connect. And every ``CLAUDE.md`` in a folder above the working folder was in the model's context,
 the person's own ``~/.claude/CLAUDE.md`` among them, since the working folder lies under their
 home folder. Every command outside the rules was denied either way, read-only ones too (``cat``,
 ``ls``, ``printenv``), so the environment is handed on as it is: the model has no way to read it,
 and a proxy or a provider's credentials in it are what the run needs.
+
+The two switches keep Claude Code's memory out of the model's context; they do not close its
+folder. Claude Code allows the file tools in the memory folder it keeps for a session's project
+without any rule, and measured on the same day a step with both switches set read, wrote and
+edited files there (the memory folder of another project was refused). The folder belongs to the
+step's working folder or to a git repository above it, which is the person's home folder where
+they keep that under git, and what a step wrote there would be in the context of every later
+session of that repository. So the folder Claude Code keeps its own files in is denied by path
+(``off_limits``, ``claude_code.own_folders``), for Read and for Edit, the rule Claude Code reads
+for Write too: a deny rule holds whatever allows a call, and with it the same calls were refused
+and listed with the denials.
 
 The fence is not taken on trust: before the model's first answer Claude Code prints a line that
 names the session's tools and MCP servers (after the lines of the plugin's session-start hooks),
@@ -67,6 +77,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO
 
+from m2b import claude_code
 from m2b.config import store_path
 from m2b.config.machine import MachineConfig
 from m2b.curate import report
@@ -83,6 +94,8 @@ STORE_PLACEHOLDER = "<store>"
 # their own, and such a rule cannot name the store, so it allows them on every path.
 TOOLS_OF_A_RULE = {"Edit": ("Edit", "Write")}
 NO_MCP_TOOL = "mcp__*"
+# The tools of an Edit rule and of a Read rule: a deny rule for both leaves no file tool on a path.
+FILE_RULES = ("Edit", "Read")
 # Claude Code's switches for a child that is to read nothing but its step: no CLAUDE.md, of the
 # folders above the working folder or of the person, and no memory of its own.
 FENCE_ENVIRONMENT = {"CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"}
@@ -200,6 +213,7 @@ def fenced_command(
     executable: str,
     skill: str,
     rules: Sequence[str],
+    off_limits: Sequence[Path],
     plugin_dirs: Sequence[Path],
     model: str,
     max_turns: int,
@@ -211,7 +225,18 @@ def fenced_command(
         command += ["--max-budget-usd", f"{max_budget_usd:g}"]
     for plugin_dir in plugin_dirs:
         command += ["--plugin-dir", str(plugin_dir)]
-    command += ["--tools", ",".join(step_tools(rules)), "--strict-mcp-config", "--disallowedTools", NO_MCP_TOOL]
+    command += ["--tools", ",".join(step_tools(rules)), "--strict-mcp-config"]
+    # A deny rule holds whatever allows the call: the step's rules, or Claude Code itself, which
+    # allows the file tools in the memory folder it keeps for a session without any rule.
+    command += ["--disallowedTools", NO_MCP_TOOL]
+    for folder in off_limits:
+        unnamable = store_path.unsafe_characters(folder)
+        if unnamable:
+            raise FenceError(
+                f"Claude Code's own folder {str(folder)!r} holds {unnamable!r}, which a permission rule "
+                "cannot name, so no model step can be kept out of it"
+            )
+        command += [f"{tool}(/{folder}/**)" for tool in FILE_RULES]
     command += ["--no-session-persistence"]
     # Nobody answers a prompt in this run: Claude Code's flag for a scheduled job, beside dontAsk.
     command += ["--permission-mode", "dontAsk", "--permission-prompts", "none", "--allowedTools", *rules]
@@ -475,6 +500,7 @@ def model_step(
         executable,
         skill,
         rules,
+        claude_code.own_folders(environ),
         list(plugin_dirs.values()),
         curation.model,
         curation.max_turns,
