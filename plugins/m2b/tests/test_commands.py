@@ -7,6 +7,7 @@ import datetime
 import io
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -816,6 +817,156 @@ class DoctorTest(CommandTest):
         self.assertEqual(allowed, [7])
         self.assertEqual(check.state, "does not answer")
         self.assertIn("bin/m2b-prompt-hook took longer than the 7 s Claude Code gives it", check.detail)
+
+    def store_git_line(self) -> tuple[int, str]:
+        code, out, _ = self.run_command("doctor")
+        return code, next(line for line in out.splitlines() if line.startswith("store-git: "))
+
+    def git_init(self, *arguments: str) -> None:
+        """Makes the store folder a git repository, without the developer's git configuration."""
+        environ = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull}
+        subprocess.run(
+            ["git", "init", "-q", "-b", "main", *arguments],
+            cwd=self.store_root,
+            env=environ,
+            capture_output=True,
+            check=True,
+        )
+        self.environ.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_SYSTEM=os.devnull)
+
+    def no_git_on_this_machine(self) -> None:
+        """A PATH with the two programs the prompt hook's line needs, and no git."""
+        programs = self.bin.parent / "no-git"
+        programs.mkdir()
+        os.symlink(sys.executable, programs / "python3")
+        os.symlink(str(shutil.which("dirname")), programs / "dirname")
+        self.environ["PATH"] = str(programs)
+
+    def test_a_store_folder_without_a_git_folder_is_no_repository(self) -> None:
+        """Covers: B149"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+
+        self.assertEqual(self.store_git_line(), (cli.EXIT_OK, "store-git: no repository"))
+
+    def test_a_store_that_is_a_repository_names_the_git_directory_a_run_commits_into(self) -> None:
+        """Covers: B149"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        self.git_init()
+        commits = "a curation run on this machine ends with one commit of what it changed"
+
+        where = f"{self.store_root.resolve() / '.git'}, read with {shutil.which('git')}"
+
+        self.assertEqual(self.store_git_line(), (cli.EXIT_OK, f"store-git: found ({where}; {commits})"))
+
+    def test_a_git_directory_outside_the_store_folder_is_named_where_it_lies(self) -> None:
+        """Covers: B149"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        outside = self.bin.parent.resolve() / "sb-test-store.git"
+        self.git_init("--separate-git-dir", str(outside))
+
+        code, line = self.store_git_line()
+
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertTrue(line.startswith(f"store-git: found ({outside}, read with "), line)
+
+    def test_a_machine_that_does_not_curate_commits_nothing_and_starts_no_git(self) -> None:
+        """Covers: B149"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        self.git_init()
+        settings = json.loads((self.store_root / "store.json").read_text(encoding="utf-8"))
+        save_store_settings(self.store, {**settings, "curating_machine": "sb-test-m2"})
+        self.no_git_on_this_machine()
+
+        self.assertEqual(
+            self.store_git_line(),
+            (
+                cli.EXIT_OK,
+                "store-git: found (.git in the store folder; this machine does not curate, so it commits nothing)",
+            ),
+        )
+
+    def test_with_the_commit_turned_off_nothing_is_committed_and_no_git_starts(self) -> None:
+        """Covers: B149"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"}, curation={"git_commit": False})
+        self.git_init()
+        self.no_git_on_this_machine()
+
+        self.assertEqual(
+            self.store_git_line(),
+            (
+                cli.EXIT_OK,
+                "store-git: found (.git in the store folder; curation.git_commit is false on this machine, "
+                "so its runs commit nothing)",
+            ),
+        )
+
+    def test_a_repository_on_a_curating_machine_without_git_is_a_problem(self) -> None:
+        """Covers: B149"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        self.git_init()
+        self.no_git_on_this_machine()
+
+        self.assertEqual(
+            self.store_git_line(),
+            (
+                cli.EXIT_PROBLEM,
+                "store-git: cannot commit (the store folder holds a .git, but this machine has no git to start; "
+                "a curation run on this machine leaves what it changed uncommitted)",
+            ),
+        )
+
+    def test_a_git_folder_git_cannot_use_is_a_problem_with_gits_reason(self) -> None:
+        """Covers: B149"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        (self.store_root / ".git").write_text("gitdir: /sb-test-nowhere\n", encoding="utf-8")
+
+        code, line = self.store_git_line()
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        self.assertTrue(line.startswith("store-git: cannot commit (git rev-parse failed: "), line)
+        self.assertTrue(line.endswith("; a curation run on this machine leaves what it changed uncommitted)"), line)
+
+    def test_gits_reason_is_printed_with_the_characters_that_draw_nothing_written_out(self) -> None:
+        """Covers: B149"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        (self.store_root / ".git").write_text("gitdir: /sb-test-no\u200bwhere\U000e0041\n", encoding="utf-8")
+
+        code, line = self.store_git_line()
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        self.assertIn("/sb-test-no<U+200B>where<U+E0041>", line)
+
+    def test_the_git_directory_is_printed_with_the_characters_that_draw_nothing_written_out(self) -> None:
+        """Covers: B149"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        outside = self.bin.parent.resolve() / "sb-test\u200b-store.git"
+        self.git_init("--separate-git-dir", str(outside))
+
+        code, line = self.store_git_line()
+
+        self.assertEqual(code, cli.EXIT_OK)
+        shown = self.bin.parent.resolve() / "sb-test<U+200B>-store.git"
+        self.assertTrue(line.startswith(f"store-git: found ({shown}, read with "), line)
+
+    def test_a_repository_whose_work_tree_is_another_folder_is_a_problem(self) -> None:
+        """Covers: B149"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        self.git_init()
+        elsewhere = self.bin.parent / "another-work-tree"
+        elsewhere.mkdir()
+        subprocess.run(["git", "config", "core.worktree", str(elsewhere)], cwd=self.store_root, check=True)
+
+        code, line = self.store_git_line()
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        self.assertIn("cannot commit (the store folder is not the top of the repository's work tree; ", line)
+
+    def test_a_store_that_cannot_be_reached_has_no_line_for_its_repository(self) -> None:
+        """Covers: B149"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        os.rename(self.store_root, self.store_root.with_name("moved"))
+
+        self.assertNotIn("store-git", self.run_command("doctor")[1])
 
     def test_the_skills_that_run_doctor_name_every_state_that_is_a_problem(self) -> None:
         skills = Path(__file__).resolve().parents[1] / "skills"

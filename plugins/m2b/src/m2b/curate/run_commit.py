@@ -162,6 +162,12 @@ class Repository:
         return result.returncode, os.fsdecode(result.stdout)
 
 
+def holds_git_folder(store: Store) -> bool:
+    """Whether the store folder holds a ``.git``: a folder, or the file a git directory kept elsewhere
+    leaves in its place."""
+    return os.path.lexists(store.root / GIT_FOLDER)
+
+
 def find_repository(
     store: Store,
     environ: Mapping[str, str],
@@ -172,7 +178,7 @@ def find_repository(
     """The repository to commit a run into; None without a ``.git`` in the store folder and
     without a git to start, which are the two cases in which nothing is done. A ``.git`` whose work
     tree turns out to be another folder is found here and fails the commit, which says so."""
-    if not os.path.lexists(store.root / GIT_FOLDER):
+    if not holds_git_folder(store):
         return None
     git = shutil.which("git", path=environ.get("PATH"))
     if git is None:
@@ -272,7 +278,7 @@ def commit(
     if set(written + removed) <= set(no_reason_alone):
         return None
     _refuse_evicted_rule_files(store, written)
-    _refuse_unfinished_operation(_git_directory(repository))
+    _refuse_unfinished_operation(git_directory(repository))
     _, found = repository.call(["rev-parse", "--verify", "--quiet", "HEAD^{commit}"], allowed=(0, 1))
     head = found.strip() or None
     temp_dir.mkdir(parents=True, exist_ok=True)
@@ -303,8 +309,9 @@ def commit(
     return new
 
 
-def _git_directory(repository: Repository) -> Path:
-    """The repository's git directory, for a store folder that is the top of its work tree."""
+def git_directory(repository: Repository) -> Path:
+    """The repository's git directory, for a store folder that is the top of its work tree; a
+    ``CommitError`` says why there is none to commit into."""
     if repository.store.is_evicted(GIT_FOLDER):
         raise CommitError(f"{GIT_FOLDER} is not downloaded to this machine; run: {fetch_command(GIT_FOLDER)}")
     answer = repository.call(["rev-parse", "--absolute-git-dir", "--show-toplevel"])[1].splitlines()

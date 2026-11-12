@@ -27,7 +27,7 @@ from m2b.curate.report import ACTION, INFO
 from m2b.notes import frontmatter as keys
 from m2b.notes.frontmatter import Note, NoteFormatError, read_created
 from m2b.notes.layout import CORPUS, INBOX, MEMORY, MEMORY_INDEX, TASKS, is_journal_name
-from m2b.notes.memory_index import MemoryIndex, Topic, is_day, split_topics
+from m2b.notes.memory_index import MAX_TOPIC_NAME, MemoryIndex, Topic, is_day, split_topics
 from m2b.notes.names import NoteName
 from m2b.store.base import Store, StoreError, fetch_command
 from m2b.tasks import markers
@@ -42,7 +42,6 @@ TOPIC_WORDS = range(2, 6)
 # A shorter word never matches, so the topic would never come in by it.
 MIN_TOPIC_WORD = MIN_WORD_CHARACTERS
 MAX_TOPIC_WORD = 40
-MAX_TOPIC_NAME = 60
 TEMP_FILE_MAX_AGE = datetime.timedelta(days=1)
 NOTE_EXTENSION = ".md"
 TEXT_EXTENSIONS = frozenset({".md", ".markdown", ".txt"})

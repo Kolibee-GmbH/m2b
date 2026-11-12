@@ -445,6 +445,53 @@ class SearchCommandTest(unittest.TestCase):
         self.assertEqual([line.split(":")[0] for line in text.splitlines()], in_order)
         self.assertEqual([hit["path"] for hit in json.loads(answer)["hits"]], in_order)
 
+    def test_a_hit_prints_without_the_characters_that_draw_nothing(self) -> None:
+        """Covers: B143"""
+        self.set_up()
+        coder = "\U0001f469‍\U0001f4bb"
+        self.write("memory/dana.md", f"Dana​ likes\U000e0041 old­ maps️ ‮{coder}\n")
+
+        _, text, _ = self.run_command("search", "dana")
+        _, answer, _ = self.run_command("search", "--json", "dana")
+
+        self.assertEqual(text, f"memory/dana.md:1: Dana likes old maps {coder}\n")
+        self.assertEqual(
+            json.loads(answer)["hits"], [{"path": "memory/dana.md", "line": 1, "text": f"Dana likes old maps {coder}"}]
+        )
+
+    def test_a_character_that_draws_nothing_in_a_file_name_is_written_out(self) -> None:
+        """Covers: B143"""
+        self.set_up()
+        self.write("inbox/da​na.md", "Dana called\n")
+        self.write("inbox/ki‍m.md", "Dana wrote\n")
+        self.eviction.evicted.add(self.store_root / "inbox/ki‍m.md")
+        fetch = "m2b store fetch 'inbox/ki<U+200D>m.md'"
+
+        _, text, _ = self.run_command("search", "dana")
+        _, answer, _ = self.run_command("search", "--json", "dana")
+
+        self.assertEqual(text.splitlines()[0], "inbox/da<U+200B>na.md:1: Dana called")
+        self.assertEqual(text.splitlines()[-1], f"  {fetch}")
+        data = json.loads(answer)
+        self.assertEqual(data["hits"], [{"path": "inbox/da<U+200B>na.md", "line": 1, "text": "Dana called"}])
+        self.assertEqual(data["evicted"], [{"path": "inbox/ki<U+200D>m.md", "fetch": fetch}])
+
+    def test_why_a_file_could_not_be_read_is_said_without_a_character_that_draws_nothing(self) -> None:
+        """Covers: B143"""
+        self.set_up()
+        self.write("inbox/da​na.md", "Dana called\n")
+
+        def unreadable(store: Any, relative: str) -> bytes:
+            raise StoreReadError(f"{relative} could not be read: permission denied")
+
+        with mock.patch("m2b.store.folder.FolderStore.read_bytes", unreadable):
+            _, text, _ = self.run_command("search", "dana")
+            _, answer, _ = self.run_command("search", "--json", "dana")
+
+        reason = "inbox/da<U+200B>na.md could not be read: permission denied"
+        self.assertEqual(text.splitlines()[-1], f"  {reason}")
+        self.assertEqual(json.loads(answer)["unreadable"], [{"path": "inbox/da<U+200B>na.md", "reason": reason}])
+
     def test_several_words_are_searched_as_one_phrase(self) -> None:
         """Covers: B68"""
         self.set_up()

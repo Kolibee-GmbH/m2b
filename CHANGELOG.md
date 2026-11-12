@@ -9,6 +9,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `m2b doctor` has a line `store-git`. It says whether the store folder is a git repository and,
+  on the machine that curates, where the git directory lies that a run commits into and which
+  git named it. `cannot commit` with the reason counts as a problem: a `.git` in the store folder
+  on a curating machine without git, where a run commits nothing and says nothing, a `.git` that
+  is not downloaded, a repository git cannot read, or one whose work tree is another folder.
+  Where the folder holds a `.git` and this machine does not curate or has `curation.git_commit`
+  off, the line says so and git is not started. The git directory and git's reason are printed
+  with invisible characters written out, because both come from the `.git` in the store.
 - `m2b doctor` has a line `prompt-hook`. The hook that brings a topic's facts before a prompt says
   nothing when it fails, so that no prompt waits or breaks for it; one that never worked looked
   the same as a prompt that named no topic. Doctor now starts it the way Claude Code does, within
@@ -85,6 +93,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- `m2b search` prints nothing from the store with a character that draws nothing, as text and
+  with `--json`: zero-width characters, marks that reorder text, variation selectors, soft
+  hyphens and tag characters are gone from a hit's text, the joiners emoji and several scripts
+  need stay. In a file's path, in
+  the command that fetches a file and in the reason a file could not be read, such a character
+  is written out as `<U+200B>`. A session that searches through the skill's command read a hit
+  as it was stored until now, with whatever such a character carried.
+- A proposal from your sessions whose topic is longer than the 60 characters a topic's name may
+  have is left out and counted with the entries that are not in the form, like one whose text is
+  over 300 characters.
 - A curation step that fails over what it wrote to `memory/` names the line by its file and line
   number ("line 5 written to memory/MEMORY.md holds U+200B"), no longer by its text, and does not
   name a file the step added, whose name the model chose. `m2b status` and the review task show

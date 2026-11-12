@@ -27,6 +27,10 @@ CURRENT_HEADING = "## Current"
 CURRENT_IN_TOPIC = "#### Current"
 _TOPIC_SECTIONS = (FACTS_HEADING, CURRENT_HEADING)
 
+# The characters a topic's name may have: lint reports a heading with a longer one, and a
+# proposal that names a longer one names no topic.
+MAX_TOPIC_NAME = 60
+
 # Only top-level and second-level headings switch the section; deeper ones group lines in it.
 _SECTION_HEADING = re.compile(r"#{1,2} ")
 _SINCE = re.compile(r"\s*\(since (?P<since>[^()]*)\)\s*\Z")

@@ -111,6 +111,14 @@ review says so.
 
 `m2b config set curation.git_commit false` on the curating machine turns the commit off.
 
+`m2b doctor` says in its line `store-git` whether a run on this machine commits: `no repository`
+without a `.git` in the store folder; `found` with the git directory and the git that named it
+when a run here commits; `found` with the reason when this machine does not curate or has the
+commit off; or `cannot commit` with the reason. A machine without git is such a reason, and
+doctor is the only place you learn of it, because a run there commits nothing and says nothing.
+Doctor looks for git on the `PATH` it is started with; a run started by a schedule looks on the
+`PATH` the schedule gives it.
+
 ## Reading your sessions
 
 Much of what belongs in a second brain is said in passing: who runs what at a customer, what was

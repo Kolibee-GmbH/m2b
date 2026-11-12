@@ -38,6 +38,13 @@ still open; a run started by hand does not. GitHub starts scheduled runs from `m
 in a public repository it stops them after sixty days without activity until someone turns the
 workflow on again.
 
+The workflows name each action by a commit, with the version as a comment behind it: whoever
+controls an action's repository can move a tag, and these workflows hold an account's key and
+write a release. A test holds that form and that one action is one commit in every workflow. To
+move to a newer version, look up its commit with
+`git ls-remote --tags https://github.com/<owner>/<action>` and change the hash and the comment
+wherever the action is named.
+
 The stage `core-alone` proves that the core stands without its add-ons. It copies `plugins/m2b`
 into a temporary folder without any part of an add-on, runs the core's unit tests in the copy and
 then the end-to-end scenarios that turn no add-on on. A core test that reads an add-on's file, or

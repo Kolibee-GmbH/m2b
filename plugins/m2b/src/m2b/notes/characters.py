@@ -3,8 +3,9 @@
 ``HIDDEN_RANGES`` is what draws nothing: the code points Unicode calls default ignorable, without
 the joiners U+200C and U+200D, which emoji, Persian and several Indic scripts need. Text from the
 store goes to a model without them (``without_hidden``): the distillate at session start, a
-topic's facts before a prompt, and what the mod's tools answer; the mod keeps the same table in
-``hooks/plain-text.ts``. A model does not draw, so it loses nothing, and nothing rides along unseen.
+topic's facts before a prompt, the hits ``m2b search`` prints, and what the mod's tools answer;
+the mod keeps the same table in ``hooks/plain-text.ts``. A model does not draw, so it loses
+nothing, and nothing rides along unseen.
 
 ``unsafe_characters`` names the few of them that make a line read one way to the owner and another
 to the model. A line a model step writes with one of them undoes the step:

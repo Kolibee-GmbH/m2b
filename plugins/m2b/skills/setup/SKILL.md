@@ -103,8 +103,9 @@ m2b doctor
 
 Report each line whose state is `not reachable`, `missing`, `not installed`, `newer` (the store format: update m2b
 on this machine), `not usable for curation` (the store path: move the store to a folder the line
-allows and set `store.path` to it) or `does not answer` (the prompt hook: no topic's facts come in before a
-prompt, for the reason the line gives), with what to do; `not recorded` only on
+allows and set `store.path` to it), `does not answer` (the prompt hook: no topic's facts come in before a
+prompt, for the reason the line gives) or `cannot commit` (the store folder is a git repository, and a
+curation run on this machine cannot commit into it, for the reason the line gives), with what to do; `not recorded` only on
 the curating machine, where the model steps need that program. The line `band` says whether the
 latest session that ran m2b's hooks also started the band above the prompt. Right after setup it
 can say `not seen`, because m2b's hooks only begin with the next session. Say that the band appears

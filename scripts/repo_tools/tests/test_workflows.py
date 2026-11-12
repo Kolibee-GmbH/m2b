@@ -76,6 +76,39 @@ class WorkflowCommandsTest(unittest.TestCase):
         self.assertIn(f'"{CLAUDE_CODE_PACKAGE}@${{CLAUDE_CODE_VERSION}}"', _text("ci.yml"))
 
 
+class PinnedActionsTest(unittest.TestCase):
+    """A tag is moved by whoever controls an action's repository, a commit is not: the workflows
+    hold an account's key and may write a release."""
+
+    PINNED = re.compile(r" *- uses: [\w.-]+/[\w./-]+@[0-9a-f]{40} # v\d+\.\d+\.\d+")
+    USES = re.compile(r"uses: (\S+?)@(.*)")
+
+    def uses(self) -> dict[str, list[str]]:
+        """The lines that name an action, per workflow file."""
+        found = {}
+        for workflow in sorted(WORKFLOWS.glob("*.yml")):
+            found[workflow.name] = [line for line in _text(workflow.name).splitlines() if "uses:" in line]
+        return found
+
+    def test_every_action_is_named_by_its_commit_with_the_version_as_a_comment(self) -> None:
+        for workflow, lines in self.uses().items():
+            self.assertTrue(lines, workflow)
+            for line in lines:
+                with self.subTest(workflow=workflow, line=line.strip()):
+                    self.assertRegex(line, f"^{self.PINNED.pattern}$")
+
+    def test_an_action_is_the_same_commit_and_version_in_every_workflow(self) -> None:
+        pins: dict[str, set[str]] = {}
+        for lines in self.uses().values():
+            for line in lines:
+                found = self.USES.search(line)
+                assert found is not None, line
+                pins.setdefault(found.group(1), set()).add(found.group(2))
+
+        self.assertEqual({action: len(named) for action, named in pins.items() if len(named) != 1}, {})
+        self.assertGreaterEqual(len(pins), 4)
+
+
 class WeeklyRunTest(unittest.TestCase):
     def setUp(self) -> None:
         self.text = _text("weekly.yml")

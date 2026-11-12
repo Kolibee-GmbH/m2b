@@ -50,6 +50,7 @@ from pathlib import Path
 from typing import Any
 
 from m2b.notes.characters import unsafe_characters
+from m2b.notes.memory_index import MAX_TOPIC_NAME
 from m2b.sessions import Session
 
 PERSON = "person"
@@ -225,7 +226,11 @@ def _proposal(entry: object, sessions: Sequence[Session]) -> Proposal | None:
         return None
     if kind not in KINDS or not isinstance(quote, str) or not quote.strip():
         return None
-    if not text or len(text) > TEXT_LENGTH or topic is None:
+    if not text or len(text) > TEXT_LENGTH:
+        return None
+    # The topic is the name of a heading the model was shown, so one longer than a name may be
+    # is the model's own text; cut short it would name no heading either.
+    if topic is None or len(topic) > MAX_TOPIC_NAME:
         return None
     if number is None or not 1 <= number <= len(sessions):
         return None

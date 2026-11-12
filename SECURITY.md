@@ -145,7 +145,7 @@ which is the model's wording and is not checked against the quote. Proposals are
 proposals file before you answer, and a dropped one stays there for 90 days, so whoever can steer
 that model can have words from any prompt it was given written into the store: a proposal's quote
 can be a whole prompt of the session it names, and nothing holds its text, up to 300 characters,
-or its topic against a prompt. Read a proposal's text beside your words before you keep it;
+or its topic, up to 60, against a prompt. Read a proposal's text beside your words before you keep it;
 `keep --all` keeps each as it is written.
 
 ## The tools the model calls
@@ -158,7 +158,9 @@ describes. A search answer goes to the model under a line saying it is data from
 instructions, with escape sequences and the invisible characters m2b knows removed (marks that
 reorder text, zero-width characters, variation selectors, tag characters; the table the hooks use
 for the distillate); that list cannot be complete, and a model may still follow text that looks
-like an instruction.
+like an instruction. Where the tool is not offered, the `search` skill runs `m2b search` in a
+shell: a hit then comes without those invisible characters too, but with its escape sequences
+and without the line that marks it as data.
 
 The mod lets a call of either tool run where Claude Code would only ask because no rule allows it,
 as the skills run their commands without asking; then neither the classifier of auto mode nor a

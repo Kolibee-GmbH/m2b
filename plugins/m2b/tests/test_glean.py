@@ -8,6 +8,7 @@ from typing import Any
 
 from m2b import glean
 from m2b.glean import Proposal
+from m2b.notes.memory_index import MAX_TOPIC_NAME
 from m2b.sessions import LeftOut, Prompt, Session
 
 UTC = datetime.timezone.utc
@@ -210,6 +211,7 @@ class ParseAnswerTest(unittest.TestCase):
             "a due day in words": entry(due="Friday"),
             "a due day that is no day": entry(due="2026-02-30"),
             "a topic that is no text": entry(topic=3),
+            "a topic longer than the name of a topic may be": entry(topic="N" * (MAX_TOPIC_NAME + 1)),
             "a character nobody sees in the text": entry(text="Dana runs\u200b IT."),
             "a character nobody sees in the quote": entry(quote="Dana runs\u202e IT at Northwind"),
             "half a character in the text": entry(text="Dana runs \ud83d IT."),
@@ -234,6 +236,14 @@ class ParseAnswerTest(unittest.TestCase):
 
         self.assertIsNone(read.topic)
         self.assertIsNone(read.due)
+
+    def test_a_topic_as_long_as_the_name_of_a_topic_may_be_is_kept(self) -> None:
+        """Covers: B117"""
+        longest = "N" * MAX_TOPIC_NAME
+
+        (read,) = glean.parse_answer(answer(entry(topic=longest)), [SHED]).proposals
+
+        self.assertEqual(read.topic, longest)
 
     def test_white_space_in_text_and_topic_is_collapsed(self) -> None:
         (read,) = glean.parse_answer(answer(entry(text=" Dana runs\n IT. ", topic="North\twind ")), [SHED]).proposals

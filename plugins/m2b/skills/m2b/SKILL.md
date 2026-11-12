@@ -63,8 +63,9 @@ m2b doctor
 
 Report each line whose state is `not reachable`, `missing`, `not installed`, `newer` (the store format: update
 m2b on this machine), `not usable for curation` (the store path: move the store to a folder the line
-allows and set `store.path` to it) or `does not answer` (the prompt hook: no topic's facts come in before a
-prompt, for the reason the line gives), with what to do. Report `not recorded`
+allows and set `store.path` to it), `does not answer` (the prompt hook: no topic's facts come in before a
+prompt, for the reason the line gives) or `cannot commit` (the store folder is a git repository, and a
+curation run on this machine cannot commit into it, for the reason the line gives), with what to do. Report `not recorded`
 too, and say that it matters only on the machine that curates, where the model steps need that program. Report
 `band: not seen` with the reason its line gives: the band above the prompt and the status line are
 missing because Claude Code loads no mods, or no plugin hooks at all, in the latest session. When all
