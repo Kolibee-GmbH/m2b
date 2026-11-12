@@ -1008,6 +1008,107 @@ class HarvestStepTest(RunnerTest):
         self.assertEqual(len(corpus), 1)
 
 
+class RunSummaryTest(RunnerTest):
+    """The second line ``m2b curate`` prints: what the run filed and what waits."""
+
+    def test_a_capture_the_run_itself_wrote_and_filed_counts_as_filed(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        tasks = self.tasks()
+        proposal = candidates.propose(self.store, tasks, "Dana likes old maps", "Remember?", START)
+        assert proposal.task_id is not None
+        tasks.complete(proposal.task_id)
+        self.model({"m2b:ingest": [{"tool": "Bash", "command": "m2b ingest finish <capture:candidate>"}]})
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.summary, "inbox: 1 capture filed, 0 waiting")
+
+    def test_a_capture_with_a_file_beside_its_note_counts_once(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        self.capture()
+        self.write("inbox/20261107T070000Z-cli-a1b2.pdf", "%PDF-1.4 a scan\n")
+        self.model({"m2b:ingest": INGEST_FILES_THE_CAPTURE})
+
+        outcome = self.run_curate()
+
+        self.assertEqual(len(list((self.store_root / "corpus").rglob("20261107T070000Z-cli-a1b2.*"))), 2)
+        self.assertEqual(outcome.summary, "inbox: 1 capture filed, 0 waiting")
+
+    def test_a_file_the_step_only_renamed_counts_as_waiting(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        self.write("inbox/shopping list.md", "Buy plywood\n")
+        self.model({"m2b:ingest": [{"tool": "Bash", "command": "m2b ingest normalize --json"}]})
+
+        outcome = self.run_curate()
+
+        self.assertEqual([path.name for path in (self.store_root / "inbox").iterdir() if "shopping" in path.name], [])
+        self.assertEqual(outcome.summary, "inbox: 0 captures filed, 1 waiting")
+
+    def test_a_capture_that_is_not_downloaded_counts_as_waiting(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        self.capture()
+        self.eviction.evicted.add(self.store_root / "inbox" / "20261107T070000Z-cli-a1b2.md")
+
+        outcome = self.run_curate(fetch_timeout=0.3)
+
+        self.assertEqual(outcome.summary, "inbox: 0 captures filed, 1 waiting")
+
+    def test_a_step_that_failed_after_filing_still_counts_what_it_filed(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        self.capture()
+        self.model({"m2b:ingest": INGEST_FILES_THE_CAPTURE}, outcomes={"m2b:ingest": "error"})
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, FAILED)
+        self.assertEqual(outcome.summary, "inbox: 1 capture filed, 0 waiting")
+
+    def test_there_is_no_second_line_when_the_inbox_or_the_archive_cannot_be_listed(self) -> None:
+        """Covers: B163"""
+        for folder in ("inbox", "corpus"):
+            with self.subTest(folder=folder):
+                self.curating()
+                real_scan = runner.Store.scan
+
+                def scan(store: Any, asked: str, folder: str = folder, real_scan: Any = real_scan) -> Any:
+                    if asked == folder:
+                        raise runner.StoreError(f"{folder} could not be listed: Operation not permitted")
+                    return real_scan(store, asked)
+
+                with mock.patch.object(runner.Store, "scan", scan):
+                    outcome = self.run_curate()
+
+                self.assertIsNone(outcome.summary)
+
+    def test_a_failed_step_that_does_not_fail_the_run_is_named_in_the_first_line_only(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        self.addon("worklog", "before_ingest")
+        self.environ["SB_TEST_ADDON_EXIT"] = "4"
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        self.assertIn("see the review", outcome.message)
+        self.assertEqual(outcome.summary, "inbox: 0 captures filed, 0 waiting")
+
+    def test_a_finding_that_is_only_information_does_not_send_to_the_review_task(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        self.repairable_link()
+        report = "m2b curate report --step lint --kind info --text '3 notes evicted'"
+        self.model({"m2b:lint": [{"tool": "Bash", "command": report}]})
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.summary, "inbox: 0 captures filed, 0 waiting")
+
+
 GUARDED = "# Memory\n\n## Facts\n\n- Dana likes old maps (dana.md)\n- Sam brings plywood (sam.md)\n\n## Current\n"
 SAM_DUE = "---\nuntil: 2026-11-01\n---\n# Sam\n\n- Brings plywood.\n"
 

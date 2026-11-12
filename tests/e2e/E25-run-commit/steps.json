@@ -104,7 +104,7 @@
         "GIT_CONFIG_GLOBAL": "/dev/null",
         "GIT_CONFIG_SYSTEM": "/dev/null"
       },
-      "stdout": "\\Athe curation run succeeded\\n\\Z"
+      "stdout": "\\Athe curation run succeeded\\ninbox: 1 capture filed, 0 waiting\\n\\Z"
     },
     {
       "run": [
@@ -245,7 +245,7 @@
         "GIT_CONFIG_GLOBAL": "/dev/null",
         "GIT_CONFIG_SYSTEM": "/dev/null"
       },
-      "stdout": "\\Athe curation run succeeded\\n\\Z"
+      "stdout": "\\Athe curation run succeeded\\ninbox: 1 capture filed, 0 waiting\\n\\Z"
     },
     {
       "run": [
@@ -287,7 +287,7 @@
         "GIT_CONFIG_GLOBAL": "/dev/null",
         "GIT_CONFIG_SYSTEM": "/dev/null"
       },
-      "stdout": "\\Athe curation run succeeded\\n\\Z"
+      "stdout": "\\Athe curation run succeeded\\ninbox: 0 captures filed, 0 waiting\\n\\Z"
     },
     {
       "run": [

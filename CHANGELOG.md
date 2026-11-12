@@ -66,7 +66,8 @@ In short:
   each such start. Until now that output was discarded, and a run that died before it could write
   its record left no reason behind.
 - A curation run ends with one git commit when you keep the store in a git repository: run
-  `git init` in the store folder, and from then on `git revert <commit>` takes one run back. The
+  `git init` in the store folder and commit the store once, and from then on
+  `git revert <commit>` takes one run back. The
   commit holds what changed in the store while the run ran, and nothing else of what you left
   uncommitted or staged (a file the run also wrote goes in as it is on disk); its author is `m2b <m2b@localhost>`, so `git log --author=m2b` lists the
   runs. m2b makes no repository, writes no git configuration, never pushes, runs no hook and signs
@@ -161,6 +162,38 @@ In short:
 
 ### Changed
 
+- `m2b curate` answers a run in two lines. After the line that says how the run ended comes what
+  it did to the inbox, such as `inbox: 3 captures filed, 0 waiting`; when a run that ended well
+  left something in the review task, the line says so. Until now the answer was
+  `the curation run succeeded` alone, and whether anything was filed took a second command. Filed
+  counts what reached the archive, so a ticked "Remember? ..." candidate the same run filed is in
+  it. An answer without a run (not due, paused, `--detach`) is one line as before. A script that
+  compared the whole output must take the second line into account.
+- On a machine that is not set up, a command's answer names both ways in: `/m2b:m2b setup` in
+  Claude Code and, without Claude Code, `m2b setup apply` with the address of Getting started.
+  Until now it named only the first, which whoever tries m2b from a checkout does not have.
+- The README explains six more of its words (fact file, review task, proposal, memory candidate,
+  mod, herdr), shows under Troubleshooting what `m2b doctor` and `m2b status` answer on a healthy
+  machine and which of their lines only look like a problem, and names two more things to remove
+  when uninstalling: the marketplace and the `PATH` line. [Security](SECURITY.md) opens with five
+  lines that sum it up and says that reports are taken for the latest release.
+  [Getting started](docs/getting-started.md) lists the folder with the copies of `memory/` a run
+  keeps on the machine.
+- The README has a quick start right below its first screen, says what Claude Code prints when
+  the install is done, says where m2b stands (young, in daily use by its author on macOS, Linux
+  covered by the tests), that a run's usage is recorded nowhere, that the band's two tools run
+  without Claude Code's permission prompt, and how to report a bug. It no longer says a session
+  keeps your words "verbatim": the note is in your words without the request around them. It
+  also says that a run can file facts under a topic,
+  and that a session then starts with the topic's name only.
+- [The curation run](docs/curation.md) has a section "Correcting what a run filed": a wrong fact,
+  a fact under the wrong topic, a finding of lint in the review task, a note that should never
+  have been kept. It also says to commit the store once before the first run commits into it:
+  reverting the first run that touched a file git had never seen deletes that file, the
+  distillate for one.
+- lint's finding about a topic's words names the file and says where the words stand: "in
+  memory/MEMORY.md, the topic Trip has 1 word in the brackets of its heading; it needs 2 to 5".
+  Until now it read "the topic Trip has 1 words; it needs 2 to 5".
 - [Getting started](docs/getting-started.md) says after each step in Claude Code what you should
   see and what to do when you do not, and which session knows a new fact: the session start after
   a capture starts the run, and the session after that one starts with the fact. The times in it

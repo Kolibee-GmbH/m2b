@@ -12,6 +12,9 @@ in which only a step failed that does not fail the run ([The steps](#the-steps))
 succeeded and starts no wait. A
 schedule can start it too, for days without a session ([On a schedule](#on-a-schedule)), and
 `m2b curate --force` starts it now; add `--detach` to get your terminal back while it runs.
+Started in front of you it answers in two lines: how the run ended, and what it did to the inbox,
+such as `inbox: 3 captures filed, 0 waiting`, with a pointer to the review task when a run that
+ended well left something there for you.
 On a machine you paused, a run starts only when you ask for one, with `--force`, `--refresh-all`
 or `--sort-facts` ([Pausing](#pausing)).
 
@@ -81,6 +84,23 @@ the store folder itself is the top of a git work tree (you ran `git init` in the
 git is on the curating machine. It never makes the repository for you; without one nothing changes
 and nothing is reported.
 
+Commit the store once yourself before the first run commits into it, in the store folder:
+
+```bash
+cd ~/m2b
+git init
+git add -A
+git commit -m "the store before m2b's commits"
+```
+
+In a synced folder, make the repository with `git init --separate-git-dir <a folder outside>`
+instead of `git init`, for the reason given further down, and know that `git add -A` reads every
+file: in iCloud Drive it downloads those that are not on this machine.
+
+A run commits only what it changed. A file git has never seen, `memory/MEMORY.md` for one, would
+enter the repository whole with the first run that touches it, and reverting that run would delete
+the file, with every fact earlier runs wrote into it.
+
 What the commit holds:
 
 - every visible file that changed in the store while the run ran: the facts it wrote, the captures
@@ -125,6 +145,10 @@ next run files those captures again. Revert the commit named `m2b: curation run 
 of the captures before it. Tasks in Apple Reminders are not in the store, so they stay as the run
 left them.
 
+- A file that was in no commit before the run is deleted by the revert, not put back as it was:
+  `memory/MEMORY.md`, a fact file or a task file in a store you never committed yourself. The
+  facts are not lost, `git revert` on the revert brings the file back; committing the store once
+  before the first run avoids it ([A commit per run](#a-commit-per-run)).
 - git refuses the revert while `state/core/last-run.json` holds a change that is not committed.
   That is the case after a later run that had nothing to do: it wrote its record and made no
   commit. `git restore state/core/last-run.json` drops that record; then revert.
@@ -152,6 +176,34 @@ commit off; or `cannot commit` with the reason. A machine without git is such a 
 doctor is the only place you learn of it, because a run there commits nothing and says nothing.
 Doctor looks for git on the `PATH` it is started with; a run started by a schedule looks on the
 `PATH` the schedule gives it.
+
+## Correcting what a run filed
+
+A model files your notes, and it can file one wrong. The files in `memory/` are yours to edit, and
+nothing a run filed is final:
+
+- **A fact is wrong.** Say the right one, "remember that Dana's birthday is on 4 March". The next
+  run rewrites the line; a correction leaves no old value behind, while a fact that changed, such
+  as a new address, keeps its old value under `## Earlier` in the fact file. Or edit the line in
+  `memory/MEMORY.md` and in its fact file yourself.
+- **A fact stands under a topic and every session should start with it.** Move its line in
+  `memory/MEMORY.md` above the first `###` heading. The other way round, a line moved under a
+  `### <name> (<word>, <word>)` heading reaches a session only when it is about that topic
+  ([Store format](store-format.md)).
+- **The review task names a finding of lint,** such as "in memory/MEMORY.md, the topic Mill Lane
+  has 1 word in the brackets of its heading; it needs 2 to 5". Change the file the finding names,
+  here by adding a word a prompt about the topic would use, as in
+  `### Mill Lane (mill lane, bike shop)`, and tick the review task; the next run reports the
+  finding again if it still holds.
+- **A note should never have been kept,** a password or something told in confidence. While no
+  run has filed it, delete its file in `inbox/`. After a run, read the `filed:` line at the end of
+  its file in `corpus/<year>/<month>/` first: it names every fact file and task the run made from
+  the note. Delete each of those facts in its fact file, with the link to the note under
+  `## Evidence` there, and its line in `memory/MEMORY.md`; any line under `## Current` about it,
+  which `m2b search` finds; and the tasks, in your task list. Then delete the note's file. What
+  m2b does not reach: a copy of `memory/` from
+  before a run under `~/.local/state/m2b/memory-before-run/` on the curating machine, earlier
+  commits when the store is a git repository, and whatever your sync service or backup keeps.
 
 ## Reading your sessions
 

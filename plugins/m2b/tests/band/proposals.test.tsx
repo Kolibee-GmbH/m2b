@@ -408,12 +408,12 @@ test('with the task list out of reach too, the band keeps to that one error line
   // Covers: B127
   const fake = new FakeM2b()
   fake.isStoreMissing = true
-  fake.proposalsError = 'not set up: no store.json in the store /home/alex/Notes. Run /m2b:m2b setup in Claude Code.'
+  fake.proposalsError = 'not set up: no store.json in the store /home/alex/Notes. Run /m2b:m2b setup in Claude Code; without Claude Code, m2b setup apply (https://github.com/Kolibee-GmbH/m2b/blob/main/docs/getting-started.md).'
   await start($, on, fake)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
 
   expect(await texts(ui)).toEqual([
-    'm2b could not read the tasks: not set up: no store.json in the store /home/alex/Notes. Run /m2b:m2b setup in Claude Code.',
+    'm2b could not read the tasks: not set up: no store.json in the store /home/alex/Notes. Run /m2b:m2b setup in Claude Code; without Claude Code, m2b setup apply (https://github.com/Kolibee-GmbH/m2b/blob/main/docs/getting-started.md).',
   ])
   await ui.unmount()
 })

@@ -41,6 +41,9 @@ changes anything; its worklog recording turns off at its next session start. Add
 turned on per machine: run their setups (such as `/m2b:worklog-setup`) again on the new
 curating machine; `take-over` lists the add-ons that were on in the last run.
 
+On a machine that does not curate, `m2b status` answers the question whether a run is due with
+`due: asked on <machine>, the curating machine`: only that machine decides it, so ask there.
+
 ## When the curating machine is away
 
 The session start on every machine prints one line when the curating machine has not run for more

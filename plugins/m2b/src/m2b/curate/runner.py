@@ -89,7 +89,7 @@ from m2b.notes.layout import (
     waiting_on_evicted,
 )
 from m2b.paths import MachinePaths
-from m2b.review import StepFailure, review_is_open, update_review
+from m2b.review import StepFailure, reaches_the_owner, review_is_open, update_review
 from m2b.run_record import (
     FAILED,
     RUN_RECORD,
@@ -104,7 +104,7 @@ from m2b.run_record import (
 )
 from m2b.setup import write_store_contract
 from m2b.sort_facts import sorting_problem
-from m2b.store.base import DEFAULT_FETCH_TIMEOUT_SECONDS, FetchError, Store, StoreError, fetch_command
+from m2b.store.base import DEFAULT_FETCH_TIMEOUT_SECONDS, FetchError, Scan, Store, StoreError, fetch_command
 from m2b.store.factory import open_store
 from m2b.tasks.base import Tasks, TasksError
 from m2b.tasks.factory import open_tasks
@@ -216,6 +216,9 @@ class RunOutcome:
     state: str
     message: str
     record: RunRecord | None = None
+    # What a run that happened did to the inbox, as a second line for whoever started it by hand;
+    # None when no run happened or the inbox could not be listed.
+    summary: str | None = None
 
 
 def now() -> datetime.datetime:
@@ -306,6 +309,8 @@ class _Run:
     repository: run_commit.Repository | None = None
     listed_before: run_commit.StoreListing | None = None
     not_listed: str = ""
+    # The notes the archive gained during the ingest step; None when the archive could not be listed.
+    filed: int | None = 0
 
     def run(self) -> RunOutcome:
         started = self.clock()
@@ -329,7 +334,26 @@ class _Run:
             record = self._tell_of_failed_commit(
                 problem, record, lambda: update_review(tasks, findings, self.failures, started, locale)
             )
-        return _outcome(record)
+        return _outcome(record, self._summary(record, findings))
+
+    def _summary(self, record: RunRecord, findings: Sequence[report.Finding]) -> str | None:
+        """The line after how the run ended: the captures it filed and what waits in the inbox,
+        counted as ``m2b status`` counts it; None when either could not be counted.
+
+        A run that ended well and still left something for the owner names the review task here;
+        a failed step is named with the review in the first line already.
+        """
+        try:
+            inbox = self.store.scan(INBOX)
+        except StoreError:
+            return None
+        if self.filed is None:
+            return None
+        waiting = len(inbox.files) + len(inbox.evicted)
+        line = f"inbox: {self.filed} {'capture' if self.filed == 1 else 'captures'} filed, {waiting} waiting"
+        if record.state == SUCCEEDED and not record.message and (reaches_the_owner(findings) or self.failures):
+            line += "; the review task in your list says what to look at"
+        return line
 
     def _list_before_the_run(self) -> None:
         """Finds the repository a run is committed into and lists the store as the run found it."""
@@ -525,7 +549,7 @@ class _Run:
             self.forgiven_steps.add(GLEAN)
             self._step(GLEAN, self._glean)
         self._addons("before_ingest", token)
-        self._step(INGEST, lambda: self._ingest(token))
+        self._step(INGEST, lambda: self._ingest_counting_the_filed(token))
         self._addons("after_ingest", token)
         self._step(REFRESH, lambda: self._refresh(tasks, locale, token))
         if self.sort_facts:
@@ -665,6 +689,26 @@ class _Run:
 
     def _task_list(self) -> str:
         return current_check.task_list_of(self.settings.tasks.backend, self.settings.tasks.list_name)
+
+    def _ingest_counting_the_filed(self, token: str) -> Skipped | None:
+        """The ingest step, and how many captures it filed, also when it failed after filing some.
+
+        Counted is what reached the archive, one note for a capture and the sidecar note for a
+        bundle: what left the inbox would miss a capture the harvest step wrote in this run and
+        count a file that normalize only renamed.
+        """
+        before = self._archive()
+        try:
+            return self._ingest(token)
+        finally:
+            after = self._archive()
+            self.filed = None if before is None or after is None else _notes_gained(before, after)
+
+    def _archive(self) -> Scan | None:
+        try:
+            return self.store.scan(CORPUS)
+        except StoreError:
+            return None
 
     def _ingest(self, token: str) -> Skipped | None:
         """The model only when something in the inbox can be filed: a file the last run could not file
@@ -1039,12 +1083,27 @@ def refresh_rules(due_files: Sequence[str], fixed: Sequence[str] = REFRESH_RULES
     return rules
 
 
-def _outcome(record: RunRecord) -> RunOutcome:
+def _notes_gained(before: Scan, after: Scan) -> int:
+    """The notes in ``after`` that ``before`` did not hold.
+
+    A folder that was not downloaded stands for everything in it, so a note that only became
+    readable is none the archive gained.
+    """
+    known = {*before.files, *before.evicted}
+    not_listed = tuple(f"{folder}/" for folder in before.evicted)
+    return sum(
+        1
+        for path in (*after.files, *after.evicted)
+        if path.endswith(".md") and path not in known and not path.startswith(not_listed)
+    )
+
+
+def _outcome(record: RunRecord, summary: str | None) -> RunOutcome:
     """What the caller is told of a finished run."""
     if record.state == SUCCEEDED and record.message:
         forgiven = "the curation run succeeded; a step that does not fail it failed, see the review: "
-        return RunOutcome(record.state, forgiven + record.message, record)
-    return RunOutcome(record.state, record.message or "the curation run succeeded", record)
+        return RunOutcome(record.state, forgiven + record.message, record, summary)
+    return RunOutcome(record.state, record.message or "the curation run succeeded", record, summary)
 
 
 def _expired_note(expired: int) -> str:

@@ -72,10 +72,10 @@ command answers as JSON with it.
 
 | Command | What it does |
 |---|---|
-| `m2b capture [--follow-up <day>] [--quiet] [--json] <text>` | writes a new note into the inbox; with `--follow-up YYYY-MM-DD` also a task due that day; `--quiet` keeps the note out of everything proactive; without text, or with `-`, it reads standard input |
+| `m2b capture [--follow-up <day>] [--quiet] [--source <name>] [--json] <text>` | writes a new note into the inbox; with `--follow-up YYYY-MM-DD` also a task due that day; `--quiet` keeps the note out of everything proactive; `--source` says who wrote it, `cli` when left out ([Integrations](integrations.md)); without text, or with `-`, it reads standard input |
 | `m2b search [--any] [--word] [--json] <terms>` | full text over archive, memory and inbox; the terms are one phrase, with `--any` each term counts on its own |
 | `m2b todos [--json]` | open tasks by due date, and today's events |
-| `m2b rediscover [--count <n>] [--month <YYYY-MM>] [--json]` | old notes back into view, three without `--count` |
+| `m2b rediscover [--count <n>] [--month <YYYY-MM>] [--today <day>] [--json]` | old notes back into view, three without `--count`; `--today YYYY-MM-DD` sets the day that counts as today |
 | `m2b status [--json]` | the inbox, the last curation run, whether one is due, the backends |
 | `m2b doctor [--json]` | checks every backend and the programs m2b starts; the first thing to run when something looks wrong |
 
@@ -115,7 +115,7 @@ To pause the runs on a machine: `m2b config set curation.paused true`
 | Command | What it does |
 |---|---|
 | `m2b setup inspect [--store-backend <backend>] [--store-path <folder>] [--json]` | what a store folder holds, before anything is written |
-| `m2b setup apply --answers <json>` | writes the setup from a JSON object of answers ([Getting started](getting-started.md)) |
+| `m2b setup apply --answers <json> [--json]` | writes the setup from a JSON object of answers ([Getting started](getting-started.md)) |
 | `m2b config get [--json] [<key>]` | the machine config, or one key such as `store.path` |
 | `m2b config set <key> <value>` | sets one key of the machine config, validated first ([Configuration](configuration.md)) |
 | `m2b profile get [--json] [<key>]` | the owner's profile, or one key of it |

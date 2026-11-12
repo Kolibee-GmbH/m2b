@@ -234,7 +234,7 @@ export class FakeM2b {
     }
     const open = (marker: string): FakeTask[] => this.tasks.filter(task => task.marker === marker && !task.completed)
     const error = this.isStoreMissing
-      ? 'not set up: no store.json in the store /home/alex/Notes. Run /m2b:m2b setup in Claude Code.'
+      ? 'not set up: no store.json in the store /home/alex/Notes. Run /m2b:m2b setup in Claude Code; without Claude Code, m2b setup apply (https://github.com/Kolibee-GmbH/m2b/blob/main/docs/getting-started.md).'
       : this.failure
     const tasks =
       error === null

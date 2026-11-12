@@ -264,6 +264,14 @@ class TopicTest(LintFixture):
 
         self.assertEqual(self.codes(), [("topic-words", "action", "memory/MEMORY.md")])
 
+    def test_a_topic_with_too_few_words_is_told_where_its_words_stand(self) -> None:
+        self.write("memory/MEMORY.md", INDEX.replace("- Planning the trip", "### Trip (Porto)\n- Planning the trip"))
+
+        (finding,) = self.findings()
+
+        expected = "in memory/MEMORY.md, the topic Trip has 1 word in the brackets of its heading; it needs 2 to 5"
+        self.assertEqual(finding.text, expected)
+
     def test_the_size_of_a_topic_counts_its_current_items(self) -> None:
         """Covers: B48"""
         items = "".join(f"- Planning stage {number} of the trip to Porto and Lisbon\n" for number in range(60))

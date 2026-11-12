@@ -1,5 +1,23 @@
 # Security
 
+In short:
+
+- **What m2b touches.** Your notes, your task list and, with the worklog add-on, a record of when
+  you work in which folder. They stay in folders you chose: the store, and `~/.config/m2b/` and
+  `~/.local/state/m2b/` on each machine ([What m2b handles](#what-m2b-handles)).
+- **No network connection of its own.** m2b opens none. What a curation run reads reaches a model
+  through Claude Code, on your login, like the text of any session.
+- **What a hostile note can do at most.** A capture written to steer the model that files it can
+  put lines into your memory, create tasks in your list and move waiting captures into the archive
+  with misleading notes. It cannot run another command, read outside the store or delete the
+  archive ([Untrusted input](#untrusted-input)).
+- **The fence is Claude Code's permission system, not a sandbox of the operating system.** A model
+  step runs from an empty folder, with only the commands and store paths its step lists; m2b's
+  own commands run with your rights
+  ([The fence around a model step](#the-fence-around-a-model-step)).
+- **Reports** go privately through the security advisory form, for the latest release
+  ([Reporting a vulnerability](#reporting-a-vulnerability)).
+
 ## What m2b handles
 
 Your notes, your task list and, with the worklog add-on, a record of when you work in which
@@ -203,4 +221,5 @@ its own rules for these names, because the mod cannot see that setting
 
 Please do not open a public issue. Report it privately through the repository's security advisory
 form ("Report a vulnerability" on the Security tab), with the steps that show it and the version
-of m2b involved. You get an answer within a week.
+of m2b involved. You get an answer within a week. Reports are taken for the latest release: a fix
+comes as a new release, and earlier versions get none.

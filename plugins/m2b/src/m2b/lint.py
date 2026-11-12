@@ -271,7 +271,7 @@ def _index(store: Store, report: LintReport, index_path: str, files: list[str], 
         for topic in index.topics:
             problem = _topic_problem(topic)
             if problem is not None:
-                report.add("topic-words", ACTION, index_path, f"the topic {topic.name} {problem}")
+                report.add("topic-words", ACTION, index_path, f"in {index_path}, the topic {topic.name} {problem}")
         names = {PurePosixPath(relative).name for relative in fact_files}
         for fact in index.facts:
             if fact.file_name not in names:
@@ -305,7 +305,8 @@ def _topic_problem(topic: Topic) -> str | None:
     if len(topic.name) > MAX_TOPIC_NAME:
         return f"has a name over {MAX_TOPIC_NAME} characters"
     if len(topic.words) not in TOPIC_WORDS:
-        return f"has {len(topic.words)} words; it needs {TOPIC_WORDS.start} to {TOPIC_WORDS.stop - 1}"
+        count = f"{len(topic.words)} {'word' if len(topic.words) == 1 else 'words'}"
+        return f"has {count} in the brackets of its heading; it needs {TOPIC_WORDS.start} to {TOPIC_WORDS.stop - 1}"
     for word in topic.words:
         if not MIN_TOPIC_WORD <= len(word) <= MAX_TOPIC_WORD:
             return f"has the word {word!r}; a word has {MIN_TOPIC_WORD} to {MAX_TOPIC_WORD} characters"

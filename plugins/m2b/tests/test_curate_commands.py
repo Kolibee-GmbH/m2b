@@ -41,6 +41,69 @@ class CurateCommandTest(test_runner.RunnerTest):
         self.assertEqual(code, cli.EXIT_PROBLEM)
         self.assertIn("lint", out)
 
+    def test_a_run_says_in_a_second_line_how_many_captures_it_filed_and_how_many_wait(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        self.capture()
+        self.model({"m2b:ingest": test_runner.INGEST_FILES_THE_CAPTURE})
+
+        code, out, err = self.run_command("curate", "--force")
+
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertEqual(out.splitlines(), ["the curation run succeeded", "inbox: 1 capture filed, 0 waiting"])
+
+    def test_the_second_line_counts_a_capture_the_run_left_in_the_inbox_as_waiting(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        self.capture()
+        self.capture("20261107T070100Z-cli-c3d4.md")
+        self.model({"m2b:ingest": []})
+
+        _, out, _ = self.run_command("curate", "--force")
+
+        self.assertEqual(out.splitlines()[1], "inbox: 0 captures filed, 2 waiting")
+
+    def test_the_second_line_names_the_review_task_when_a_run_that_ended_well_left_a_finding(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        self.repairable_link()
+        report = "m2b curate report --step lint --kind action --text 'dana.md links two notes'"
+        self.model({"m2b:lint": [{"tool": "Bash", "command": report}]})
+
+        code, out, err = self.run_command("curate", "--force")
+
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertEqual(
+            out.splitlines(),
+            [
+                "the curation run succeeded",
+                "inbox: 0 captures filed, 0 waiting; the review task in your list says what to look at",
+            ],
+        )
+
+    def test_a_failed_run_says_the_second_line_too_and_names_the_review_task_once(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        self.capture()
+        self.repairable_link()
+        self.model({"m2b:ingest": test_runner.INGEST_FILES_THE_CAPTURE, "m2b:lint": []}, outcomes={"m2b:lint": "error"})
+
+        code, out, _ = self.run_command("curate", "--force")
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        first, second = out.splitlines()
+        self.assertTrue(first.endswith("The review task names what to look at."), first)
+        self.assertEqual(second, "inbox: 1 capture filed, 0 waiting")
+
+    def test_an_answer_without_a_run_stays_one_line(self) -> None:
+        """Covers: B163"""
+        self.curating()
+        self.set_store_value("curating_machine", "sb-test-m2")
+
+        _, out, _ = self.run_command("curate", "--force")
+
+        self.assertEqual(len(out.splitlines()), 1, out)
+
     def test_not_the_curating_machine_and_already_running_exit_0(self) -> None:
         """Covers: B62, B63"""
         self.curating()
@@ -444,6 +507,17 @@ class AddonsCommandTest(test_runner.RunnerTest):
         code, _, err = self.run_command("addons", "list", "--json")
         self.assertEqual(code, cli.EXIT_USAGE)
         self.assertIn("not set up", err)
+
+    def test_the_answer_before_setup_names_the_way_in_with_claude_code_and_the_one_without(self) -> None:
+        """Covers: B164"""
+        code, _, err = self.run_command("status")
+
+        self.assertEqual(code, cli.EXIT_USAGE)
+        self.assertTrue(err.startswith("m2b: not set up: "), err)
+        self.assertEqual(len(err.splitlines()), 1, err)
+        self.assertIn("/m2b:m2b setup", err)
+        self.assertIn("m2b setup apply", err)
+        self.assertIn("docs/getting-started.md", err)
 
     def test_the_old_parts_command_is_a_usage_error(self) -> None:
         self.curating()

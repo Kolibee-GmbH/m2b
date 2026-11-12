@@ -22,6 +22,10 @@ nor a model. Both end with a first capture, a curation run and a first search.
    `/plugin marketplace add <path to the checkout>`, then the same install; before an update run
    `git pull` in it, because the marketplace is that folder and updating it fetches nothing.
 
+   **You should see** the install end with `Plugin is now active.`, or with
+   `Run /reload-plugins to apply.`, which Claude Code then runs by itself. Type `/`: `/m2b:m2b` is
+   in the list. **If not:** run `/reload-plugins`, or start a new session.
+
 2. Run setup in a session and answer its questions:
 
    ```
@@ -82,7 +86,9 @@ nor a model. Both end with a first capture, a curation run and a first search.
 
    **If not:** `!m2b status` says in its line `due` whether a run is due and why not, and in a
    line `paused` when you paused this machine. `!m2b curate --force` runs it now, in front of you,
-   and says how it ended; add `--detach` to run it in the background instead. After a run that
+   and says in two lines how it ended and what it did to the inbox, such as
+   `the curation run succeeded` and `inbox: 1 capture filed, 0 waiting`; add `--detach` to run it
+   in the background instead. After a run that
    failed, the review task in your list names the step and the cause
    ([Troubleshooting](../README.md#troubleshooting)).
 
@@ -102,12 +108,18 @@ nor a model. Both end with a first capture, a curation run and a first search.
    It prints each line that matches with its file: the fact in `memory/`, the note in `corpus/`.
    **If not:** look for the line in `memory/MEMORY.md`. When it is missing, the run filed the
    note another way, which `!m2b todos` and the files under `memory/` show; a sentence that names
-   a day can become a task instead of a fact. When the line is there and the session does not
+   a day can become a task instead of a fact. When the line stands under a `###` heading, the run
+   filed it under a topic: the session started with the topic's name only and answers by
+   searching, or without a search once your prompt names one of the words in the heading's
+   brackets ([Correcting what a run filed](curation.md#correcting-what-a-run-filed) says how to
+   move it). When the line is there, above every `###` heading, and the session does not
    know it, `m2b doctor` says in its line `band` whether the latest session ran m2b's hooks, and
    `m2b distillate on` turns the distillate back on in a folder where it was turned off.
 
-From the next session on, while Claude Code has mods on, [the band](band.md) above the prompt
-shows what curation asks you to keep or drop, and `m2b doctor` says whether it ran. With it come
+From the next session on, [the band](band.md) above the prompt shows what curation asks you to
+keep or drop. It is a mod, a module Claude Code loads with the plugin, and runs only while mods are
+on in Claude Code: `m2b doctor` says in its line `band` whether it ran, and
+[What it needs](band.md#what-it-needs) what to do when it did not. With it come
 `/m2b-note <text>`, which notes a text at once without a model turn, `/m2b-review`,
 `/m2b-proposals` and `/m2b-search <text>`, which show the last curation run, the proposals from
 your sessions and search hits in a pane, and two tools through which the model notes and searches
@@ -175,7 +187,8 @@ m2b on a server, in a container, or before installing it in Claude Code.
    m2b status
    ```
 
-   The run succeeds; the capture stays in the inbox, because filing it is the model's work. With
+   The run succeeds and says so, with `inbox: 0 captures filed, 1 waiting` as its second line: the
+   capture stays in the inbox, because filing it is the model's work. With
    `no-model` the model steps count as succeeded without doing anything, which is why
    `~/notes/state/core/last-run.json` lists the steps as `succeeded` (refresh as `skipped`, nothing being due) next to an unchanged inbox.
    `status` still says a run is due, for the same reason: the capture is still waiting.
@@ -205,6 +218,7 @@ m2b config set executables.claude "$(command -v claude)"
 | `<store>/tasks/` | your tasks, with the `markdown` backend |
 | `~/.config/m2b/config.json` | this machine's settings |
 | `~/.local/state/m2b/` | lock, run log, temp files, the worklog's recordings, and while sessions are read the git remotes of the folders they start in |
+| `~/.local/state/m2b/memory-before-run/` | copies of `memory/` from before a run's model steps: the latest run's copy until the next run, and an older one while a review task still names it for a facts line a run removed or rewrote ([The curation run](curation.md)). They hold what your facts say, outside the store folder |
 | `~/.local/share/m2b/` | the copy of the worklog's herdr recorder, with the worklog add-on |
 | `~/.local/bin/m2b` | the launcher scripts and schedules call |
 
