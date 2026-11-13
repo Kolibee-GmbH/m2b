@@ -101,6 +101,11 @@ looks like an instruction. So:
 - `m2b distillate off` keeps the distillate out of projects where it must not appear, on the
   machine you run it on.
 
+The tests hold these defences with hostile samples on purpose: captures written to steer the
+model and text in invisible characters, in `plugins/m2b/tests/` and in the scenario
+`tests/e2e/E17-planted-capture`. A static scanner that reads the whole repository reports those
+samples.
+
 ## The fence around a model step
 
 A curation step that files, refreshes, sorts or lints is a headless Claude Code session,
