@@ -50,7 +50,7 @@ _HIDDEN_CLASS = "".join(f"{chr(first)}-{chr(last)}" for first, last in HIDDEN_RA
 _HIDDEN = re.compile(f"[{_HIDDEN_CLASS}]")
 # In a name the joiners mislead like the rest: two names that look the same are two files.
 _UNSEEN_IN_A_NAME = re.compile(f"[{_HIDDEN_CLASS}\u200c\u200d]")
-_UNSAFE = re.compile("[᠎​‪-‮⁠-⁤⁦-⁩﻿\U000e0000-\U000e007f]")
+_UNSAFE = re.compile("[\u180e\u200b\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff\U000e0000-\U000e007f]")
 
 
 def unsafe_characters(text: str) -> list[str]:
