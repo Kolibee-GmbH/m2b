@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { BAND, FakeM2b, HOME, NOW, start, texts } from './harness'
+import { BAND, ENGINES_OWN_DRAWING, everyText, FakeM2b, HOME, NOW, start, texts } from './harness'
 import type { Files } from './harness'
 
 const CACHE = `${HOME}/.local/state/m2b/band-view.json`
@@ -267,7 +267,7 @@ test('a reload under way when m2b stops being set up does not draw the band agai
   fake.isSetUp = false
   await clock.advance(100_000)
 
-  expect(await texts(ui)).toEqual(['engine'])
+  expect(await everyText(ui)).toEqual([ENGINES_OWN_DRAWING])
   expect(statuses.at(-1)).toBeUndefined()
   await ui.unmount()
 })
@@ -292,7 +292,7 @@ test('a band newer than the installed m2b, as from a checkout, says nothing abou
   fake.bandVersion = '0.10.0'
   await start($, on, fake)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(await texts(ui)).toEqual(['engine'])
+  expect(await everyText(ui)).toEqual([ENGINES_OWN_DRAWING])
   await ui.unmount()
 })
 
