@@ -101,6 +101,15 @@ looks like an instruction. So:
 - `m2b distillate off` keeps the distillate out of projects where it must not appear, on the
   machine you run it on.
 
+The tests contain hostile samples on purpose, to check the defences of m2b this section
+describes. In `plugins/m2b/tests/` they are lines with characters that hide or reorder text,
+text in characters that draw nothing and lines worded as instructions; the scenario
+`tests/e2e/E17-planted-capture` ([CONTRIBUTING.md](CONTRIBUTING.md#end-to-end-scenarios)) sends
+captures written to steer the model through a curation run. Whether a model keeps the rule of
+the skills only that scenario's model level shows, with a real model. The tests lie in the plugin
+folder, which an install copies, so a static scanner run over the repository or an installed
+copy reports the samples.
+
 ## The fence around a model step
 
 A curation step that files, refreshes, sorts or lints is a headless Claude Code session,
