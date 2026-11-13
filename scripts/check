@@ -11,7 +11,10 @@
 # the shell linter, the workflow linter, the plugin manifest, the tests of the band (the core's mod),
 # the B/X coverage check and the end-to-end scenarios at the stub level.
 #
-# The add-ons' tests sit in plugins/m2b/tests/addons/<add-on>/ under a folder without __init__.py, so
+# The Python unit tests sit in tests/unit/, outside the plugin's folder, which an install copies whole.
+# Only the band's tests stay in plugins/m2b/tests/band/: Claude Code's test kit finds them there.
+#
+# The add-ons' tests sit in tests/unit/addons/<add-on>/ under a folder without __init__.py, so
 # the core's discovery does not descend into them and each runs as its own suite. An add-on's suite
 # may use the fixtures of the core's tests, so their folder is on its path; the core's suite uses
 # nothing of an add-on, which the core-alone stage proves.
@@ -53,19 +56,20 @@ run_unit_tests() {
 }
 
 readonly PLUGIN=plugins/m2b
+readonly UNIT_TESTS=tests/unit
 
 # Arguments: python, suite (m2b for the core, else an add-on's name).
 run_suite() {
     if [ "$2" = m2b ]; then
-        run_unit_tests "$1" "$PLUGIN/tests" m2b "$PLUGIN/src"
+        run_unit_tests "$1" "$UNIT_TESTS" m2b "$PLUGIN/src"
     else
-        run_unit_tests "$1" "$PLUGIN/tests/addons/$2" "$2" "$PLUGIN/src" "$PLUGIN/tests"
+        run_unit_tests "$1" "$UNIT_TESTS/addons/$2" "$2" "$PLUGIN/src" "$UNIT_TESTS"
     fi
 }
 
 suites() {
     echo m2b
-    for suite_folder in "$PLUGIN"/tests/addons/*/; do
+    for suite_folder in "$UNIT_TESTS"/addons/*/; do
         basename "$suite_folder"
     done
 }
@@ -120,8 +124,8 @@ all_unit_tests() {
     return "$unit_status"
 }
 
-# The core's unit tests, and the end-to-end scenarios that turn no add-on on, in a temporary copy of
-# the plugin without any part of an add-on.
+# The core's unit tests, and the end-to-end scenarios that turn no add-on on, against a temporary copy
+# of the plugin without any part of an add-on.
 core_alone() {
     PYTHONPATH="$repo_root/scripts" python3 -m repo_tools.core_alone
 }
@@ -191,7 +195,7 @@ if [ "$#" -gt 0 ]; then
         claude plugin test "$PLUGIN" || quick_status=1
         exit "$quick_status"
     fi
-    if [ "$2" != m2b ] && [ ! -d "$PLUGIN/tests/addons/$2" ]; then
+    if [ "$2" != m2b ] && [ ! -d "$UNIT_TESTS/addons/$2" ]; then
         echo "no such suite: $2" >&2
         usage
     fi

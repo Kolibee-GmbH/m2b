@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { CommandRunResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { BAND, FakeM2b, HOME, NOW, pane, start, texts } from './harness'
+import { BAND, ENGINES_OWN_DRAWING, everyText, FakeM2b, HOME, NOW, pane, start, texts } from './harness'
 import type { Files } from './harness'
 
 const PANE = 'm2b'
@@ -65,7 +65,7 @@ test('with no proposal waiting the band has no row for them', async ($, on) => {
   await start($, on, fake)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
 
-  expect(await texts(ui)).toEqual(['engine'])
+  expect(await everyText(ui)).toEqual([ENGINES_OWN_DRAWING])
   await ui.unmount()
 })
 
@@ -147,7 +147,7 @@ test('where no pane can be shown the command answers with the proposals and how 
 
   const answer = await typed($, 'm2b-proposals')
 
-  expect(answer.text.split('\n')).toEqual([
+  expect(answer.text?.split('\n')).toEqual([
     'the m2b pane cannot be shown here: no terminal is attached',
     '3 proposals from your sessions',
     LIST_AND_ANSWER,
@@ -177,7 +177,7 @@ test('a text answer too long to give whole still says how to list and answer, be
   fake.paneWaits = 'no terminal is attached'
   await start($, on, fake)
 
-  const lines = (await typed($, 'm2b-proposals')).text.split('\n')
+  const lines = (await typed($, 'm2b-proposals')).text?.split('\n') ?? []
 
   expect(lines.slice(0, 5)).toEqual([
     'the m2b pane cannot be shown here: no terminal is attached',
@@ -204,7 +204,7 @@ test('before the band could look, the pane and the text answer say so and never 
 
   fake.paneWaits = 'no terminal is attached'
   const answer = await typed($, 'm2b-proposals')
-  expect(answer.text.split('\n')).toEqual(['the m2b pane cannot be shown here: no terminal is attached', NOT_LOOKED])
+  expect(answer.text?.split('\n')).toEqual(['the m2b pane cannot be shown here: no terminal is attached', NOT_LOOKED])
 })
 
 test('show on a surface without panes says so in the band', async ($, on) => {
@@ -338,7 +338,7 @@ test('an answer m2b refuses stands in the pane and in the band until the next pr
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await texts(band)).toContain(refused)
 
-  await $.prompt.submit({ text: 'what is on today?', context: [] })
+  await $.prompt.submit({ text: 'what is on today?', context: [], wait: false, origin: { kind: 'composer' } })
   expect(await texts(band)).toEqual(['2 proposals from your sessions'])
   await band.unmount()
 })
@@ -477,7 +477,7 @@ test('once m2b is no longer set up on this machine the row for the proposals goe
   fake.isSetUp = false
   await clock.advance(60_000)
 
-  expect(await texts(ui)).toEqual(['engine'])
+  expect(await everyText(ui)).toEqual([ENGINES_OWN_DRAWING])
   await ui.unmount()
 })
 
@@ -504,7 +504,7 @@ test('a shared answer of a band that does not know proposals says nothing about 
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
 
   expect(fake.calls).toEqual([])
-  expect(await texts(ui)).toEqual(['engine'])
+  expect(await everyText(ui)).toEqual([ENGINES_OWN_DRAWING])
 
   await clock.advance(60_000)
   expect(await texts(ui)).toEqual(['3 proposals from your sessions'])

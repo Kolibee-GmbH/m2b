@@ -15,6 +15,7 @@ import unittest
 from pathlib import Path
 from typing import Any
 
+from locations import PLUGIN_ROOT
 from m2b import git_program, session_remotes
 from m2b.redaction import redact
 from m2b_worklog import facts, schema
@@ -29,7 +30,7 @@ ZONE = datetime.timezone(datetime.timedelta(hours=1))
 # The machine's time zone in every test: one hour east of UTC all year, as ZONE (POSIX names it GMT-1).
 TEST_TZ = "Etc/GMT-1"
 NOW = datetime.datetime(2026, 3, 14, 18, 0, tzinfo=ZONE)
-COMMAND = Path(__file__).resolve().parents[3] / "bin" / "m2b-worklog"
+COMMAND = PLUGIN_ROOT / "bin" / "m2b-worklog"
 GLOBEX = "https://git.globex.example/globex-ag/invoices.git"
 BY_REMOTE = {"worklog_leave_out": {"path_under": [], "git_remote_contains": ["globex-ag/"]}}
 PROFILE = {

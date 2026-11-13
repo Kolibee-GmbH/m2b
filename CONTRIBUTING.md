@@ -25,6 +25,12 @@ and mypy, or both tools on your PATH. With uv it also lints the workflows with a
 and skips that stage when there is none. `shellcheck` and `claude` are used when installed; with
 `CI=true` a missing `claude` ends the run at once, because the manifest and band checks need it.
 
+The Python unit tests are in `tests/unit/`, outside the plugin's folder: Claude Code copies that
+folder whole when it installs the plugin, and a user needs no test. Two kinds of test stay in it,
+because Claude Code looks for them there: the band's in `plugins/m2b/tests/band/` and the
+[eval cases](#evals) in `plugins/m2b/evals/`. A test finds the plugin through
+`tests/unit/locations.py`.
+
 Two workflows run `scripts/check` on GitHub. `.github/workflows/ci.yml` runs it for every pull
 request and on `main`, with the Claude Code version the README names as the minimum.
 `.github/workflows/weekly.yml` runs it every Monday, and whenever someone starts it by hand, with
@@ -47,16 +53,17 @@ move to a newer version, look up its commit with
 wherever the action is named.
 
 The stage `core-alone` proves that the core stands without its add-ons. It copies `plugins/m2b`
-into a temporary folder without any part of an add-on, runs the core's unit tests in the copy and
-then the end-to-end scenarios that turn no add-on on. A core test that reads an add-on's file, or
+into a temporary folder without any part of an add-on, and `tests/unit/` beside it without the
+add-ons' suites, runs the core's unit tests in the copy and then the end-to-end scenarios that turn
+no add-on on. A core test that reads an add-on's file, or
 a core command that needs one, passes in the checkout, where the add-on is always present, and
 fails there. A core module that imports an add-on fails there too; in the checkout only
-`plugins/m2b/tests/test_package_boundaries.py` says so. The parts of each add-on are listed in `ADDON_PARTS`
+`tests/unit/test_package_boundaries.py` says so. The parts of each add-on are listed in `ADDON_PARTS`
 (`scripts/repo_tools/core_alone.py`), and a new one goes into that list: a test fails for a path
 or hook command that carries the add-on's name and is missing there, and for a new entry at the
 top of the plugin's folder until it is named as the core's or as an add-on's. What an add-on has
 to keep of the core's rules (its skills, its hook command, its step in the core's catalogue, what
-it imports from the core) is tested in its own suite, `plugins/m2b/tests/addons/<add-on>/`, which
+it imports from the core) is tested in its own suite, `tests/unit/addons/<add-on>/`, which
 may use the fixtures of the core's tests. The core's tests use nothing of an add-on.
 
 ## Behavior coverage
@@ -80,8 +87,9 @@ def test_a_name_collision_draws_a_new_suffix(self) -> None:
 
 `scripts/check` fails while a rule has no test, a test names an ID no rule has, or an ID stands
 twice. A rule in `worklog.md` needs a test in the add-on's own suite,
-`plugins/m2b/tests/addons/worklog/`, and a rule of the three other parts a test outside it: the
-core is proven in a copy of the plugin without its add-ons, and there the add-on's tests are gone.
+`tests/unit/addons/worklog/`, and a rule of the three other parts a test outside it: the
+core is proven in a copy of the plugin and the tests without the add-ons, and there the add-on's
+suite is gone.
 
 ## Store format
 
@@ -91,7 +99,7 @@ additive change gets one that changes nothing. A key added without it would make
 the m2b before refuse the store, capture included. The keys of each format are in `KEYS_BY_FORMAT`
 (`plugins/m2b/src/m2b/config/store_settings.py`), and a store is checked against its own format's
 keys, so a new key can only be written once the store is at the new format.
-`plugins/m2b/tests/test_store_settings.py` holds a copy of each released entry: a released entry
+`tests/unit/test_store_settings.py` holds a copy of each released entry: a released entry
 never changes, a new format gets its own. [Store format](docs/store-format.md#formats) lists what
 each number added.
 

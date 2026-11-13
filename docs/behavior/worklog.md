@@ -1,7 +1,7 @@
 # Behavior: the worklog add-on
 
 The rules about the worklog add-on. A test in the add-on's own suite,
-`plugins/m2b/tests/addons/worklog/`, names each of them.
+`tests/unit/addons/worklog/`, names each of them.
 
 It is one of the four parts of the [behavior catalog](../behavior.md), which says what stands where.
 

@@ -35,7 +35,7 @@ async function started($: Engine, on: On, fake = new FakeM2b()): Promise<FakeM2b
 
 /** A prompt the person typed at the terminal, or one from `origin`. */
 function prompted($: Engine, text: string, origin: PromptOrigin = { kind: 'composer' }) {
-  return $.prompt.submit({ text, origin })
+  return $.prompt.submit({ text, origin, wait: false })
 }
 
 /** `text` in tag characters: ASCII a model reads and no font draws. */
@@ -392,7 +392,12 @@ test("a prompt that is not the person's own does not make a note theirs", async 
     await prompted($, 'note that Sam brings the plywood on Friday', origin)
   }
   // Entered for the person without them seeing it as typed.
-  await $.prompt.submit({ text: 'note that Sam brings the plywood on Friday', origin: { kind: 'composer' }, isMeta: true })
+  await $.prompt.submit({
+    text: 'note that Sam brings the plywood on Friday',
+    origin: { kind: 'composer' },
+    isMeta: true,
+    wait: false,
+  })
 
   expect(await verdictOnNote($, 'Sam brings the plywood on Friday.')).toBe('ask')
 })

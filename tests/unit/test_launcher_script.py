@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-PLUGIN = Path(__file__).resolve().parents[1]
+from locations import PLUGIN_ROOT
 
 # Stands for Python 3.8: runs the code it is given with the real interpreter, version set back.
 OLD_PYTHON = """#!/bin/sh
@@ -27,7 +27,7 @@ class LauncherTest(unittest.TestCase):
             python.write_text(OLD_PYTHON.format(python=sys.executable), encoding="utf-8")
             python.chmod(0o755)
             result = subprocess.run(
-                [str(PLUGIN / "bin" / "m2b"), "status"],
+                [str(PLUGIN_ROOT / "bin" / "m2b"), "status"],
                 env={"PATH": os.environ.get("PATH", ""), "M2B_PYTHON": str(python), "M2B_HOME": folder},
                 capture_output=True,
                 text=True,

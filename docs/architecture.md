@@ -11,7 +11,7 @@ command instead of loading every command; it never writes to the store. The mode
 through a fenced run that may call only the commands its step lists.
 
 The core needs no add-on. Every `scripts/check` proves it: the core's unit tests, and the end-to-end
-scenarios that turn no add-on on, run in a copy of the plugin without the add-on's parts.
+scenarios that turn no add-on on, run against a copy of the plugin without the add-on's parts.
 
 ```mermaid
 flowchart LR
@@ -35,7 +35,8 @@ flowchart LR
 | `plugins/m2b/skills/` | one folder per skill; the ones a curation run starts (`ingest`, `refresh`, `sort-facts`, `lint`, `worklog-verdict`) say so in their description |
 | `plugins/m2b/hooks/` | `hooks.json` (session-start commands, the prompt hook and the band mod), `register.tsx` and its helpers (the band) |
 | `plugins/m2b/recorder/` | the worklog's herdr recorder, copied out of the plugin when set up |
-| `plugins/m2b/tests/` | core tests, with `tests/band/` the band's; `tests/addons/<add-on>/` the add-ons', which also hold what an add-on has to keep of the core's rules, so that the core's tests read no file of an add-on |
+| `plugins/m2b/tests/band/` | the band's tests, which Claude Code's test kit looks for in the plugin's folder |
+| `tests/unit/` | the core's unit tests, outside the plugin's folder so that an install does not copy them; `addons/<add-on>/` the add-ons', which also hold what an add-on has to keep of the core's rules, so that the core's tests read no file of an add-on; `fakes/` the scripted stand-ins for `claude`, `reminders` and `osascript` |
 | `tests/e2e/` | end-to-end scenarios against a temporary store |
 | `tests/glean/` | an invented day of typed prompts, which `scripts/glean-eval` asks a model about |
 | `tests/ingest/` | an invented store and inbox, which `scripts/ingest-eval` has a model file in a real curation run |

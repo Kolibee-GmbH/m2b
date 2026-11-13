@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import re
 import unittest
-from pathlib import Path
 
+from locations import PLUGIN_ROOT
 from m2b.notes.characters import HIDDEN_RANGES, unsafe_characters, with_hidden_written_out, without_hidden
 
-MOD_TABLE = Path(__file__).resolve().parents[1] / "hooks" / "plain-text.ts"
+MOD_TABLE = PLUGIN_ROOT / "hooks" / "plain-text.ts"
 JOINERS = ("‌", "‍")
 
 

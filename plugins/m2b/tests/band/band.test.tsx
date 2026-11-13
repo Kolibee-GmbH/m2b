@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { BAND, FakeM2b, fail, NOW, STATUS, start, texts } from './harness'
+import { BAND, ENGINES_OWN_DRAWING, everyText, fail, FakeM2b, NOW, start, STATUS, texts } from './harness'
 import type { Files } from './harness'
 
 const UNDO_MS = 5_000
@@ -33,7 +33,7 @@ test('the band shows candidates and the review, capped with "and N more"', async
 test('nothing to show draws nothing of its own', async ($, on) => {
   await start($, on, new FakeM2b())
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(await texts(ui)).toEqual(['engine'])
+  expect(await everyText(ui)).toEqual([ENGINES_OWN_DRAWING])
   await ui.unmount()
 })
 
@@ -55,7 +55,7 @@ test('before m2b is set up the band draws nothing, says nothing and asks m2b not
   const { clock, statuses } = await start($, on, fake)
   await clock.advance(60_000)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(await texts(ui)).toEqual(['engine'])
+  expect(await everyText(ui)).toEqual([ENGINES_OWN_DRAWING])
   await ui.unmount()
   expect(statuses.length).toBeGreaterThan(0)
   expect(statuses.every(text => text === undefined)).toBe(true)
@@ -70,7 +70,7 @@ test('a machine config that goes away clears what the band showed', async ($, on
 
   fake.isSetUp = false
   await clock.advance(60_000)
-  expect(await texts(ui)).toEqual(['engine'])
+  expect(await everyText(ui)).toEqual([ENGINES_OWN_DRAWING])
   expect(statuses.at(-1)).toBeUndefined()
   await ui.unmount()
 })
@@ -110,7 +110,7 @@ test('before the core wrote its launcher the band starts nothing and says nothin
   const { clock, statuses } = await start($, on, fake)
   await clock.advance(60_000)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(await texts(ui)).toEqual(['engine'])
+  expect(await everyText(ui)).toEqual([ENGINES_OWN_DRAWING])
   await ui.unmount()
   expect(fake.calls).toEqual([])
   expect(statuses.every(text => text === undefined)).toBe(true)
@@ -448,7 +448,12 @@ test('a prompt enters as typed and clears the band notice', async ($, on) => {
   const notice = 'Already settled in another session, nothing written: Remember? Alex runs on Tuesdays'
   expect(await texts(ui)).toContain(notice)
 
-  const entered = await $.prompt.submit({ text: 'what is on today?', context: ['from another plugin'] })
+  const entered = await $.prompt.submit({
+    text: 'what is on today?',
+    context: ['from another plugin'],
+    wait: false,
+    origin: { kind: 'composer' },
+  })
 
   expect(entered).toEqual({ text: 'what is on today?', context: ['from another plugin'] })
   expect(await texts(ui)).not.toContain(notice)

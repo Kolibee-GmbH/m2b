@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+from locations import PLUGIN_ROOT
 from m2b import cli, paths
 from m2b.config import machine
 from m2b.rediscover import FROM_PERIOD, RANDOM, SHARES_A_WORD, Months, rediscover
@@ -447,7 +448,7 @@ class RediscoverCommandTest(unittest.TestCase):
 class RediscoverSkillTest(unittest.TestCase):
     """Structure only: the policy prose lives once, in the skill (X15)."""
 
-    skill = Path(__file__).resolve().parents[1] / "skills" / "rediscover" / "SKILL.md"
+    skill = PLUGIN_ROOT / "skills" / "rediscover" / "SKILL.md"
 
     def frontmatter(self) -> dict[str, str]:
         text = self.skill.read_text(encoding="utf-8")

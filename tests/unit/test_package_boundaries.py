@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import ast
 import unittest
-from pathlib import Path
 
-SOURCES = Path(__file__).resolve().parents[1] / "src"
+from locations import PLUGIN_ROOT
+
+SOURCES = PLUGIN_ROOT / "src"
 CORE = "m2b"
 WORKLOG = "m2b_worklog"
 

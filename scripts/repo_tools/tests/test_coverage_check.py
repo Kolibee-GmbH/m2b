@@ -215,14 +215,14 @@ class AddonSuiteTest(CatalogFolderTestCase):
         super().setUp()
         self.write_part("core", CORE_PART)
         self.write_part("worklog", WORKLOG_PART)
-        self.core_tests = self.root / "plugins" / "m2b" / "tests"
+        self.core_tests = self.root / "tests" / "unit"
         self.worklog_tests = self.core_tests / "addons" / "worklog"
         self.worklog_tests.mkdir(parents=True)
 
     def _run(self) -> tuple[int, str]:
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
-            code = coverage_check.main(["--catalog", str(self.catalog), str(self.root / "plugins")])
+            code = coverage_check.main(["--catalog", str(self.catalog), str(self.root / "tests")])
         return code, output.getvalue()
 
     def test_each_part_named_by_its_own_suite_passes(self) -> None:

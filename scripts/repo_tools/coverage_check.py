@@ -2,8 +2,8 @@
 
 The catalog is a folder of parts, one Markdown file each, and an ID stands in one of them. The
 part named like an add-on holds that add-on's rules: each needs a test in the add-on's own suite,
-``tests/addons/<add-on>/``. A rule of any other part needs a test outside those suites: the core
-is proven in a copy of the plugin without its add-ons, where their suites are gone.
+``tests/unit/addons/<add-on>/``. A rule of any other part needs a test outside those suites: the
+core is proven in a copy of the plugin and the tests without the add-ons, where their suites are gone.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from repo_tools import REPO_ROOT
-from repo_tools.core_alone import ADDON_PARTS
+from repo_tools.core_alone import ADDON_PARTS, ADDON_SUITES, UNIT_TESTS
 
 BEHAVIOR_CATALOG = REPO_ROOT / "docs" / "behavior"
 ADDON_NAMES = frozenset(addon.name for addon in ADDON_PARTS)
@@ -33,7 +33,7 @@ EXIT_BAD_CATALOG = 2
 _ID_ROW = re.compile(r"^\|\s*([BX]\d+)\s*\|", re.MULTILINE)
 _COVERS_LINE = re.compile(r"Covers:\s*([A-Z]\d+(?:\s*,\s*[A-Z]\d+)*)")
 _ID = re.compile(r"[A-Z]\d+")
-_ADDON_SUITES = ("tests", "addons")
+_ADDON_SUITES = (UNIT_TESTS.name, ADDON_SUITES)
 
 
 class CatalogError(Exception):
@@ -88,7 +88,7 @@ def files_under_test_folders(roots: Iterable[Path]) -> list[Path]:
 
 
 def addon_suite_of(test_file: Path, addons: Collection[str]) -> str | None:
-    """The add-on whose suite, ``tests/addons/<add-on>/``, holds the file; None for a test of no add-on."""
+    """The add-on whose suite, ``tests/unit/addons/<add-on>/``, holds the file; None for a test of no add-on."""
     folders = test_file.parts[:-1]
     for index, folder in enumerate(folders[2:], start=2):
         if folders[index - 2 : index] == _ADDON_SUITES and folder in addons:

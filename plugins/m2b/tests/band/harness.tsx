@@ -6,6 +6,8 @@ import type { EngineResultOf, On, ProcessRunResult } from 'claude-code'
 export const HOME = '/home/alex'
 export const NOW = Date.parse('2026-03-14T17:30:00Z')
 
+export const ENGINES_OWN_DRAWING = 'engine'
+
 export const BAND = {
   plugin: 'm2b',
   component: 'AbovePrompt',
@@ -406,13 +408,25 @@ export async function start(
   // Stands for the engine's own drawing, which is what the band leaves to when it has nothing to show.
   on('ui.render', ($, e) => {
     const { Text } = $.ui.resolve(e)
-    return <Text>engine</Text>
+    return <Text>{ENGINES_OWN_DRAWING}</Text>
   })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await clock.advance(1)
   return { clock, statuses, commands, tools, opened, toasts }
 }
 
-export async function texts(ui: { findAll: (q: { type: string }) => Promise<{ text: string }[]> }): Promise<string[]> {
+type Mounted = { findAll: (q: { type: string }) => Promise<{ text: string }[]> }
+
+/**
+ * The texts m2b drew, without the engine's own drawing. Whether the engine draws beside a band that
+ * shows something depends on the Claude Code version: up to 2.1.322 the band stands in its place,
+ * from 2.1.323 the engine draws below it.
+ */
+export async function texts(ui: Mounted): Promise<string[]> {
+  return (await everyText(ui)).filter(text => text !== ENGINES_OWN_DRAWING)
+}
+
+/** Every text on the surface, the engine's own drawing included: `[ENGINES_OWN_DRAWING]` when m2b drew nothing. */
+export async function everyText(ui: Mounted): Promise<string[]> {
   return (await ui.findAll({ type: 'Text' })).map(found => found.text.trim()).filter(text => text !== '')
 }

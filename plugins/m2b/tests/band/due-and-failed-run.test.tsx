@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { BAND, FakeM2b, STATUS, start, texts } from './harness'
+import { BAND, ENGINES_OWN_DRAWING, everyText, FakeM2b, start, STATUS, texts } from './harness'
 
 const FAILED = {
   ...STATUS,
@@ -38,7 +38,7 @@ test('without a task due, or with the setting off, the band draws nothing for th
   fake.dueTasks = null
   await start($, on, fake)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(await texts(ui)).toEqual(['engine'])
+  expect(await everyText(ui)).toEqual([ENGINES_OWN_DRAWING])
   await ui.unmount()
 })
 

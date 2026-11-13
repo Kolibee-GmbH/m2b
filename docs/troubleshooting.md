@@ -20,7 +20,7 @@ tasks: reachable
 calendar: not configured
 executable claude: found (/Users/alex/.local/bin/claude)
 executable python3: found (/usr/bin/python3)
-claude-code: found (the launcher runs m2b from /Users/alex/.claude/plugins/cache/m2b/m2b/0.4.1)
+claude-code: found (the launcher runs m2b from /Users/alex/.claude/plugins/cache/m2b/m2b/0.4.2)
 prompt-hook: answers (topics in the distillate: 0)
 band: seen (it ran in the latest session, started 2026-11-12 17:25)
 

@@ -11,6 +11,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from locations import PLUGIN_ROOT
 from m2b import addons, cli, launcher, paths, topic_state
 from m2b.config import machine
 from m2b.curate import machine_state
@@ -822,7 +823,7 @@ class RunRecordTest(unittest.TestCase):
 
 
 class HooksManifestTest(unittest.TestCase):
-    manifest = Path(__file__).resolve().parents[1] / "hooks" / "hooks.json"
+    manifest = PLUGIN_ROOT / "hooks" / "hooks.json"
 
     def test_session_start_runs_the_core_hooks_then_only_commands_of_the_addons(self) -> None:
         """Which command an add-on runs there is for its own suite to check: the core stands without it."""

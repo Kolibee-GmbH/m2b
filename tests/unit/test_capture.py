@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+from locations import PLUGIN_ROOT
 from m2b import cli, paths
 from m2b.capture import FOLLOW_UP_KEY, NOT_SAVED, NotSavedError, capture
 from m2b.commands import capture as capture_commands
@@ -587,7 +588,7 @@ class CaptureCommandTest(unittest.TestCase):
 class CaptureSkillTest(unittest.TestCase):
     """Structure only: the policy prose lives once, in the skill (X15)."""
 
-    skill = Path(__file__).resolve().parents[1] / "skills" / "capture" / "SKILL.md"
+    skill = PLUGIN_ROOT / "skills" / "capture" / "SKILL.md"
 
     def frontmatter(self) -> dict[str, str]:
         text = self.skill.read_text(encoding="utf-8")

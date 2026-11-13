@@ -2,15 +2,16 @@
 
 An add-on lives in the same plugin folder as the core. ``ADDON_PARTS`` names everything there that
 belongs to one. ``python3 -m repo_tools.core_alone`` copies the plugin without those parts into a
-temporary folder, runs the core's unit tests in the copy and then the end-to-end scenarios that
-turn no add-on on against it. A core test that reads an add-on's file, or a core command that
+temporary folder, and the unit tests without the add-ons' suites beside it, in the position the two
+have in the checkout. It runs the core's unit tests in the copy and then the end-to-end scenarios
+that turn no add-on on against it. A core test that reads an add-on's file, or a core command that
 needs one, fails there, while it passes in the checkout, where the add-on is always present. A
 core module that imports an add-on fails there too; in the checkout only the core's test of its
 imports says so.
 
 The unit tests import the copy's packages only. The scenario runner is a repository tool and runs
-from the checkout; every command a step runs is the copy's, whose ``bin/`` is first on ``PATH`` and
-whose commands start Python with their own ``src/`` alone.
+from the checkout, with the checkout's scripted model; every command a step runs is the copy's,
+whose ``bin/`` is first on ``PATH`` and whose commands start Python with their own ``src/`` alone.
 """
 
 from __future__ import annotations
@@ -29,6 +30,9 @@ from typing import Any
 from repo_tools import REPO_ROOT
 
 PLUGIN = REPO_ROOT / "plugins" / "m2b"
+UNIT_TESTS = REPO_ROOT / "tests" / "unit"
+# The folder in the unit tests that holds one suite per add-on and nothing of the core.
+ADDON_SUITES = "addons"
 SCENARIOS = REPO_ROOT / "tests" / "e2e"
 HOOKS_MANIFEST = "hooks/hooks.json"
 BYTECODE_CACHE = "__pycache__"
@@ -58,7 +62,6 @@ ADDON_PARTS = (
             "skills/worklog-setup",
             "skills/worklog-verdict",
             "src/m2b_worklog",
-            "tests/addons/worklog",
         ),
         hook_commands=('"${CLAUDE_PLUGIN_ROOT}"/bin/m2b-worklog hook session-start',),
     ),
@@ -127,28 +130,45 @@ def _drop_hook_commands(manifest_file: Path, commands: set[str]) -> None:
     manifest_file.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
 
+def copy_tests_without_addon_suites(unit_tests: Path, target: Path) -> None:
+    """Copies the unit tests to ``target``, which must not exist, without the add-ons' suites."""
+
+    def addon_suites_and_bytecode(folder: str, names: list[str]) -> set[str]:
+        at_the_top = Path(folder) == unit_tests
+        return {name for name in names if name == BYTECODE_CACHE or (at_the_top and name == ADDON_SUITES)}
+
+    copytree(unit_tests, target, ignore=addon_suites_and_bytecode, symlinks=True)
+
+
 def prove_core_alone(
     plugin: Path = PLUGIN,
+    unit_tests: Path = UNIT_TESTS,
     parts: Sequence[AddonParts] = ADDON_PARTS,
     scenarios: Path = SCENARIOS,
     capture_output: bool = False,
 ) -> list[subprocess.CompletedProcess[str]]:
-    """Runs the core's unit tests and the scenarios without an add-on in a copy of the plugin without add-ons.
+    """Runs the core's unit tests and the scenarios without an add-on against a copy of the plugin without add-ons.
 
     The two finished runs, the unit tests first; the proof holds when both ended with 0.
     """
     with tempfile.TemporaryDirectory(prefix=f"{TEST_RESOURCE_PREFIX}core-alone-") as temp:
         # Resolved, because the tests compare paths and macOS hands out a temporary folder behind a link.
-        copy = Path(temp).resolve() / plugin.name
-        copy_without_addons(plugin, copy, parts)
-        unit_tests = ["-m", "repo_tools.unit_tests", "--tests", str(copy / "tests"), "--label", LABEL]
-        unit_tests += ["--import-root", str(copy / "src")]
+        checkout = Path(temp).resolve()
+        # A test finds the plugin by its position to the tests, so the copies keep that position.
+        plugin_copy = checkout / PLUGIN.parent.relative_to(REPO_ROOT) / plugin.name
+        tests_copy = checkout / UNIT_TESTS.relative_to(REPO_ROOT)
+        plugin_copy.parent.mkdir(parents=True)
+        tests_copy.parent.mkdir(parents=True)
+        copy_without_addons(plugin, plugin_copy, parts)
+        copy_tests_without_addon_suites(unit_tests, tests_copy)
+        run_tests = ["-m", "repo_tools.unit_tests", "--tests", str(tests_copy), "--label", LABEL]
+        run_tests += ["--import-root", str(plugin_copy / "src")]
         end_to_end = ["-m", "repo_tools.e2e", "--level", "stub", "--core-only"]
-        end_to_end += ["--plugin", str(copy), "--scenarios", str(scenarios)]
+        end_to_end += ["--plugin", str(plugin_copy), "--scenarios", str(scenarios)]
         tools = str(REPO_ROOT / "scripts")
         return [
-            _run_python(unit_tests, [tools], copy.parent, capture_output),
-            _run_python(end_to_end, [tools, str(PLUGIN / "src")], copy.parent, capture_output),
+            _run_python(run_tests, [tools], checkout, capture_output),
+            _run_python(end_to_end, [tools, str(PLUGIN / "src")], checkout, capture_output),
         ]
 
 
@@ -161,9 +181,14 @@ def _run_python(
     )
 
 
-def main(plugin: Path = PLUGIN, parts: Sequence[AddonParts] = ADDON_PARTS, scenarios: Path = SCENARIOS) -> int:
+def main(
+    plugin: Path = PLUGIN,
+    unit_tests: Path = UNIT_TESTS,
+    parts: Sequence[AddonParts] = ADDON_PARTS,
+    scenarios: Path = SCENARIOS,
+) -> int:
     try:
-        runs = prove_core_alone(plugin, parts, scenarios)
+        runs = prove_core_alone(plugin, unit_tests, parts, scenarios)
     except StaleAddonPartsError as error:
         print(f"core alone: {error}", file=sys.stderr)
         return 1

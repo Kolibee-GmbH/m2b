@@ -12,6 +12,7 @@ from unittest import mock
 
 import test_client_skills
 import test_commands
+from locations import PLUGIN_ROOT
 from m2b import cli
 from m2b.calendar.base import (
     Calendar,
@@ -363,7 +364,7 @@ class TodosCommandTest(test_commands.CommandTest):
 class TodosSkillTest(unittest.TestCase):
     """Structure only: the policy prose lives once, in the skill (X15)."""
 
-    skill = Path(__file__).resolve().parents[1] / "skills" / "todos" / "SKILL.md"
+    skill = PLUGIN_ROOT / "skills" / "todos" / "SKILL.md"
 
     def frontmatter(self) -> dict[str, str]:
         text = self.skill.read_text(encoding="utf-8")

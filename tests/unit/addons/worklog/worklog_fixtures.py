@@ -11,7 +11,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-PLUGIN_ROOT = Path(__file__).resolve().parents[3]
+from locations import PLUGIN_ROOT
+
 RECORDER_DIR = PLUGIN_ROOT / "recorder"
 COMMAND = PLUGIN_ROOT / "bin" / "m2b-worklog"
 FAKES = Path(__file__).resolve().parent / "fakes"
