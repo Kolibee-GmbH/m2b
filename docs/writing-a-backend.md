@@ -38,8 +38,8 @@ are chosen per machine.
    `config/machine.py`) and a branch to the factory of its kind (`tasks/factory.py`,
    `store/factory.py`, `calendar/factory.py`).
 3. **Pass the contract.** Each kind has a contract test class: `Contracts.TasksContract` in
-   `tests/tasks_contract.py`, `Contracts.StoreContract` in `tests/store_contract.py`,
-   `Contracts.CalendarContract` in `tests/calendar_contract.py`. Subclass it and say how to build a
+   `tests/unit/tasks_contract.py`, `Contracts.StoreContract` in `tests/unit/store_contract.py`,
+   `Contracts.CalendarContract` in `tests/unit/calendar_contract.py`. Subclass it and say how to build a
    fresh, empty backend; for tasks with a method, for a store with the class attributes
    `make_store` (a constructor taking the root, a temp folder and the guard) and `copy_of_plan`
    (a name the backend's sync service gives a conflict copy of `plan.md`):
@@ -51,7 +51,7 @@ are chosen per machine.
    ```
 
    A backend that talks to a real service gets a fake of that service for the unit tests, as
-   `tests/fakes/` has for `reminders-cli`.
+   `tests/unit/fakes/` has for `reminders-cli`.
 4. **Integration tests against the real service** run only when asked and only against
    resources whose names start with `sb-test-`, never against your own lists. `M2B_IT=1` turns
    them on; each names its test resource in a variable of its own, and a test whose variable is

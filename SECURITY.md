@@ -102,13 +102,14 @@ looks like an instruction. So:
   machine you run it on.
 
 The tests contain hostile samples on purpose, to check the defences of m2b this section
-describes. In `plugins/m2b/tests/` they are lines with characters that hide or reorder text,
-text in characters that draw nothing and lines worded as instructions; the scenario
+describes. In `tests/unit/` and in the band's tests they are lines with characters that hide or
+reorder text, text in characters that draw nothing and lines worded as instructions; the scenario
 `tests/e2e/E17-planted-capture` ([CONTRIBUTING.md](CONTRIBUTING.md#end-to-end-scenarios)) sends
 captures written to steer the model through a curation run. Whether a model keeps the rule of
-the skills only that scenario's model level shows, with a real model. The tests lie in the plugin
-folder, which an install copies, so a static scanner run over the repository or an installed
-copy reports the samples.
+the skills only that scenario's model level shows, with a real model. Of these tests only the
+band's lie in the plugin's folder, which an install copies (`plugins/m2b/tests/band/`, where
+Claude Code looks for them), so a static scanner run over the repository reports the samples,
+and run over an installed copy those of the band's tests.
 
 ## The fence around a model step
 

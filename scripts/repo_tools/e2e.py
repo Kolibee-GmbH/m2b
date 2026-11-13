@@ -19,7 +19,7 @@ A scenario is a folder under ``tests/e2e/`` with:
   made on first use, so two sessions can stand for two projects; without it a step runs in the
   working folder.
   An optional ``"model": {"actions": [...], "outcome": "success"}`` scripts the model: every model
-  run of the scenario replays these actions in the stub ``tests/fakes/fake_claude.py``, which
+  run of the scenario replays these actions in the stub ``tests/unit/fakes/fake_claude.py``, which
   denies what the step's rules do not allow (the action format is in the stub);
   an add-on a scenario needs is turned on by one of its steps (``m2b addons on worklog``), as setup does,
   and ``--core-only`` leaves such a scenario out;
@@ -42,7 +42,8 @@ notes its own way. A value a step saved can name a folder outside the store for 
 as the memory folder Claude Code reports at a session's start.
 
 ``--plugin`` names another folder that holds the plugin, in place of this checkout's: the proof
-that the core stands without its add-ons runs the scenarios against a copy without them.
+that the core stands without its add-ons runs the scenarios against a copy without them. The stub
+is a tool of the repository and always this checkout's.
 """
 
 from __future__ import annotations
@@ -70,8 +71,7 @@ from repo_tools import REPO_ROOT
 
 SCENARIO_ROOT = REPO_ROOT / "tests" / "e2e"
 CORE_PLUGIN = REPO_ROOT / "plugins" / "m2b"
-# Relative to the plugin's folder.
-MODEL_STUB = Path("tests") / "fakes" / "fake_claude.py"
+MODEL_STUB = REPO_ROOT / "tests" / "unit" / "fakes" / "fake_claude.py"
 ADDON_ON = ["m2b", "addons", "on"]
 MODEL_RUNNER_VARIABLE = "M2B_MODEL_RUNNER"
 MODEL_STUB_STORE_VARIABLE = "M2B_STUB_STORE"
@@ -304,13 +304,13 @@ def _given_transcripts(scenario: Path, claude_config: Path) -> None:
         target.write_text(source.read_text(encoding="utf-8").replace(AN_HOUR_AGO, written), encoding="utf-8")
 
 
-def model_stub(sandbox: Path, script: Mapping[str, Any], plugin: Path) -> Path:
+def model_stub(sandbox: Path, script: Mapping[str, Any]) -> Path:
     """A ``claude`` for this scenario: the stub with the scenario's model actions."""
     actions = sandbox / "model.json"
     actions.write_text(json.dumps(script), encoding="utf-8")
     runner = sandbox / "bin" / "claude"
     runner.parent.mkdir()
-    stub = " ".join(shlex.quote(str(part)) for part in (sys.executable, plugin / MODEL_STUB, actions))
+    stub = " ".join(shlex.quote(str(part)) for part in (sys.executable, MODEL_STUB, actions))
     runner.write_text(f'#!/bin/sh\nexec {stub} "$@"\n', encoding="utf-8")
     runner.chmod(0o755)
     return runner
@@ -369,7 +369,7 @@ def run_scenario(
             environment["M2B_HERDR"] = str(sandbox / "no-herdr")
             environment["M2B_LAUNCHCTL"] = str(sandbox / "no-launchctl")
             environment["M2B_SYSTEMCTL"] = str(sandbox / "no-systemctl")
-            stub = model_stub(sandbox, scenario_steps.get("model", {"actions": []}), plugin)
+            stub = model_stub(sandbox, scenario_steps.get("model", {"actions": []}))
             environment[MODEL_RUNNER_VARIABLE] = str(stub)
             environment[MODEL_STUB_STORE_VARIABLE] = str(store)
             result.problems += _run_steps(scenario_steps["steps"], environment, work, saved=saved, plugin=plugin)

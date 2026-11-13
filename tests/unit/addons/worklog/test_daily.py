@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+from locations import FAKES as CORE_FAKES
+from locations import PLUGIN_ROOT
 from m2b import atomic_file, session_remotes
 from m2b.paths import MachinePaths
 from m2b_worklog import daily, ledger, writeup
@@ -26,9 +28,8 @@ from m2b_worklog.sources import SourceState
 from m2b_worklog.sources.git import NO_GIT_TO_START
 from test_facts import BY_REMOTE, GLOBEX, NOW, PROFILE, TEST_TZ, Fixture, at
 
-PLUGIN_ROOT = Path(__file__).resolve().parents[3]
 COMMAND = PLUGIN_ROOT / "bin" / "m2b-worklog"
-FAKE_CLAUDE = PLUGIN_ROOT / "tests" / "fakes" / "fake_claude.py"
+FAKE_CLAUDE = CORE_FAKES / "fake_claude.py"
 DAY_BEFORE = at(9) - datetime.timedelta(days=1)
 STATE = Path("state") / "addons" / "worklog"
 

@@ -13,13 +13,13 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+from locations import PLUGIN_ROOT
 from m2b import paths, prompt_hook, topic_state
 from m2b.config import machine
 from m2b.hooks import DISTILLATE_HEADER
 from m2b.store.guard import DatalessGuard
 from store_contract import FakeEviction
 
-PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 SESSION = "ea4af7eb-7f1d-4eab-aac2-987397455c4b"
 ACME = "### Acme Ltd (Acme, Kim Lee)\n- Kim Lee leads Acme's IT (kim-lee.md)\n"
 CHOIR = "### Riverside Choir (Riverside Choir)\n- The choir meets on Wednesdays (choir.md)\n"

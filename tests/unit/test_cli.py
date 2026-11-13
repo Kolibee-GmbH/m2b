@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+from locations import PLUGIN_ROOT
 from m2b import cli, paths
 from m2b.config import machine, profile
 from m2b.config.store_settings import KNOWN_STORE_FORMAT, save_store_settings
@@ -19,7 +20,7 @@ from m2b.store.base import EvictedFileError, FetchError, UnsupportedStoreError
 from m2b.store.folder import FolderStore
 from m2b.store.guard import DatalessGuard
 
-SOURCE_ROOT = Path(__file__).resolve().parents[1] / "src"
+SOURCE_ROOT = PLUGIN_ROOT / "src"
 
 
 class CommandLineTest(unittest.TestCase):

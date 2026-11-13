@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import re
 import unittest
-from pathlib import Path
 
+from locations import PLUGIN_ROOT
 from m2b.notes.memory_index import MemoryIndex
 
-SKILLS = Path(__file__).resolve().parents[1] / "skills"
+SKILLS = PLUGIN_ROOT / "skills"
 # The core's skills a session runs with the owner present. ingest, refresh, sort-facts and lint run
 # fenced with ``dontAsk`` inside a curation run, where nothing can ask; of those, the ones that read
 # captured text are held to ``READS_CAPTURED_TEXT`` below. An add-on's skills are held to the same
@@ -19,7 +19,7 @@ SESSION_SKILLS = ("capture", "search", "todos", "rediscover", "m2b", "setup")
 OWN_CALL_RULE = "Run each `m2b` command in a Bash call of its own"
 BASH_BLOCK = re.compile(r"^[ \t]*```bash\n(.*?)^[ \t]*```$", re.MULTILINE | re.DOTALL)
 CHAINED = re.compile(r"&&|\|\||;|\|")
-TOOLS_MODULE = Path(__file__).resolve().parents[1] / "hooks" / "tools.ts"
+TOOLS_MODULE = PLUGIN_ROOT / "hooks" / "tools.ts"
 # The mod's tools, and the skill whose rules each one's description carries.
 TOOLS = {"capture": ("mcp__m2b__note", "NOTE_RULES"), "search": ("mcp__m2b__search", "SEARCH_RULES")}
 # Rules a tool must state in the skill's own words: what may be noted, the wording stays, nothing

@@ -13,12 +13,12 @@ m2b addons off worklog
 
 m2b is one plugin, so the worklog is installed with it whether you use it or not. A worklog you
 never turn on costs three things. Its files sit in the plugin's folder: its package and command,
-the herdr recorder, two schemas, two skills and its tests. Claude Code lists those two skills,
+the herdr recorder, two schemas and two skills. Claude Code lists those two skills,
 `worklog-setup` and `worklog-verdict`, with their descriptions in every session, as it does for
 every skill of the plugin. And one command runs at each session start, `m2b-worklog hook
 session-start`: it asks the core whether the worklog is on, which reads this machine's
 `config.json`, and ends without printing or writing anything. The core needs none of it: the
-repository's check runs the core's tests in a copy of the plugin without the worklog's parts
+repository's check runs the core's tests against a copy of the plugin without the worklog's parts
 ([Contributing](../CONTRIBUTING.md#checks)).
 
 Turning an add-on off keeps its settings, so its setup skill turns it on again with what was set

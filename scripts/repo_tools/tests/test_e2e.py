@@ -192,14 +192,10 @@ class ScenarioTest(unittest.TestCase):
             "home = pathlib.Path(os.environ['M2B_HOME'])\n"
             "store = pathlib.Path(json.loads((home / '.config/m2b/config.json').read_text())['store']['path'])\n"
             "seen = [sys.argv[1], os.environ['M2B_CORE_ROOT'], os.environ['PATH'].split(os.pathsep)[0]]\n"
-            "stub = pathlib.Path(os.environ['M2B_MODEL_RUNNER']).read_text()\n"
-            "seen.append('its stub' if sys.argv[1] + '/tests/fakes/' in stub else 'another stub')\n"
             "(store / 'inbox/seen.md').write_text(' '.join(seen))\n"
         )
         self._given_steps([{"run": [sys.executable, "-c", write, "{core_plugin}"]}])
-        self._expect(
-            {"inbox/note.md": "Dana likes maps.\n", "inbox/seen.md": f"{other} {other} {other / 'bin'} its stub"}
-        )
+        self._expect({"inbox/note.md": "Dana likes maps.\n", "inbox/seen.md": f"{other} {other} {other / 'bin'}"})
 
         result = e2e.run_scenario(self.scenario, self.environ, plugin=other)
 

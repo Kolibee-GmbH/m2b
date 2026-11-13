@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+from locations import PLUGIN_ROOT
 from m2b import cli, paths, session_remotes
 from m2b import hooks as session_start
 from m2b.calendar.base import local_midnight
@@ -59,7 +60,7 @@ class CommandTest(unittest.TestCase):
         self.environ = {"HOME": str(root / "user-home"), "M2B_HOME": str(self.home)}
 
     def fake_program(self, name: str, fake: str, state: Path) -> str:
-        """A wrapper script that runs a fake from ``tests/fakes`` with its state file."""
+        """A wrapper script that runs a fake from ``fakes/`` with its state file."""
         script = self.bin / name
         script.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{FAKES / fake}" "{state}" "$@"\n', encoding="utf-8")
         script.chmod(0o755)
@@ -1076,7 +1077,7 @@ class DoctorTest(CommandTest):
         self.assertNotIn("store-git", self.run_command("doctor")[1])
 
     def test_the_skills_that_run_doctor_name_every_state_that_is_a_problem(self) -> None:
-        skills = Path(__file__).resolve().parents[1] / "skills"
+        skills = PLUGIN_ROOT / "skills"
         for skill in ("m2b", "setup"):
             body = (skills / skill / "SKILL.md").read_text(encoding="utf-8")
             for state in doctor.PROBLEMS:

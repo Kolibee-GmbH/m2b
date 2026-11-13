@@ -1,4 +1,4 @@
-"""The list of what each add-on puts into the plugin, the copy without it, and the proof run in that copy."""
+"""The list of what each add-on puts into the plugin, the copies without add-ons, and the proof run in them."""
 
 from __future__ import annotations
 
@@ -27,7 +27,14 @@ CORE_TEST = (
     "import unittest\nfrom pathlib import Path\n\nimport m2b\n\n\n"
     "class CoreTest(unittest.TestCase):\n    def test_it(self) -> None:\n        {check}\n"
 )
-READS_THE_ADDON = "(Path(__file__).resolve().parents[1] / 'skills' / 'sample-setup' / 'SKILL.md').read_text()"
+# The proof puts the copy of the plugin, named as the plugin is, where the tests' copy finds it.
+READS_THE_ADDON = (
+    "(Path(__file__).resolve().parents[2] / 'plugins' / 'plugin' / 'skills' / 'sample-setup' / 'SKILL.md').read_text()"
+)
+ADDON_TEST = (
+    "import unittest\n\nimport m2b_sample\n\n\n"
+    "class AddonTest(unittest.TestCase):\n    def test_it(self) -> None:\n        self.assertTrue(m2b_sample)\n"
+)
 # Exits 0 only when the plugin a scenario runs against is the one built here and holds no add-on package.
 IN_THE_COPY_ALONE = (
     "import pathlib, sys; plugin = pathlib.Path(sys.argv[1]); "
@@ -63,6 +70,11 @@ class RealPluginTest(unittest.TestCase):
     def test_nothing_in_the_plugin_carries_an_addons_name_without_being_listed(self) -> None:
         self.assertEqual(core_alone.unlisted_parts(core_alone.PLUGIN), [])
 
+    def test_every_addon_has_its_suite_in_the_folder_the_copy_of_the_tests_leaves_out(self) -> None:
+        suites = core_alone.UNIT_TESTS / core_alone.ADDON_SUITES
+
+        self.assertEqual(sorted(suite.name for suite in suites.iterdir() if suite.is_dir()), sorted(addon_names()))
+
     def test_the_copy_holds_the_core_and_nothing_that_carries_an_addons_name(self) -> None:
         with tempfile.TemporaryDirectory(prefix="sb-test-") as temp:
             copy = Path(temp) / "m2b"
@@ -88,6 +100,7 @@ class SamplePluginTest(unittest.TestCase):
         self._temp = tempfile.TemporaryDirectory(prefix="sb-test-")
         self.addCleanup(self._temp.cleanup)
         self.plugin = Path(self._temp.name) / "plugin"
+        self.unit_tests = Path(self._temp.name) / "unit-tests"
         self.scenarios = Path(self._temp.name) / "scenarios"
         self.scenarios.mkdir()
         self.write("built-for-this-test", "")
@@ -97,11 +110,16 @@ class SamplePluginTest(unittest.TestCase):
         self.write("bin/m2b-sample", "#!/bin/sh\n")
         self.write("skills/capture/SKILL.md", "capture\n")
         self.write("skills/sample-setup/SKILL.md", "set the sample up\n")
-        self.write("tests/test_core.py", CORE_TEST.format(check="self.assertTrue(m2b)"))
+        self.write_test("test_core.py", CORE_TEST.format(check="self.assertTrue(m2b)"))
         self.write_hooks(CORE_HOOK, SAMPLE_HOOK)
 
     def write(self, path: str, text: str) -> None:
-        target = self.plugin / path
+        self._write(self.plugin / path, text)
+
+    def write_test(self, path: str, text: str) -> None:
+        self._write(self.unit_tests / path, text)
+
+    def _write(self, target: Path, text: str) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8")
 
@@ -122,7 +140,7 @@ class SamplePluginTest(unittest.TestCase):
 
     def proof(self, parts: tuple[AddonParts, ...] = (SAMPLE,)) -> tuple[bool, str]:
         """Whether the proof holds, and what its two runs printed."""
-        runs = core_alone.prove_core_alone(self.plugin, parts, self.scenarios, capture_output=True)
+        runs = core_alone.prove_core_alone(self.plugin, self.unit_tests, parts, self.scenarios, capture_output=True)
         return all(run.returncode == 0 for run in runs), "".join(run.stdout + run.stderr for run in runs)
 
 
@@ -171,7 +189,6 @@ class CopyTest(SamplePluginTest):
                 "hooks/hooks.json",
                 "skills/capture/SKILL.md",
                 "src/m2b/__init__.py",
-                "tests/test_core.py",
             ],
         )
         manifest = json.loads((copy / "hooks" / "hooks.json").read_text(encoding="utf-8"))
@@ -196,6 +213,17 @@ class CopyTest(SamplePluginTest):
 
         self.assertFalse(copy.exists())
 
+    def test_the_copy_of_the_tests_leaves_out_the_addons_suites_and_keeps_the_rest(self) -> None:
+        self.write_test("addons/sample/test_sample.py", ADDON_TEST)
+        self.write_test("fakes/addons/fake_command.py", "")
+        self.write_test("__pycache__/test_core.cpython-314.pyc", "")
+        copy = self.plugin.parent / "copy"
+
+        core_alone.copy_tests_without_addon_suites(self.unit_tests, copy)
+
+        files = sorted(path.relative_to(copy).as_posix() for path in copy.rglob("*") if path.is_file())
+        self.assertEqual(files, ["fakes/addons/fake_command.py", "test_core.py"])
+
 
 class ProofTest(SamplePluginTest):
     def test_a_core_that_needs_no_addon_passes_its_tests_and_scenarios(self) -> None:
@@ -215,8 +243,16 @@ class ProofTest(SamplePluginTest):
         self.assertFalse(passed)
         self.assertIn("No module named 'm2b_sample'", output)
 
+    def test_the_suite_of_an_addon_does_not_run(self) -> None:
+        self.write_test("addons/sample/test_sample.py", ADDON_TEST)
+
+        passed, output = self.proof()
+
+        self.assertTrue(passed, output)
+        self.assertIn("unit tests m2b without add-ons: 1 tests", output)
+
     def test_a_core_test_that_reads_a_file_of_the_addon_fails(self) -> None:
-        self.write("tests/test_core.py", CORE_TEST.format(check=READS_THE_ADDON))
+        self.write_test("test_core.py", CORE_TEST.format(check=READS_THE_ADDON))
 
         passed, output = self.proof()
 
@@ -225,7 +261,7 @@ class ProofTest(SamplePluginTest):
 
     def test_beside_the_addon_both_faults_pass_which_is_what_the_copy_is_for(self) -> None:
         self.write("src/m2b/__init__.py", "import m2b_sample\n")
-        self.write("tests/test_core.py", CORE_TEST.format(check=READS_THE_ADDON))
+        self.write_test("test_core.py", CORE_TEST.format(check=READS_THE_ADDON))
 
         passed, output = self.proof(parts=())
 
@@ -253,14 +289,14 @@ class ProofTest(SamplePluginTest):
         for exits, status in (((0, 0), 0), ((1, 0), 1), ((0, 1), 1)):
             runs = [subprocess.CompletedProcess([], code, "", "") for code in exits]
             with self.subTest(exits=exits), mock.patch.object(core_alone, "prove_core_alone", return_value=runs):
-                self.assertEqual(core_alone.main(self.plugin, [SAMPLE], self.scenarios), status)
+                self.assertEqual(core_alone.main(self.plugin, self.unit_tests, [SAMPLE], self.scenarios), status)
 
     def test_a_stale_list_fails_the_command_and_says_what_is_missing(self) -> None:
         (self.plugin / "bin" / "m2b-sample").unlink()
         errors = io.StringIO()
 
         with contextlib.redirect_stderr(errors):
-            status = core_alone.main(self.plugin, [SAMPLE], self.scenarios)
+            status = core_alone.main(self.plugin, self.unit_tests, [SAMPLE], self.scenarios)
 
         self.assertEqual(status, 1)
         self.assertIn("bin/m2b-sample", errors.getvalue())

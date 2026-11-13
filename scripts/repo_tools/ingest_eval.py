@@ -505,7 +505,7 @@ class Runner:
         environment.pop(MODEL_RUNNER_VARIABLE, None)
         environment.pop(MODEL_STUB_STORE_VARIABLE, None)
         if self.script is not None:
-            environment[MODEL_RUNNER_VARIABLE] = str(model_stub(sandbox, self.script, CORE_PLUGIN))
+            environment[MODEL_RUNNER_VARIABLE] = str(model_stub(sandbox, self.script))
             environment[MODEL_STUB_STORE_VARIABLE] = str(store)
 
         started = time.monotonic()

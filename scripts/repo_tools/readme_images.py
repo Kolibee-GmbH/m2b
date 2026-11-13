@@ -229,7 +229,7 @@ PROPOSALS = (
         None,
     ),
 )
-MODEL_STUB = PLUGIN / "tests" / "fakes" / "fake_claude.py"
+MODEL_STUB = REPO_ROOT / "tests" / "unit" / "fakes" / "fake_claude.py"
 
 
 class ImagesError(Exception):

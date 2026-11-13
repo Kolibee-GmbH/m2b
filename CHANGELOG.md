@@ -7,6 +7,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-13
+
+### Changed
+
+- An install no longer brings m2b's Python tests. Claude Code copies the plugin's folder whole,
+  and until now 86 test files came with it; they moved to `tests/unit/` in the repository. The
+  installed plugin has 220 files instead of 306 and 1.2 MB instead of 2.5 MB. The band's tests and
+  the eval cases stay in the plugin's folder, where Claude Code looks for them. Nothing m2b does
+  changes ([#22](https://github.com/Kolibee-GmbH/m2b/pull/22)).
+
 ## [0.4.1] - 2026-11-12
 
 ### Added

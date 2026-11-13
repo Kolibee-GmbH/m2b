@@ -12,6 +12,7 @@ from typing import Any
 from unittest import mock
 
 import test_commands
+from locations import PLUGIN_ROOT
 from m2b import cli, launcher, setup
 from m2b.config import store_path
 from m2b.config.machine import load_machine_config
@@ -587,7 +588,7 @@ class StoreContractTest(unittest.TestCase):
 class SetupSkillTest(unittest.TestCase):
     """Structure only: the questions live once, in the skill (X15)."""
 
-    skill = Path(__file__).resolve().parents[1] / "skills" / "setup" / "SKILL.md"
+    skill = PLUGIN_ROOT / "skills" / "setup" / "SKILL.md"
 
     def test_the_skill_may_only_run_setup_and_doctor(self) -> None:
         text = self.skill.read_text(encoding="utf-8")

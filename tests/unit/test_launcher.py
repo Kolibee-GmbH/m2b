@@ -16,10 +16,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from locations import PLUGIN_ROOT
 from m2b import cli, launcher, paths
 from m2b.config import machine
-
-PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 
 
 class LauncherTest(unittest.TestCase):
