@@ -154,7 +154,7 @@ class ReadingTest(GleanStepTest):
         self.assertEqual(
             self.info(),
             [
-                f"read 1 session with 2 typed prompts since {START - DAY:%Y-%m-%d %H:%M}: 1 proposal added, "
+                f"read 1 session with 2 prompts since {START - DAY:%Y-%m-%d %H:%M}: 1 proposal added, "
                 "0 like one that waits, is answered or expired, 0 without the person's words, 0 captured already, "
                 "0 not in the form"
             ],
@@ -187,10 +187,39 @@ class ReadingTest(GleanStepTest):
         self.assertEqual(self.calls(), [])
         self.assertEqual(self.kept(), nothing_kept(read_until=START))
 
+    def test_a_proposal_from_a_prompt_that_was_pasted_whole_waits_and_says_that_it_was_pasted(self) -> None:
+        """Covers: B172"""
+        self.reading()
+        notes = "I am in a meeting with Northwind. Dana runs IT at Northwind and signs the renewals."
+        self.typed(f'<pasted_content id="a1">{notes}</pasted_content id="a1">', START - 2 * HOUR)
+        self.answers(DANA)
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        (asked,) = self.asked()
+        self.assertEqual(asked["sessions"][0]["prompts"], [{"typed": "", "pasted": [notes]}])
+        (kept,) = self.kept()["proposals"].values()
+        self.assertEqual((kept["text"], kept["source"]), ("Dana runs IT at Northwind.", "pasted"))
+        self.assertIn("1 pasted text was read with the prompts they stand in", self.info())
+
+    def test_a_period_in_which_everything_was_pasted_shows_that_claude_code_marks_who_sent_it(self) -> None:
+        self.reading()
+        self.typed(
+            '<pasted_content id="a1">notes of mine about the shed roof</pasted_content id="a1">', START - 2 * HOUR
+        )
+        self.record(test_sessions.unmarked("ls -la", START - HOUR))
+        self.answers()
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        self.assertEqual(self.steps()[1], ("glean", "succeeded"))
+
     def test_what_the_reader_left_out_of_the_sessions_is_counted_in_the_runs_information(self) -> None:
         """Covers: B115"""
         self.reading()
-        self.typed(f'{DANA_SAID} <pasted_content id="a1">a mail</pasted_content id="a1">', START - 4 * HOUR)
+        self.typed(DANA_SAID, START - 4 * HOUR)
         self.record(test_sessions.sent_by("plugin", "build the next part", START - 3 * HOUR))
         self.record(test_sessions.sent_by("task-notification", "the build is done", START - 3 * HOUR))
         self.record(test_sessions.typed("yes, do that", START - 2 * HOUR, promptSource="suggestion_accepted"))
@@ -201,7 +230,7 @@ class ReadingTest(GleanStepTest):
 
         self.assertIn(
             "left out of these sessions: 2 prompts that a plugin, a task or another agent sent, "
-            "1 suggestion that was only accepted, 1 pasted block, 1 text without Claude Code's mark of who sent it",
+            "1 suggestion that was only accepted, 1 text without Claude Code's mark of who sent it",
             self.info(),
         )
 
@@ -621,7 +650,7 @@ class AnsweredTest(GleanStepTest):
         self.answers(DANA)
         self.run_curate()
         proposal_answers.give(self.store, [DANA_ID], proposal_answers.KEEP)
-        self.write(proposals.PROPOSALS_FILE, json.dumps({**self.kept(), "format": 2}))
+        self.write(proposals.PROPOSALS_FILE, json.dumps({**self.kept(), "format": 3}))
         real_items = MarkdownTasks.items
 
         def items(tasks: MarkdownTasks, *arguments: Any, **options: Any) -> Any:
@@ -728,7 +757,7 @@ class WaitingTaskTest(GleanStepTest):
 
     def test_a_cause_that_does_not_clear_by_itself_is_not_left_to_the_next_run(self) -> None:
         self.curating()
-        self.write(proposals.PROPOSALS_FILE, json.dumps({"format": 2, "proposals": {}}))
+        self.write(proposals.PROPOSALS_FILE, json.dumps({"format": 3, "proposals": {}}))
 
         outcome = self.run_curate()
 
@@ -737,7 +766,7 @@ class WaitingTaskTest(GleanStepTest):
         (review,) = self.review_tasks()
         self.assertIn(
             "The step proposals failed: the task for the proposals that wait was not brought up to date: "
-            "state/core/proposals.json has format 2 and this m2b knows 1: update m2b on this machine",
+            "state/core/proposals.json has format 3 and this m2b knows 2: update m2b on this machine",
             review.notes,
         )
         self.assertNotIn("the next run does it", review.notes)
@@ -916,7 +945,7 @@ class FailingReadingTest(GleanStepTest):
         self.reading()
         self.typed(DANA_SAID, START - HOUR)
         self.capture()
-        from_a_newer_m2b = json.dumps({"format": 2, "proposals": {"aaaaaaaaaaaa": {"shape": "unknown here"}}})
+        from_a_newer_m2b = json.dumps({"format": 3, "proposals": {"aaaaaaaaaaaa": {"shape": "unknown here"}}})
         self.write(proposals.PROPOSALS_FILE, from_a_newer_m2b)
         self.answers(DANA, skills={"m2b:ingest": INGEST_FILES_THE_CAPTURE})
 
@@ -927,7 +956,7 @@ class FailingReadingTest(GleanStepTest):
         self.assertEqual((self.store_root / proposals.PROPOSALS_FILE).read_text(encoding="utf-8"), from_a_newer_m2b)
         self.assertEqual([call for call in self.calls() if "stdin" in call], [])
         (review,) = self.review_tasks()
-        self.assertIn("has format 2 and this m2b knows 1", review.notes)
+        self.assertIn("has format 3 and this m2b knows 2", review.notes)
 
     def test_a_transcript_that_cannot_be_read_is_counted_and_the_others_are_read(self) -> None:
         self.reading()

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Measures what a model proposes for the memory from an invented day of typed prompts, with the real
+# Measures what a model proposes for the memory from an invented day of prompts, typed and pasted, with the real
 # model and your own Claude login, for example: scripts/glean-eval --model haiku --runs 1
 # With --replay it reads your own last days instead and writes the proposals to a file you name.
 set -eu

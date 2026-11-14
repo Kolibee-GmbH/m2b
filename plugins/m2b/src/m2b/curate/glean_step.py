@@ -16,13 +16,13 @@ session start, or one git names there now, holds a part the profile names, and a
 says anything of the folder, since it is then not shown to be other work (``session_remotes``).
 
 The model is asked once, with nothing to call (``model.text_step``), and only when a session left
-has a typed prompt. With the prompts it gets the distillate and what the person kept and dropped of
-earlier proposals (``proposals.examples``); harvest has settled the answers by then, so the last
-ones are among them. Code checks its answer (``glean.check``) against the prompts and against the
-captures of the period, and ``proposals`` keeps what is new and counts, per kind, what was added
-and what stood on no words of the person. The counts go to the run as
-information, never into the review: nothing here asks the person to act. What the reader left out
-of the sessions it read is among them, so a day's reading shows what it did not take.
+has a prompt of the person's, typed or pasted. With the prompts it gets the distillate and what the
+person kept and dropped of earlier proposals (``proposals.examples``); harvest has settled the
+answers by then, so the last ones are among them. Code checks its answer (``glean.check``) against
+the prompts and against the captures of the period, and ``proposals`` keeps what is new and counts,
+per kind, what was added and what stood on no words of the person. The counts go to the run as
+information, never into the review: nothing here asks the person to act. What the reader left out of
+the sessions it read is among them, so a day's reading shows what it did not take.
 
 When anything fails, the transcripts that cannot be looked at, a model without an answer, an
 answer that cannot be read, nothing is saved and ``read_until`` stays, so the next run reads the
@@ -129,7 +129,7 @@ def propose(
     notes += _left_out_of(considered)
     if not read:
         proposals.save(store, dataclasses.replace(kept, read_until=started))
-        return Reading(f"no session since {start.strftime(_MOMENT)} has a typed prompt", tuple(notes))
+        return Reading(f"no session since {start.strftime(_MOMENT)} has a prompt of yours", tuple(notes))
     captures = _captures(store, start, started)
     examples = proposals.examples(kept, started)
     if examples != glean.NO_EXAMPLES:
@@ -137,6 +137,9 @@ def propose(
             f"the model was shown {len(examples.kept)} kept and "
             f"{_count(len(examples.dropped), 'dropped proposal')} as examples"
         )
+    pasted = sum(len(prompt.pasted) for session in read for prompt in session.prompts)
+    if pasted:
+        notes.append(f"{_count(pasted, 'pasted text')} {_were(pasted)} read with the prompts they stand in")
     given = glean.step_input(read, _distillate(store), zone, examples)
     run = model.text_step(config, machine, environ, glean.instruction(), given, pass_fds)
     if run.answer is None:
@@ -152,9 +155,9 @@ def propose(
     for refused in checked.not_quoted:
         counted = proposals.counted(counted, refused.kind, "not_quoted")
     proposals.save(store, dataclasses.replace(counted, read_until=started))
-    typed = sum(len(session.prompts) for session in read)
+    sent = sum(len(session.prompts) for session in read)
     summary = (
-        f"read {_count(len(read), 'session')} with {_count(typed, 'typed prompt')} since {start.strftime(_MOMENT)}: "
+        f"read {_count(len(read), 'session')} with {_count(sent, 'prompt')} since {start.strftime(_MOMENT)}: "
         f"{_count(added.added, 'proposal')} added, "
         f"{added.added_before} like one that waits, is answered or expired, "
         f"{len(checked.not_quoted)} without the person's words, "
@@ -167,16 +170,15 @@ def _nothing_marked(found: Sequence[sessions.Session]) -> int:
     """How many texts have no mark of who sent them when nothing of the period has one, else 0.
 
     A text without the mark beside marked ones is a record the reader does not recognise, such as
-    the output of a shell line that came in two blocks. When no prompt, no pasted block and
-    nothing another sender sent shows the mark, the reader cannot tell what was typed; a slash
+    the output of a shell line that came in two blocks. When no prompt and nothing another
+    sender sent shows the mark, the reader cannot tell what was typed; a slash
     command proves nothing, since it is taken by its form. The reading then fails at every run
     until the period holds a marked text or has moved past the unmarked ones.
     """
     marked = any(
         session.left_out.sent_by_others
         or session.left_out.suggested
-        or session.left_out.pasted_blocks
-        or any(not _COMMAND_NAME.fullmatch(prompt.text) for prompt in session.prompts)
+        or any(prompt.pasted or not _COMMAND_NAME.fullmatch(prompt.text) for prompt in session.prompts)
         for session in found
     )
     return 0 if marked else sum(session.left_out.unmarked for session in found)
@@ -186,12 +188,10 @@ def _left_out_of(read: Sequence[sessions.Session]) -> list[str]:
     """What the reader left out of these sessions, as one note, or none when that is nothing."""
     others = sum(session.left_out.sent_by_others for session in read)
     suggested = sum(session.left_out.suggested for session in read)
-    pasted = sum(session.left_out.pasted_blocks for session in read)
     unmarked = sum(session.left_out.unmarked for session in read)
     counted = (
         (others, f"{_count(others, 'prompt')} that a plugin, a task or another agent sent"),
         (suggested, f"{_count(suggested, 'suggestion')} that {_were(suggested)} only accepted"),
-        (pasted, _count(pasted, "pasted block")),
         (
             unmarked,
             f"{_count(unmarked, 'text')} without Claude Code's mark of who sent {'it' if unmarked == 1 else 'them'}",

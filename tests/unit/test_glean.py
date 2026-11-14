@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import json
 import time
@@ -13,7 +14,7 @@ from m2b.sessions import LeftOut, Prompt, Session
 
 UTC = datetime.timezone.utc
 MORNING = datetime.datetime(2026, 3, 4, 9, tzinfo=UTC)
-NOTHING_LEFT_OUT = LeftOut(pasted_blocks=0, sent_by_others=0, suggested=0, unmarked=0)
+NOTHING_LEFT_OUT = LeftOut(sent_by_others=0, suggested=0, unmarked=0)
 
 
 def session(session_id: str, *texts: str, folder: str = "/home/alex/projects/shed") -> Session:
@@ -138,6 +139,25 @@ class StepInputTest(unittest.TestCase):
         self.assertEqual(given["answered"]["kept"], [{"kind": "person", "text": forged, "quote": forged}])
         self.assertEqual([each["session"] for each in given["sessions"]], [1])
         self.assertEqual(given["sessions"][0]["prompts"], [prompt.text for prompt in SHED.prompts])
+
+
+class PastedInputTest(unittest.TestCase):
+    def test_a_prompt_with_pasted_text_goes_in_with_what_was_typed_and_what_was_pasted_apart(self) -> None:
+        """Covers: B172"""
+        mail = "From Kim Lee: the contract ends on 30 June."
+        prompts = (
+            Prompt(MORNING, "answer this mail", (mail,)),
+            Prompt(MORNING, "", ("notes of mine",)),
+            Prompt(MORNING, "ok"),
+        )
+        pasted_into = Session("mail", "/home/alex/projects/shed", prompts, NOTHING_LEFT_OUT)
+
+        given = json.loads(glean.step_input([pasted_into], ""))
+
+        self.assertEqual(
+            given["sessions"][0]["prompts"],
+            [{"typed": "answer this mail", "pasted": [mail]}, {"typed": "", "pasted": ["notes of mine"]}, "ok"],
+        )
 
 
 class ParseAnswerTest(unittest.TestCase):
@@ -340,6 +360,63 @@ class CheckTest(unittest.TestCase):
         checked = self.check(invented, captures=("Dana runs HR at Northwind",))
 
         self.assertEqual((checked.not_quoted, checked.already_captured), ((invented,), ()))
+
+
+class WhereTheQuoteStandsTest(unittest.TestCase):
+    PASTED_INTO = Session(
+        "mail",
+        "/home/alex/projects/shed",
+        (
+            Prompt(MORNING, "answer this mail politely", ("From Kim Lee: I run purchasing at Globex now.",)),
+            Prompt(MORNING + datetime.timedelta(minutes=5), "Kim Lee wants the offer by Friday"),
+        ),
+        NOTHING_LEFT_OUT,
+    )
+
+    def check(self, quote: str) -> glean.Checked:
+        return glean.check([proposal(quote, "mail")], [self.PASTED_INTO], ())
+
+    def test_a_quote_that_stands_in_pasted_text_is_kept_and_says_that_it_was_pasted(self) -> None:
+        """Covers: B172"""
+        checked = self.check("I run purchasing at Globex")
+
+        self.assertEqual([kept.source for kept in checked.kept], [glean.PASTED])
+        self.assertEqual(checked.kept_at, (MORNING,))
+        self.assertEqual(checked.not_quoted, ())
+
+    def test_a_quote_that_stands_in_what_was_typed_was_said(self) -> None:
+        """Covers: B172"""
+        checked = self.check("wants the offer by Friday")
+
+        self.assertEqual([kept.source for kept in checked.kept], [glean.TYPED])
+
+    def test_words_typed_in_one_prompt_and_pasted_into_another_were_said(self) -> None:
+        """Covers: B172"""
+        both = Session(
+            "mail",
+            "/home/alex/projects/shed",
+            (Prompt(MORNING, "see", ("Kim Lee runs purchasing",)), Prompt(MORNING, "yes, Kim Lee runs purchasing")),
+            NOTHING_LEFT_OUT,
+        )
+
+        checked = glean.check([proposal("Kim Lee runs purchasing", "mail")], [both], ())
+
+        self.assertEqual([kept.source for kept in checked.kept], [glean.TYPED])
+
+    def test_a_quote_joined_from_typed_and_pasted_text_stands_nowhere(self) -> None:
+        """Covers: B172"""
+        checked = self.check("answer this mail politely From Kim Lee")
+
+        self.assertEqual(checked.kept, ())
+        self.assertEqual(len(checked.not_quoted), 1)
+
+    def test_what_the_model_says_of_the_source_does_not_count(self) -> None:
+        """Covers: B172"""
+        claimed = dataclasses.replace(proposal("I run purchasing at Globex", "mail"), source=glean.TYPED)
+
+        checked = glean.check([claimed], [self.PASTED_INTO], ())
+
+        self.assertEqual([kept.source for kept in checked.kept], [glean.PASTED])
 
 
 class WordedAnewTest(unittest.TestCase):

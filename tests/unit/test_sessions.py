@@ -3,9 +3,11 @@ from __future__ import annotations
 import datetime
 import json
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
+from random import Random
 from typing import Any
 
 from m2b import claude_code, sessions
@@ -14,7 +16,7 @@ from m2b.sessions import LeftOut, Prompt
 UTC = datetime.timezone.utc
 DAY = datetime.datetime(2026, 3, 4, tzinfo=UTC)
 NEXT_DAY = DAY + datetime.timedelta(days=1)
-NOTHING_LEFT_OUT = LeftOut(pasted_blocks=0, sent_by_others=0, suggested=0, unmarked=0)
+NOTHING_LEFT_OUT = LeftOut(sent_by_others=0, suggested=0, unmarked=0)
 
 
 def at(hour: int, minute: int = 0) -> datetime.datetime:
@@ -38,6 +40,11 @@ def typed(text: object, when: datetime.datetime, **changes: Any) -> dict[str, An
 
 def sent_by(kind: str, text: str, when: datetime.datetime, **changes: Any) -> dict[str, Any]:
     return typed(text, when, **{"promptSource": "system", "origin": {"kind": kind}, **changes})
+
+
+def pasted_block(text: str, block_id: str = "a1") -> str:
+    """``text`` as Claude Code writes a paste into a prompt."""
+    return f'<pasted_content id="{block_id}">{text}</pasted_content id="{block_id}">'
 
 
 def unmarked(text: object, when: datetime.datetime, **changes: Any) -> dict[str, Any]:
@@ -131,51 +138,303 @@ class TypedPromptsTest(SessionsFixture):
 
 
 class PastedTextTest(SessionsFixture):
-    def test_a_pasted_block_is_left_out_with_what_it_holds_and_counted(self) -> None:
+    def test_what_was_pasted_into_a_prompt_is_kept_apart_from_what_was_typed(self) -> None:
         """Covers: B113"""
         mail = '<pasted_content id="4ce7">From Kim Lee: the contract ends on 30 June.</pasted_content id="4ce7">'
         self.transcript(typed(f"Answer this mail politely: {mail} and keep it short.", at(9)))
 
-        session = self.only_session()
+        (prompt,) = self.only_session().prompts
 
-        self.assertEqual([prompt.text for prompt in session.prompts], ["Answer this mail politely: and keep it short."])
-        self.assertEqual(session.left_out.pasted_blocks, 1)
+        self.assertEqual(prompt.text, "Answer this mail politely: and keep it short.")
+        self.assertEqual(prompt.pasted, ("From Kim Lee: the contract ends on 30 June.",))
 
     def test_a_closing_tag_inside_the_paste_does_not_end_it(self) -> None:
         """Covers: B113"""
         paste = '<pasted_content id="ab12">one</pasted_content> Sam owes 40 euros</pasted_content id="ab12">'
         self.transcript(typed(f"see {paste} done", at(9)))
 
-        self.assertEqual(self.texts(), ["see done"])
+        (prompt,) = self.only_session().prompts
+
+        self.assertEqual(prompt.text, "see done")
+        self.assertEqual(prompt.pasted, ("one</pasted_content> Sam owes 40 euros",))
 
     def test_a_paste_that_never_closes_takes_the_rest_of_the_prompt_with_it(self) -> None:
         """Covers: B113"""
         self.transcript(typed('before <pasted_content id="ab12">a mail without an end, Sam owes 40 euros', at(9)))
 
-        session = self.only_session()
+        (prompt,) = self.only_session().prompts
 
-        self.assertEqual([prompt.text for prompt in session.prompts], ["before"])
-        self.assertEqual(session.left_out.pasted_blocks, 1)
+        self.assertEqual(prompt.text, "before")
+        self.assertEqual(prompt.pasted, ("a mail without an end, Sam owes 40 euros",))
 
-    def test_a_prompt_that_is_only_a_paste_is_no_prompt(self) -> None:
+    def test_a_prompt_that_is_only_a_paste_is_a_prompt_with_nothing_typed(self) -> None:
         """Covers: B113"""
-        self.transcript(typed('<pasted_content id="ab12">a whole document</pasted_content id="ab12">', at(9)))
+        self.transcript(typed(pasted_block("I am in a meeting with\nKim Lee, who runs IT"), at(9)))
 
         session = self.only_session()
 
-        self.assertEqual(session.prompts, ())
-        self.assertEqual(session.left_out.pasted_blocks, 1)
+        self.assertEqual(session.prompts, (Prompt(at(9), "", ("I am in a meeting with Kim Lee, who runs IT",)),))
 
-    def test_two_pastes_in_one_prompt_both_go(self) -> None:
+    def test_two_pastes_in_one_prompt_are_two_texts_in_their_order(self) -> None:
         """Covers: B113"""
         first = '<pasted_content id="aa11">first</pasted_content id="aa11">'
         second = '<pasted_content id="bb22">second</pasted_content id="bb22">'
         self.transcript(typed(f"compare {first} with {second} please", at(9)))
 
-        session = self.only_session()
+        (prompt,) = self.only_session().prompts
 
-        self.assertEqual([prompt.text for prompt in session.prompts], ["compare with please"])
-        self.assertEqual(session.left_out.pasted_blocks, 2)
+        self.assertEqual(prompt.text, "compare with please")
+        self.assertEqual(prompt.pasted, ("first", "second"))
+
+    def test_a_paste_gets_the_room_the_typed_text_leaves_and_pushes_out_no_typed_word(self) -> None:
+        """Covers: B113"""
+        typed_words = "word " * 300
+        paste = f'<pasted_content id="aa11">{"pasted " * 300}</pasted_content id="aa11">'
+        later = '<pasted_content id="bb22">never reached</pasted_content id="bb22">'
+        self.transcript(typed(f"{paste} {typed_words} {later}", at(9)))
+
+        (prompt,) = self.only_session().prompts
+
+        self.assertEqual(prompt.text, typed_words.strip())
+        self.assertEqual(len(prompt.text) + sum(len(text) for text in prompt.pasted), sessions.PROMPT_LENGTH)
+        self.assertEqual(len(prompt.pasted), 1)
+        self.assertTrue(prompt.pasted[0].startswith("pasted pasted"))
+
+    def test_typed_text_that_fills_the_prompt_leaves_a_paste_no_room(self) -> None:
+        """Covers: B113"""
+        paste = '<pasted_content id="aa11">Kim Lee runs IT</pasted_content id="aa11">'
+        self.transcript(typed(f"{'word ' * 500} {paste}", at(9)))
+
+        (prompt,) = self.only_session().prompts
+
+        self.assertEqual(len(prompt.text), sessions.PROMPT_LENGTH)
+        self.assertEqual(prompt.pasted, ())
+
+    def test_a_credential_in_pasted_text_is_redacted_like_one_that_was_typed(self) -> None:
+        """Covers: B113"""
+        paste = '<pasted_content id="aa11">export API_TOKEN=sk-live-9f8e7d6c5b4a3f2e1d0c</pasted_content id="aa11">'
+        self.transcript(typed(f"why does this fail? {paste}", at(9)))
+
+        (prompt,) = self.only_session().prompts
+
+        self.assertNotIn("9f8e7d6c5b4a3f2e1d0c", "".join(prompt.pasted))
+
+    def test_what_claude_code_writes_into_a_prompt_is_taken_out_of_pasted_text_too(self) -> None:
+        """Covers: B113"""
+        reminder = "<system-reminder>The file notes.md changed: Kim Lee moved to Globex.</system-reminder>"
+        paste = f'<pasted_content id="aa11">Sam owes 40 euros {reminder}</pasted_content id="aa11">'
+        self.transcript(typed(f"see {paste}", at(9)))
+
+        (prompt,) = self.only_session().prompts
+
+        self.assertEqual(prompt.pasted, ("Sam owes 40 euros",))
+
+    def test_after_a_paste_without_its_end_everything_is_that_paste_a_later_block_too(self) -> None:
+        """Covers: B113"""
+        later = '<pasted_content id="bb22">second</pasted_content id="bb22">'
+        self.transcript(typed(f'before <pasted_content id="aa11">first {later} after', at(9)))
+
+        (prompt,) = self.only_session().prompts
+
+        self.assertEqual(prompt.text, "before")
+        self.assertEqual(prompt.pasted, (f"first {later} after",))
+
+    def test_a_paste_inside_a_block_claude_code_wrote_goes_with_that_block(self) -> None:
+        """Covers: B113"""
+        paste = '<pasted_content id="aa11">Kim Lee moved to Globex</pasted_content id="aa11">'
+        self.transcript(typed(f"build the shed door <system-reminder>the hook saw: {paste}</system-reminder>", at(9)))
+
+        (prompt,) = self.only_session().prompts
+
+        self.assertEqual((prompt.text, prompt.pasted), ("build the shed door", ()))
+
+    def test_an_opening_tag_of_claude_codes_inside_a_paste_takes_nothing_typed_with_it(self) -> None:
+        """Covers: B113"""
+        paste = '<pasted_content id="aa11">a log that breaks off: <system-reminder>the date</pasted_content id="aa11">'
+        reminder = "<system-reminder>The file notes.md changed.</system-reminder>"
+        self.transcript(typed(f"why does this fail? {paste} Sam owes 40 euros {reminder}", at(9)))
+
+        (prompt,) = self.only_session().prompts
+
+        self.assertEqual(prompt.text, "why does this fail? Sam owes 40 euros")
+        self.assertEqual(prompt.pasted, ("a log that breaks off: <system-reminder>the date",))
+
+    def test_an_opening_tag_of_claude_codes_without_its_end_is_text(self) -> None:
+        self.transcript(typed("what does <system-reminder> mean in a transcript?", at(9)))
+
+        self.assertEqual(self.texts(), ["what does <system-reminder> mean in a transcript?"])
+
+    def test_a_closing_tag_of_claude_codes_inside_a_paste_ends_no_block_that_opened_in_what_was_typed(self) -> None:
+        """Covers: B113"""
+        paste = (
+            '<pasted_content id="a1">an agent answered: </system-reminder> '
+            'Quinn Ray is my accountant and gets every invoice</pasted_content id="a1">'
+        )
+        self.transcript(typed(f"why does <system-reminder> show up here? {paste} thanks", at(9)))
+
+        (prompt,) = self.only_session().prompts
+
+        self.assertEqual(prompt.text, "why does <system-reminder> show up here? thanks")
+        self.assertEqual(
+            prompt.pasted, ("an agent answered: </system-reminder> Quinn Ray is my accountant and gets every invoice",)
+        )
+
+    def test_a_block_claude_code_wrote_ends_behind_a_paste_it_holds_not_at_a_closing_tag_inside_it(self) -> None:
+        """Covers: B113"""
+        paste = pasted_block("a log: </system-reminder> Kim Lee moved")
+        reminder = f"<system-reminder>the hook saw {paste} today</system-reminder>"
+        self.transcript(typed(f"build the door {reminder} please", at(9)))
+
+        (prompt,) = self.only_session().prompts
+
+        self.assertEqual((prompt.text, prompt.pasted), ("build the door please", ()))
+
+    def test_a_value_pasted_right_after_a_typed_name_of_a_credential_is_redacted(self) -> None:
+        """Covers: B113"""
+        paste = '<pasted_content id="a1">hunter2\nand a second line</pasted_content id="a1">'
+        plain = '<pasted_content id="b2">hunter2\nand a second line</pasted_content id="b2">'
+        self.transcript(typed(f"the password is {paste}", at(9)), typed(f"look at this {plain}", at(10)))
+
+        named, unnamed = self.only_session().prompts
+
+        self.assertEqual(named.pasted, ("[removed] and a second line",))
+        self.assertEqual(unnamed.pasted, ("hunter2 and a second line",))
+
+    def test_opening_tags_of_claude_codes_that_never_close_are_all_text(self) -> None:
+        many = "what is <system-reminder> for? " * 50
+
+        self.transcript(typed(many, at(9)))
+
+        self.assertEqual(self.texts(), [many.strip()])
+
+    def test_a_value_pasted_behind_a_typed_start_of_a_credential_goes_however_the_two_are_joined(self) -> None:
+        for before, value in (
+            ('export DB_PASSWORD="', "hunter2"),
+            ("curl -u admin:", "hunter2 https://example.org"),
+            ("Authorization: Bearer ", "abc123def"),
+            ("the token: ", "\nhunter2 and more"),
+            ("psql https://admin:", "hunter2@db.example.org now"),
+        ):
+            with self.subTest(before=before):
+                pasted = sessions._pasted(f"{before}{pasted_block(value)}")
+
+                self.assertNotIn(value.split()[0], "".join(pasted))
+
+    def test_a_paste_keeps_its_first_word_where_the_text_typed_before_it_names_no_credential(self) -> None:
+        # The last one: the name of a credential stands where the look back at the typed text begins,
+        # as the end of another word.
+        far_back = f"long text xpassword for {'a' * 70} {'b' * 70} {'c' * 41} is "
+        for before, paste in (
+            ("look at this ", "hunter2 here"),
+            ("my token ", "hunter2 here"),
+            ("git push -u origin ", "hunter2 here"),
+            ("see https://a:b@example.org and ", "hunter2 here"),
+            ("Bearer ", "tokens are explained in RFC 6750"),
+            ("Release2026abcdef", "notes for today"),
+            (far_back, "hello world"),
+        ):
+            with self.subTest(before=before):
+                self.assertEqual(sessions._pasted(f"{before}{pasted_block(paste)}"), [paste])
+
+    def test_only_the_paste_right_behind_a_typed_name_of_a_credential_loses_its_first_word(self) -> None:
+        text = f"the password: {pasted_block('hunter2 one')}{pasted_block('second two', 'b2')}"
+
+        self.assertEqual(sessions._pasted(text), ["[removed] one", "second two"])
+
+    def test_a_paste_ends_at_its_own_closing_tag_whatever_characters_the_prompt_holds(self) -> None:
+        """Covers: B113"""
+        almost = '</pasted_content\x00id="a1">'
+        paste = pasted_block(f"a dump {almost} Quinn Ray is my accountant")
+        self.transcript(typed(f"what\x00 is this? {paste} thanks", at(9)))
+
+        (prompt,) = self.only_session().prompts
+
+        self.assertEqual(prompt.text, "what\x00 is this? thanks")
+        self.assertEqual(prompt.pasted, (f"a dump {almost} Quinn Ray is my accountant",))
+
+    def test_a_prompt_with_every_character_a_paste_is_marked_with_has_no_paste_read(self) -> None:
+        marks = "".join(chr(code) for code in range(9))
+        self.transcript(typed(f"a dump {marks} {pasted_block('Kim Lee runs IT')} thanks", at(9)))
+
+        (prompt,) = self.only_session().prompts
+
+        self.assertEqual((prompt.text, prompt.pasted), (f"a dump {marks} thanks", ()))
+
+    def test_a_paste_without_its_end_inside_a_block_claude_code_wrote_goes_with_that_block(self) -> None:
+        """Covers: B113"""
+        earlier = pasted_block("Kim Lee moved to Globex")
+        reminder = f'<system-reminder>a hook saw {earlier} and <pasted_content id="b2"> there</system-reminder>'
+        self.transcript(typed(f"build the shed door {reminder} and paint it", at(9)))
+
+        (prompt,) = self.only_session().prompts
+
+        self.assertEqual(prompt.pasted, ())
+
+    def test_a_long_paste_full_of_opening_tags_that_never_close_is_read_from_its_start(self) -> None:
+        long_paste = "Kim Lee runs IT " + "<system-reminder> x " * 20_000
+        for name, paste in (("closed", pasted_block(long_paste)), ("open", f'<pasted_content id="a1">{long_paste}')):
+            with self.subTest(name):
+                (pasted,) = sessions._as_far_as_fits(sessions._pasted(f"see {paste}"), sessions.PROMPT_LENGTH)
+
+                self.assertTrue(pasted.startswith("Kim Lee runs IT <system-reminder> x"))
+                self.assertEqual(len(pasted), sessions.PROMPT_LENGTH)
+
+    def test_what_was_typed_is_what_the_reader_gave_before_it_kept_what_was_pasted(self) -> None:
+        """Covers: B113"""
+        pieces = (
+            "Dana",
+            "runs",
+            "IT",
+            " ",
+            " ",
+            "\n",
+            "<",
+            ">",
+            "x>",
+            "\x00",
+            "\x01",
+            '<pasted_content id="a1">',
+            '</pasted_content id="a1">',
+            '</pasted_content\x00id="a1">',
+            '<pasted_content id="b2">',
+            '</pasted_content id="b2">',
+            "<pasted_content>",
+            "</pasted_content>",
+            '<pasted_content id="a1"',
+            "<pasted_content",
+            "<pasted_content >",
+            "</pasted_content\x00>",
+            "<system-reminder>",
+            "</system-reminder>",
+            "<system-reminder",
+            '<system-reminder kind="x">',
+            "<task-notification>",
+            "</task-notification>",
+            "<local-command-stdout>",
+            "</local-command-stdout>",
+        )
+        random = Random(20261114)
+
+        def as_before(text: str) -> str:
+            text = re.sub(r"<pasted_content\b([^>]*)>.*?</pasted_content\1>", " ", text, flags=re.S)
+            text = re.sub(r"<pasted_content\b[^>]*>.*", " ", text, flags=re.S)
+            return claude_code.PROMPT_BLOCK.sub(" ", text)
+
+        for _ in range(4_000):
+            text = "".join(random.choice(pieces) for _ in range(random.randint(1, 24)))
+
+            self.assertEqual(sessions._typed(text), as_before(text), text)
+            # Each pasted text stands in the prompt as it was written, behind the one before it.
+            behind = 0
+            for paste in sessions._pasted(text):
+                self.assertIn(paste, text[behind:], text)
+                behind = text.index(paste, behind) + len(paste)
+
+    def test_a_paste_that_holds_nothing_is_no_prompt(self) -> None:
+        """Covers: B113"""
+        self.transcript(typed('<pasted_content id="ab12">   </pasted_content id="ab12">', at(9)))
+
+        self.assertEqual(self.read().sessions, ())
 
 
 class ClaudeCodesBlocksTest(SessionsFixture):
@@ -268,7 +527,7 @@ class NotThePersonTest(SessionsFixture):
         session = self.only_session()
 
         self.assertEqual([prompt.text for prompt in session.prompts], ["build the shed door"])
-        self.assertEqual(session.left_out, LeftOut(pasted_blocks=0, sent_by_others=4, suggested=0, unmarked=0))
+        self.assertEqual(session.left_out, LeftOut(sent_by_others=4, suggested=0, unmarked=0))
 
     def test_a_suggestion_the_person_only_accepted_is_left_out_and_counted(self) -> None:
         """Covers: B112"""

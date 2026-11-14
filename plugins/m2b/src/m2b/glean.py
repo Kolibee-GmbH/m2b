@@ -7,7 +7,8 @@ model gets, the form its answer must have, and two checks no instruction can rep
 
 The input is one JSON document: the distillate, so the model can leave out what is known already,
 the proposals of earlier readings the person kept and those they dropped (``Examples``), and per
-session its folder, its day and every prompt whole. A session is named by a small number, its
+session its folder, its day and every prompt whole, what was pasted into one apart from what was
+typed. A session is named by a small number, its
 place in the sequence the caller passes; the model repeats a number more reliably than an id, and
 ``parse_answer`` turns it back with the same sequence. JSON keeps a prompt one string whatever it
 holds, so no typed text can pass as another session or as the memory, and no example as a session.
@@ -18,7 +19,9 @@ proposal that quotes one stands in no prompt, and ``check`` refuses it like any 
 
 A proposal carries the words it stands on, its ``quote``. ``check`` keeps a proposal only when the
 quote stands, white space aside, in one prompt of the session it names, with at least
-``QUOTE_WORDS`` words: fewer show nothing. A proposal that fails is the model's wording and not
+``QUOTE_WORDS`` words: fewer show nothing. The quote stands in what the person typed or in one text
+they pasted into the prompt; ``check`` says which (``Proposal.source``), looking at what was typed
+first, so pasted words are never shown as said. A proposal that fails is the model's wording and not
 the person's; it is returned apart, so a caller can count it. The second check takes away what the
 person captured themselves in the same period: the quote stands in a capture, or a capture of at
 least ``QUOTE_WORDS`` words stands in the quote, case and the punctuation at the ends aside.
@@ -41,6 +44,7 @@ single proposal that is not in the form is left out and counted.
 
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import json
 import re
@@ -51,13 +55,16 @@ from typing import Any
 
 from m2b.notes.characters import unsafe_characters
 from m2b.notes.memory_index import MAX_TOPIC_NAME
-from m2b.sessions import Session
+from m2b.sessions import Prompt, Session
 
 PERSON = "person"
 AGREEMENT = "agreement"
 COMMITMENT = "commitment"
 PERSONAL = "personal"
 KINDS = (PERSON, AGREEMENT, COMMITMENT, PERSONAL)
+# Where in a prompt a proposal's quote stands. What was pasted may be anyone's words.
+TYPED = "typed"
+PASTED = "pasted"
 # A proposal is one fact or one task; a longer text is a summary, which nobody asked for.
 TEXT_LENGTH = 300
 QUOTE_WORDS = 3
@@ -87,6 +94,8 @@ class Proposal:
     session: str
     topic: str | None = None
     due: datetime.date | None = None
+    # Where the quote stands in that session; ``check`` finds it, the model is never asked.
+    source: str = TYPED
 
 
 @dataclass(frozen=True)
@@ -146,7 +155,7 @@ def step_input(
             "session": number,
             "folder": session.folder,
             "day": session.prompts[0].time.astimezone(zone).strftime("%A %Y-%m-%d"),
-            "prompts": [prompt.text for prompt in session.prompts],
+            "prompts": [_as_shown(prompt) for prompt in session.prompts],
         }
         for number, session in enumerate(sessions, start=1)
         if session.prompts
@@ -172,9 +181,16 @@ def parse_answer(answer: str, sessions: Sequence[Session]) -> Answer:
 
 
 def check(proposals: Sequence[Proposal], sessions: Sequence[Session], captures: Sequence[str]) -> Checked:
-    """Sorts the proposals by the two checks; ``captures`` are the texts captured in the period."""
-    typed = {
-        session.session_id: [(_collapsed(prompt.text), prompt.time) for prompt in session.prompts]
+    """Sorts the proposals by the two checks; ``captures`` are the texts captured in the period.
+
+    A kept proposal says where its quote stands (``Proposal.source``): in what was typed, or else
+    in what was pasted.
+    """
+    said = {
+        session.session_id: [
+            (prompt.time, _collapsed(prompt.text), [_collapsed(text) for text in prompt.pasted])
+            for prompt in session.prompts
+        ]
         for session in sessions
     }
     # Only a capture adds in brackets; what the person typed in brackets are words of their prompt.
@@ -185,15 +201,40 @@ def check(proposals: Sequence[Proposal], sessions: Sequence[Session], captures: 
     already_captured: list[Proposal] = []
     for proposal in proposals:
         quote = _collapsed(proposal.quote)
-        quoted_from = [(prompt, time) for prompt, time in typed.get(proposal.session, ()) if quote in prompt]
-        if len(quote.split()) < QUOTE_WORDS or not quoted_from:
+        stands_in = _where_it_stands(quote, said.get(proposal.session, ()))
+        if len(quote.split()) < QUOTE_WORDS or stands_in is None:
             not_quoted.append(proposal)
-        elif _is_captured(quote, [prompt for prompt, _ in quoted_from], captured):
+        elif _is_captured(quote, stands_in.texts, captured):
             already_captured.append(proposal)
         else:
-            kept.append(proposal)
-            kept_at.append(quoted_from[0][1])
+            kept.append(dataclasses.replace(proposal, source=stands_in.source))
+            kept_at.append(stands_in.first_at)
     return Checked(tuple(kept), tuple(not_quoted), tuple(already_captured), tuple(kept_at))
+
+
+@dataclass(frozen=True)
+class _StandsIn:
+    """Where a quote stands in a session: the texts that hold it and when the first was sent."""
+
+    source: str
+    texts: tuple[str, ...]
+    first_at: datetime.datetime
+
+
+def _where_it_stands(quote: str, prompts: Sequence[tuple[datetime.datetime, str, Sequence[str]]]) -> _StandsIn | None:
+    """In what was typed, or else in what was pasted; None when no prompt of the session holds the quote."""
+    typed = [(text, time) for time, text, _ in prompts if quote in text]
+    if typed:
+        return _StandsIn(TYPED, tuple(text for text, _ in typed), typed[0][1])
+    pasted = [(text, time) for time, _, texts in prompts for text in texts if quote in text]
+    if pasted:
+        return _StandsIn(PASTED, tuple(text for text, _ in pasted), pasted[0][1])
+    return None
+
+
+def _as_shown(prompt: Prompt) -> str | dict[str, Any]:
+    """A prompt as the model reads it: its text, or what was typed and what was pasted, kept apart."""
+    return {"typed": prompt.text, "pasted": list(prompt.pasted)} if prompt.pasted else prompt.text
 
 
 def _as_given(example: Example) -> dict[str, str]:

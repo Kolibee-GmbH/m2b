@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import unittest
 from pathlib import Path
@@ -83,6 +84,18 @@ class ListTest(ProposalsCommandTest):
             self.assertEqual([character for character in shown if ord(character) < 32 and character != "\n"], [])
             self.assertNotIn("\x9b", shown)
 
+    def test_a_proposal_that_stands_on_pasted_text_says_pasted_where_the_others_say_said(self) -> None:
+        """Covers: B172"""
+        self.proposed(DANA, dataclasses.replace(LADDER, source="pasted"))
+
+        code, out, _ = self.run_command("proposals")
+        listed = {entry["id"]: entry["source"] for entry in self.run_json("proposals")["proposals"]}
+
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertIn('  pasted on 2026-03-04: "I still have to call Sam"\n', out)
+        self.assertIn('  said on 2026-03-04: "Dana runs IT at Northwind"\n', out)
+        self.assertEqual(listed, {DANA_ID: "typed", LADDER_ID: "pasted"})
+
     def test_json_gives_the_same_for_a_client(self) -> None:
         """Covers: B122"""
         self.proposed(DANA, LADDER)
@@ -102,6 +115,7 @@ class ListTest(ProposalsCommandTest):
                         "day": "2026-03-04",
                         "topic": "Northwind",
                         "due": None,
+                        "source": "typed",
                     }
                 ],
                 "answered": 1,
@@ -152,7 +166,7 @@ class ListTest(ProposalsCommandTest):
     def test_a_proposals_file_a_newer_m2b_wrote_is_a_problem_the_person_can_act_on(self) -> None:
         target = self.store_root / proposals.PROPOSALS_FILE
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps({"format": 2, "proposals": {}}), encoding="utf-8")
+        target.write_text(json.dumps({"format": 3, "proposals": {}}), encoding="utf-8")
 
         code, out, err = self.run_command("proposals")
 

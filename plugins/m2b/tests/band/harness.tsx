@@ -41,6 +41,7 @@ export type FakeProposal = {
   day: string
   topic: string | null
   due: string | null
+  source?: string
   answer?: 'keep' | 'drop'
 }
 

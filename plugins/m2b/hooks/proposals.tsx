@@ -6,8 +6,8 @@ import { candidateRow } from './rows'
 
 /*
  * What a reading of the sessions proposed for the memory and still waits for an answer: one row in
- * the band with their number, and the m2b pane with each proposal, the person's own words beside
- * it, to keep or drop. Every text of a proposal is drawn written out, never cleaned: what the
+ * the band with their number, and the m2b pane with each proposal, the words it stands on beside
+ * it, said or pasted, to keep or drop. Every text of a proposal is drawn written out, never cleaned: what the
  * person keeps is what they were shown.
  */
 
@@ -23,6 +23,8 @@ export const PROPOSALS_PLACED = 'the proposals from your sessions are in the m2b
 export const KEEP_ALL = 'proposals:all'
 
 const NO_PROPOSALS: BandProposals = { waiting: [], answered: 0, error: null }
+// Where a quote stands when it was typed, as the core names it.
+const TYPED = 'typed'
 
 const OTHER_SHAPE = 'm2b answered something other than the proposals that wait'
 const NONE_WAITS = 'No proposal waits for an answer.'
@@ -63,7 +65,9 @@ function isProposal(value: unknown): value is BandProposal {
     typeof value['quote'] === 'string' &&
     typeof value['day'] === 'string' &&
     isTextOrNull(value['topic']) &&
-    isTextOrNull(value['due'])
+    isTextOrNull(value['due']) &&
+    // An m2b before the field names no source: the words were typed.
+    (value['source'] === undefined || typeof value['source'] === 'string')
   )
 }
 
@@ -96,7 +100,16 @@ export function parseProposals(part: unknown): BandProposals {
   if (!isObject(part) || !Array.isArray(part['proposals']) || !part['proposals'].every(isProposal) || !isCount(part['answered'])) {
     return { ...NO_PROPOSALS, error: OTHER_SHAPE }
   }
-  const waiting = part['proposals'].map(({ id, kind, text, quote, day, topic, due }) => ({ id, kind, text, quote, day, topic, due }))
+  const waiting = part['proposals'].map(({ id, kind, text, quote, day, topic, due, source }) => ({
+    id,
+    kind,
+    text,
+    quote,
+    day,
+    topic,
+    due,
+    source,
+  }))
   return { waiting, answered: part['answered'], error: null }
 }
 
@@ -120,8 +133,18 @@ function heading(proposal: BandProposal): string {
   return parts.join(', ')
 }
 
+// How the line under a proposal begins for the sources the band knows, as `m2b proposals` begins it.
+const LEADS = new Map([
+  [TYPED, 'said on'],
+  ['pasted', 'pasted on'],
+])
+
+/** Where the words a proposal stands on were found: typed words were said, pasted ones are named so. */
 function saidLine(proposal: BandProposal): string {
-  return `said on ${writtenOut(proposal.day)}: "${writtenOut(proposal.quote)}"`
+  // An answer of an m2b before the field, or one a band before it kept, names no source.
+  const source = proposal.source ?? TYPED
+  const lead = LEADS.get(source) ?? `from ${writtenOut(source)} on`
+  return `${lead} ${writtenOut(proposal.day)}: "${writtenOut(proposal.quote)}"`
 }
 
 function answeredLine(answered: number): string {

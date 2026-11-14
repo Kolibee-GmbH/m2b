@@ -145,7 +145,8 @@ arrows scroll a long review.
 
 `/m2b-proposals`, or `show` on the band's row, opens the m2b pane with what waits for your answer:
 each proposal with its text, what kind of thing it is (with the due day of a commitment and the
-topic, where it has one), your own words it was taken from and the day you said them.
+topic, where it has one), the words it was taken from and their day: `said on` before words you
+typed, `pasted on` before words from text you pasted into a prompt, which may be someone else's.
 
 ![The pane after /m2b-proposals: three proposals from the sessions, each with keep and drop, its kind, a due day for the commitment, and the words it was taken from with the day they were said; above them "keep all"](images/proposals.png)
 
@@ -311,7 +312,7 @@ one stands. Every open session asks about once a
 minute and after each of your turns, so the answer is shared between sessions for 55 seconds in
 `~/.local/state/m2b/band-view.json`; an answer of a shape the band does not know, or stamped later
 than now, is not used. However many turns end while `m2b` is slow, at most one more refresh waits.
-That folder holds titles, findings and the proposals with your words, so m2b keeps it readable by
+That folder holds titles, findings and the proposals with the words they stand on, so m2b keeps it readable by
 you only. At each session start
 it writes `~/.local/state/m2b/band-seen.json`, which `m2b doctor` reads. Apart from keep and drop, which
 change that one task in your task list (with the `markdown` backend, its file in `tasks/` of the

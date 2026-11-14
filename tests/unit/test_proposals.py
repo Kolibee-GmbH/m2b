@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 from m2b import proposals
 from m2b.config.errors import ConfigError
@@ -138,6 +139,104 @@ class KeepingTest(ProposalsFixture):
         self.assertRegex(proposals.proposal_id(DANA), r"\A[0-9a-f]{12}\Z")
         self.assertEqual(proposals.proposal_id(same_words), proposals.proposal_id(DANA))
         self.assertNotEqual(proposals.proposal_id(other_session), proposals.proposal_id(DANA))
+
+
+class SourceTest(ProposalsFixture):
+    PASTED = dataclasses.replace(DANA, source="pasted")
+    PASTED_LADDER = dataclasses.replace(LADDER, source="pasted")
+
+    def test_a_proposal_from_pasted_text_is_written_with_its_source_and_read_back_with_it(self) -> None:
+        """Covers: B172"""
+        self.kept(self.PASTED)
+
+        (written,) = self.written()["proposals"].values()
+        (loaded,) = proposals.load(self.store).entries.values()
+
+        self.assertEqual(written["source"], "pasted")
+        self.assertEqual(loaded.source, "pasted")
+
+    def test_a_proposal_from_typed_words_is_written_as_before_the_source_was_known(self) -> None:
+        """Covers: B172"""
+        self.kept(DANA)
+
+        (written,) = self.written()["proposals"].values()
+
+        self.assertEqual(sorted(written), ["day", "due", "kind", "quote", "since", "state", "text", "topic"])
+        self.assertEqual(self.written()["format"], 1)
+
+    def test_a_file_with_a_proposal_from_pasted_text_has_a_format_an_m2b_before_the_source_refuses(self) -> None:
+        """Covers: B172"""
+        self.kept(DANA)
+        without = self.written()["format"]
+        self.kept(self.PASTED_LADDER)
+        with_pasted = self.written()["format"]
+
+        with (
+            mock.patch.object(proposals, "FORMAT", proposals.FORMAT_WITHOUT_SOURCE),
+            self.assertRaises(proposals.ProposalsError) as refused,
+        ):
+            proposals.load(self.store)
+
+        self.assertEqual((without, with_pasted), (1, 2))
+        self.assertIn("update m2b on this machine", str(refused.exception))
+
+    def test_once_no_proposal_from_pasted_text_is_left_the_file_has_the_earlier_format_again(self) -> None:
+        """Covers: B172"""
+        self.kept(self.PASTED_LADDER)
+        (key,) = self.written()["proposals"]
+        self.settle(key, proposals.DROPPED, NOW - datetime.timedelta(days=91))
+
+        self.kept(DANA)
+
+        self.assertEqual(self.written()["format"], 1)
+        self.assertEqual([entry.source for entry in proposals.load(self.store).entries.values()], ["typed"])
+
+    def test_an_entry_without_a_source_was_typed(self) -> None:
+        """Covers: B172"""
+        self.kept(DANA)
+
+        (loaded,) = proposals.load(self.store).entries.values()
+
+        self.assertEqual(loaded.source, "typed")
+
+    def test_a_source_this_m2b_does_not_know_is_kept_as_written_and_named_in_the_line(self) -> None:
+        """Covers: B172"""
+        self.kept(DANA)
+        raw = self.written()
+        (key,) = raw["proposals"]
+        raw["proposals"][key]["source"] = "tool"
+        self.write(raw)
+
+        (loaded,) = proposals.load(self.store).entries.values()
+        proposals.save(self.store, proposals.load(self.store))
+
+        self.assertEqual(loaded.source, "tool")
+        self.assertEqual(self.written()["proposals"][key]["source"], "tool")
+        self.assertEqual(
+            proposals.said_line(loaded, loaded.quote), 'from tool on 2026-03-04: "Dana runs IT at Northwind"'
+        )
+
+    def test_an_entry_whose_source_is_no_word_is_left_out(self) -> None:
+        self.kept(DANA)
+        for source in (7, None, "", "Two Words", "x" * 21, "on\nits own line"):
+            with self.subTest(source=source):
+                raw = self.written()
+                (key,) = raw["proposals"]
+                raw["proposals"][key]["source"] = source
+                self.write(raw)
+
+                self.assertEqual(dict(proposals.load(self.store).entries), {})
+
+    def test_the_line_under_a_proposal_says_said_for_typed_words_and_pasted_for_pasted_ones(self) -> None:
+        """Covers: B172"""
+        self.kept(DANA, dataclasses.replace(LADDER, source="pasted"))
+        lines = {
+            entry.source: proposals.said_line(entry, entry.quote)
+            for entry in proposals.load(self.store).entries.values()
+        }
+
+        self.assertEqual(lines["typed"], 'said on 2026-03-04: "Dana runs IT at Northwind"')
+        self.assertTrue(lines["pasted"].startswith("pasted on 2026-03-04: "))
 
 
 class RefusingTest(ProposalsFixture):
@@ -549,9 +648,9 @@ class UnreadableFileTest(ProposalsFixture):
         self.assertEqual(loaded.entries["aaaaaaaaaaaa"].since, datetime.datetime(2026, 3, 4, 3, tzinfo=UTC))
 
     def test_a_file_a_newer_m2b_wrote_is_not_read_so_it_is_not_written_over(self) -> None:
-        self.write({"format": 2, "proposals": {}})
+        self.write({"format": 3, "proposals": {}})
 
-        with self.assertRaisesRegex(proposals.ProposalsError, "format 2.*update m2b"):
+        with self.assertRaisesRegex(proposals.ProposalsError, "format 3.*update m2b"):
             proposals.load(self.store)
 
     def test_a_file_that_is_not_json_is_an_error_not_a_store_without_proposals(self) -> None:

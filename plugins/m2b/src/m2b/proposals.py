@@ -31,7 +31,10 @@ nothing. A proposal with the text of an open one, or of one settled within the 9
 as well: the same fact said in two sessions is one proposal.
 
 Only the curation run writes the file, as it does ``candidates.json``. A file a newer m2b wrote is
-not read, so this one never writes over what it does not know.
+not read, so this one never writes over what it does not know. That is why a file with a proposal
+whose words were not typed carries a format of its own (``FORMAT``): an m2b before the source
+would show such a proposal as said and write it back without the field. A file without one keeps
+the format that m2b reads (``FORMAT_WITHOUT_SOURCE``).
 """
 
 from __future__ import annotations
@@ -47,12 +50,14 @@ from typing import Any
 from m2b.candidates import REMEMBER_DROPPED as REMEMBER_SETTLED
 from m2b.candidates import same_text
 from m2b.config.json_file import read_store_json_object, write_store_json_object
-from m2b.glean import KINDS, Example, Examples, Proposal
+from m2b.glean import KINDS, PASTED, TYPED, Example, Examples, Proposal
 from m2b.notes.layout import STATE
 from m2b.store.base import Store
 
 PROPOSALS_FILE = f"{STATE}/core/proposals.json"
-FORMAT = 1
+FORMAT = 2
+# What an m2b before a proposal had a source wrote and reads.
+FORMAT_WITHOUT_SOURCE = 1
 OPEN = "open"
 KEPT = "kept"
 DROPPED = "dropped"
@@ -66,6 +71,8 @@ KEEP_RATE_PERIOD = datetime.timedelta(days=30)
 EXAMPLES_OF_EACH = 30
 ID_LENGTH = 12
 _ID = re.compile(rf"[0-9a-f]{{{ID_LENGTH}}}")
+# A source is a word; one this m2b does not know is shown as written (``said_line``).
+_SOURCE = re.compile(r"[a-z][a-z-]{0,19}")
 
 
 class ProposalsError(Exception):
@@ -76,7 +83,7 @@ class ProposalsError(Exception):
 class Entry:
     kind: str
     text: str
-    # The person's own words the proposal stands on.
+    # The words of the session the proposal stands on, typed or pasted (``source``).
     quote: str
     # The day the person said them, where they are.
     day: datetime.date
@@ -85,6 +92,8 @@ class Entry:
     since: datetime.datetime
     topic: str | None = None
     due: datetime.date | None = None
+    # Where in the session the quote stands: what was typed, or something else, such as pasted text.
+    source: str = TYPED
 
 
 @dataclass(frozen=True)
@@ -200,13 +209,18 @@ def save(store: Store, proposals: Proposals) -> None:
         store,
         PROPOSALS_FILE,
         {
-            "format": FORMAT,
+            "format": _format_of(proposals.entries.values()),
             "read_until": proposals.read_until.isoformat() if proposals.read_until else None,
             "announced_until": proposals.announced_until.isoformat() if proposals.announced_until else None,
             "counts": {kind: dataclasses.asdict(proposals.tally(kind)) for kind in KINDS},
             "proposals": {key: _as_json(entry) for key, entry in sorted(proposals.entries.items())},
         },
     )
+
+
+def _format_of(entries: Collection[Entry]) -> int:
+    """The format the file needs: the one before the source while every proposal's words were typed."""
+    return FORMAT_WITHOUT_SOURCE if all(entry.source == TYPED for entry in entries) else FORMAT
 
 
 def add(current: Proposals, found: Sequence[Said], now: datetime.datetime) -> Added:
@@ -228,7 +242,15 @@ def add(current: Proposals, found: Sequence[Said], now: datetime.datetime) -> Ad
             continue
         proposal = said.proposal
         entries[key] = Entry(
-            proposal.kind, proposal.text, proposal.quote, said.day, OPEN, now, proposal.topic, proposal.due
+            proposal.kind,
+            proposal.text,
+            proposal.quote,
+            said.day,
+            OPEN,
+            now,
+            proposal.topic,
+            proposal.due,
+            proposal.source,
         )
         counts = _counted(counts, proposal.kind, "proposed")
         added += 1
@@ -339,6 +361,8 @@ def _entry(value: object) -> Entry | None:
         return None
     kind, text, quote, state = (value.get(name) for name in ("kind", "text", "quote", "state"))
     topic = value.get("topic")
+    # Without the field the words were typed: an m2b before it read nothing else.
+    source = value.get("source", TYPED)
     since = _moment(value.get("since"))
     try:
         day = _day(value.get("day"))
@@ -351,7 +375,9 @@ def _entry(value: object) -> Entry | None:
         return None
     if not all(_can_be_written(part) for part in (text, quote, topic or "")):
         return None
-    return Entry(kind, text, quote, day, state, since, topic, due)
+    if not isinstance(source, str) or not _SOURCE.fullmatch(source):
+        return None
+    return Entry(kind, text, quote, day, state, since, topic, due, source)
 
 
 def _can_be_written(text: str) -> bool:
@@ -368,7 +394,7 @@ def _can_be_written(text: str) -> bool:
 
 
 def _as_json(entry: Entry) -> dict[str, Any]:
-    return {
+    written = {
         "kind": entry.kind,
         "text": entry.text,
         "quote": entry.quote,
@@ -378,6 +404,20 @@ def _as_json(entry: Entry) -> dict[str, Any]:
         "state": entry.state,
         "since": entry.since.isoformat(),
     }
+    # Written only where the words were not typed, so the file of a store without such a proposal
+    # is the one an m2b before the field wrote (``_format_of``).
+    return written if entry.source == TYPED else {**written, "source": entry.source}
+
+
+def said_line(entry: Entry, quote: str) -> str:
+    """The line under a proposal that says whose words it stands on: ``said on <day>: "<quote>"``.
+
+    ``quote`` is the entry's quote as the caller shows text. Typed words were said; pasted ones
+    are named as pasted, and a source this m2b does not know by its name.
+    """
+    leads = {TYPED: "said on", PASTED: "pasted on"}
+    lead = leads.get(entry.source, f"from {entry.source} on")
+    return f'{lead} {entry.day.isoformat()}: "{quote}"'
 
 
 def _day(value: object) -> datetime.date | None:
