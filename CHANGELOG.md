@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-14
+
+One fix needs a step from you. If the `.git` in your store folder is a file, because you keep
+its repository outside a synced folder, name that repository once on the curating machine after
+the update, or its runs stop committing: `m2b config set curation.git_directory <path>`;
+`m2b doctor` shows the path in its line `store-git`. The third entry says why, and what to do
+where `.git` is a symlink.
+
 ### Fixed
 
 - A symlink in the store is never read or followed. Until now a symlink to a file was read like
@@ -26,9 +34,11 @@ All notable changes to this project are documented here. The format follows
   every file that changed while the run ran, so a capture that was taken or synced in during those
   minutes and still waited in `inbox/` at the end was in it as a new file. `git revert` on that
   commit deleted it from the store folder, and a sync service carried the deletion to every
-  device; the text stayed in git. Now a file that came into `inbox/` during a run and still lies
-  there stays out of the run's commit. It shows as untracked until the next run commits it before
-  its first step, like every capture git does not know yet
+  device; the text stayed in git. Now a capture that came into `inbox/` during a run and still
+  lies there stays out of the run's commit. It shows as untracked until the next run commits it
+  before its first step, like every capture git does not know yet. What the run adds to a capture
+  that was there when it began still goes in: the new name it gave it, and the note and the
+  reading copy it put beside a picture or a PDF
   ([A commit per run](docs/curation.md#a-commit-per-run),
   [#23](https://github.com/Kolibee-GmbH/m2b/pull/23)).
 - A run follows a `.git` file in the store folder only to the git directory this machine's
@@ -42,7 +52,9 @@ All notable changes to this project are documented here. The format follows
   `m2b config set curation.git_directory <path>`; `m2b doctor` shows the path the file holds in
   its line `store-git`. The directory must lie outside the store folder; one inside it, or
   reached through a link in it, is refused, because it would be as open to every writer of the
-  store as the file is. A `.git` folder in the store folder needs nothing
+  store as the file is. A `.git` folder in the store folder needs nothing. A `.git` that is a
+  symlink is no longer followed, and runs stop committing there too: put a `.git` file with the
+  line `gitdir: <path>` in its place and name the directory as above
   ([A commit per run](docs/curation.md#a-commit-per-run),
   [#23](https://github.com/Kolibee-GmbH/m2b/pull/23)).
 - No git that m2b starts reaches a remote or starts a program a repository names for signatures.
@@ -60,13 +72,14 @@ All notable changes to this project are documented here. The format follows
   bytes reaches a text as half a character, which cannot be written: a commit that failed over
   such a file name kept the run record from being written, and `m2b doctor` ended in an error
   where it should have named the cause. Such a character is now written as `?` in the run
-  record, the review task and the run's notes on the machine, and printed as `?` by `m2b`.
+  record, the review task and the run's notes on the machine, and printed as `?` in what `m2b`
+  prints to standard output; an error message shows it escaped, like `\udcff`.
   Filing a capture whose own name is no UTF-8, which Linux allows and macOS does not, is not
   covered by this
   ([#23](https://github.com/Kolibee-GmbH/m2b/pull/23)).
-- The worklog reads a commit whose author time has no offset from UTC on Python 3.9 too. git
-  writes such a time with a `Z`, which that Python does not read, so the commit was left out of
-  the day ([#23](https://github.com/Kolibee-GmbH/m2b/pull/23)).
+- The worklog reads a commit whose author time has no offset from UTC on Python 3.9 and 3.10
+  too. git writes such a time with a `Z`, which Python reads only from 3.11 on, so the commit was
+  left out of the day ([#23](https://github.com/Kolibee-GmbH/m2b/pull/23)).
 
 ## [0.4.2] - 2026-11-13
 
