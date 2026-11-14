@@ -8,8 +8,9 @@ allowed-tools: Bash(m2b-worklog facts *)
 
 The worklog collected the facts of one period: the owner's sessions with their working blocks,
 prompts, commits and state. You judge them; a program writes the note and the ledger from your
-verdict. You read through the commands below and the files under `<store>/memory/` and
-`<store>/inbox/`, and you write and read one file of your own: the verdict. Nothing else.
+verdict. You read through the commands below, the file of facts the first one names and the files
+under `<store>/memory/` and `<store>/inbox/`, and you write and read one file of your own: the
+verdict. Nothing else.
 
 Run every command as a Bash call of its own, exactly as shown: no `&&`, `;`, `|`, `echo` or
 redirection. The run allows each command by itself and denies anything chained.
@@ -32,7 +33,13 @@ If it fails with "no worklog is being judged", you were asked in an ordinary ses
 the worklog is written once a day by the curation run, before the inbox is filed, and stop.
 
 The answer has `store` (the store's folder), `language` (write every topic, detail and note in
-this language), `verdict_file` (where you write the verdict) and `facts`. In `facts`:
+this language), `verdict_file` (where you write the verdict), `facts_file` and `lines`. The facts
+are in the file at `facts_file`, which has `lines` lines: read all of it with the Read tool. When
+one Read does not return the whole file, read on from the line where it stopped, with `offset`
+and `limit`, until you have read line `lines`. A session you have not read you cannot judge, and
+a verdict that leaves one out is refused.
+
+The file is one JSON object: `store`, `language` and `verdict_file` again, and `facts`. In `facts`:
 
 - `period`: the start and end of what you judge.
 - `sources`: each source and whether it could be read. A source that could not be read means

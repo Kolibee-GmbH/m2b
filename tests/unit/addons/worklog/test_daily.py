@@ -196,6 +196,7 @@ class WriteTest(DailyFixture):
                 "Read(<store>/memory/**)",
                 "Read(<store>/inbox/**)",
                 "Bash(m2b-worklog verdict)",
+                f"Read(/{self.paths.run_dir / 'facts.json'})",
                 f"Read(/{self.paths.run_dir / 'verdict-draft.json'})",
                 f"Edit(/{self.paths.run_dir / 'verdict-draft.json'})",
             ),
@@ -1062,7 +1063,8 @@ else:
         handed = self.command("facts", "--json")
         hand_in(self.paths, {})
         refused = self.command("verdict")
-        hand_in(self.paths, judged(json.loads(handed.stdout)["facts"]))
+        facts_file = Path(json.loads(handed.stdout)["facts_file"])
+        hand_in(self.paths, judged(json.loads(facts_file.read_text(encoding="utf-8"))["facts"]))
         accepted = self.command("verdict")
 
         self.assertEqual(failed.returncode, 1)
@@ -1074,6 +1076,42 @@ else:
         self.assertEqual(refused.returncode, 1)
         self.assertIn("- $: version is missing", refused.stderr)
         self.assertEqual((accepted.returncode, accepted.stdout), (0, "verdict accepted\n"))
+
+    def test_facts_names_the_file_and_answers_as_briefly_however_much_the_period_holds(self) -> None:
+        """Covers: B171"""
+        self.launcher()
+        self.a_due_day()
+        collected = json.loads(self.command("collect", "--now", NOW.isoformat()).stdout)
+        (session,) = collected["sessions"]
+        # A separator Python reads as the end of a line and a reader of the file does not.
+        many = [{**session, "key": f"{session['key']}-{number}", "label": "left\u2028right"} for number in range(400)]
+        a_long_period = {**collected, "sessions": many}
+
+        daily.hand_to_model(self.paths, self.store, "en", collected)
+        of_a_day = json.loads(self.command("facts", "--json").stdout)
+        daily.hand_to_model(self.paths, self.store, "en", a_long_period)
+        answered = self.command("facts", "--json")
+        of_a_long_period = json.loads(answered.stdout)
+
+        facts_file = self.paths.run_dir / "facts.json"
+        held = facts_file.read_text(encoding="utf-8")
+        self.assertGreater(len(held), 200_000)
+        self.assertLess(len(answered.stdout), 1_000)
+        self.assertEqual(
+            of_a_long_period,
+            {
+                "store": str(self.store),
+                "language": "en",
+                "verdict_file": str(self.paths.verdict_draft),
+                "facts_file": str(facts_file),
+                "lines": held.count("\n"),
+            },
+        )
+        self.assertTrue(held.endswith("\n"))
+        self.assertLess(held.count("\n"), len(held.splitlines()))
+        self.assertEqual(json.loads(held)["facts"], a_long_period)
+        self.assertEqual({**of_a_day, "lines": 0}, {**of_a_long_period, "lines": 0})
+        self.assertIn(f"Read(/{facts_file})", daily.verdict_rules(self.paths))
 
     def test_a_folder_with_an_apostrophe_is_judged_and_accepted(self) -> None:
         """Covers: B99"""

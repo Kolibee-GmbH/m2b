@@ -250,10 +250,10 @@ password for the db is [removed]"), the value of an assignment whose name holds 
 own, a passphrase of several words (only its first word goes), an option such as `-phunter2`, or a
 short value with no such name before it goes through. With the name, the whole value up to the
 next space goes, so the rest of a connection string after `AccountKey=` goes too. For work where
-that is not enough, see "Leaving work out". The facts wait in
+that is not enough, see "Leaving work out". The facts wait in a file in
 `~/.local/state/m2b/worklog-run/`, readable by you only, while the model step runs. Its model step, once a
-day, reads these facts and, to place a session, may read memory and the inbox notes and search the
-archive with `m2b search`. The transcripts are read from the `projects/` folder of Claude
+day, reads that file, in parts when the period was long, and, to place a session, may read memory
+and the inbox notes and search the archive with `m2b search`. The transcripts are read from the `projects/` folder of Claude
 Code's own folder: the one `CLAUDE_CONFIG_DIR` names, or `~/.claude` when that variable is not set.
 
 ## What it writes
@@ -263,7 +263,7 @@ Code's own folder: the one `CLAUDE_CONFIG_DIR` names, or `~/.claude` when that v
 | `~/.local/share/m2b/worklog-recorder/` | the recorder copy herdr links, outside the plugin's folder, which an update replaces, with `linked-version`, the version herdr last linked |
 | `~/.local/state/m2b/worklog/` | the recorder's events, one file per workspace, a workspace cache, the switch file `recording` (`on` or `off`), and in `alive/` the signs of life (one file per month), the time of the timer's first run (`first-tick`) and the herdr sockets the events came from (`sockets.json`) |
 | `~/Library/LaunchAgents/m2b.worklog-recorder.tick.plist` (macOS), `~/.config/systemd/user/m2b-worklog-recorder-tick.service` and `.timer` (Linux) | the timer that runs the recorder every five minutes |
-| `~/.local/state/m2b/worklog-run/` | while one worklog is being written: the facts, `verdict-draft.json`, which the model step writes and `m2b-worklog verdict` checks, and the accepted verdict |
+| `~/.local/state/m2b/worklog-run/` | while one worklog is being written: the facts in `facts.json`, which the model step reads, `verdict-draft.json`, which it writes and `m2b-worklog verdict` checks, and the accepted verdict |
 | `inbox/` in the store | the day's note, with `source: worklog` and `kind: worklog` |
 | `state/addons/worklog/` in the store | `ledger.json` (the record), `ledger.csv` and `ledger.xlsx` (rebuilt every day, not for editing), `watermark.json` (where the next period starts), `intent.json` (only while a worklog is being written, so a rerun after a crash finishes the same plan) |
 
