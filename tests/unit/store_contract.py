@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 import os
+import shutil
 import tempfile
 import types
 import unittest
@@ -12,8 +13,11 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-from m2b.store.base import EvictedFileError, PathOutsideStoreError, Store, StoreReadError
+from m2b.store import symlinks
+from m2b.store.base import EvictedFileError, PathOutsideStoreError, Scan, Store, StoreReadError, SymlinkError
 from m2b.store.guard import SF_DATALESS, DatalessGuard
+
+SECRET = b"OUTSIDE-SECRET\n"
 
 
 class FakeEviction:
@@ -173,6 +177,94 @@ class Contracts:
 
             self.assertEqual(self.store.check_local(["inbox"]), [])
             self.assertEqual(self.store.list_files("inbox", recursive=True), [])
+            self.assertEqual(self.store.scan("inbox"), Scan([], [], ["inbox/link", "inbox/loop"]))
+
+        def test_a_file_symlink_is_never_listed_and_never_read(self) -> None:
+            """Covers: B166"""
+            self._put("corpus/a.md", b"Dana likes maps.\n")
+            (self.root / "inbox" / "note.txt").symlink_to(self._outside_file())
+            (self.root / "inbox" / "inside.md").symlink_to(self.root / "corpus" / "a.md")
+            (self.root / "inbox" / "nowhere.md").symlink_to(self.root.parent / "missing.md")
+            links = ["inbox/inside.md", "inbox/note.txt", "inbox/nowhere.md"]
+
+            self.assertEqual(self.store.list_files("inbox"), [])
+            self.assertEqual(self.store.scan("inbox"), Scan([], [], links))
+            self._evict("inbox/note.txt")
+            self.assertEqual(self.store.check_local(["inbox", "inbox/note.txt"]), [])
+            for relative in links:
+                for read in (self.store.read_bytes, self.store.read_text):
+                    with self.subTest(relative=relative, read=read.__name__):
+                        with self.assertRaises(SymlinkError) as caught:
+                            read(relative)
+                        self.assertIn(f"{relative} is a symlink", str(caught.exception))
+
+        def test_a_path_through_a_folder_symlink_is_never_listed_and_never_read(self) -> None:
+            """Covers: B166"""
+            outside = self._outside_file().parent
+            (self.root / "inbox" / "scans").symlink_to(outside, target_is_directory=True)
+            (self.root / "memory").symlink_to(outside, target_is_directory=True)
+
+            for folder, behind in (("inbox/scans", "inbox/scans/secret.txt"), ("memory", "memory/secret.txt")):
+                with self.subTest(folder=folder):
+                    self.assertEqual(self.store.list_files(folder, recursive=True), [])
+                    self.assertEqual(self.store.scan(folder), Scan([], [], [folder]))
+                    self._evict(behind)
+                    self.assertEqual(self.store.check_local([folder, behind]), [])
+                    with self.assertRaises(SymlinkError) as caught:
+                        self.store.read_bytes(behind)
+                    self.assertIn(f"{folder} is a symlink", str(caught.exception))
+
+        def test_the_read_itself_refuses_a_symlink_so_none_can_be_slipped_in_after_a_check(self) -> None:
+            """Covers: B166"""
+            outside = self._outside_file()
+            (self.root / "inbox" / "note.txt").symlink_to(outside)
+            (self.root / "inbox" / "scans").symlink_to(outside.parent, target_is_directory=True)
+
+            for relative in ("inbox/note.txt", "inbox/scans/secret.txt"):
+                # As if the symlink had come after every check: the store is told there is none.
+                with (
+                    self.subTest(relative=relative),
+                    mock.patch.object(symlinks, "symlink_on", return_value=None),
+                    self.assertRaises(StoreReadError),
+                ):
+                    self.store.read_bytes(relative)
+
+        def test_nothing_is_written_or_deleted_through_a_folder_symlink(self) -> None:
+            """Covers: B166"""
+            outside = self._outside_file().parent
+            shutil.rmtree(self.root / "inbox")
+            (self.root / "inbox").symlink_to(outside, target_is_directory=True)
+
+            with self.assertRaises(SymlinkError):
+                self.store.create_exclusive("inbox/a.md", b"a capture")
+            with self.assertRaises(SymlinkError):
+                self.store.replace("inbox/secret.txt", b"overwritten")
+            with self.assertRaises(SymlinkError):
+                self.store.delete("inbox/secret.txt")
+
+            self.assertEqual({path.name: path.read_bytes() for path in outside.iterdir()}, {"secret.txt": SECRET})
+
+        def test_replacing_or_deleting_a_file_symlink_leaves_its_target_alone(self) -> None:
+            """Covers: B166"""
+            outside = self._outside_file()
+            (self.root / "memory").mkdir()
+            for name in ("memory/MEMORY.md", "memory/dana.md"):
+                (self.root / name).symlink_to(outside)
+
+            self.store.replace("memory/MEMORY.md", b"# Facts\n")
+            self.store.delete("memory/dana.md")
+
+            self.assertEqual(outside.read_bytes(), SECRET)
+            self.assertFalse((self.root / "memory" / "MEMORY.md").is_symlink())
+            self.assertEqual(self.store.read_bytes("memory/MEMORY.md"), b"# Facts\n")
+            self.assertEqual(self.store.list_files("memory"), ["memory/MEMORY.md"])
+
+        def _outside_file(self) -> Path:
+            """A file beside the store that no store path may reach."""
+            outside = self.root.parent / "outside" / "secret.txt"
+            outside.parent.mkdir()
+            outside.write_bytes(SECRET)
+            return outside
 
         def test_delete_removes_a_file_and_refuses_a_missing_one(self) -> None:
             self.store.create_exclusive("tasks/a1b2c3d4e5f6.md", b"x")

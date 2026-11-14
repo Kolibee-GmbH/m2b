@@ -25,13 +25,15 @@ from worklog_fixtures import PLUGIN_ROOT
 
 SESSION_START_COMMAND = '"${CLAUDE_PLUGIN_ROOT}"/bin/m2b-worklog hook session-start'
 # Each knowledge that must exist once: how credentials are found, what Claude Code writes into a
-# transcript, how a file is written whole into a synced folder, how an evicted file is told, which
-# remotes a folder's repository has, and which git starts without asking the person anything.
+# transcript, how a file is written whole into a synced folder, how an evicted file is told, how a
+# symlink in the store is told and a file read past none, which remotes a folder's repository has,
+# and which git starts without asking the person anything.
 IMPORTED_FROM_THE_CORE = (
     "redaction",
     "claude_code",
     "atomic_file",
     "store.guard",
+    "store.symlinks",
     "session_remotes",
     "git_program",
 )

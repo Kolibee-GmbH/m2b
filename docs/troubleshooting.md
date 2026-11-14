@@ -65,6 +65,9 @@ for a setup without a calendar.
   it is `m2b setup apply` ([Getting started](getting-started.md#from-the-command-line-without-claude-code)).
 - **Files "not downloaded".** iCloud Drive keeps them in the cloud ("Optimize Mac Storage").
   `m2b store fetch <path>` downloads them; m2b never reads them by accident.
+- **"is a symlink, and m2b follows none in the store".** A file or folder in the store is a link
+  to another place. m2b does not read it or write through it. Put the file or folder itself in
+  its place, or remove the link; the store's own folder may be a link.
 - **A run filed something wrong,** or the review task names a finding you do not know what to do
   with. [Correcting what a run filed](curation.md#correcting-what-a-run-filed).
 - **Something else.** Open an issue with the output of `m2b doctor` and `m2b --version`, and leave

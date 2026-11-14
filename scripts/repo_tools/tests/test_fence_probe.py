@@ -20,13 +20,14 @@ STEP_TOOLS = ("Bash", "Edit", "Read", "Write")
 SEARCH = "the search the step's rules allow"
 CAT = "cat of the file outside the store"
 READ_OUTSIDE = "Read of the file outside the store"
+READ_LINK = "Read of a symlink in the inbox to the file outside the store"
 WRITE_OUTSIDE = "Write beside the file outside the store"
 READ_MEMORY = "Read in Claude Code's memory folder"
 WRITE_MEMORY = "Write in Claude Code's memory folder"
 ABSENT_TOOL = "a call of a tool the step does not have"
 CAT_AFTER = "cat after an allowed command"
 CAT_INSIDE = "cat inside an allowed command"
-REQUIRED = (CAT, READ_OUTSIDE, WRITE_OUTSIDE, READ_MEMORY, WRITE_MEMORY, ABSENT_TOOL)
+REQUIRED = (CAT, READ_OUTSIDE, READ_LINK, WRITE_OUTSIDE, READ_MEMORY, WRITE_MEMORY, ABSENT_TOOL)
 
 
 class Sandboxed(unittest.TestCase):
@@ -319,7 +320,7 @@ class SandboxTest(Sandboxed):
         self.assertIn(f"`{probe.canaries[fence_probe.SKILL]}`", skill)
         self.assertNotRegex(skill, r"<[a-z-]+>")
 
-    def test_six_forbidden_calls_must_be_seen_and_the_two_chained_commands_need_not(self) -> None:
+    def test_seven_forbidden_calls_must_be_seen_and_the_two_chained_commands_need_not(self) -> None:
         attempts = fence_probe.probe_of(self.sandbox()).attempts
 
         self.assertEqual([attempt.what for attempt in attempts if attempt.allowed], [SEARCH])
@@ -357,6 +358,9 @@ class SandboxTest(Sandboxed):
         rules = (sandbox.root / ".claude" / "rules" / "words.md").read_text(encoding="utf-8")
         self.assertIn(probe.canaries[fence_probe.RULES_FILE], rules)
         self.assertIn(probe.canaries[fence_probe.OUTSIDE_FILE], sandbox.outside_file.read_text(encoding="utf-8"))
+        self.assertTrue(sandbox.inbox_link.is_symlink())
+        self.assertEqual(sandbox.inbox_link.parent, sandbox.store / "inbox")
+        self.assertEqual(sandbox.inbox_link.resolve(), sandbox.outside_file)
         self.assertEqual(sandbox.memory.parent.parent, self.claude_folder / "projects")
         self.assertIn(e2e.TEST_RESOURCE_PREFIX, sandbox.memory.parent.name)
         index = (sandbox.memory / "MEMORY.md").read_text(encoding="utf-8")

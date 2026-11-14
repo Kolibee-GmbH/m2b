@@ -378,7 +378,7 @@ def _layout(store: Store, tasks_backend: str) -> None:
     if tasks_backend == "markdown":
         folders.append(TASKS)
     for folder in folders:
-        store.path(folder).mkdir(parents=True, exist_ok=True)
+        store.make_folder(folder)
 
 
 def _launcher(

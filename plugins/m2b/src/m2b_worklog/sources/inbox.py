@@ -2,7 +2,8 @@
 
 Worklog notes (``source: worklog``) and harvested candidates (``source: candidate``) are the
 curator's own output, so they are never a source of the next worklog. A file that is not downloaded
-(evicted by iCloud Drive) is not opened, which could hang; the source counts it in its detail.
+(evicted by iCloud Drive) is not opened, which could hang; the source counts it in its detail. A
+symlink is no capture and is not opened, wherever it points, and an inbox that is one is not listed.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ import datetime
 from dataclasses import dataclass
 from pathlib import Path
 
-from m2b_worklog.files import is_evicted
+from m2b_worklog.files import is_evicted, read_in_store, symlink_in_store
 from m2b_worklog.sources import READ, SourceState
 
 INBOX = "inbox"
@@ -33,16 +34,21 @@ class InboxFacts:
 
 def read_inbox(store: Path, start: datetime.datetime, end: datetime.datetime) -> InboxFacts:
     folder = store / INBOX
+    if symlink_in_store(store, INBOX) is not None:
+        return InboxFacts([], SourceState.failed(f"{INBOX} is a symlink, and m2b follows none in the store"))
     if not folder.is_dir():
         return InboxFacts([], SourceState.failed(f"the store has no inbox at {folder}"))
     found = []
     evicted = 0
     try:
         for path in sorted(folder.glob("*.md")):
+            if path.is_symlink():
+                continue
             if is_evicted(path):
                 evicted += 1
                 continue
-            fields = _frontmatter(path.read_text(encoding="utf-8", errors="replace"))
+            # Opened past no symlink: one put there since the check above fails the read.
+            fields = _frontmatter(read_in_store(store, f"{INBOX}/{path.name}").decode("utf-8", errors="replace"))
             created = _time(fields.get("created"))
             source = fields.get("source", "")
             if created is None or source in NOT_SOURCES or not start <= created < end:

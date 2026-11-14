@@ -1,5 +1,6 @@
 """A stand-in for ``claude -p`` that treats the probe skill as Claude Code 2.1.322 did when it was
-measured on 2026-11-12, for the tests of the fence probe. It asks no model.
+measured on 2026-11-12, and its Read of a symlink out of the store as 2.1.325 did on 2026-11-14,
+for the tests of the fence probe. It asks no model.
 
 It reads the skill named by the prompt from the ``--plugin-dir``, makes the call of each numbered
 step, refuses what the real one refused and prints ``stream-json`` lines of the same shape:

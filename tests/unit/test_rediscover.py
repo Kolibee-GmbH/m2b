@@ -247,6 +247,20 @@ class RediscoverTest(RediscoverFixture):
         self.assertEqual([pick.why for pick in result.picks], [RANDOM])
         self.assertEqual([item.path for item in result.unreadable], ["memory/MEMORY.md"])
 
+    def test_a_distillate_that_is_a_symlink_is_listed_as_unreadable_and_the_picks_still_come(self) -> None:
+        """Covers: B166"""
+        self.note("corpus/2026/03/20260310T100000Z-cli-aaaa.md", "The shed roof.\n")
+        outside = self.root.parent / "outside.md"
+        outside.write_text("# Memory\n\n## Current\n\n- OUTSIDE-SECRET shed\n", encoding="utf-8")
+        (self.root / "memory").mkdir()
+        (self.root / "memory" / "MEMORY.md").symlink_to(outside)
+
+        result = self.run_it()
+
+        self.assertEqual([pick.why for pick in result.picks], [RANDOM])
+        self.assertEqual([item.path for item in result.unreadable], ["memory/MEMORY.md"])
+        self.assertIn("is a symlink", result.unreadable[0].reason)
+
     def test_an_empty_corpus_gives_no_picks(self) -> None:
         result = self.run_it()
 

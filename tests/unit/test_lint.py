@@ -74,6 +74,39 @@ class CleanStoreTest(LintFixture):
 
         self.assertEqual(self.findings(), [])
 
+    def test_a_symlink_anywhere_in_the_store_is_an_action_and_nothing_behind_it_is_read(self) -> None:
+        """Covers: B166"""
+        outside = self.root.parent / "outside"
+        outside.mkdir()
+        (outside / "20261103T081300Z-cli-d4e5.md").write_text("OUTSIDE-SECRET\n", encoding="utf-8")
+        (self.root / "inbox").mkdir()
+        (self.root / "inbox" / "note.txt").symlink_to(outside / "20261103T081300Z-cli-d4e5.md")
+        (self.root / "memory" / "robin.md").symlink_to(outside / "20261103T081300Z-cli-d4e5.md")
+        (self.root / "corpus" / "2026" / "10").symlink_to(outside, target_is_directory=True)
+        (self.root / "tasks").symlink_to(outside, target_is_directory=True)
+
+        findings = self.findings()
+
+        self.assertEqual(
+            [(finding.code, finding.kind, finding.path) for finding in findings],
+            [
+                ("symlink", report.ACTION, path)
+                for path in ("corpus/2026/10", "inbox/note.txt", "memory/robin.md", "tasks")
+            ],
+        )
+        self.assertIn("inbox/note.txt is a symlink", findings[1].text)
+        self.assertNotIn("OUTSIDE-SECRET", repr(findings))
+
+    def test_a_distillate_or_a_fact_file_that_is_a_symlink_is_one_finding_not_also_a_missing_file(self) -> None:
+        """Covers: B166"""
+        for name in ("MEMORY.md", "dana.md"):
+            (self.root / "memory" / name).rename(self.root.parent / name)
+            (self.root / "memory" / name).symlink_to(self.root.parent / name)
+
+        self.assertEqual(
+            self.codes(), [("symlink", report.ACTION, "memory/MEMORY.md"), ("symlink", report.ACTION, "memory/dana.md")]
+        )
+
     def test_an_excel_lock_file_beside_the_worklog_export_is_no_finding_and_stays(self) -> None:
         """Excel writes ~$<name> while the owner has the worklog's export open."""
         self.write("state/addons/worklog/ledger.xlsx", b"xlsx")

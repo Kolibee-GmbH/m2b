@@ -7,6 +7,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A symlink in the store is never read or followed. Until now a symlink to a file was read like
+  the file: one in `inbox/` that points at any file of the curating machine had its target's bytes
+  copied into a note by the next curation run, and one in the place of `memory/MEMORY.md` was
+  printed at every session start, with no model taking part. A symlink in the place of a folder,
+  `inbox/` itself for one, was entered the same way. Whoever can put a file into the store can put
+  a symlink there: a sync service brings what another device or an integration wrote. Now m2b
+  lists and reads no symlink below the store's folder and writes through no folder that is one, a
+  file is opened so that a symlink taking its place in that moment is not followed either, and
+  lint names each symlink in the review task. The store's folder itself may be a link. The
+  worklog's reading of the inbox keeps the same rule. `scripts/fence-probe` now also asks Claude
+  Code whether a step's Read of a symlink that leads out of the store is refused; with Claude Code
+  2.1.325 it was ([Security](SECURITY.md#untrusted-input),
+  [#23](https://github.com/Kolibee-GmbH/m2b/pull/23)).
+
 ## [0.4.2] - 2026-11-13
 
 ### Changed

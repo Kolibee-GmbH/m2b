@@ -10,7 +10,8 @@ In short:
 - **What a hostile note can do at most.** A capture written to steer the model that files it can
   put lines into your memory, create tasks in your list and move waiting captures into the archive
   with misleading notes. It cannot run another command, read outside the store or delete the
-  archive ([Untrusted input](#untrusted-input)).
+  archive, and a symlink someone puts into the store is not followed
+  ([Untrusted input](#untrusted-input)).
 - **The fence is Claude Code's permission system, not a sandbox of the operating system.** A model
   step runs from an empty folder, with only the commands and store paths its step lists; m2b's
   own commands run with your rights
@@ -69,6 +70,20 @@ run another command, read outside the store or delete the archive, but it can:
 - create tasks in your task list;
 - move its own and other waiting captures into the archive with misleading notes.
 
+Reading outside the store stays out of reach for whoever can put a file there, too: an
+integration, another device, a sync service. Below the store's folder m2b follows no symlink,
+whatever it points at. Its commands and hooks neither list nor read one and write through no
+folder that is one, so a symlink in `inbox/` is never filed and one in the place of
+`memory/MEMORY.md` is never printed at a session start; lint names each symlink in the review task
+until you remove it; like every listing, lint passes over hidden names and folders that are not
+downloaded. A step's own Read of a symlink that leads out of the store paths its rules
+name is refused by Claude Code (measured with Claude Code 2.1.325 on 2026-11-14;
+[the fence](#the-fence-around-a-model-step) says what asks it again). A read opens a file so that
+a symlink put in its place in that moment is not followed either; a write checks the folders on
+the way just before it writes. With the worklog add-on, its reading of the inbox and the note it
+writes there keep the same rule; its own state files in `state/addons/worklog/` it opens by their
+path.
+
 Code checks what the step did to `memory/` against a copy taken just before it. Each facts line
 ingest removed or rewrote lands in the review task, with the captures it filed and where the copy is
 kept (`~/.local/state/m2b/memory-before-run/`), and it comes back in every review until you complete
@@ -120,7 +135,9 @@ on 2026-11-12, in a sandbox with files planted outside the store:
 - Every command outside the step's list was denied, read-only ones too (`cat`, `ls`, `printenv`,
   `env`, `curl`), as was a listed command with a second one behind `;` or inside `$(...)`.
   So were reading a file outside the step's store paths, inside the store too, writing one
-  outside the store or into the step's working folder, and fetching or searching the web.
+  outside the store or into the step's working folder, and fetching or searching the web. Reading
+  a symlink in the inbox, a path the step may read, was denied when it points at a file outside
+  the store (Claude Code 2.1.325, 2026-11-14).
 - The session has only the tools its step's rules name: Bash, Read, Edit and Write for a step of
   the core. Without that list Claude Code gave the session some twenty more, and those that ask no
   permission ran: the step listed the other Claude sessions on the machine and started a subagent,
@@ -164,7 +181,8 @@ What the fence is not:
   the switches and part of the refusals above with a real model
   ([CONTRIBUTING.md](CONTRIBUTING.md#whether-the-fence-still-holds)): a step that is asked to
   break out (`cat` of a file outside the store, alone and chained to an allowed command, Read and
-  Write there and in Claude Code's memory folder, a tool the step does not have), with a random
+  Write there and in Claude Code's memory folder, Read of a symlink in the inbox that points
+  there, a tool the step does not have), with a random
   word in each file it must not get, beside a control run without the switches. The weekly
   workflow of this repository runs it with the newest Claude Code when it has an account for a
   model, so a Claude Code that drops a switch is seen there within a week. On your machine

@@ -460,14 +460,19 @@ def _reading_copy(store: Store, relative: str, convert: Converter | None) -> Non
     if convert is not None:
         store.temp_dir.mkdir(parents=True, exist_ok=True)
         temporary = store.temp_dir / f".reading-copy-{stem}.{READING_COPY_EXTENSION}"
+        # The converter opens a path by itself and would follow a symlink put there, so it is given
+        # a copy of the bytes the store read, outside the store.
+        source = store.temp_dir / f".reading-source-{stem}.{extension}"
         try:
-            convert(store.path(relative), temporary)
+            source.write_bytes(store.read_bytes(relative))
+            convert(source, temporary)
             store.create_exclusive(copy, temporary.read_bytes())
             return
         except (OSError, subprocess.SubprocessError) as error:
             problem = str(error)
         finally:
             temporary.unlink(missing_ok=True)
+            source.unlink(missing_ok=True)
     note = Note.parse(store.read_text(sidecar))
     if _add_trailer_line(note, NO_READING_COPY_PREFIX + problem):
         _write(store, sidecar, note)

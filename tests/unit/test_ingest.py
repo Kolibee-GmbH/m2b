@@ -29,6 +29,12 @@ CAPTURE = "20261107T091500Z-cli-a1b2.md"
 CAPTURED = "---\ncreated: 2026-11-07T10:15:00+01:00\nsource: cli\n---\nRenew the passport before the trip\n"
 
 
+def files_holding(root: Path, word: str) -> list[str]:
+    """The files of the store, symlinks left out, whose bytes hold the word."""
+    files = [path for path in root.rglob("*") if path.is_file() and not path.is_symlink()]
+    return sorted(path.relative_to(root).as_posix() for path in files if word.encode() in path.read_bytes())
+
+
 class IngestFixture(unittest.TestCase):
     store_class: Any = FolderStore
 
@@ -63,6 +69,22 @@ class IngestFixture(unittest.TestCase):
 
 
 class NormalizeTextTest(IngestFixture):
+    def test_a_symlink_in_the_inbox_stays_a_symlink_and_nothing_of_its_target_reaches_the_store(self) -> None:
+        """Covers: B166"""
+        outside = self.root.parent / "outside.txt"
+        outside.write_text("OUTSIDE-SECRET\n", encoding="utf-8")
+        (self.root / "inbox" / "note.txt").symlink_to(outside)
+        self.write("inbox/Shopping list.txt", "milk\n")
+
+        report = self.normalize()
+
+        self.assertEqual([old for old, _ in report.renamed], ["inbox/Shopping list.txt"])
+        self.assertTrue((self.root / "inbox" / "note.txt").is_symlink())
+        self.assertEqual(files_holding(self.root, "OUTSIDE-SECRET"), [])
+        self.assertEqual(
+            [f"inbox/{entry.file}" for entry in ingest.pending(self.store).captures], [report.renamed[0][1]]
+        )
+
     def test_a_foreign_text_file_gets_the_schema_name_created_source_and_its_name_in_the_trailer(self) -> None:
         """Covers: B18"""
         self.write("inbox/Shopping list.txt", "milk\nbread\n")
@@ -197,6 +219,23 @@ class NormalizeBinaryTest(IngestFixture):
         assert trailer is not None
         self.assertIn("original name: IMG_0042.HEIC", trailer.notes)
         self.assertEqual(report.bundles, [f"inbox/{stem}.md"])
+
+    def test_the_converter_gets_a_copy_of_the_bytes_the_store_read_and_never_a_path_in_the_store(self) -> None:
+        """Covers: B166"""
+        name = "20261107T091500Z-cli-a1b2.heic"
+        outside = self.root.parent / "photo.heic"
+        outside.write_bytes(b"OUTSIDE-SECRET")
+        self.write("inbox/IMG_0042.HEIC", b"heic bytes")
+        self.write(f"inbox/scans/{name}", b"a scan")
+        (self.root / "inbox" / name).symlink_to(outside)
+
+        report = self.normalize()
+
+        self.assertEqual(files_holding(self.root, "OUTSIDE-SECRET"), [])
+        self.assertEqual(files_holding(self.root, "JPEG from heic bytes"), [report.renamed[0][1][:-4] + "jpg"])
+        self.assertEqual([source for source, _ in self.converted if self.root in source.parents], [])
+        self.assertEqual(list(self.store.temp_dir.iterdir()), [])
+        self.assertIn(f"inbox/{name} is a symlink", " ".join(report.problems))
 
     def test_a_photo_the_model_can_read_gets_no_reading_copy(self) -> None:
         self.write("inbox/whiteboard.jpg", b"jpeg bytes")
@@ -788,6 +827,18 @@ class IngestCommandTest(test_commands.CommandTest):
         (renamed,) = answer["renamed"]
         self.assertEqual(renamed["from"], "inbox/Shopping list.txt")
         self.assertTrue((self.store_root / renamed["to"]).is_file())
+
+    def test_normalize_copies_nothing_of_a_file_a_symlink_in_the_inbox_points_at(self) -> None:
+        """Covers: B166"""
+        outside = self.store_root.parent / "outside.txt"
+        outside.write_text("OUTSIDE-SECRET\n", encoding="utf-8")
+        (self.store_root / "inbox" / "note.txt").symlink_to(outside)
+
+        answer = self.run_json("ingest", "normalize")
+
+        self.assertEqual(answer["renamed"], [])
+        self.assertEqual(files_holding(self.store_root, "OUTSIDE-SECRET"), [])
+        self.assertEqual(self.run_json("ingest", "list", "--json")["captures"], [])
 
     def test_a_task_twice_prints_the_same_id_and_a_task_without_key_is_a_usage_error(self) -> None:
         self.write(f"inbox/{CAPTURE}", CAPTURED)
