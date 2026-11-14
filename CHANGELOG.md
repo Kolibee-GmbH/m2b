@@ -7,6 +7,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-11-15
+
 ### Changed
 
 - The reading of your sessions takes what you pasted into a prompt too. Until now a pasted block
