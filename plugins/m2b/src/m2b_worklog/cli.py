@@ -43,7 +43,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     recordings_commands.add_parser("delete", help="delete every recorded event and the workspace cache")
     run = commands.add_parser("run", help="the daily worklog: the curation step before ingest")
     run.add_argument("--now", help="the period's end, ISO 8601 with an offset (default: now)")
-    facts_command = commands.add_parser("facts", help="the facts being judged, for the verdict's model step")
+    facts_command = commands.add_parser("facts", help="where the facts being judged are, for the verdict's model step")
     facts_command.add_argument("--json", action="store_true", help="accepted for symmetry; the output is JSON")
     commands.add_parser("verdict", help="hand in the verdict written to the file `facts` names: checked, then stored")
     state_command = commands.add_parser(
@@ -148,7 +148,7 @@ def _run(paths: WorklogPaths, now_text: str | None) -> int:
 
 def _facts(paths: WorklogPaths) -> int:
     try:
-        print(json.dumps(daily.facts_for_model(paths), ensure_ascii=False, indent=1))
+        print(json.dumps(daily.where_the_facts_are(paths), ensure_ascii=False, indent=1))
     except daily.DailyError as error:
         print(f"m2b-worklog: {error}", file=sys.stderr)
         return EXIT_PROBLEM

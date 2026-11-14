@@ -1,5 +1,5 @@
 {
-  "description": "A day's worklog inside a curation run (stub level): with the worklog add-on turned on, a curation run writes the day's worklog: the scripted verdict skill reads the facts, writes its verdict to its file and hands it in, the writer files the note into the inbox, the ledger and its two exports and moves the watermark, and the ingest of the same run moves the note into the corpus. The worklog proposes nothing for memory: no candidate is in the task list afterwards. A second run the same day writes no second worklog.",
+  "description": "A day's worklog inside a curation run (stub level): with the worklog add-on turned on, a curation run writes the day's worklog: the scripted verdict skill asks where the facts are, reads their file, writes its verdict to its file and hands it in, the writer files the note into the inbox, the ledger and its two exports and moves the watermark, and the ingest of the same run moves the note into the corpus. The worklog proposes nothing for memory: no candidate is in the task list afterwards. A second run the same day writes no second worklog.",
   "model": {
     "skills": {
       "/m2b:worklog-verdict": {
@@ -7,6 +7,10 @@
           {
             "tool": "Bash",
             "command": "m2b-worklog facts --json"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<m2b-home>/.local/state/m2b/worklog-run/facts.json"
           },
           {
             "tool": "Write",

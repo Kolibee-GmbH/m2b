@@ -81,8 +81,10 @@ ingest is allowed: the `m2b ingest`, `m2b search` and `m2b curate report` comman
 inbox and `memory/`, and editing files in `memory/`. Two more steps read captures as evidence:
 refresh, which may also read the whole archive and edit the distillate and the facts that are due,
 and, with the worklog add-on, its daily step, whose output is a verdict on the day's sessions
-that code checks, and a finding for the review when it cannot hand one in. So a capture cannot
-run another command, read outside the store or delete the archive, but it can:
+that code checks, and a finding for the review when it cannot hand one in. Outside the store,
+that step reads only two files of its own, in the worklog's run folder: the period's facts and
+the draft of its verdict. So a capture cannot run another command, read anything else outside
+the store or delete the archive, but it can:
 
 - put lines of its choosing into `memory/MEMORY.md`, the distillate every new session starts with,
   and into the fact files beside it;

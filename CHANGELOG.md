@@ -7,6 +7,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-11-14
+
+### Fixed
+
+- The worklog is written after a day with many sessions too. Its model step got the facts of the
+  period as the output of a command, and Claude Code hands a model such an output only up to a
+  size: a larger one it saves in its own folder, which the step's fence does not let it read. The
+  step stopped, no worklog was written, the watermark stayed, and the next run had more facts
+  still. Now the facts are a file in the worklog's run folder that the step may read, in parts
+  when the period was long, and `m2b-worklog facts` names the file and prints no fact. With
+  Claude Code 2.1.325 and invented facts, 41 KB stopped the step before and are judged now, and
+  122 KB in 2033 lines are judged, every session
+  ([What it reads](docs/addons/worklog.md#what-it-reads),
+  [#24](https://github.com/Kolibee-GmbH/m2b/pull/24)).
+
 ## [0.4.3] - 2026-11-14
 
 One fix needs a step from you. If the `.git` in your store folder is a file, because you keep

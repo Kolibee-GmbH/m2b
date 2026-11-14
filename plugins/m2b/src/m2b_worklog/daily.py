@@ -6,8 +6,8 @@ double bookings after a crash.
 When the last worklog ended less than 20 hours ago, the step does nothing; a period without
 sessions, with every source read, only moves the watermark. Otherwise it collects
 the facts since the watermark, has the model judge them through ``m2b curate model`` (the skill
-``m2b:worklog-verdict`` reads the facts with ``m2b-worklog facts`` and hands its verdict to
-``m2b-worklog verdict``), checks the verdict and plans what to write. Then, in this order:
+``m2b:worklog-verdict`` reads the facts from the file ``m2b-worklog facts`` names and hands its
+verdict to ``m2b-worklog verdict``), checks the verdict and plans what to write. Then, in this order:
 
 1. the plan is recorded as the intent in ``state/addons/worklog/intent.json``;
 2. the note goes into the inbox, unless the inbox or the corpus holds it already (ingest files it
@@ -50,8 +50,8 @@ DUE_AFTER = datetime.timedelta(hours=20)
 FACTS_FILE = "facts.json"
 VERDICT_FILE = "verdict.json"
 VERDICT_SKILL = "m2b:worklog-verdict"
-# The verdict's fence: its own two commands, the core's search, reports, memory and inbox, and the
-# one file it writes its verdict to.
+# The verdict's fence: its own two commands, the core's search, reports, memory and inbox, the file
+# that holds the facts and the one file it writes its verdict to.
 VERDICT_RULES = (
     "Bash(m2b-worklog facts *)",
     "Bash(m2b-worklog verdict *)",
@@ -63,17 +63,22 @@ VERDICT_RULES = (
 
 
 def verdict_rules(paths: WorklogPaths) -> tuple[str, ...]:
-    """The fence with the draft's own rules: Write needs an Edit rule, and a Read one to write it again.
+    """The fence with the rules of the two files in the run folder: the facts to read, the draft to write.
+
+    The facts come as a file the step reads, not as the output of a command: Claude Code hands a
+    model a command's output only up to a size and saves a larger one where the fence lets no step
+    read, so a period with much work would reach no verdict. Writing the draft needs an Edit rule,
+    and a Read one to write it again.
 
     The verdict goes in as a file, not as an argument of the command: a session key holds the
     folder's path as written, and an apostrophe in it cannot be quoted in a shell argument without
     changing the key. A permission rule reads ``//path`` as an absolute path.
     """
-    draft = paths.verdict_draft
+    facts_file, draft = paths.run_dir / FACTS_FILE, paths.verdict_draft
     if not draft.is_absolute():
         raise DailyError(f"the worklog's run folder {paths.run_dir} is not an absolute path; check M2B_HOME")
     # The command takes no argument; the rule without " *" holds whether or not " *" covers it bare.
-    return (*VERDICT_RULES, "Bash(m2b-worklog verdict)", f"Read(/{draft})", f"Edit(/{draft})")
+    return (*VERDICT_RULES, "Bash(m2b-worklog verdict)", f"Read(/{facts_file})", f"Read(/{draft})", f"Edit(/{draft})")
 
 
 class DailyError(Exception):
@@ -207,13 +212,35 @@ def read_intent(folder: Path) -> dict[str, Any] | None:
 
 
 def facts_for_model(paths: WorklogPaths) -> dict[str, Any]:
-    """What ``m2b-worklog facts`` prints: the facts being judged, with the store and the language."""
-    path = paths.run_dir / FACTS_FILE
+    """What the model step reads in the facts' file: the facts being judged, with the store and the language."""
+    return _handed(paths)[1]
+
+
+def where_the_facts_are(paths: WorklogPaths) -> dict[str, Any]:
+    """What ``m2b-worklog facts`` prints: the facts' file and how many lines it has, and no fact.
+
+    The answer is as short for a long period as for a day. ``lines`` tells a step that reads the
+    file in parts when it has read all of it: the line feeds, which is how a reader numbers the
+    lines, and not what Python calls a line, which a separator inside a prompt would end too.
+    """
+    text, handed = _handed(paths)
+    return {
+        "store": handed["store"],
+        "language": handed["language"],
+        "verdict_file": handed["verdict_file"],
+        "facts_file": str(paths.run_dir / FACTS_FILE),
+        "lines": text.count("\n"),
+    }
+
+
+def _handed(paths: WorklogPaths) -> tuple[str, dict[str, Any]]:
+    """The facts' file as text and as what it holds."""
     try:
-        handed: Any = json.loads(path.read_text(encoding="utf-8"))
+        text = (paths.run_dir / FACTS_FILE).read_text(encoding="utf-8")
+        handed: Any = json.loads(text)
     except (OSError, ValueError) as error:
         raise DailyError(f"no worklog is being judged ({error}); m2b-worklog run starts one") from error
-    return dict(handed)
+    return text, dict(handed)
 
 
 def accept_verdict(paths: WorklogPaths) -> list[str]:
@@ -236,7 +263,7 @@ def accept_verdict(paths: WorklogPaths) -> list[str]:
 
 
 def hand_to_model(paths: WorklogPaths, store: Path, language: str, collected: Mapping[str, Any]) -> None:
-    """The facts for ``m2b-worklog facts``; while they are there, a worklog is being judged."""
+    """The facts in the file ``m2b-worklog facts`` names; while they are there, a worklog is being judged."""
     # The facts hold the owner's prompts, and the draft is written with whatever mode the Write tool gives it.
     paths.run_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     paths.run_dir.chmod(0o700)
