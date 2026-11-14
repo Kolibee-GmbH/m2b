@@ -13,6 +13,7 @@ from typing import Any
 from unittest import mock
 
 import test_commands
+import test_ingest
 from m2b import addons, candidates, expiry, launcher
 from m2b.atomic_file import HIDDEN_TEMP_PREFIX
 from m2b.config import machine
@@ -519,6 +520,25 @@ class CleanRunTest(RunnerTest):
         assert record is not None
         self.assertEqual(record.steps[1].name, "ingest")
         self.assertEqual(record.steps[1].result, "skipped")
+
+    def test_a_symlink_in_the_inbox_is_named_in_the_review_and_its_target_reaches_no_file(self) -> None:
+        """Covers: B166"""
+        self.curating()
+        self.capture()
+        outside = self.store_root.parent / "outside.txt"
+        outside.write_text("OUTSIDE-SECRET\n", encoding="utf-8")
+        (self.store_root / "inbox" / "note.txt").symlink_to(outside)
+        self.model({"m2b:ingest": INGEST_FILES_THE_CAPTURE})
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        self.assertEqual([entry.name for entry in (self.store_root / "inbox").iterdir()], ["note.txt"])
+        self.assertTrue((self.store_root / "inbox" / "note.txt").is_symlink())
+        self.assertEqual(test_ingest.files_holding(self.store_root, "OUTSIDE-SECRET"), [])
+        (review,) = self.review_tasks()
+        self.assertIn("lint: inbox/note.txt is a symlink, and m2b follows none in the store", review.notes)
+        self.assertNotIn("OUTSIDE-SECRET", review.notes)
 
     def test_findings_of_the_model_steps_reach_the_review_and_info_stays_in_the_record(self) -> None:
         """Covers: B14"""

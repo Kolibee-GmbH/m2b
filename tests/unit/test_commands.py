@@ -970,11 +970,50 @@ class DoctorTest(CommandTest):
         self.set_up(calendar="none", tasks={"backend": "markdown"})
         outside = self.bin.parent.resolve() / "sb-test-store.git"
         self.git_init("--separate-git-dir", str(outside))
+        self.run_command("config", "set", "curation.git_directory", str(outside))
 
         code, line = self.store_git_line()
 
         self.assertEqual(code, cli.EXIT_OK)
         self.assertTrue(line.startswith(f"store-git: found ({outside}, read with "), line)
+
+    def test_a_git_directory_outside_the_store_folder_that_the_config_does_not_name_is_a_problem(self) -> None:
+        """Covers: B149, B168"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        outside = self.bin.parent.resolve() / "sb-test-store.git"
+        self.git_init("--separate-git-dir", str(outside))
+
+        code, line = self.store_git_line()
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        self.assertTrue(
+            line.startswith(
+                f"store-git: cannot commit (.git in the store folder points at {outside}, and this machine's "
+                "config names no git directory to commit into; when that is the repository you keep the store "
+                "in, name it with m2b config set curation.git_directory and its path; "
+            ),
+            line,
+        )
+
+    def test_a_git_file_that_points_away_from_the_named_directory_is_a_problem_and_starts_no_git(self) -> None:
+        """Covers: B149, B168"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        outside = self.bin.parent.resolve() / "sb-test-store.git"
+        self.git_init("--separate-git-dir", str(outside))
+        self.run_command("config", "set", "curation.git_directory", str(outside))
+        written = "gitdir: /sb-test-no\u200bwhere\nstore-git: found\n"
+        (self.store_root / ".git").write_text(written, encoding="utf-8")
+        self.a_git_that_refuses_with("this git must not be started")
+
+        code, line = self.store_git_line()
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        self.assertIn(
+            "cannot commit (.git in the store folder leads to /sb-test-no<U+200B>where?store-git: found, "
+            f"not to {outside}, "
+            "the git directory this machine's config names (curation.git_directory); ",
+            line,
+        )
 
     def test_a_machine_that_does_not_curate_commits_nothing_and_starts_no_git(self) -> None:
         """Covers: B149"""
@@ -1025,7 +1064,7 @@ class DoctorTest(CommandTest):
     def test_a_git_folder_git_cannot_use_is_a_problem_with_gits_reason(self) -> None:
         """Covers: B149"""
         self.set_up(calendar="none", tasks={"backend": "markdown"})
-        (self.store_root / ".git").write_text("gitdir: /sb-test-nowhere\n", encoding="utf-8")
+        (self.store_root / ".git").mkdir()
 
         code, line = self.store_git_line()
 
@@ -1036,7 +1075,7 @@ class DoctorTest(CommandTest):
     def test_gits_reason_is_printed_with_the_characters_that_draw_nothing_written_out(self) -> None:
         """Covers: B149"""
         self.set_up(calendar="none", tasks={"backend": "markdown"})
-        (self.store_root / ".git").write_text("gitdir: /sb-test-nowhere\n", encoding="utf-8")
+        (self.store_root / ".git").mkdir()
         self.a_git_that_refuses_with("fatal: not a git repository: /sb-test-no\u200bwhere\U000e0041")
 
         code, line = self.store_git_line()
@@ -1049,12 +1088,49 @@ class DoctorTest(CommandTest):
         self.set_up(calendar="none", tasks={"backend": "markdown"})
         outside = self.bin.parent.resolve() / "sb-test\u200b-store.git"
         self.git_init("--separate-git-dir", str(outside))
+        self.run_command("config", "set", "curation.git_directory", str(outside))
 
         code, line = self.store_git_line()
 
         self.assertEqual(code, cli.EXIT_OK)
         shown = self.bin.parent.resolve() / "sb-test<U+200B>-store.git"
         self.assertTrue(line.startswith(f"store-git: found ({shown}, read with "), line)
+
+    def test_a_named_directory_inside_the_store_folder_is_a_problem(self) -> None:
+        """Covers: B149, B168"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        inside = self.store_root.resolve() / "history.git"
+        self.git_init("--separate-git-dir", str(inside))
+        self.run_command("config", "set", "curation.git_directory", str(inside))
+
+        code, line = self.store_git_line()
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        self.assertIn(
+            f"cannot commit ({inside}, the git directory this machine's config names (curation.git_directory), "
+            "lies in the store folder or is reached through it, where everything that writes the store can "
+            "write the repository's configuration; name a directory outside the store folder, by a path with "
+            "no link in the store on its way; ",
+            line,
+        )
+
+    def test_half_a_character_in_a_line_is_printed_as_a_question_mark(self) -> None:
+        """Covers: B170"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        self.git_init()
+        printed = io.BytesIO()
+        terminal = io.TextIOWrapper(printed, encoding="utf-8", errors="strict")
+        named_in_bytes_that_are_no_text = Path("/sb-test-store\udcff/.git")
+
+        with (
+            mock.patch.object(doctor.run_commit, "git_directory", return_value=named_in_bytes_that_are_no_text),
+            contextlib.redirect_stdout(terminal),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            cli.main(["doctor"], self.environ)
+            terminal.flush()
+
+        self.assertIn(b"store-git: found (/sb-test-store?/.git, read with ", printed.getvalue())
 
     def test_a_repository_whose_work_tree_is_another_folder_is_a_problem(self) -> None:
         """Covers: B149"""

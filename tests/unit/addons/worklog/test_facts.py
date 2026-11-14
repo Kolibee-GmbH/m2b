@@ -14,6 +14,7 @@ import types
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 from locations import PLUGIN_ROOT
 from m2b import git_program, session_remotes
@@ -1244,6 +1245,52 @@ class FactsShapeTest(Fixture):
         keys = sorted(s["key"] for s in self.collect()["sessions"])
 
         self.assertEqual(keys, [f"folder:{self.home / 'scratch'}", f"folder:{self.home / 'scratch' / 'inner'}"])
+
+
+class SymlinkTest(Fixture):
+    def outside_capture(self) -> Path:
+        """A file beside the store that reads like a capture of the period."""
+        outside = self.base / "outside" / "20260314-110000-mac-c3d4.md"
+        outside.parent.mkdir()
+        outside.write_text(f"---\ncreated: {at(11).isoformat()}\nsource: OUTSIDE-SECRET\n---\n", encoding="utf-8")
+        return outside
+
+    def test_a_capture_that_is_a_symlink_is_not_read(self) -> None:
+        """Covers: B166"""
+        self.watermark(at(9))
+        self.capture("20260314-100000-mac-a1b2.md", at(10), "mac")
+        (self.store / "inbox" / "20260314-110000-mac-c3d4.md").symlink_to(self.outside_capture())
+
+        found = self.collect()
+
+        self.assertEqual([c["name"] for c in found["captures"]], ["20260314-100000-mac-a1b2.md"])
+        self.assertEqual(found["sources"]["inbox"]["state"], "read")
+        self.assertNotIn("OUTSIDE-SECRET", json.dumps(found))
+
+    def test_the_read_itself_refuses_a_symlink_that_came_after_the_checks(self) -> None:
+        """Covers: B166"""
+        self.watermark(at(9))
+        (self.store / "inbox" / "20260314-110000-mac-c3d4.md").symlink_to(self.outside_capture())
+
+        with mock.patch.object(Path, "is_symlink", return_value=False):
+            found = self.collect()
+
+        self.assertEqual(found["captures"], [])
+        self.assertEqual(found["sources"]["inbox"]["state"], "could not read")
+        self.assertNotIn("OUTSIDE-SECRET", json.dumps(found))
+
+    def test_an_inbox_that_is_a_symlink_is_not_listed(self) -> None:
+        """Covers: B166"""
+        self.watermark(at(9))
+        (self.store / "inbox").rmdir()
+        (self.store / "inbox").symlink_to(self.outside_capture().parent, target_is_directory=True)
+
+        found = self.collect()
+
+        self.assertEqual(found["captures"], [])
+        self.assertEqual(found["sources"]["inbox"]["state"], "could not read")
+        self.assertIn("inbox is a symlink", found["sources"]["inbox"]["detail"])
+        self.assertNotIn("OUTSIDE-SECRET", json.dumps(found))
 
 
 class EvictedFilesTest(Fixture):

@@ -7,6 +7,80 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-14
+
+One fix needs a step from you. If the `.git` in your store folder is a file, because you keep
+its repository outside a synced folder, name that repository once on the curating machine after
+the update, or its runs stop committing: `m2b config set curation.git_directory <path>`;
+`m2b doctor` shows the path in its line `store-git`. The third entry says why, and what to do
+where `.git` is a symlink.
+
+### Fixed
+
+- A symlink in the store is never read or followed. Until now a symlink to a file was read like
+  the file: one in `inbox/` that points at any file of the curating machine had its target's bytes
+  copied into a note by the next curation run, and one in the place of `memory/MEMORY.md` was
+  printed at every session start, with no model taking part. A symlink in the place of a folder,
+  `inbox/` itself for one, was entered the same way. Whoever can put a file into the store can put
+  a symlink there: a sync service brings what another device or an integration wrote. Now m2b
+  lists and reads no symlink below the store's folder and writes through no folder that is one, a
+  file is opened so that a symlink taking its place in that moment is not followed either, and
+  lint names each symlink in the review task. The store's folder itself may be a link. The
+  worklog's reading of the inbox keeps the same rule. `scripts/fence-probe` now also asks Claude
+  Code whether a step's Read of a symlink that leads out of the store is refused; with Claude Code
+  2.1.325 it was ([Security](SECURITY.md#untrusted-input),
+  [#23](https://github.com/Kolibee-GmbH/m2b/pull/23)).
+- Reverting a run's commit no longer deletes a capture the run never touched. The commit held
+  every file that changed while the run ran, so a capture that was taken or synced in during those
+  minutes and still waited in `inbox/` at the end was in it as a new file. `git revert` on that
+  commit deleted it from the store folder, and a sync service carried the deletion to every
+  device; the text stayed in git. Now a capture that came into `inbox/` during a run and still
+  lies there stays out of the run's commit. It shows as untracked until the next run commits it
+  before its first step, like every capture git does not know yet. What the run adds to a capture
+  that was there when it began still goes in: the new name it gave it, and the note and the
+  reading copy it put beside a picture or a PDF
+  ([A commit per run](docs/curation.md#a-commit-per-run),
+  [#23](https://github.com/Kolibee-GmbH/m2b/pull/23)).
+- A run follows a `.git` file in the store folder only to the git directory this machine's
+  config names. A store in a synced folder keeps its repository outside, and the `.git` file in the
+  store folder names where; git followed that line, and whoever writes the store can rewrite it,
+  so a run could be made to commit your notes into another repository, or into a folder whose
+  configuration names commands git then ran. Now m2b reads the line itself and commits only into
+  the directory `curation.git_directory` names; otherwise the run commits nothing, starts no git
+  for a commit, and its review task and `m2b doctor` say why. **If your store has such a `.git` file**, name
+  its directory once on the curating machine, or runs stop committing:
+  `m2b config set curation.git_directory <path>`; `m2b doctor` shows the path the file holds in
+  its line `store-git`. The directory must lie outside the store folder; one inside it, or
+  reached through a link in it, is refused, because it would be as open to every writer of the
+  store as the file is. A `.git` folder in the store folder needs nothing. A `.git` that is a
+  symlink is no longer followed, and runs stop committing there too: put a `.git` file with the
+  line `gitdir: <path>` in its place and name the directory as above
+  ([A commit per run](docs/curation.md#a-commit-per-run),
+  [#23](https://github.com/Kolibee-GmbH/m2b/pull/23)).
+- No git that m2b starts reaches a remote or starts a program a repository names for signatures.
+  The commit of a run could fetch: in a store that was a partial clone, git fetched the objects
+  it lacked and ran the command the repository named for that. The worklog's `git log`, run in
+  every folder a session ran in, started the `gpg.program` of a repository that asked for
+  signatures to be shown. Now every git m2b starts, for the commit, for a folder's remotes and
+  for the worklog's commits, gets the same settings: no hook, no file-system monitor, no
+  signature check, every transport closed and no fetching of missing objects. A store that is a
+  partial clone is not committed into, and the review task says so
+  ([Security](SECURITY.md#what-m2b-handles),
+  [#23](https://github.com/Kolibee-GmbH/m2b/pull/23)).
+- A reason that quotes bytes that are no UTF-8 no longer keeps a run from writing its record
+  and its review, or `m2b doctor` from printing. A file name or a program's message with such
+  bytes reaches a text as half a character, which cannot be written: a commit that failed over
+  such a file name kept the run record from being written, and `m2b doctor` ended in an error
+  where it should have named the cause. Such a character is now written as `?` in the run
+  record, the review task and the run's notes on the machine, and printed as `?` in what `m2b`
+  prints to standard output; an error message shows it escaped, like `\udcff`.
+  Filing a capture whose own name is no UTF-8, which Linux allows and macOS does not, is not
+  covered by this
+  ([#23](https://github.com/Kolibee-GmbH/m2b/pull/23)).
+- The worklog reads a commit whose author time has no offset from UTC on Python 3.9 and 3.10
+  too. git writes such a time with a `Z`, which Python reads only from 3.11 on, so the commit was
+  left out of the day ([#23](https://github.com/Kolibee-GmbH/m2b/pull/23)).
+
 ## [0.4.2] - 2026-11-13
 
 ### Changed

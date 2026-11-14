@@ -351,6 +351,19 @@ class JoinTest(SetupTest):
         self.assertEqual(load_machine_config(self.machine).store.path, self.store_root)
         self.assertEqual(result["written"], [str(self.machine.config_file), str(self.machine.launcher)])
 
+    def test_joining_a_store_makes_no_folder_through_a_symlink(self) -> None:
+        """Covers: B166"""
+        self.existing_store()
+        outside = self.bin.parent / "outside"
+        outside.mkdir()
+        (self.store_root / "state").symlink_to(outside, target_is_directory=True)
+
+        code, _, err = self.apply(self.answers(owner=None, language=None, tasks=None, curates=False))
+
+        self.assertNotEqual(code, cli.EXIT_OK)
+        self.assertIn("state is a symlink", err)
+        self.assertEqual(list(outside.iterdir()), [])
+
     def test_an_evicted_memory_folder_is_downloaded_and_its_distillate_never_written_over(self) -> None:
         """Covers: B37"""
         self.existing_store()

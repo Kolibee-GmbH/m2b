@@ -26,6 +26,10 @@ are chosen per machine.
   `osascript`), recorded by absolute path in `executables`, but adds no Python dependency.
 - **A file that is not downloaded is not read.** Store backends report such files as evicted;
   reading one would download it or hang.
+- **No symlink in the store is followed.** The `Store` base class lists, reads and writes that
+  way for every backend. A backend that reads a file on its own does it with
+  `m2b.store.symlinks.read_bytes`, and before it writes one it asks `symlink_on` whether a folder
+  on the way is a symlink.
 
 ## Steps
 

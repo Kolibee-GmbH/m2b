@@ -36,6 +36,11 @@ cannot read, a text that is not UTF-8, a capture in a subfolder) stays where it 
 the review task, and starts no further run until it changes. The journal of completed tasks is the
 one exception in the archive: `corpus/YYYY/MM/YYYYMM-done.md`, one per month.
 
+A symlink is never content, anywhere in the store. m2b does not list or read one, whatever it
+points at, enters no folder that is one and writes through none; lint names it in the review task
+until the file or folder itself is in its place or the link is gone
+([Security](../SECURITY.md#untrusted-input) says why).
+
 ## A note
 
 ```markdown

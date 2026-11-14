@@ -8,11 +8,16 @@ A folder that is not a repository, a git that fails or does not answer, is "coul
 that session, never "no commits". So is every session on a machine without a git to start: the
 worklog runs in the background, and the only git there would ask the person something
 (``git_to_start``).
+
+The folders are whatever a session ran in, so git is started as the core starts it
+(``m2b.git_program``): a repository's configuration starts no program of its own, here the one it
+names for checking signatures, and nothing is fetched.
 """
 
 from __future__ import annotations
 
 import datetime
+import os
 import subprocess
 import sys
 from collections.abc import Mapping
@@ -20,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from m2b.git_program import usable_git
+from m2b.git_program import git_command, git_environment, usable_git
 from m2b.redaction import redact
 
 from m2b_worklog.sources import SourceState
@@ -92,7 +97,8 @@ def read_git(
         commit_hash, _, rest = line.partition(_FIELD)
         moment_text, _, subject = rest.partition(_FIELD)
         try:
-            moment = datetime.datetime.fromisoformat(moment_text)
+            # git writes a time without an offset from UTC with a "Z", which Python 3.9 does not read.
+            moment = datetime.datetime.fromisoformat(moment_text.replace("Z", "+00:00"))
         except ValueError:
             continue
         if start <= moment < end:
@@ -103,11 +109,12 @@ def read_git(
 def _git(run: Runner, git: str, folder: Path, arguments: list[str], allow_missing: bool = False) -> str:
     try:
         result = run(
-            [git, "-C", str(folder), *arguments],
+            git_command(git, folder, arguments),
             capture_output=True,
             text=True,
             timeout=GIT_TIMEOUT_SECONDS,
             stdin=subprocess.DEVNULL,
+            env=git_environment(os.environ),
         )
     except FileNotFoundError as error:
         raise _GitError(f"{git} was not found") from error

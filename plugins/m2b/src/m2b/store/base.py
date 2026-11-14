@@ -1,7 +1,9 @@
 """The ``Store`` interface and the behavior both backends share.
 
 Paths are relative to the store root, written with ``/``. Hidden files (a leading dot) are
-not content: readers skip them, so a hidden temp file is never taken for a note.
+not content: readers skip them, so a hidden temp file is never taken for a note. A symlink is not
+content either, and no way to content: a listing passes it over, and a path that is one or leads
+through one is neither read nor written (``m2b.store.symlinks`` says why).
 """
 
 from __future__ import annotations
@@ -12,10 +14,11 @@ import shlex
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from m2b.atomic_file import create_exclusively, replace_atomically
+from m2b.store import symlinks
 from m2b.store.guard import DatalessGuard
 
 
@@ -38,6 +41,22 @@ def fetch_command(relative: str) -> str:
 
 class StoreReadError(StoreError):
     """A file is there but could not be read, for example after a privacy grant was withdrawn."""
+
+
+class SymlinkError(StoreReadError):
+    """The path is a symlink or leads through one; below its root the store follows none.
+
+    A read error, so that a reader which lists a file it could not read and goes on does so here too.
+    """
+
+    def __init__(self, relative: str, link: str) -> None:
+        self.relative = relative
+        self.link = link
+        left_alone = "" if link == relative else f"{relative} was left alone: "
+        super().__init__(
+            f"{left_alone}{link} is a symlink, and m2b follows none in the store; "
+            "put the file or folder itself in its place, or remove it"
+        )
 
 
 class FetchError(StoreError):
@@ -74,10 +93,14 @@ class ConflictCopy:
 
 @dataclass(frozen=True)
 class Scan:
-    """What a folder holds on this machine: the local files, and apart from them what is evicted."""
+    """What a folder holds on this machine: the local files, and apart from them what is evicted.
+
+    ``symlinks`` are the symlinks met on the way, which are in neither list: nothing reads them.
+    """
 
     files: list[str]
     evicted: list[str]
+    symlinks: list[str] = field(default_factory=list)
 
 
 FETCH_POLL_SECONDS = 0.2
@@ -100,13 +123,17 @@ class Store(ABC):
         self._sleep = sleep
 
     def path(self, relative: str) -> Path:
-        """The absolute path of a store path; refuses anything that would leave the store."""
+        """The absolute path of a store path; refuses a spelling that would leave the store.
+
+        A symlink on the way would leave it too; that is refused where the path is read or written.
+        """
         parts = PurePosixPath(relative).parts
         if not relative or relative.startswith("/") or ".." in parts:
             raise PathOutsideStoreError(f"{relative!r} is not a path inside the store")
         return self.root.joinpath(*parts)
 
     def exists(self, relative: str) -> bool:
+        """Whether the name is taken; for a symlink, whether its target is there, of which nothing else is told."""
         return self.path(relative).exists()
 
     def is_evicted(self, relative: str) -> bool:
@@ -120,16 +147,17 @@ class Store(ABC):
         """
         evicted: list[str] = []
         for relative in relatives:
-            evicted.extend(self._evicted_at(relative))
+            if symlinks.symlink_on(self.root, relative) is None:
+                evicted.extend(self._evicted_at(relative))
         return evicted
 
     def _evicted_at(self, relative: str) -> list[str]:
         target = self.path(relative)
-        if not target.exists():
+        if target.is_symlink() or not target.exists():
             return []
         if self.guard.is_evicted(target):
             return [relative]
-        if target.is_symlink() or not target.is_dir():
+        if not target.is_dir():
             return []
         try:
             entries = self._visible_entries(relative)
@@ -151,12 +179,25 @@ class Store(ABC):
                 raise EvictedFileError(relative or ".") from error
             raise StoreReadError(f"{relative or 'the store'} could not be listed: {error}") from error
 
+    def _refuse_symlinks(self, relative: str, folders_only: bool = False) -> None:
+        """Raises when the path is a symlink or leads through one; ``folders_only`` lets the name itself be one.
+
+        A write replaces or removes the name, whatever it is, and so stays in the store; only a
+        symlinked folder on the way to it would take the write elsewhere.
+        """
+        checked = PurePosixPath(relative).parent.as_posix() if folders_only else relative
+        link = symlinks.symlink_on(self.root, checked)
+        if link is not None:
+            raise SymlinkError(relative, link)
+
     def read_bytes(self, relative: str) -> bytes:
         target = self.path(relative)
+        self._refuse_symlinks(relative)
         if self.guard.is_evicted(target):
             raise EvictedFileError(relative)
         try:
-            return target.read_bytes()
+            # Opened past no symlink: one slipped in since the check above fails the read like any other error.
+            return symlinks.read_bytes(self.root, relative)
         except FileNotFoundError:
             raise
         except OSError as error:
@@ -170,16 +211,17 @@ class Store(ABC):
     def list_files(self, folder: str = "", recursive: bool = False) -> list[str]:
         """Visible files below ``folder`` as store paths, sorted; nothing for a missing folder.
 
-        Folder symlinks are not followed. A folder that cannot be listed raises, so an evicted
-        subfolder is never shown as empty.
+        Symlinks are neither listed nor followed, and a folder that is one or lies behind one holds
+        nothing. A folder that cannot be listed raises, so an evicted subfolder is never shown as
+        empty.
         """
         base = self.path(folder) if folder else self.root
-        if not base.is_dir():
+        if symlinks.symlink_on(self.root, folder) is not None or not base.is_dir():
             return []
         files = []
         for entry in self._visible_entries(folder):
             relative = entry.relative_to(self.root).as_posix()
-            if entry.is_symlink() and entry.is_dir():
+            if entry.is_symlink():
                 continue
             if entry.is_dir():
                 if recursive:
@@ -192,16 +234,20 @@ class Store(ABC):
         """The local files below ``folder`` and the evicted files and folders, in one walk.
 
         No file is opened, so nothing is downloaded. An evicted folder stands for everything in
-        it, because its contents cannot be listed without downloading it. Hidden files and folder
-        symlinks are left out as in ``list_files``; a missing folder holds nothing; ``""`` is the
-        whole store.
+        it, because its contents cannot be listed without downloading it. Hidden files are left out
+        as in ``list_files``, and symlinks are named apart, the one ``folder`` lies behind too; a
+        missing folder holds nothing; ``""`` is the whole store.
         """
+        link = symlinks.symlink_on(self.root, folder)
+        if link is not None:
+            return Scan([], [], [link])
         files: list[str] = []
         evicted: list[str] = []
-        self._scan_into(folder, files, evicted)
-        return Scan(sorted(files), sorted(evicted))
+        links: list[str] = []
+        self._scan_into(folder, files, evicted, links)
+        return Scan(sorted(files), sorted(evicted), sorted(links))
 
-    def _scan_into(self, relative: str, files: list[str], evicted: list[str]) -> None:
+    def _scan_into(self, relative: str, files: list[str], evicted: list[str], links: list[str]) -> None:
         target = self.path(relative) if relative else self.root
         if not target.is_dir():
             return
@@ -216,26 +262,34 @@ class Store(ABC):
         for entry in entries:
             child = f"{relative}/{entry.name}" if relative else entry.name
             try:
-                if self.guard.is_evicted(entry):
+                if entry.is_symlink():
+                    links.append(child)
+                elif self.guard.is_evicted(entry):
                     evicted.append(child)
-                elif entry.is_symlink() and entry.is_dir():
-                    continue
                 elif entry.is_dir():
-                    self._scan_into(child, files, evicted)
+                    self._scan_into(child, files, evicted, links)
                 elif entry.is_file():
                     files.append(child)
             except FileNotFoundError:
                 continue
 
+    def make_folder(self, relative: str) -> None:
+        """Makes a folder and the folders on the way to it; one that is there stays as it is."""
+        target = self.path(relative)
+        self._refuse_symlinks(relative)
+        target.mkdir(parents=True, exist_ok=True)
+
     def create_exclusive(self, relative: str, data: bytes) -> None:
         """Creates a new file; raises ``FileExistsError`` and changes nothing if the name is taken."""
         target = self.path(relative)
+        self._refuse_symlinks(relative, folders_only=True)
         target.parent.mkdir(parents=True, exist_ok=True)
         create_exclusively(target, data, self.temp_dir)
 
     def replace(self, relative: str, data: bytes) -> None:
         """Writes a file atomically; refused when the file on disk is only a placeholder."""
         target = self.path(relative)
+        self._refuse_symlinks(relative, folders_only=True)
         if target.exists() and self.guard.is_evicted(target):
             raise EvictedFileError(relative)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -244,6 +298,7 @@ class Store(ABC):
     def delete(self, relative: str) -> None:
         """Removes one file; an evicted file can be removed without downloading it."""
         target = self.path(relative)
+        self._refuse_symlinks(relative, folders_only=True)
         if target.is_dir():
             raise IsADirectoryError(f"{relative} is a folder")
         target.unlink()

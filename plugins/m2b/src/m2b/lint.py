@@ -7,7 +7,8 @@ wrong month, refs and ``[[links]]`` that lead nowhere (B22), fact files no facts
 facts in too often or never (B48), incomplete bundles, the binary volume,
 conflict copies in the corpus and of task files (B157), tasks whose capture is gone, and evicted
 files, which are listed and never read (B6). The inbox is ingest's: what waits there is no finding
-(X12).
+(X12). A symlink is one wherever it lies, the inbox included, because no listing shows it and
+nothing reads it (B166).
 
 ``fix`` removes what is safe to remove without asking: conflict copies in the corpus and of task
 files that equal their original byte for byte (a looser match could delete a real note or the
@@ -31,7 +32,7 @@ from m2b.notes.frontmatter import Note, NoteFormatError, read_created
 from m2b.notes.layout import CORPUS, INBOX, MEMORY, MEMORY_INDEX, TASKS, is_journal_name
 from m2b.notes.memory_index import MAX_TOPIC_NAME, MemoryIndex, Topic, is_day, split_topics
 from m2b.notes.names import NoteName
-from m2b.store.base import ConflictCopy, Store, StoreError, fetch_command
+from m2b.store.base import ConflictCopy, Scan, Store, StoreError, SymlinkError, fetch_command
 from m2b.tasks import markers
 from m2b.tasks.base import Tasks, TasksError
 from m2b.topic_match import MIN_WORD_CHARACTERS
@@ -99,8 +100,9 @@ def scan(store: Store, tasks: Tasks | None = None) -> LintReport:
     corpus = _Corpus(corpus_scan.files, corpus_scan.evicted, {PurePosixPath(path).name for path in corpus_scan.files})
     for folder, evicted in ((CORPUS, corpus_scan.evicted), (MEMORY, memory_scan.evicted)):
         _evicted(report, folder, evicted)
+    _symlinks(store, report)
     _corpus(store, report, corpus)
-    _memory(store, report, memory_scan.files, memory_scan.evicted, corpus)
+    _memory(store, report, memory_scan, corpus)
     if tasks is not None:
         _tasks(store, report, tasks, corpus)
     return report
@@ -145,6 +147,12 @@ def _evicted(report: LintReport, folder: str, evicted: list[str]) -> None:
         folder,
         f"{len(evicted)} {noun} in {folder}/ not downloaded, not checked ({examples}); run: {fetch_command(folder)}",
     )
+
+
+def _symlinks(store: Store, report: LintReport) -> None:
+    """Every symlink in the store, wherever it lies: no listing shows one, so nothing else would name it."""
+    for link in store.scan("").symlinks:
+        report.add("symlink", ACTION, link, str(SymlinkError(link, link)))
 
 
 def _corpus(store: Store, report: LintReport, corpus: _Corpus) -> None:
@@ -238,7 +246,8 @@ def _bundle(
         report.add("orphaned-member", ACTION, relative, f"{relative} has no sidecar note next to it")
 
 
-def _memory(store: Store, report: LintReport, files: list[str], evicted: list[str], corpus: _Corpus) -> None:
+def _memory(store: Store, report: LintReport, memory: Scan, corpus: _Corpus) -> None:
+    files, evicted = memory.files, memory.evicted
     index_path = f"{MEMORY}/{MEMORY_INDEX}"
     fact_files = [
         relative
@@ -247,8 +256,10 @@ def _memory(store: Store, report: LintReport, files: list[str], evicted: list[st
         and relative.endswith(NOTE_EXTENSION)
         and relative != index_path
     ]
-    if not any(index_path == entry or index_path.startswith(entry + "/") for entry in evicted):
-        _index(store, report, index_path, files, fact_files)
+    # An evicted entry and a symlink each have a finding of their own; the name is neither missing nor checked.
+    not_read = [*evicted, *memory.symlinks]
+    if not any(index_path == entry or index_path.startswith(entry + "/") for entry in not_read):
+        _index(store, report, index_path, files, fact_files, {PurePosixPath(link).name for link in memory.symlinks})
     for relative in files:
         if relative.endswith(NOTE_EXTENSION):
             text = _links(store, report, relative, corpus)
@@ -257,7 +268,9 @@ def _memory(store: Store, report: LintReport, files: list[str], evicted: list[st
                 _earlier(report, relative, text)
 
 
-def _index(store: Store, report: LintReport, index_path: str, files: list[str], fact_files: list[str]) -> None:
+def _index(
+    store: Store, report: LintReport, index_path: str, files: list[str], fact_files: list[str], symlink_names: set[str]
+) -> None:
     if index_path not in files:
         report.add("no-distillate", ACTION, index_path, f"{index_path} is missing; every session starts without it")
     else:
@@ -272,7 +285,7 @@ def _index(store: Store, report: LintReport, index_path: str, files: list[str], 
             problem = _topic_problem(topic)
             if problem is not None:
                 report.add("topic-words", ACTION, index_path, f"in {index_path}, the topic {topic.name} {problem}")
-        names = {PurePosixPath(relative).name for relative in fact_files}
+        names = {PurePosixPath(relative).name for relative in fact_files} | symlink_names
         for fact in index.facts:
             if fact.file_name not in names:
                 report.add(

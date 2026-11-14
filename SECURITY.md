@@ -10,7 +10,8 @@ In short:
 - **What a hostile note can do at most.** A capture written to steer the model that files it can
   put lines into your memory, create tasks in your list and move waiting captures into the archive
   with misleading notes. It cannot run another command, read outside the store or delete the
-  archive ([Untrusted input](#untrusted-input)).
+  archive, and a symlink someone puts into the store is not followed
+  ([Untrusted input](#untrusted-input)).
 - **The fence is Claude Code's permission system, not a sandbox of the operating system.** A model
   step runs from an empty folder, with only the commands and store paths its step lists; m2b's
   own commands run with your rights
@@ -45,12 +46,31 @@ that list is denied and reported in the run's review task
 When the store folder is a git repository, a curation run starts `git` there to commit what it
 changed and, before its first step, the captures in the inbox that git does not know yet
 ([docs/curation.md](docs/curation.md#a-commit-per-run)). git is given those files by
-name and is asked for nothing that reaches a remote: m2b never pushes or fetches. For these calls
-it points git's hooks folder at nothing and turns the file-system monitor off, so neither a hook
-nor a monitor program of the repository runs. What does run is a filter the repository's configuration or your own names
-for adding a file, as with your own `git add`. The configuration in the store's `.git` is
-therefore as trusted as your own: keep the store in a repository only you write to, and
-`curation.git_commit: false` in the machine config keeps m2b from starting git at all.
+name. m2b also starts git to read the remotes of the folders your sessions start in and, with the
+worklog add-on, your commits there. Every git it starts is started the same way, with settings
+that win over the repository's configuration and your own: the hooks folder points at nothing,
+the file-system monitor is off, no signature is checked, every transport is closed and objects a
+partial clone lacks are not fetched. So no hook, no monitor and no signature program that a
+repository names runs, nothing reaches a remote, and no command a remote names for fetching
+runs. m2b never pushes or fetches, and a store that is a partial clone is not committed into.
+
+What does run, in the commit of a run alone, is a filter the repository's configuration or your
+own names for adding a file, as with your own `git add`. The configuration of the store's
+repository is therefore as trusted as your own, and where it lies decides who can write it:
+
+- A `.git` folder in the store folder lies where everything that writes the store can write it,
+  a sync service with what another device sent included: its configuration, and what it says
+  about where its objects and branches are kept. Keep such a store in a folder only you write to.
+- A `.git` file that points at a git directory outside the store folder
+  (`git init --separate-git-dir`) keeps that configuration on this machine. The file itself is
+  still in the store and can be rewritten there, to point at another repository of yours or at a
+  folder made for the purpose. So m2b reads the file itself, without git, and a run commits only
+  into the directory this machine's config names (`curation.git_directory`), which must lie
+  outside the store folder, with no link of the store on the way to it. When the file
+  points anywhere else, or the config names no directory, the run commits nothing, starts no git
+  for a commit, and says so in its review task and in `m2b doctor`.
+
+`curation.git_commit: false` in the machine config keeps a run from starting git at all.
 
 ## Untrusted input
 
@@ -68,6 +88,20 @@ run another command, read outside the store or delete the archive, but it can:
   and into the fact files beside it;
 - create tasks in your task list;
 - move its own and other waiting captures into the archive with misleading notes.
+
+Reading outside the store stays out of reach for whoever can put a file there, too: an
+integration, another device, a sync service. Below the store's folder m2b follows no symlink,
+whatever it points at. Its commands and hooks neither list nor read one and write through no
+folder that is one, so a symlink in `inbox/` is never filed and one in the place of
+`memory/MEMORY.md` is never printed at a session start; lint names each symlink in the review task
+until you remove it; like every listing, lint passes over hidden names and folders that are not
+downloaded. A step's own Read of a symlink that leads out of the store paths its rules
+name is refused by Claude Code (measured with Claude Code 2.1.325 on 2026-11-14;
+[the fence](#the-fence-around-a-model-step) says what asks it again). A read opens a file so that
+a symlink put in its place in that moment is not followed either; a write checks the folders on
+the way just before it writes. With the worklog add-on, its reading of the inbox and the note it
+writes there keep the same rule; its own state files in `state/addons/worklog/` it opens by their
+path.
 
 Code checks what the step did to `memory/` against a copy taken just before it. Each facts line
 ingest removed or rewrote lands in the review task, with the captures it filed and where the copy is
@@ -120,7 +154,9 @@ on 2026-11-12, in a sandbox with files planted outside the store:
 - Every command outside the step's list was denied, read-only ones too (`cat`, `ls`, `printenv`,
   `env`, `curl`), as was a listed command with a second one behind `;` or inside `$(...)`.
   So were reading a file outside the step's store paths, inside the store too, writing one
-  outside the store or into the step's working folder, and fetching or searching the web.
+  outside the store or into the step's working folder, and fetching or searching the web. Reading
+  a symlink in the inbox, a path the step may read, was denied when it points at a file outside
+  the store (Claude Code 2.1.325, 2026-11-14).
 - The session has only the tools its step's rules name: Bash, Read, Edit and Write for a step of
   the core. Without that list Claude Code gave the session some twenty more, and those that ask no
   permission ran: the step listed the other Claude sessions on the machine and started a subagent,
@@ -164,7 +200,8 @@ What the fence is not:
   the switches and part of the refusals above with a real model
   ([CONTRIBUTING.md](CONTRIBUTING.md#whether-the-fence-still-holds)): a step that is asked to
   break out (`cat` of a file outside the store, alone and chained to an allowed command, Read and
-  Write there and in Claude Code's memory folder, a tool the step does not have), with a random
+  Write there and in Claude Code's memory folder, Read of a symlink in the inbox that points
+  there, a tool the step does not have), with a random
   word in each file it must not get, beside a control run without the switches. The weekly
   workflow of this repository runs it with the newest Claude Code when it has an account for a
   model, so a Claude Code that drops a switch is seen there within a week. On your machine

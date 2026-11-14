@@ -238,6 +238,23 @@ class DistillateHookTest(HookFixture):
         self.assertIn("m2b store fetch memory/MEMORY.md", out)
         self.assertNotIn("Dana", out)
 
+    def test_a_distillate_that_is_a_symlink_is_one_line_and_nothing_of_its_target(self) -> None:
+        """Covers: B166, B7"""
+        self.set_up()
+        outside = self.store_root.parent / "outside.md"
+        outside.write_text(MEMORY.replace("Building the garden shed", "OUTSIDE-SECRET"), encoding="utf-8")
+        (self.store_root / "memory").mkdir()
+        (self.store_root / "memory" / "MEMORY.md").symlink_to(outside)
+
+        code, out, _ = self.hook("distillate")
+
+        self.assertEqual(code, 0)
+        self.assertEqual(len(out.splitlines()), 1, out)
+        self.assertIn("memory/MEMORY.md is a symlink", out)
+        self.assertNotIn("OUTSIDE-SECRET", out)
+        self.assertNotIn("Dana", out)
+        self.assertNotIn(ROUTING_RULE, out)
+
     def test_a_failed_last_run_is_one_line_before_the_distillate(self) -> None:
         """Covers: B7"""
         self.set_up()

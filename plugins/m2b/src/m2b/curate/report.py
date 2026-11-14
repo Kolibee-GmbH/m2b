@@ -17,6 +17,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from m2b.notes.characters import writable
 from m2b.paths import MachinePaths
 
 RUN_TOKEN_VARIABLE = "M2B_RUN_TOKEN"
@@ -122,8 +123,12 @@ def _checked_text(finding: Finding) -> str:
 
 
 def one_line(text: str) -> str:
-    """Whitespace and line breaks collapsed, cut to ``MAX_TEXT_CHARACTERS``: one paragraph of the review."""
-    text = " ".join(text.split())
+    """Whitespace and line breaks collapsed, cut to ``MAX_TEXT_CHARACTERS``: one paragraph of the review.
+
+    Half a character becomes a question mark (``notes.characters.as_utf8``): no task list can
+    store it.
+    """
+    text = " ".join(writable(text).split())
     if len(text) > MAX_TEXT_CHARACTERS:
         text = text[: MAX_TEXT_CHARACTERS - 3].rstrip() + "..."
     return text

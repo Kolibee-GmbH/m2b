@@ -37,7 +37,7 @@ from typing import Any
 
 from m2b_worklog import facts, ledger, verdict, writeup
 from m2b_worklog.core import Core
-from m2b_worklog.files import create_in_store, is_evicted, replace_file, replace_in_store
+from m2b_worklog.files import create_in_store, is_evicted, replace_file, replace_in_store, symlink_in_store
 from m2b_worklog.paths import WorklogPaths
 from m2b_worklog.sources import READ as SOURCE_READ
 from m2b_worklog.sources import SourceState
@@ -92,6 +92,8 @@ class Sources:
 
 def run(paths: WorklogPaths, core: Core, now: datetime.datetime, sources: Sources) -> str:
     store = core.store()
+    # Asked here too, before the model: a worklog that could not write its note is not worth a judgment.
+    _refuse_a_symlinked_inbox(store)
     folder = store / STATE_DIR
     intent = read_intent(folder)
     if intent is not None:
@@ -268,9 +270,16 @@ def _write_note(store: Path, plan: writeup.Plan, temp_dir: Path) -> bool:
     end = datetime.datetime.fromisoformat(plan.end).astimezone(datetime.timezone.utc)
     if (store / "corpus" / f"{end:%Y}" / f"{end:%m}" / plan.note_name).exists():
         return False
+    _refuse_a_symlinked_inbox(store)
     inbox = store / "inbox"
     inbox.mkdir(exist_ok=True)
     return create_in_store(inbox / plan.note_name, plan.note_text.encode("utf-8"), temp_dir)
+
+
+def _refuse_a_symlinked_inbox(store: Path) -> None:
+    """The note is written into the inbox by its path: through a symlink it would land outside the store."""
+    if symlink_in_store(store, "inbox") is not None:
+        raise DailyError("inbox is a symlink, and m2b follows none in the store; no worklog is written through it")
 
 
 def _nothing_to_judge(collected: Mapping[str, Any]) -> bool:

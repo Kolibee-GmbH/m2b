@@ -52,6 +52,7 @@ from pathlib import Path
 
 from m2b.atomic_file import replace_atomically
 from m2b.curate.report import Finding, runs_dir
+from m2b.notes.characters import as_utf8
 from m2b.paths import MachinePaths
 
 LOCK_FILE = "curate.lock"
@@ -167,7 +168,7 @@ def save_memory_changes(machine: MachinePaths, findings: list[Finding]) -> None:
         | ({"change": dict(finding.change)} if finding.change is not None else {})
         for finding in findings
     ]
-    replace_atomically(path, (json.dumps(data, ensure_ascii=False) + "\n").encode("utf-8"), machine.temp_dir)
+    replace_atomically(path, as_utf8(json.dumps(data, ensure_ascii=False) + "\n"), machine.temp_dir)
 
 
 def load_stuck_inbox(machine: MachinePaths) -> dict[str, int]:
@@ -206,7 +207,9 @@ def _save_times(machine: MachinePaths, name: str, times: dict[str, int]) -> None
         path.unlink(missing_ok=True)
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    replace_atomically(path, (json.dumps(times, ensure_ascii=False) + "\n").encode("utf-8"), machine.temp_dir)
+    # Escaped, not as UTF-8: a file is found again by its path here, and a name whose bytes are
+    # no UTF-8 reads back as it was only from its escapes.
+    replace_atomically(path, (json.dumps(times) + "\n").encode("ascii"), machine.temp_dir)
 
 
 def prune_memory_copies(machine: MachinePaths, keep: set[Path]) -> None:
@@ -283,7 +286,7 @@ def log_event(machine: MachinePaths, kind: str, message: str, now: datetime.date
     line = json.dumps({"time": now.isoformat(), "kind": kind, "message": message}, ensure_ascii=False) + "\n"
     descriptor = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
     try:
-        os.write(descriptor, line.encode("utf-8"))
+        os.write(descriptor, as_utf8(line))
     finally:
         os.close(descriptor)
 
@@ -344,7 +347,7 @@ def record_attempt(machine: MachinePaths, kind: str, message: str, now: datetime
     """Overwrites the last attempt; a run that is not due, or not forced on a paused machine, writes
     it instead of a run log line."""
     data = json.dumps({"time": now.isoformat(), "kind": kind, "message": message}, ensure_ascii=False) + "\n"
-    replace_atomically(attempt_file(machine), data.encode("utf-8"), machine.temp_dir)
+    replace_atomically(attempt_file(machine), as_utf8(data), machine.temp_dir)
 
 
 def last_attempt(machine: MachinePaths) -> LogEvent | None:

@@ -204,6 +204,25 @@ class SearchTest(SearchFixture):
         self.assertEqual([item.path for item in result.unreadable], ["inbox/a.md"])
         self.assertIn("permission denied", result.unreadable[0].reason)
 
+    def test_a_file_that_became_a_symlink_during_the_search_is_listed_as_unreadable(self) -> None:
+        """Covers: B166"""
+        self.write("inbox/a.md", "Dana\n")
+        self.write("inbox/b.md", "Dana\n")
+        real_read = self.store.read_bytes
+
+        def read_bytes(relative: str) -> bytes:
+            if relative == "inbox/a.md":
+                (self.root / relative).unlink()
+                (self.root / relative).symlink_to(self.root / "inbox" / "b.md")
+            return real_read(relative)
+
+        with mock.patch.object(self.store, "read_bytes", read_bytes):
+            result = search(self.store, "dana")
+
+        self.assertEqual([hit.path for hit in result.hits], ["inbox/b.md"])
+        self.assertEqual([item.path for item in result.unreadable], ["inbox/a.md"])
+        self.assertIn("is a symlink", result.unreadable[0].reason)
+
     def test_a_file_moved_away_during_the_search_is_skipped(self) -> None:
         self.write("inbox/a.md", "Dana\n")
         self.write("inbox/b.md", "Dana\n")

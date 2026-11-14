@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from typing import Any, TypeVar
 
 from m2b.curate.report import Finding
+from m2b.notes.characters import as_utf8
 from m2b.notes.frontmatter import parse_time
 from m2b.notes.layout import STATE
 from m2b.store.base import Store
@@ -113,7 +114,7 @@ def load_run_record(store: Store) -> RunRecord | None:
 
 
 def write_run_record(store: Store, record: RunRecord) -> None:
-    store.replace(RUN_RECORD, (json.dumps(_raw(record), indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
+    store.replace(RUN_RECORD, as_utf8(json.dumps(_raw(record), indent=2, ensure_ascii=False) + "\n"))
 
 
 def _raw(record: RunRecord) -> dict[str, Any]:

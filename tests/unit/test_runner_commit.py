@@ -16,6 +16,7 @@ from m2b.run_record import FAILED, RUN_RECORD, SUCCEEDED, load_run_record
 
 OWNER = ("-c", "user.name=Alex", "-c", "user.email=alex@example.com")
 CAPTURE_NAME = "20261107T070000Z-cli-a1b2.md"
+LATE_CAPTURE_NAME = "20261107T090030Z-cli-a7b8.md"
 CAPTURES_SUBJECT = "m2b: captures before the curation run 2026-11-07 09:00"
 INGEST_FILES_A_FACT = [
     {"tool": "Bash", "command": "m2b ingest list --json"},
@@ -201,6 +202,68 @@ class RunInARepositoryTest(test_runner.RunnerTest):
         self.assertEqual(self.git("ls-tree", "-r", "--name-only", "HEAD", "inbox"), "")
         self.assertEqual(self.git("status", "--porcelain", "--untracked-files=all"), "")
 
+    def test_a_capture_that_comes_in_after_the_filing_outlives_a_revert_and_goes_in_with_the_next_run(self) -> None:
+        """Covers: B167"""
+        self.curating()
+        self.repository()
+        self.capture(CAPTURE_NAME)
+        self.model({"m2b:ingest": INGEST_FILES_A_FACT})
+        real_update_review = test_runner.runner.update_review
+
+        def a_capture_syncs_in_first(*arguments: object, **options: object) -> object:
+            self.capture(LATE_CAPTURE_NAME)
+            return real_update_review(*arguments, **options)  # type: ignore[arg-type]
+
+        with test_runner.mock.patch.object(test_runner.runner, "update_review", a_capture_syncs_in_first):
+            outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        late = f"inbox/{LATE_CAPTURE_NAME}"
+        waiting = (self.store_root / late).read_bytes()
+        self.assertNotIn(late, self.committed_paths())
+        self.assertEqual(self.git("status", "--porcelain", "--untracked-files=all").splitlines(), [f"?? {late}"])
+
+        self.git("revert", "--no-edit", "HEAD")
+
+        self.assertEqual((self.store_root / late).read_bytes(), waiting)
+
+        self.clock = test_runner.START + datetime.timedelta(days=1)
+        self.run_curate()
+
+        captures_commit = self.git("log", "--format=%H", "--grep=captures before the curation run", "-1").strip()
+        self.assertEqual(self.git("show", "--name-status", "--format=", captures_commit), f"A\t{late}\n")
+
+    def test_a_capture_the_run_renamed_and_did_not_file_is_committed_under_its_new_name(self) -> None:
+        """Covers: B167"""
+        self.curating()
+        self.write("inbox/dentist.md", "Dentist on Friday at nine\n")
+        self.repository()
+        self.model({"m2b:ingest": [{"tool": "Bash", "command": "m2b ingest normalize"}]})
+
+        self.run_curate()
+
+        (renamed,) = [path.name for path in (self.store_root / "inbox").iterdir()]
+        changes = self.git("show", "--name-status", "--format=", "--no-renames", "HEAD").splitlines()
+        self.assertIn(f"A\tinbox/{renamed}", changes)
+        self.assertIn("D\tinbox/dentist.md", changes)
+        self.assertEqual(self.git("status", "--porcelain", "--untracked-files=all"), "")
+
+        self.git("revert", "--no-edit", "HEAD")
+
+        self.assertEqual([path.name for path in (self.store_root / "inbox").iterdir()], ["dentist.md"])
+
+    def test_the_note_the_run_put_beside_a_waiting_file_is_committed_with_the_run(self) -> None:
+        """Covers: B167"""
+        self.curating()
+        self.write("inbox/20261107T071500Z-phone-e5f6.pdf", "%PDF the receipt\n")
+        self.repository()
+        self.model({"m2b:ingest": [{"tool": "Bash", "command": "m2b ingest normalize"}]})
+
+        self.run_curate()
+
+        self.assertIn("inbox/20261107T071500Z-phone-e5f6.md", self.committed_paths())
+        self.assertEqual(self.git("status", "--porcelain", "--untracked-files=all"), "")
+
     def test_a_run_committed_with_an_index_left_behind_still_says_its_captures_were_not_committed(self) -> None:
         self.curating()
         self.repository()
@@ -321,6 +384,36 @@ class RunInARepositoryTest(test_runner.RunnerTest):
         self.assertEqual(outcome.message.count("in the middle of a merge"), 1)
         self.assertEqual([step.name for step in record.steps].count("commit"), 1)
         self.assertIsNone(machine_state.load_backoff(self.machine))
+
+    def test_a_git_file_rewritten_to_another_repository_reaches_the_review_and_nothing_is_committed_there(
+        self,
+    ) -> None:
+        """Covers: B168"""
+        outside = self.store_root.parent / "sb-test-history.git"
+        other = self.store_root.parent / "sb-test-other-work"
+        other.mkdir()
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=other, env=self.environ, check=True)
+        self.curating(curation={"git_directory": str(outside)})
+        self.git("init", "-q", "-b", "main", "--separate-git-dir", str(outside))
+        self.git("add", "--all")
+        self.git("commit", "-q", "-m", "the store as Alex set it up")
+        self.capture(CAPTURE_NAME)
+        self.model({"m2b:ingest": test_runner.INGEST_FILES_THE_CAPTURE})
+        (self.store_root / ".git").write_text(f"gitdir: {other / '.git'}\n", encoding="utf-8")
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED)
+        self.assertIn("commit: .git in the store folder leads to ", outcome.message)
+        (review,) = self.review_tasks()
+        self.assertIn("not to", review.notes)
+        self.assertIn("the git directory this machine's config names (curation.git_directory)", review.notes)
+        in_other = subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", "HEAD"], cwd=other, env=self.environ, capture_output=True
+        )
+        self.assertNotEqual(in_other.returncode, 0)
+        (self.store_root / ".git").write_text(f"gitdir: {outside}\n", encoding="utf-8")
+        self.assertEqual(self.authors(), ["Alex"])
 
     def test_a_store_that_cannot_be_listed_before_the_run_is_a_failed_commit_not_a_failed_run(self) -> None:
         """Covers: B141"""

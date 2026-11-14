@@ -35,9 +35,10 @@ def is_journal_name(name: str) -> bool:
 def waiting_on_evicted(files: Iterable[str], evicted: Iterable[str]) -> set[str]:
     """The local inbox files of a bundle (a sidecar and its members share a stem) with an entry
     that is not downloaded: they wait for it, since filing the bundle reads every file in it."""
-    stems = {_stem(path) for path in evicted}
-    return {path for path in files if _stem(path) in stems}
+    stems = {bundle_stem(path) for path in evicted}
+    return {path for path in files if bundle_stem(path) in stems}
 
 
-def _stem(path: str) -> str:
+def bundle_stem(path: str) -> str:
+    """What the files of one capture share: the name without its folder and its extension."""
     return path.rsplit("/", 1)[-1].rsplit(".", 1)[0]

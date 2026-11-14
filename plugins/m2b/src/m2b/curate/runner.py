@@ -360,7 +360,9 @@ class _Run:
         if not self.config.curation.git_commit:
             return
         try:
-            self.repository = run_commit.find_repository(self.store, self.environ, self.lock.pass_fds)
+            self.repository = run_commit.find_repository(
+                self.store, self.environ, self.lock.pass_fds, named_directory=self.config.curation.git_directory
+            )
             if self.repository is not None:
                 self.listed_before = run_commit.listing(self.store)
         except (OSError, StoreError) as error:
@@ -400,7 +402,8 @@ class _Run:
         # The message names the run's steps; a commit of the captures that failed is none of them.
         text = run_commit.message(started, [step for step in self.steps if step.name != COMMIT])
         try:
-            run_commit.commit(self.repository, self.listed_before, text, self.machine.temp_dir, (RUN_RECORD,))
+            renamed = ingest.carried_on(self.store)
+            run_commit.commit(self.repository, self.listed_before, text, self.machine.temp_dir, (RUN_RECORD,), renamed)
         except run_commit.StaleIndexError as error:
             # The commit is made, so a failed commit of the captures still says what a revert does.
             return str(error)

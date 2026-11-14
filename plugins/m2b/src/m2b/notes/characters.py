@@ -72,3 +72,20 @@ def with_hidden_written_out(text: str) -> str:
     For a name the owner has to find: without its hidden characters it could be another file's.
     """
     return _UNSEEN_IN_A_NAME.sub(lambda match: f"<U+{ord(match.group()):04X}>", text)
+
+
+def as_utf8(text: str) -> bytes:
+    """The text's bytes for a file, with half a character as a question mark.
+
+    A file name or a program's message whose bytes are no UTF-8 reaches Python as a text with half
+    of a surrogate pair in the place of each such byte, and encoding that strictly raises. What
+    m2b writes about a run (a reason, a finding, a log line) can quote either, and a text that
+    cannot be written would cost the run its record and its review. So every writer of such a
+    text encodes it here.
+    """
+    return text.encode("utf-8", errors="replace")
+
+
+def writable(text: str) -> str:
+    """The text as ``as_utf8`` writes it, for a writer that takes a text and not bytes."""
+    return as_utf8(text).decode("utf-8")

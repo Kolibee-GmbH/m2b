@@ -165,6 +165,18 @@ class PromptHookSilenceTest(PromptHookFixture):
         self.store_root.rmdir()
         self.assertIsNone(self.prompt("Acme"))
 
+    def test_it_adds_nothing_from_the_target_of_a_distillate_that_is_a_symlink(self) -> None:
+        """Covers: B166"""
+        index = self.store_root / "memory" / "MEMORY.md"
+        index.rename(self.store_root.parent / "outside.md")
+        self.assertIsNone(self.prompt("Acme"))
+
+        index.symlink_to(self.store_root.parent / "outside.md")
+        self.assertIsNone(self.prompt("Acme"))
+        index.unlink()
+        (self.store_root.parent / "outside.md").rename(index)
+        self.assertIsNotNone(self.prompt("Acme"))
+
     def test_it_does_nothing_inside_a_curation_run(self) -> None:
         """Covers: B49"""
         self.assertIsNone(self.prompt("Acme", M2B_CURATION_RUN="1"))
@@ -262,6 +274,12 @@ class CheckTest(PromptHookFixture):
         self.assertIn("memory/MEMORY.md is not downloaded to this machine; run: ", said)
 
         self.eviction.evicted.clear()
+        index.rename(self.store_root.parent / "outside.md")
+        index.symlink_to(self.store_root.parent / "outside.md")
+        code, said = self.check()
+        self.assertEqual(code, 1)
+        self.assertIn("memory/MEMORY.md is a symlink", said)
+
         self.machine.config_file.write_text("{broken", encoding="utf-8")
         code, said = self.check()
         self.assertEqual(code, 1)

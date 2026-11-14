@@ -57,6 +57,11 @@ class CurationSettings:
     # (``curate.run_commit``). On, because the repository is the owner's own doing; this is the way
     # to keep one there and say no.
     git_commit: bool = True
+    # The git directory a run commits into when the store folder's ``.git`` is a file that points
+    # at one kept elsewhere, absolute after loading. The store can be written from other devices
+    # and this file cannot, so the directory is named here; unset, a run commits only into a
+    # ``.git`` folder of the store itself.
+    git_directory: Path | None = None
     # Whether this machine starts no run by itself: none at a session start, none from a schedule.
     # A run asked for by hand (``m2b curate --force``) still runs, so the owner can pause the
     # background work and file the inbox when it suits.
@@ -111,7 +116,7 @@ def parse_machine_config(raw: object, home: Path) -> MachineConfig:
         store=_store_location(fields.section("store"), home),
         calendar=_calendar(fields.section("calendar", required=False)),
         executables=_executables(fields.section("executables", required=False)),
-        curation=_curation(fields.section("curation", required=False)),
+        curation=_curation(fields.section("curation", required=False), home),
         distillate=_distillate(fields.section("distillate", required=False), home),
         band=_band(fields.section("band", required=False)),
         addons=_addons(fields.section("addons", required=False)),
@@ -140,9 +145,18 @@ def _executables(fields: Fields) -> Mapping[str, str]:
     return {name: fields.string(name) for name in fields.names()}
 
 
-def _curation(fields: Fields) -> CurationSettings:
+def _curation(fields: Fields, home: Path) -> CurationSettings:
     fields.reject_unknown(
-        ("model_timeout_minutes", "model", "max_turns", "max_budget_usd", "read_sessions", "git_commit", "paused")
+        (
+            "model_timeout_minutes",
+            "model",
+            "max_turns",
+            "max_budget_usd",
+            "read_sessions",
+            "git_commit",
+            "git_directory",
+            "paused",
+        )
     )
     return CurationSettings(
         model_timeout_minutes=fields.integer("model_timeout_minutes", default=DEFAULT_MODEL_TIMEOUT_MINUTES),
@@ -151,8 +165,19 @@ def _curation(fields: Fields) -> CurationSettings:
         max_budget_usd=_budget(fields),
         read_sessions=fields.boolean("read_sessions", default=False),
         git_commit=fields.boolean("git_commit", default=True),
+        git_directory=_git_directory(fields, home),
         paused=fields.boolean("paused", default=False),
     )
+
+
+def _git_directory(fields: Fields, home: Path) -> Path | None:
+    if not fields.has("git_directory"):
+        return None
+    written = fields.string("git_directory")
+    directory = expand(written, home)
+    if not directory.is_absolute():
+        raise fields.error("git_directory", f"must be absolute or start with ~/, got {written!r}")
+    return directory
 
 
 def _budget(fields: Fields) -> float | None:

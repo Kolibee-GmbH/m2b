@@ -3,10 +3,10 @@
 m2b is one Claude Code plugin, `plugins/m2b`. Everything the core does goes through one command,
 `m2b`, which skills, hooks, the curation run and outside callers all use; the add-ons have
 their own commands beside it (the worklog's `m2b-worklog`) and reach the core only
-through `m2b`; of the core's code the worklog imports six modules that import nothing else of the
-core: `redaction` and `claude_code`, so that the patterns that find credentials and the list of what
+through `m2b`; of the core's code the worklog imports seven modules that import nothing of the
+core but one another: `redaction` and `claude_code`, so that the patterns that find credentials and the list of what
 Claude Code writes into a prompt exist once, and `atomic_file` and `store.guard`, so that how a file
-is written whole into a synced folder and how an evicted file is told exist once as well, and `session_remotes` and `git_program`, so that which remotes a folder's repository has and which git starts without asking the person anything do too. The other exception is the prompt hook, which runs before every prompt and therefore reads the distillate through its own slim
+is written whole into a synced folder and how an evicted file is told exist once as well, `store.symlinks`, so that how a symlink in the store is told and a file read past none does too, and `session_remotes` and `git_program`, so that which remotes a folder's repository has and which git starts without asking the person anything, and under which settings every git is started, do too. The other exception is the prompt hook, which runs before every prompt and therefore reads the distillate through its own slim
 command instead of loading every command; it never writes to the store. The model never touches the store except
 through a fenced run that may call only the commands its step lists.
 

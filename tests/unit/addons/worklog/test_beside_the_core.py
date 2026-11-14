@@ -25,13 +25,15 @@ from worklog_fixtures import PLUGIN_ROOT
 
 SESSION_START_COMMAND = '"${CLAUDE_PLUGIN_ROOT}"/bin/m2b-worklog hook session-start'
 # Each knowledge that must exist once: how credentials are found, what Claude Code writes into a
-# transcript, how a file is written whole into a synced folder, how an evicted file is told, which
-# remotes a folder's repository has, and which git starts without asking the person anything.
+# transcript, how a file is written whole into a synced folder, how an evicted file is told, how a
+# symlink in the store is told and a file read past none, which remotes a folder's repository has,
+# and which git starts without asking the person anything.
 IMPORTED_FROM_THE_CORE = (
     "redaction",
     "claude_code",
     "atomic_file",
     "store.guard",
+    "store.symlinks",
     "session_remotes",
     "git_program",
 )
@@ -113,11 +115,12 @@ class ImportsTest(unittest.TestCase):
 
         self.assertEqual(imported, {f"{boundaries.CORE}.{module}" for module in IMPORTED_FROM_THE_CORE})
 
-    def test_what_the_worklog_imports_imports_nothing_else_of_the_core(self) -> None:
+    def test_what_the_worklog_imports_imports_of_the_core_only_what_is_named_here(self) -> None:
+        named = {f"{boundaries.CORE}.{module}" for module in IMPORTED_FROM_THE_CORE}
         for module in IMPORTED_FROM_THE_CORE:
             for source in sources_an_import_runs(module):
                 with self.subTest(module=module, source=source.name):
-                    self.assertEqual(core_modules_imported_by(source), set())
+                    self.assertEqual(core_modules_imported_by(source) - named, set())
 
     def test_the_helper_that_reads_imports_knows_a_core_import_in_each_form(self) -> None:
         forms = ("import m2b.config", "from m2b.store import base", "from . import base", "from .base import Store")

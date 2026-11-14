@@ -421,6 +421,44 @@ class StateTest(DailyFixture):
 
         self.assertEqual(list(self.paths.run_dir.iterdir()), [])
 
+    def test_a_worklog_writes_nothing_through_an_inbox_that_is_a_symlink_and_asks_no_model(self) -> None:
+        """Covers: B166"""
+        self.a_due_day()
+        outside = self.base / "outside"
+        outside.mkdir()
+        (self.store / "inbox").rmdir()
+        (self.store / "inbox").symlink_to(outside, target_is_directory=True)
+        before = self.store_files()
+
+        with self.assertRaises(daily.DailyError) as caught:
+            self.run_daily()
+
+        self.assertIn("inbox is a symlink", str(caught.exception))
+        self.assertEqual(self.core.model_calls, [])
+        self.assertEqual(list(outside.iterdir()), [])
+        self.assertEqual(self.store_files(), before)
+
+    def test_an_inbox_that_becomes_a_symlink_while_the_model_judges_gets_no_note_either(self) -> None:
+        """Covers: B166"""
+        self.a_due_day()
+        outside = self.base / "outside"
+        outside.mkdir()
+
+        def judged_while_the_inbox_is_swapped(found: dict[str, Any]) -> dict[str, Any]:
+            (self.store / "inbox").rmdir()
+            (self.store / "inbox").symlink_to(outside, target_is_directory=True)
+            return judged(found)
+
+        self.core = FakeCore(self.paths, self.store, self.profile, judged_while_the_inbox_is_swapped)
+
+        with self.assertRaises(daily.DailyError) as caught:
+            self.run_daily()
+
+        self.assertIn("inbox is a symlink", str(caught.exception))
+        self.assertEqual(len(self.core.model_calls), 1)
+        self.assertEqual(list(outside.iterdir()), [])
+        self.assertEqual(self.worklog_notes(), [])
+
     def test_a_store_without_an_inbox_folder_gets_one_for_the_note(self) -> None:
         self.a_due_day()
         (self.store / "inbox").rmdir()

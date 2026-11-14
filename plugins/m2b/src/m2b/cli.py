@@ -108,6 +108,7 @@ def main(
     environ = os.environ if environ is None else environ
     if stdin is None and argv is None:
         stdin = sys.stdin
+    _print_what_cannot_be_encoded_as_question_marks()
     try:
         arguments = _parser().parse_args(argv)
     except SystemExit as exit_request:
@@ -128,6 +129,15 @@ def main(
     except _HANDLED as error:
         print(f"m2b: {error}", file=sys.stderr)
         return next(code for error_type, code in _EXIT_CODES if isinstance(error, error_type))
+
+
+def _print_what_cannot_be_encoded_as_question_marks() -> None:
+    """Keeps a command from failing while it prints. What a command prints can name a file or quote a
+    program whose bytes are no UTF-8, and such a byte is half a character in the text, which a
+    terminal's stream refuses with an error."""
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if reconfigure is not None:
+        reconfigure(errors="replace")
 
 
 def _run_hook(name: str, machine: MachinePaths, environ: Mapping[str, str], stdin: TextIO | None) -> int:
