@@ -112,6 +112,10 @@ SHOWN_PATH_LENGTH = 200
 # surrogate pair, and the separators of lines and paragraphs.
 NOT_SHOWN = ("Cc", "Cs", "Zl", "Zp")
 NAMING_KEY = "curation.git_directory"
+THROUGH_THE_STORE = "lies in the store folder or is reached through it"
+OPEN_TO_EVERY_WRITER = "where everything that writes the store can write the repository's configuration"
+# What a system follows before it gives a path up as a loop.
+MAX_LINKS_FOLLOWED = 40
 # What marks a repository that lacks objects by design and fetches each when it is needed.
 PARTIAL_CLONE_KEYS = r"^(extensions\.partialclone|remote\..*\.(promisor|partialclonefilter))$"
 # What an operation the owner has not finished leaves in the git directory; a commit onto HEAD
@@ -248,7 +252,9 @@ def directory_kept_elsewhere(store: Store, named: Path | None) -> Path | None:
     None when ``.git`` is a folder, the git directory itself, which git finds without being told.
 
     Read without starting git. A ``CommitError`` says why a run must not commit: the file points
-    at another directory than ``named``, the one the machine config names, or the config names none.
+    at another directory than ``named``, the one the machine config names, the config names none,
+    or it names one that lies in the store folder or is reached through it, which would be as open
+    to every writer of the store as the file is.
     """
     if store.is_evicted(GIT_FOLDER):
         raise CommitError(f"{GIT_FOLDER} is not downloaded to this machine; run: {fetch_command(GIT_FOLDER)}")
@@ -257,6 +263,12 @@ def directory_kept_elsewhere(store: Store, named: Path | None) -> Path | None:
     if named is None:
         if pointed_at is None:
             return None
+        if _leads_through_store(store, pointed_at):
+            raise CommitError(
+                f"{GIT_FOLDER} in the store folder points at {_shown(pointed_at)}, which {THROUGH_THE_STORE}, "
+                f"{OPEN_TO_EVERY_WRITER}; a run commits into the store's own {GIT_FOLDER} folder or into a "
+                f"directory outside the store folder that {NAMING_KEY} names"
+            )
         raise CommitError(
             f"{GIT_FOLDER} in the store folder points at {_shown(pointed_at)}, and this machine's config names "
             f"no git directory to commit into; when that is the repository you keep the store in, name it with "
@@ -265,6 +277,12 @@ def directory_kept_elsewhere(store: Store, named: Path | None) -> Path | None:
     if not named.is_dir():
         missing = "is not there" if not os.path.lexists(named) else "is not a directory"
         raise CommitError(f"{named}, the git directory this machine's config names ({NAMING_KEY}), {missing}")
+    if _leads_through_store(store, named) and not _same_folder(named, own):
+        raise CommitError(
+            f"{named}, the git directory this machine's config names ({NAMING_KEY}), {THROUGH_THE_STORE}, "
+            f"{OPEN_TO_EVERY_WRITER}; name a directory outside the store folder, by a path with no link in the "
+            "store on its way"
+        )
     found = own if pointed_at is None else pointed_at
     if not _same_folder(found, named):
         raise CommitError(
@@ -294,6 +312,51 @@ def _pointed_at(store: Store) -> Path | None:
     written = os.fsdecode(content[len(GITFILE_PREFIX) :].rstrip(b"\r\n"))
     # A path that does not start at the root of the file system starts at the store folder.
     return store.root / written
+
+
+def _leads_through_store(store: Store, path: Path) -> bool:
+    """Whether the way to the path leads through the store folder, or ends at the store folder itself.
+
+    The way is walked as the system walks it, a name at a time and each link followed, and it leads
+    through the store when a folder or a link on it lies in the store folder. Whoever writes the
+    store writes what lies in it, so such a way leads wherever they point it next: a link in the
+    store to a directory outside is no directory outside. Where the way ends says too little, and
+    so does the path as it is written, which a link outside the store can hide the store behind.
+    A step back up out of the store folder itself (``<store>/../history.git``) leads through
+    nothing in it. A folder is told by itself, so another letter case or Unicode form of a name is
+    the same folder. A way with more links than a system follows leads nowhere, and a
+    ``CommitError`` says so.
+    """
+    reached = Path(path.anchor)
+    names = list(path.parts[1:])
+    links_followed = 0
+    while names:
+        name = names.pop(0)
+        if name == "..":
+            reached = reached.parent
+            continue
+        step = reached / name
+        # ``reached`` holds no link, so the folders above the step are the ones it really lies in.
+        if any(_same_folder(folder, store.root) for folder in step.parents):
+            return True
+        try:
+            target = Path(os.readlink(step)) if step.is_symlink() else None
+        except OSError:
+            target = None
+        if target is None:
+            reached = step
+            continue
+        links_followed += 1
+        if links_followed > MAX_LINKS_FOLLOWED:
+            raise CommitError(
+                f"the way to {_shown(path)} follows more than {MAX_LINKS_FOLLOWED} links, so it leads to no "
+                "git directory"
+            )
+        if target.is_absolute():
+            reached, names = Path(target.anchor), [*target.parts[1:], *names]
+        else:
+            names = [*target.parts, *names]
+    return _same_folder(reached, store.root)
 
 
 def _same_folder(one: Path, other: Path) -> bool:

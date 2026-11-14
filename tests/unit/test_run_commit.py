@@ -1185,6 +1185,141 @@ class WhichRepositoryTest(RunCommitTest):
         self.assertEqual(self.runner.calls, [])
         self.assertEqual(len(self.log()), 1)
 
+    def test_a_named_directory_inside_the_store_folder_is_not_committed_into(self) -> None:
+        """Covers: B168"""
+        inside = self.root / "history.git"
+        self.git("init", "-q", "-b", "main", "--separate-git-dir", str(inside))
+        self.git("commit", "-q", "--allow-empty", "-m", "the store as Alex set it up")
+        link = self.root.parent / "a-link-to-the-history"
+        os.symlink(inside, link)
+        ways_to_name_it = [inside, link]
+        store_in_other_letters = self.root.parent / self.root.name.upper()
+        if store_in_other_letters.exists():
+            # This file system tells no letter case apart, so the other spelling is the same folder.
+            ways_to_name_it += [self.root / "HISTORY.git", store_in_other_letters / "history.git"]
+        for named in ways_to_name_it:
+            with self.subTest(named=named.name):
+                self.named = named
+
+                with self.assertRaisesRegex(
+                    run_commit.CommitError, "lies in the store folder or is reached through it, where everything"
+                ):
+                    self.commit(self.a_new_fact())
+
+        self.assertEqual(self.runner.calls, [])
+        self.assertEqual(self.subjects_in(inside), ["the store as Alex set it up"])
+
+    def test_a_directory_named_by_a_path_through_a_link_in_the_store_is_not_committed_into(self) -> None:
+        """Covers: B168"""
+        self.repository_kept_outside()
+        other = self.another_repository()
+        os.symlink(self.outside, self.root / "history")
+        self.named = self.root / "history"
+        self.point_at("history")
+        before = self.a_new_fact()
+
+        with self.assertRaisesRegex(
+            run_commit.CommitError, "lies in the store folder or is reached through it, where everything"
+        ):
+            self.commit(before)
+
+        # What the refusal keeps from happening: the link is the store's, and it is pointed elsewhere.
+        (self.root / "history").unlink()
+        os.symlink(other, self.root / "history")
+        with self.assertRaisesRegex(
+            run_commit.CommitError, "lies in the store folder or is reached through it, where everything"
+        ):
+            self.commit(before)
+        self.assertEqual(self.runner.calls, [])
+        self.assertEqual(self.subjects_in(other), ["other work"])
+        self.assertFalse(self.marker.exists())
+
+    def test_a_link_outside_that_leads_on_through_a_link_in_the_store_is_a_way_through_the_store(self) -> None:
+        """Covers: B168"""
+        self.repository_kept_outside()
+        os.symlink(self.outside, self.root / "history")
+        chained = self.root.parent / "a-link-to-the-link-in-the-store"
+        os.symlink(self.root / "history", chained)
+        self.named = chained
+        self.point_at(chained)
+
+        with self.assertRaisesRegex(run_commit.CommitError, "is reached through it, where everything"):
+            self.commit(self.a_new_fact())
+
+        self.assertEqual(self.runner.calls, [])
+        self.named = None
+        with self.assertRaises(run_commit.CommitError) as raised:
+            self.commit(self.a_new_fact())
+        self.assertNotIn("name it with", str(raised.exception))
+
+    def test_a_step_back_up_after_a_link_in_the_store_is_a_way_through_the_store(self) -> None:
+        """Covers: B168"""
+        self.repository_kept_outside()
+        deeper = self.root.parent / "sb-test-deep" / "er"
+        deeper.mkdir(parents=True)
+        os.symlink(deeper, self.root / "link")
+        self.named = Path(f"{self.root}/link/../../store-history")
+        self.assertTrue(os.path.samefile(self.named, self.outside))
+
+        with self.assertRaisesRegex(run_commit.CommitError, "is reached through it, where everything"):
+            self.commit(self.a_new_fact())
+
+        self.assertEqual(self.runner.calls, [])
+
+    def test_a_step_back_up_out_of_the_store_folder_itself_leads_through_nothing_in_it(self) -> None:
+        self.repository_kept_outside()
+        self.named = Path(f"{self.root}/../store-history")
+
+        self.commit(self.a_new_fact())
+
+        self.assertEqual(len(self.subjects_in(self.outside)), 2)
+
+    def test_links_that_lead_round_in_a_ring_lead_to_no_git_directory(self) -> None:
+        self.repository_kept_outside()
+        one, other = self.root.parent / "sb-test-ring-one", self.root.parent / "sb-test-ring-other"
+        os.symlink(other, one)
+        os.symlink(one, other)
+        self.point_at(one)
+        self.named = None
+
+        with self.assertRaisesRegex(run_commit.CommitError, "follows more than 40 links, so it leads to no git"):
+            self.commit(self.a_new_fact())
+
+    def test_a_git_file_that_points_through_a_link_in_the_store_is_not_offered_for_naming(self) -> None:
+        """Covers: B168"""
+        self.repository_kept_outside()
+        self.named = None
+        os.symlink(self.outside, self.root / "history")
+        self.point_at("history")
+
+        with self.assertRaises(run_commit.CommitError) as raised:
+            self.commit(self.a_new_fact())
+
+        self.assertIn(
+            "which lies in the store folder or is reached through it, where everything that writes",
+            str(raised.exception),
+        )
+        self.assertNotIn("name it with", str(raised.exception))
+
+    def test_a_git_file_that_points_into_the_store_is_not_offered_for_naming(self) -> None:
+        """Covers: B168"""
+        inside = self.root / "history.git"
+        self.git("init", "-q", "-b", "main", "--separate-git-dir", str(inside))
+        for written in (inside, "history.git", "."):
+            with self.subTest(written=str(written)):
+                self.point_at(written)
+
+                with self.assertRaises(run_commit.CommitError) as raised:
+                    self.commit(self.a_new_fact())
+
+                self.assertIn(
+                    "which lies in the store folder or is reached through it, where everything that writes",
+                    str(raised.exception),
+                )
+                self.assertNotIn("name it with", str(raised.exception))
+
+        self.assertEqual(self.runner.calls, [])
+
     def test_a_git_that_is_a_link_is_not_followed(self) -> None:
         """Covers: B168"""
         self.repository_kept_outside()

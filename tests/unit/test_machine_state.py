@@ -92,6 +92,37 @@ class RunLogTest(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.machine = MachinePaths(Path(temp.name) / "home")
 
+    def test_half_a_character_in_a_message_is_written_as_a_question_mark(self) -> None:
+        """Covers: B170"""
+        log_event(self.machine, "unrecorded", "the run record could not be written: /sb-test-\udcff", NOW)
+        record_attempt(self.machine, machine_state.NOT_DUE, "not due: /sb-test-\udcff", NOW)
+
+        event, attempt = last_event(self.machine), last_attempt(self.machine)
+
+        assert event is not None and attempt is not None
+        self.assertEqual(event.message, "the run record could not be written: /sb-test-?")
+        self.assertEqual(attempt.message, "not due: /sb-test-?")
+
+    def test_a_stuck_capture_whose_name_is_no_text_is_noted_under_its_exact_name(self) -> None:
+        """Covers: B170"""
+        stuck = {"inbox/sb-test-\udcff.pdf": 1_700_000_000_000_000_000, "inbox/Grüße.md": 7}
+
+        machine_state.save_stuck_inbox(self.machine, stuck)
+
+        self.assertEqual(machine_state.load_stuck_inbox(self.machine), stuck)
+
+    def test_half_a_character_in_a_changed_facts_line_is_written_as_a_question_mark(self) -> None:
+        """Covers: B170"""
+        from m2b.curate.report import ACTION, Finding
+
+        removed = Finding("ingest", ACTION, "removed memory/sb-test-\udcff.md", {"file": "memory/sb-test-\udcff.md"})
+
+        machine_state.save_memory_changes(self.machine, [removed])
+
+        (kept,) = machine_state.load_memory_changes(self.machine)
+        self.assertEqual(kept.text, "removed memory/sb-test-?.md")
+        self.assertEqual(kept.change, {"file": "memory/sb-test-?.md"})
+
     def test_events_are_json_lines_and_the_last_one_reads_back(self) -> None:
         log_event(self.machine, "refused", "this machine is not the curating machine", NOW)
         log_event(self.machine, "unrecorded", "the run record could not be written: disk full", NOW)

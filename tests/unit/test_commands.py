@@ -1096,6 +1096,42 @@ class DoctorTest(CommandTest):
         shown = self.bin.parent.resolve() / "sb-test<U+200B>-store.git"
         self.assertTrue(line.startswith(f"store-git: found ({shown}, read with "), line)
 
+    def test_a_named_directory_inside_the_store_folder_is_a_problem(self) -> None:
+        """Covers: B149, B168"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        inside = self.store_root.resolve() / "history.git"
+        self.git_init("--separate-git-dir", str(inside))
+        self.run_command("config", "set", "curation.git_directory", str(inside))
+
+        code, line = self.store_git_line()
+
+        self.assertEqual(code, cli.EXIT_PROBLEM)
+        self.assertIn(
+            f"cannot commit ({inside}, the git directory this machine's config names (curation.git_directory), "
+            "lies in the store folder or is reached through it, where everything that writes the store can "
+            "write the repository's configuration; name a directory outside the store folder, by a path with "
+            "no link in the store on its way; ",
+            line,
+        )
+
+    def test_half_a_character_in_a_line_is_printed_as_a_question_mark(self) -> None:
+        """Covers: B170"""
+        self.set_up(calendar="none", tasks={"backend": "markdown"})
+        self.git_init()
+        printed = io.BytesIO()
+        terminal = io.TextIOWrapper(printed, encoding="utf-8", errors="strict")
+        named_in_bytes_that_are_no_text = Path("/sb-test-store\udcff/.git")
+
+        with (
+            mock.patch.object(doctor.run_commit, "git_directory", return_value=named_in_bytes_that_are_no_text),
+            contextlib.redirect_stdout(terminal),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            cli.main(["doctor"], self.environ)
+            terminal.flush()
+
+        self.assertIn(b"store-git: found (/sb-test-store?/.git, read with ", printed.getvalue())
+
     def test_a_repository_whose_work_tree_is_another_folder_is_a_problem(self) -> None:
         """Covers: B149"""
         self.set_up(calendar="none", tasks={"backend": "markdown"})

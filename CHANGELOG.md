@@ -40,7 +40,9 @@ All notable changes to this project are documented here. The format follows
   for a commit, and its review task and `m2b doctor` say why. **If your store has such a `.git` file**, name
   its directory once on the curating machine, or runs stop committing:
   `m2b config set curation.git_directory <path>`; `m2b doctor` shows the path the file holds in
-  its line `store-git`. A `.git` folder in the store folder needs nothing
+  its line `store-git`. The directory must lie outside the store folder; one inside it, or
+  reached through a link in it, is refused, because it would be as open to every writer of the
+  store as the file is. A `.git` folder in the store folder needs nothing
   ([A commit per run](docs/curation.md#a-commit-per-run),
   [#23](https://github.com/Kolibee-GmbH/m2b/pull/23)).
 - No git that m2b starts reaches a remote or starts a program a repository names for signatures.
@@ -53,6 +55,15 @@ All notable changes to this project are documented here. The format follows
   partial clone is not committed into, and the review task says so
   ([Security](SECURITY.md#what-m2b-handles),
   [#23](https://github.com/Kolibee-GmbH/m2b/pull/23)).
+- A reason that quotes bytes that are no UTF-8 no longer keeps a run from writing its record
+  and its review, or `m2b doctor` from printing. A file name or a program's message with such
+  bytes reaches a text as half a character, which cannot be written: a commit that failed over
+  such a file name kept the run record from being written, and `m2b doctor` ended in an error
+  where it should have named the cause. Such a character is now written as `?` in the run
+  record, the review task and the run's notes on the machine, and printed as `?` by `m2b`.
+  Filing a capture whose own name is no UTF-8, which Linux allows and macOS does not, is not
+  covered by this
+  ([#23](https://github.com/Kolibee-GmbH/m2b/pull/23)).
 - The worklog reads a commit whose author time has no offset from UTC on Python 3.9 too. git
   writes such a time with a `Z`, which that Python does not read, so the commit was left out of
   the day ([#23](https://github.com/Kolibee-GmbH/m2b/pull/23)).

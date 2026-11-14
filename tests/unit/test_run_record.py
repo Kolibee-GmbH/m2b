@@ -61,6 +61,19 @@ class RunRecordTest(unittest.TestCase):
         )
         self.assertEqual(raw["addons"], ["worklog", "backup"])
 
+    def test_half_a_character_in_a_reason_is_written_as_a_question_mark(self) -> None:
+        """Covers: B170"""
+        reason = "git update-index failed: error: unable to index file 'inbox/sb-test-\udcff.md'"
+        steps = (StepResult("commit", "failed", reason),)
+        record = RunRecord(SUCCEEDED, "sb-test-m1", START, message=f"commit: {reason}", steps=steps)
+
+        write_run_record(self.store, record)
+
+        written = load_run_record(self.store)
+        assert written is not None
+        self.assertEqual(written.steps[0].detail, reason.replace("\udcff", "?"))
+        self.assertIn("'inbox/sb-test-?.md'", written.message)
+
     def test_times_are_written_in_whole_seconds_so_they_read_back(self) -> None:
         precise = START.replace(microsecond=279691)
 

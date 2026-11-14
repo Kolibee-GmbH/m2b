@@ -59,7 +59,9 @@ for a setup without a calendar.
   `m2b config set curation.git_directory <path>`
   ([A commit per run](curation.md#a-commit-per-run)). When the message says the file leads to
   another directory than the config names, something rewrote the `.git` file in the store
-  folder: look at that file before you change the config.
+  folder: look at that file before you change the config. When it says the directory lies in the
+  store folder or is reached through it, move the repository out of it (`git init --separate-git-dir <a folder
+  outside>` in the store folder does that for an existing repository) and name the new place.
 - **The session start says the last run failed.** The review task in your list names the step
   and the cause. Fix it and run `m2b curate --force`.
 - **A topic's facts do not come in when you name it.** The hook that brings them says nothing when

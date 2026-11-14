@@ -45,6 +45,14 @@ class ReviewFixture(unittest.TestCase):
     def review_tasks(self) -> list[Any]:
         return self.tasks.items(marker=markers.REVIEW, include_completed=True)
 
+    def notes_of_a_review_with_half_a_character(self) -> str:
+        """The notes of the task a finding and a failure make whose texts hold a byte that is no UTF-8."""
+        finding = Finding("lint", "action", "inbox/sb-test-\udcff.md has no name of the schema")
+        failure = review.StepFailure("commit", "git update-index failed: unable to index file 'sb-test-\udcff'")
+        self.update([finding], [failure])
+        (task,) = self.review_tasks()
+        return str(task.notes)
+
 
 class ReviewTest(ReviewFixture):
     def test_action_findings_and_failures_make_one_open_review_task(self) -> None:
@@ -129,6 +137,13 @@ class ReviewTest(ReviewFixture):
         (task,) = self.review_tasks()
         self.assertEqual((task.id, task.completed), (first, True))
 
+    def test_half_a_character_in_a_finding_or_a_failure_reaches_the_task_as_a_question_mark(self) -> None:
+        """Covers: B170"""
+        notes = self.notes_of_a_review_with_half_a_character()
+
+        self.assertIn("lint: inbox/sb-test-?.md has no name of the schema", notes)
+        self.assertIn("unable to index file 'sb-test-?'", notes)
+
     def test_a_failure_is_one_paragraph_of_bounded_length(self) -> None:
         traceback = "Traceback (most recent call last):\n\n  File x\n\nValueError: " + "y" * 2000
 
@@ -163,6 +178,13 @@ class ReviewOnRemindersTest(ReviewFixture):
     def make_tasks(self, base: Path) -> Tasks:
         command, _ = test_tasks_backends.fake_reminders(base)
         return AppleRemindersTasks(test_tasks_backends.TEST_LIST, command=command, timeout_seconds=10)
+
+    def test_half_a_character_reaches_a_reminder_as_a_question_mark(self) -> None:
+        """Covers: B170"""
+        notes = self.notes_of_a_review_with_half_a_character()
+
+        self.assertIn("lint: inbox/sb-test-?.md has no name of the schema", notes)
+        self.assertIn("unable to index file 'sb-test-?'", notes)
 
     def test_a_completed_review_reminder_is_reopened_with_the_new_notes(self) -> None:
         first = self.update([ACTION]).task_id

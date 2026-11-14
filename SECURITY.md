@@ -65,7 +65,8 @@ repository is therefore as trusted as your own, and where it lies decides who ca
   (`git init --separate-git-dir`) keeps that configuration on this machine. The file itself is
   still in the store and can be rewritten there, to point at another repository of yours or at a
   folder made for the purpose. So m2b reads the file itself, without git, and a run commits only
-  into the directory this machine's config names (`curation.git_directory`). When the file
+  into the directory this machine's config names (`curation.git_directory`), which must lie
+  outside the store folder, with no link of the store on the way to it. When the file
   points anywhere else, or the config names no directory, the run commits nothing, starts no git
   for a commit, and says so in its review task and in `m2b doctor`.
 

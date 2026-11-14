@@ -111,10 +111,11 @@ file: a run follows it only to the directory that `curation.git_directory` in th
 config names. The last line above does that, once on
 each machine that curates. Without it, or when the file points somewhere else than the config
 says, a run commits nothing and starts no git for a commit, and its review task and `m2b doctor`
-say why. A
-`.git` folder in the store folder, which plain `git init` makes, needs no such line. Know also
-that `git add -A` reads every file: in iCloud Drive it downloads those that are not on this
-machine.
+say why. The directory must lie outside the store folder, and so must every link on the way to
+it: inside the store, or reached through a link there, the repository's configuration would be as
+open to everything that writes the store as the `.git` file is, and a run does not commit there. A `.git` folder in the
+store folder, which plain `git init` makes, needs no such line. Know also that `git add -A` reads every file: in iCloud Drive it downloads
+those that are not on this machine.
 
 A run commits only what it changed. A file git has never seen, `memory/MEMORY.md` for one, would
 enter the repository whole with the first run that touches it, and reverting that run would delete
