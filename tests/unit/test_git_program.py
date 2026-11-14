@@ -63,7 +63,7 @@ def make_partial_clone(
     git(environ, source, "add", "note.md")
     git(environ, source, "commit", "-q", "-m", "the first note")
     origin = work / "origin.git"
-    git(environ, work, "init", "-q", "--bare", str(origin))
+    git(environ, work, "init", "-q", "--bare", "-b", "main", str(origin))
     git(environ, source, "push", "-q", str(origin), "main")
     git(environ, origin, "config", "uploadpack.allowFilter", "true")
     git(environ, work, "clone", "-q", "--no-checkout", "--filter=tree:0", origin.as_uri(), str(clone))
