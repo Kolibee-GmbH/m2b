@@ -7,6 +7,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-11-14
+
 ### Fixed
 
 - The worklog is written after a day with many sessions too. Its model step got the facts of the
