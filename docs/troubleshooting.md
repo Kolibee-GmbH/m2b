@@ -52,6 +52,14 @@ for a setup without a calendar.
 - **A step fails with a login message, or `claude` is not found.** Run `claude` in a terminal and
   log in. A schedule runs with a short `PATH`; record where `claude` is:
   `m2b config set executables.claude "$(command -v claude)"`.
+- **`store-git: cannot commit (.git in the store folder points at ...)`, or a review task with
+  the same words.** The store's repository is kept outside the store folder and this machine's
+  config does not name it, so curation runs commit nothing. Check that the path in the message
+  is the repository you made, then name it:
+  `m2b config set curation.git_directory <path>`
+  ([A commit per run](curation.md#a-commit-per-run)). When the message says the file leads to
+  another directory than the config names, something rewrote the `.git` file in the store
+  folder: look at that file before you change the config.
 - **The session start says the last run failed.** The review task in your list names the step
   and the cause. Fix it and run `m2b curate --force`.
 - **A topic's facts do not come in when you name it.** The hook that brings them says nothing when

@@ -246,7 +246,7 @@ def _store_git_check(config: MachineConfig, context: Context) -> list[Check]:
         switched_off = "curation.git_commit is false on this machine, so its runs commit nothing"
         return [Check(name, FOUND, f"{GIT_FOLDER_SEEN}; {switched_off}")]
     try:
-        repository = run_commit.find_repository(store, context.environ)
+        repository = run_commit.find_repository(store, context.environ, named_directory=config.curation.git_directory)
         if repository is None:
             return [Check(name, CANNOT_COMMIT, f"{NO_GIT}; {LEFT_UNCOMMITTED}")]
         directory = run_commit.git_directory(repository)

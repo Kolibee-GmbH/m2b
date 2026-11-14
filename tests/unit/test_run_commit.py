@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import os
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -12,6 +13,7 @@ import unicodedata
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 from m2b import git_program
 from m2b.curate import run_commit
@@ -19,6 +21,7 @@ from m2b.run_record import StepResult
 from m2b.store.folder import FolderStore
 from m2b.store.guard import DatalessGuard
 from store_contract import FakeEviction
+from test_git_program import make_partial_clone
 
 GIT = shutil.which("git")
 START = datetime.datetime(2026, 11, 7, 9, 0).astimezone()
@@ -26,7 +29,7 @@ TEXT = run_commit.Message("m2b: curation run 2026-11-07 09:00", "succeeded: inge
 NEW_CAPTURE = "20261107T080000Z-cli-c3d4.md"
 OWNER = ("-c", "user.name=Alex", "-c", "user.email=alex@example.com")
 # The last option m2b gives git before the subcommand.
-GIT_OPTIONS_END = "core.fsmonitor=false"
+GIT_OPTIONS_END = git_program.SETTINGS[-1]
 
 
 class RecordingRunner:
@@ -71,6 +74,8 @@ class RunCommitTest(unittest.TestCase):
             "GIT_CONFIG_SYSTEM": os.devnull,
         }
         self.runner = RecordingRunner()
+        # The git directory the machine config names; none, as on a machine that keeps `.git` in the store.
+        self.named: Path | None = None
 
     def write(self, relative: str, text: str) -> None:
         target = self.root / relative
@@ -96,7 +101,7 @@ class RunCommitTest(unittest.TestCase):
         self.git("commit", "-q", "-m", "the store as Alex set it up")
 
     def repository(self) -> run_commit.Repository:
-        found = run_commit.find_repository(self.store, self.environ, run=self.runner)
+        found = run_commit.find_repository(self.store, self.environ, run=self.runner, named_directory=self.named)
         assert found is not None
         return found
 
@@ -263,6 +268,7 @@ class WhatGoesInTest(RunCommitTest):
         outside = self.root.parent / "store-history"
         self.git("init", "-q", "-b", "main", "--separate-git-dir", str(outside))
         self.assertTrue((self.root / ".git").is_file())
+        self.named = outside
         before = run_commit.listing(self.store)
         self.write("memory/MEMORY.md", "# Memory\n")
 
@@ -359,7 +365,16 @@ class TheOwnersRepositoryTest(RunCommitTest):
         self.assertEqual((self.root / ".git/config").read_bytes(), config)
         self.assertEqual(
             set(self.runner.subcommands()),
-            {"rev-parse", "read-tree", "check-ignore", "update-index", "write-tree", "commit-tree", "update-ref"},
+            {
+                "rev-parse",
+                "config",
+                "read-tree",
+                "check-ignore",
+                "update-index",
+                "write-tree",
+                "commit-tree",
+                "update-ref",
+            },
         )
 
     def test_variables_that_point_git_elsewhere_do_not_reach_it(self) -> None:
@@ -933,6 +948,7 @@ class WaitingCapturesTest(RunCommitTest):
             set(self.runner.subcommands()),
             {
                 "rev-parse",
+                "config",
                 "ls-files",
                 "read-tree",
                 "check-ignore",
@@ -987,6 +1003,339 @@ class WaitingCapturesTest(RunCommitTest):
             self.commit_captures()
 
         self.assertEqual(len(self.log()), 2)
+
+
+class WhichRepositoryTest(RunCommitTest):
+    """A store whose ``.git`` is a file that points at a git directory kept outside the store folder."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.outside = self.root.parent / "store-history"
+        self.marker = self.root.parent / "a-command-ran"
+
+    def repository_kept_outside(self) -> None:
+        """The store as its owner committed it, with the git directory outside and named in the machine config."""
+        self.git("init", "-q", "-b", "main", "--separate-git-dir", str(self.outside))
+        self.write("memory/MEMORY.md", "# Memory\n")
+        self.git("add", "memory")
+        self.git("commit", "-q", "-m", "the store as Alex set it up")
+        self.named = self.outside
+
+    def another_repository(self) -> Path:
+        """The git directory of a repository of its own, whose configuration names a command for
+        every file added; the store's attributes ask for that command."""
+        elsewhere = self.root.parent / "another-repository"
+        elsewhere.mkdir()
+        self.git("init", "-q", "-b", "main", cwd=elsewhere)
+        self.git("commit", "-q", "--allow-empty", "-m", "other work", cwd=elsewhere)
+        self.git("config", "filter.marked.clean", f"touch {shlex.quote(str(self.marker))}; cat", cwd=elsewhere)
+        self.write(".gitattributes", "* filter=marked\n")
+        return elsewhere / ".git"
+
+    def point_at(self, written: object) -> None:
+        (self.root / ".git").write_text(f"gitdir: {written}\n", encoding="utf-8")
+
+    def a_new_fact(self) -> run_commit.StoreListing:
+        before = run_commit.listing(self.store)
+        self.write("memory/dana.md", "# Dana\n\n- Likes old maps.\n")
+        return before
+
+    def subjects_in(self, git_directory: Path) -> list[str]:
+        return self.git("--git-dir", str(git_directory), "log", "--format=%s").splitlines()
+
+    def test_the_git_directory_the_config_names_is_committed_into(self) -> None:
+        """Covers: B168"""
+        self.repository_kept_outside()
+
+        self.commit(self.a_new_fact())
+
+        self.assertEqual(self.subjects_in(self.outside), [TEXT.subject, "the store as Alex set it up"])
+
+    def test_a_git_file_rewritten_to_another_repository_stops_the_commit_before_any_git_starts(self) -> None:
+        """Covers: B168"""
+        self.repository_kept_outside()
+        other = self.another_repository()
+        before = self.a_new_fact()
+        self.point_at(other)
+
+        with self.assertRaisesRegex(
+            run_commit.CommitError, r"leads to \S+another-repository/\.git, not to \S+store-history"
+        ):
+            self.commit(before)
+
+        self.assertEqual(self.runner.calls, [])
+        self.assertFalse(self.marker.exists())
+        self.assertEqual(self.subjects_in(other), ["other work"])
+        self.assertEqual(self.subjects_in(self.outside), ["the store as Alex set it up"])
+
+    def test_the_other_repositorys_command_runs_once_the_config_names_that_repository(self) -> None:
+        # What the test above keeps from happening, shown to happen: the filter is the named repository's.
+        self.repository_kept_outside()
+        other = self.another_repository()
+        before = self.a_new_fact()
+        self.point_at(other)
+        self.named = other
+
+        self.commit(before)
+
+        self.assertTrue(self.marker.exists())
+        self.assertEqual(self.subjects_in(other), [TEXT.subject, "other work"])
+
+    def test_waiting_captures_are_not_committed_into_another_repository_either(self) -> None:
+        """Covers: B168"""
+        self.repository_kept_outside()
+        other = self.another_repository()
+        self.write(f"inbox/{NEW_CAPTURE}", "Dana moved to Lisbon\n")
+        before = run_commit.listing(self.store)
+        self.point_at(other)
+
+        with self.assertRaisesRegex(run_commit.CommitError, "not to .*the git directory this machine's config names"):
+            run_commit.commit_waiting_captures(self.repository(), before, TEXT, self.temp_dir)
+
+        self.assertEqual(self.runner.calls, [])
+        self.assertEqual(self.subjects_in(other), ["other work"])
+
+    def test_a_git_file_is_not_followed_while_the_config_names_no_git_directory(self) -> None:
+        """Covers: B168"""
+        self.repository_kept_outside()
+        self.named = None
+
+        with self.assertRaises(run_commit.CommitError) as raised:
+            self.commit(self.a_new_fact())
+
+        self.assertIn(
+            f".git in the store folder points at {self.outside}, and this machine's config names no",
+            str(raised.exception),
+        )
+        self.assertIn("m2b config set curation.git_directory", str(raised.exception))
+        self.assertEqual(self.runner.calls, [])
+        self.assertEqual(self.subjects_in(self.outside), ["the store as Alex set it up"])
+
+    def test_git_is_given_the_named_directory_with_every_call_and_reads_no_rewritten_file(self) -> None:
+        """Covers: B168"""
+        self.repository_kept_outside()
+        other = self.another_repository()
+        before = self.a_new_fact()
+        commands: list[list[str]] = []
+
+        def remembering(command: list[str], **options: Any) -> Any:
+            if GIT_OPTIONS_END in command:
+                commands.append(command)
+            return self.runner(command, **options)
+
+        # git has started with the directory in its command line; the file changes under it.
+        self.runner.before["read-tree"] = lambda: self.point_at(other)
+        repository = run_commit.find_repository(self.store, self.environ, run=remembering, named_directory=self.named)
+        assert repository is not None
+
+        with self.assertRaisesRegex(run_commit.CommitError, "leads to"):
+            run_commit.commit(repository, before, TEXT, self.temp_dir)
+
+        self.assertEqual(self.runner.subcommands(), ["rev-parse", "config", "rev-parse", "read-tree"])
+        self.assertEqual(len(commands), 4)
+        for command in commands:
+            self.assertEqual(command[3:5], ["--git-dir", str(self.outside)], command)
+        self.assertFalse(self.marker.exists())
+        self.assertEqual(self.subjects_in(other), ["other work"])
+        self.assertEqual(self.subjects_in(self.outside), ["the store as Alex set it up"])
+
+    def test_a_git_file_may_name_the_directory_from_the_store_folder(self) -> None:
+        self.repository_kept_outside()
+        self.point_at("../store-history")
+
+        self.commit(self.a_new_fact())
+
+        self.assertEqual(len(self.subjects_in(self.outside)), 2)
+
+    def test_the_named_directory_may_be_reached_through_a_link_outside_the_store(self) -> None:
+        self.repository_kept_outside()
+        link = self.root.parent / "history-link"
+        os.symlink(self.outside, link)
+        self.named = link
+
+        self.commit(self.a_new_fact())
+
+        self.assertEqual(len(self.subjects_in(self.outside)), 2)
+
+    def test_a_git_folder_in_the_store_needs_no_naming_and_takes_its_own_name(self) -> None:
+        """Covers: B168"""
+        self.repository_with_a_commit()
+        self.commit(self.a_new_fact())
+        self.named = self.root / ".git"
+        self.write("memory/dana.md", "# Dana\n")
+        before = run_commit.listing(self.store)
+        self.write("memory/dana.md", "# Dana\n\n- Moved to Lisbon.\n")
+
+        self.commit(before)
+
+        self.assertEqual(len(self.log()), 3)
+        self.assertNotIn("--git-dir", [argument for arguments, _ in self.runner.calls for argument in arguments])
+
+    def test_a_git_folder_in_the_store_is_not_committed_into_while_the_config_names_another(self) -> None:
+        """Covers: B168"""
+        self.repository_with_a_commit()
+        self.outside.mkdir()
+        self.named = self.outside
+
+        with self.assertRaisesRegex(
+            run_commit.CommitError, r"leads to \S+sb-test-store/\.git, not to \S+store-history"
+        ):
+            self.commit(self.a_new_fact())
+
+        self.assertEqual(self.runner.calls, [])
+        self.assertEqual(len(self.log()), 1)
+
+    def test_a_git_that_is_a_link_is_not_followed(self) -> None:
+        """Covers: B168"""
+        self.repository_kept_outside()
+        (self.root / ".git").unlink()
+        os.symlink(self.outside, self.root / ".git")
+
+        with self.assertRaisesRegex(run_commit.CommitError, r"\.git in the store folder is a symbolic link"):
+            self.commit(self.a_new_fact())
+
+        self.assertEqual(self.runner.calls, [])
+        self.assertEqual(self.subjects_in(self.outside), ["the store as Alex set it up"])
+
+    def test_a_link_that_takes_the_files_place_after_the_look_at_it_is_not_followed(self) -> None:
+        self.repository_kept_outside()
+        pointer = self.root.parent / "a-git-file-elsewhere"
+        os.replace(self.root / ".git", pointer)
+        os.symlink(pointer, self.root / ".git")
+
+        with (
+            mock.patch.object(Path, "is_symlink", return_value=False),
+            self.assertRaisesRegex(run_commit.CommitError, r"\.git in the store folder could not be read"),
+        ):
+            self.commit(self.a_new_fact())
+
+        self.assertEqual(self.runner.calls, [])
+
+    def test_a_git_file_that_names_no_directory_stops_the_commit(self) -> None:
+        self.repository_kept_outside()
+        nothing_named = (
+            "",
+            "gitdir:",
+            f"worktree: {self.outside}\n",
+            "gitdir: " + "x" * run_commit.GITFILE_MAX_BYTES,
+            f"gitdir: {self.outside}\0elsewhere\n",
+        )
+        for content in nothing_named:
+            with self.subTest(content=content[:20]):
+                (self.root / ".git").write_text(content, encoding="utf-8")
+
+                with self.assertRaisesRegex(
+                    run_commit.CommitError, "neither a git directory nor a file that names one"
+                ):
+                    self.commit(self.a_new_fact())
+
+        self.assertEqual(self.runner.calls, [])
+
+    def test_a_named_directory_that_is_not_there_is_the_reason(self) -> None:
+        self.repository_kept_outside()
+        self.named = self.root.parent / "sb-test-gone"
+
+        with self.assertRaisesRegex(run_commit.CommitError, r"sb-test-gone, the git directory .* is not there"):
+            self.commit(self.a_new_fact())
+
+        self.assertEqual(self.runner.calls, [])
+
+    def test_a_named_path_that_is_a_file_is_said_to_be_no_directory(self) -> None:
+        self.repository_kept_outside()
+        self.named = self.root.parent / "sb-test-a-file"
+        self.named.write_text("", encoding="utf-8")
+
+        with self.assertRaisesRegex(run_commit.CommitError, r"sb-test-a-file, the git directory .* is not a directory"):
+            self.commit(self.a_new_fact())
+
+    def test_a_pipe_in_the_place_of_the_git_file_is_not_waited_for(self) -> None:
+        self.repository_kept_outside()
+        (self.root / ".git").unlink()
+        os.mkfifo(self.root / ".git")
+        really_open = os.open
+
+        def never_blocking(path: Any, flags: int, *more: Any, **options: Any) -> int:
+            # Without the flag this open would wait for a writer for ever, and the test with it.
+            if not flags & os.O_NONBLOCK:
+                raise AssertionError("the git file is opened in a way that waits for a pipe's writer")
+            return really_open(path, flags, *more, **options)
+
+        with (
+            mock.patch.object(os, "open", never_blocking),
+            self.assertRaisesRegex(run_commit.CommitError, "neither a git directory nor a file that names one"),
+        ):
+            self.commit(self.a_new_fact())
+
+        self.assertEqual(self.runner.calls, [])
+
+    def test_a_path_in_the_git_file_is_shown_in_one_line_and_without_control_characters(self) -> None:
+        self.repository_kept_outside()
+        self.point_at("/sb-test-x\x1b[2K\rstore-git: found\nanother line")
+
+        with self.assertRaises(run_commit.CommitError) as raised:
+            self.commit(self.a_new_fact())
+
+        self.assertIn("leads to /sb-test-x?[2K?store-git: found?another line, not to", str(raised.exception))
+        self.assertEqual(len(str(raised.exception).splitlines()), 1)
+
+    def test_what_no_output_can_encode_or_keep_in_one_line_is_shown_as_a_question_mark(self) -> None:
+        self.repository_kept_outside()
+        separators = "\u2028store-git: found\u2029".encode()
+        (self.root / ".git").write_bytes(b"gitdir: /sb-test-x\xffy" + separators + b"\n")
+
+        with self.assertRaises(run_commit.CommitError) as raised:
+            self.commit(self.a_new_fact())
+
+        self.assertIn("leads to /sb-test-x?y?store-git: found?, not to", str(raised.exception))
+        self.assertTrue(str(raised.exception).encode("utf-8"))
+        self.assertEqual(len(str(raised.exception).splitlines()), 1)
+
+    def test_a_long_path_in_the_git_file_is_shown_cut(self) -> None:
+        self.repository_kept_outside()
+        self.point_at("/sb-test-" + "x" * 2000)
+
+        with self.assertRaises(run_commit.CommitError) as raised:
+            self.commit(self.a_new_fact())
+
+        self.assertIn("/sb-test-" + "x" * (run_commit.SHOWN_PATH_LENGTH - 9) + "..., not to", str(raised.exception))
+
+
+class NoRemoteTest(RunCommitTest):
+    """A store that is a partial clone, whose remote names a command for fetching what it lacks."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.marker = self.root.parent / "a-command-ran"
+        self.head = make_partial_clone(self.environ, self.root.parent / "made-from", self.root, self.marker)
+
+    def test_a_partial_clone_is_not_committed_into_and_nothing_is_fetched(self) -> None:
+        """Covers: B169"""
+        before = run_commit.listing(self.store)
+        self.write("memory/dana.md", "# Dana\n")
+
+        with self.assertRaisesRegex(run_commit.CommitError, "the repository is a partial clone"):
+            self.commit(before)
+
+        self.assertEqual(self.runner.subcommands(), ["rev-parse", "config"])
+        self.assertFalse(self.marker.exists())
+        self.assertEqual(self.git("rev-parse", "HEAD").strip(), self.head)
+
+    def test_waiting_captures_are_not_committed_into_a_partial_clone(self) -> None:
+        """Covers: B169"""
+        self.write(f"inbox/{NEW_CAPTURE}", "Dana moved to Lisbon\n")
+        before = run_commit.listing(self.store)
+
+        with self.assertRaisesRegex(run_commit.CommitError, "the repository is a partial clone"):
+            run_commit.commit_waiting_captures(self.repository(), before, TEXT, self.temp_dir)
+
+        self.assertFalse(self.marker.exists())
+
+    def test_no_git_of_a_run_fetches_even_past_that_refusal(self) -> None:
+        """Covers: B169"""
+        with self.assertRaisesRegex(run_commit.CommitError, "git read-tree failed"):
+            self.repository().call(["read-tree", self.head], self.temp_dir / "index")
+
+        self.assertFalse(self.marker.exists())
 
 
 class EvictedFilesTest(RunCommitTest):

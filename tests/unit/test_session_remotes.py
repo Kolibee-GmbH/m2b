@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-from m2b import session_remotes
+from m2b import git_program, session_remotes
 from m2b.session_remotes import ByRemote, RemoteRule
 
 NOW = datetime.datetime(2026, 11, 7, 9, 0, tzinfo=datetime.timezone.utc)
@@ -285,6 +285,26 @@ class RemoteRuleTest(Fixture):
         rule.judge(str(self.repo))
 
         self.assertEqual(asked, [self.repo])
+
+
+class HowGitIsStartedTest(unittest.TestCase):
+    def test_the_remotes_are_asked_of_a_git_started_as_every_git_of_m2b(self) -> None:
+        """Covers: B169"""
+        started: list[tuple[list[str], dict[str, str]]] = []
+
+        def recording(command: list[str], **options: Any) -> subprocess.CompletedProcess[str]:
+            started.append((command, options["env"]))
+            return subprocess.CompletedProcess(command, 1, "", "")
+
+        with tempfile.TemporaryDirectory() as folder:
+            given = {"PATH": "/usr/bin", "GIT_DIR": "/elsewhere/.git", "GIT_ALLOW_PROTOCOL": "file"}
+            session_remotes.remotes_in(Path(folder), "git", recording, environ=given)
+
+        ((command, environ),) = started
+        settings = [option for setting in git_program.SETTINGS for option in ("-c", setting)]
+        self.assertEqual(command[1:5], ["-C", folder, "-c", "safe.directory=*"])
+        self.assertEqual(command[5 : 5 + len(settings)], settings)
+        self.assertEqual(environ, {"PATH": "/usr/bin", **git_program.REACHES_NO_REMOTE})
 
 
 if __name__ == "__main__":

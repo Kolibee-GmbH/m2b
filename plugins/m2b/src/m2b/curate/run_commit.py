@@ -57,6 +57,21 @@ identity has to be configured, ``git log --author=m2b`` lists the runs, and what
 owner's commits does not count these. No hook runs and nothing is signed, because a run has nobody
 to answer a prompt. The filters the repository configures for adding a file (encryption, line
 endings) do run, for the named files, as they do when the owner adds one.
+
+Which repository that is must not be for the store to say. The ``.git`` of a store kept in a
+synced folder is best a file of one line that names a git directory outside the folder, and
+whoever writes the store can write that line: pointed at another repository of the owner, a run
+would commit the notes there, and pointed at a folder made for it, git would run what that
+folder's configuration names. So the line is read here, not by git, and it is followed only to
+the directory this machine's config names (``curation.git_directory``). git is then given that
+directory by name with every call and never reads the line itself, so a line rewritten between two
+calls changes nothing. A ``.git`` that is a folder is the store's own repository and needs no
+naming. Everything in it lies in the store, its configuration and whatever it says about where its
+objects and branches are kept, and is as trusted as the owner's own: naming a directory does nothing for such a
+store, keeping it where only the owner writes does.
+
+Nothing a run starts reaches a remote (``git_program``), and a repository that is a partial clone
+is not committed into: git would fetch the objects it lacks as soon as it needed one.
 """
 
 from __future__ import annotations
@@ -76,7 +91,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from m2b.git_program import usable_git
+from m2b import git_program
 from m2b.notes.layout import INBOX, bundle_stem
 from m2b.notes.names import NoteName
 from m2b.run_record import FAILED, SKIPPED, SUCCEEDED, StepResult
@@ -88,17 +103,17 @@ IDENTITY_EMAIL = "m2b@localhost"
 GIT_TIMEOUT_SECONDS = 60.0
 # What git reads from the work tree to decide how, and whether, a path goes in.
 RULE_FILES = (".gitignore", ".gitattributes")
-# Variables that would point git at another repository, index or work tree than the store's.
-REDIRECTING_VARIABLES = (
-    "GIT_DIR",
-    "GIT_WORK_TREE",
-    "GIT_INDEX_FILE",
-    "GIT_OBJECT_DIRECTORY",
-    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-    "GIT_COMMON_DIR",
-    "GIT_NAMESPACE",
-    "GIT_PREFIX",
-)
+# How the ``.git`` file of a work tree names the git directory kept elsewhere.
+GITFILE_PREFIX = b"gitdir: "
+# More than any path is long.
+GITFILE_MAX_BYTES = 8192
+SHOWN_PATH_LENGTH = 200
+# Unicode categories of the characters a shown path must not carry: controls, halves of a
+# surrogate pair, and the separators of lines and paragraphs.
+NOT_SHOWN = ("Cc", "Cs", "Zl", "Zp")
+NAMING_KEY = "curation.git_directory"
+# What marks a repository that lacks objects by design and fetches each when it is needed.
+PARTIAL_CLONE_KEYS = r"^(extensions\.partialclone|remote\..*\.(promisor|partialclonefilter))$"
 # What an operation the owner has not finished leaves in the git directory; a commit onto HEAD
 # in the middle of one would become part of it.
 UNFINISHED_OPERATIONS = {
@@ -152,6 +167,8 @@ class Repository:
     environ: Mapping[str, str]
     pass_fds: Sequence[int] = ()
     run: Runner = subprocess.run
+    # The git directory this machine's config names for the store; None when it names none.
+    named_directory: Path | None = None
 
     def call(
         self,
@@ -163,18 +180,11 @@ class Repository:
         """Runs one git command in the store folder; its exit code and what it printed.
 
         ``index`` is the temporary index to work on, ``paths`` go to standard input, each ended by
-        a NUL. An exit code outside ``allowed``, a timeout or a git that cannot start raises.
+        a NUL. An exit code outside ``allowed``, a timeout or a git that cannot start raises, and
+        so does a ``.git`` that leads where a run must not commit: no git is started then.
         """
-        command = [
-            self.git,
-            "-C",
-            str(self.store.root),
-            "-c",
-            f"core.hooksPath={os.devnull}",
-            "-c",
-            "core.fsmonitor=false",
-            *arguments,
-        ]
+        kept_elsewhere = directory_kept_elsewhere(self.store, self.named_directory)
+        command = git_program.git_command(self.git, self.store.root, arguments, git_directory=kept_elsewhere)
         environ = dict(self.environ)
         if index is not None:
             environ["GIT_INDEX_FILE"] = str(index)
@@ -209,28 +219,100 @@ def find_repository(
     pass_fds: Sequence[int] = (),
     platform: str = sys.platform,
     run: Runner = subprocess.run,
+    named_directory: Path | None = None,
 ) -> Repository | None:
     """The repository to commit a run into; None without a ``.git`` in the store folder and
-    without a git to start, which are the two cases in which nothing is done. A ``.git`` whose work
-    tree turns out to be another folder is found here and fails the commit, which says so."""
+    without a git to start, which are the two cases in which nothing is done. ``named_directory``
+    is the git directory the machine config names. A ``.git`` that leads to another one, or whose
+    work tree turns out to be another folder, is found here and fails the commit, which says so."""
     if not holds_git_folder(store):
         return None
-    git = usable_git(environ, platform, run, GIT_TIMEOUT_SECONDS)
+    git = git_program.usable_git(environ, platform, run, GIT_TIMEOUT_SECONDS)
     if git is None:
         return None
-    return Repository(store, git, _git_environment(environ), pass_fds, run)
+    return Repository(store, git, _git_environment(environ), pass_fds, run, named_directory)
 
 
 def _git_environment(environ: Mapping[str, str]) -> dict[str, str]:
-    kept = {name: value for name, value in environ.items() if name not in REDIRECTING_VARIABLES}
     return {
-        **kept,
+        **git_program.git_environment(environ),
         "GIT_AUTHOR_NAME": IDENTITY_NAME,
         "GIT_AUTHOR_EMAIL": IDENTITY_EMAIL,
         "GIT_COMMITTER_NAME": IDENTITY_NAME,
         "GIT_COMMITTER_EMAIL": IDENTITY_EMAIL,
-        "GIT_TERMINAL_PROMPT": "0",
     }
+
+
+def directory_kept_elsewhere(store: Store, named: Path | None) -> Path | None:
+    """The git directory the store folder's ``.git`` file points at, when a run may commit into it;
+    None when ``.git`` is a folder, the git directory itself, which git finds without being told.
+
+    Read without starting git. A ``CommitError`` says why a run must not commit: the file points
+    at another directory than ``named``, the one the machine config names, or the config names none.
+    """
+    if store.is_evicted(GIT_FOLDER):
+        raise CommitError(f"{GIT_FOLDER} is not downloaded to this machine; run: {fetch_command(GIT_FOLDER)}")
+    own = store.root / GIT_FOLDER
+    pointed_at = _pointed_at(store)
+    if named is None:
+        if pointed_at is None:
+            return None
+        raise CommitError(
+            f"{GIT_FOLDER} in the store folder points at {_shown(pointed_at)}, and this machine's config names "
+            f"no git directory to commit into; when that is the repository you keep the store in, name it with "
+            f"m2b config set {NAMING_KEY} and its path"
+        )
+    if not named.is_dir():
+        missing = "is not there" if not os.path.lexists(named) else "is not a directory"
+        raise CommitError(f"{named}, the git directory this machine's config names ({NAMING_KEY}), {missing}")
+    found = own if pointed_at is None else pointed_at
+    if not _same_folder(found, named):
+        raise CommitError(
+            f"{GIT_FOLDER} in the store folder leads to {_shown(found)}, not to {named}, the git directory "
+            f"this machine's config names ({NAMING_KEY})"
+        )
+    return None if pointed_at is None else named
+
+
+def _pointed_at(store: Store) -> Path | None:
+    """Where the store folder's ``.git`` file points, as git reads such a file; None for a ``.git`` folder."""
+    entry = store.root / GIT_FOLDER
+    if entry.is_symlink():
+        raise CommitError(f"{GIT_FOLDER} in the store folder is a symbolic link, and m2b follows none below the store")
+    if entry.is_dir():
+        return None
+    try:
+        # Not followed either when a link took the file's place since the look above, and not
+        # waited for when the name is a pipe, which nobody may ever write to.
+        descriptor = os.open(entry, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(descriptor, "rb") as file:
+            content = file.read(GITFILE_MAX_BYTES + 1) if stat.S_ISREG(os.fstat(descriptor).st_mode) else b""
+    except OSError as error:
+        raise CommitError(f"{GIT_FOLDER} in the store folder could not be read: {error}") from error
+    if not content.startswith(GITFILE_PREFIX) or len(content) > GITFILE_MAX_BYTES or b"\0" in content:
+        raise CommitError(f"{GIT_FOLDER} in the store folder is neither a git directory nor a file that names one")
+    written = os.fsdecode(content[len(GITFILE_PREFIX) :].rstrip(b"\r\n"))
+    # A path that does not start at the root of the file system starts at the store folder.
+    return store.root / written
+
+
+def _same_folder(one: Path, other: Path) -> bool:
+    try:
+        return os.path.samefile(one, other)
+    except OSError:
+        return False
+
+
+def _shown(path: Path) -> str:
+    """A path from the ``.git`` file as it goes into a reason: in one line and of a bounded length.
+
+    The reason is printed by ``m2b doctor`` and written into the review task, and whoever writes
+    the store wrote this path: a line break in it would start a line of its own there, and an
+    escape sequence would reach the terminal. git writes a ``?`` for such a character too. A byte
+    that is no text comes out of the file as half a surrogate pair, which no output can encode.
+    """
+    text = "".join("?" if unicodedata.category(character) in NOT_SHOWN else character for character in str(path))
+    return text if len(text) <= SHOWN_PATH_LENGTH else f"{text[:SHOWN_PATH_LENGTH]}..."
 
 
 def listing(store: Store) -> StoreListing:
@@ -452,14 +534,22 @@ def _commit_onto(
 
 
 def git_directory(repository: Repository) -> Path:
-    """The repository's git directory, for a store folder that is the top of its work tree; a
-    ``CommitError`` says why there is none to commit into."""
-    if repository.store.is_evicted(GIT_FOLDER):
-        raise CommitError(f"{GIT_FOLDER} is not downloaded to this machine; run: {fetch_command(GIT_FOLDER)}")
+    """The git directory a run commits into, for a store folder that is the top of its work tree; a
+    ``CommitError`` says why there is none to commit into. Asked before anything reads an object."""
     answer = repository.call(["rev-parse", "--absolute-git-dir", "--show-toplevel"])[1].splitlines()
     if len(answer) != 2 or Path(answer[1]).resolve() != repository.store.root.resolve():
         raise CommitError("the store folder is not the top of the repository's work tree")
+    _refuse_partial_clone(repository)
     return Path(answer[0])
+
+
+def _refuse_partial_clone(repository: Repository) -> None:
+    found, _ = repository.call(["config", "--get-regexp", PARTIAL_CLONE_KEYS], allowed=(0, 1))
+    if found == 0:
+        raise CommitError(
+            "the repository is a partial clone, which fetches the objects it lacks from a remote when git "
+            "needs one; m2b starts nothing that reaches a remote and commits nothing there"
+        )
 
 
 def _refuse_unfinished_operation(git_directory: Path) -> None:

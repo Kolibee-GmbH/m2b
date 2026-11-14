@@ -360,7 +360,9 @@ class _Run:
         if not self.config.curation.git_commit:
             return
         try:
-            self.repository = run_commit.find_repository(self.store, self.environ, self.lock.pass_fds)
+            self.repository = run_commit.find_repository(
+                self.store, self.environ, self.lock.pass_fds, named_directory=self.config.curation.git_directory
+            )
             if self.repository is not None:
                 self.listed_before = run_commit.listing(self.store)
         except (OSError, StoreError) as error:

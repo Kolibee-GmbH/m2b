@@ -93,9 +93,28 @@ git add -A
 git commit -m "the store before m2b's commits"
 ```
 
-In a synced folder, make the repository with `git init --separate-git-dir <a folder outside>`
-instead of `git init`, for the reason given further down, and know that `git add -A` reads every
-file: in iCloud Drive it downloads those that are not on this machine.
+In a synced folder (iCloud Drive, Dropbox, Syncthing) keep the repository's own files outside
+the folder, for the reason given further down, and tell this machine where they are:
+
+```bash
+cd ~/m2b
+git init --separate-git-dir ~/.local/share/m2b/store.git
+git add -A
+git commit -m "the store before m2b's commits"
+m2b config set curation.git_directory ~/.local/share/m2b/store.git
+```
+
+`git init --separate-git-dir` leaves a `.git` file of one line in the store folder, which names
+the directory. That line is synced like everything in the store, so another device, or anything
+else that writes the store, can rewrite it. m2b therefore does not take the directory from the
+file: a run follows it only to the directory that `curation.git_directory` in this machine's
+config names. The last line above does that, once on
+each machine that curates. Without it, or when the file points somewhere else than the config
+says, a run commits nothing and starts no git for a commit, and its review task and `m2b doctor`
+say why. A
+`.git` folder in the store folder, which plain `git init` makes, needs no such line. Know also
+that `git add -A` reads every file: in iCloud Drive it downloads those that are not on this
+machine.
 
 A run commits only what it changed. A file git has never seen, `memory/MEMORY.md` for one, would
 enter the repository whole with the first run that touches it, and reverting that run would delete
@@ -133,7 +152,9 @@ Both commits are m2b's own. Author and committer are `m2b <m2b@localhost>`, so `
 lists them, and the run's message says when the run started and how its steps ended. m2b writes no
 git configuration, never pushes, runs no hook and signs nothing, because a run has nobody to
 answer a prompt; the filters your repository sets for adding a file (encryption, line endings) do
-run. It commits onto HEAD as it is, whatever branch that is. In the middle of a merge, rebase,
+run. Nothing a run starts reaches a remote. A repository that is a partial clone would have git
+fetch the objects it lacks, so a run does not commit into one. It commits onto HEAD as it is,
+whatever branch that is. In the middle of a merge, rebase,
 cherry-pick, revert or bisect of yours, or when HEAD moved while it worked, it does not commit.
 
 A commit that fails never fails the run: it is the failed step `commit` in the review task and in
@@ -175,7 +196,8 @@ In a synced folder git is handed only files that are on this machine. A changed 
 downloaded is left out, and a `.gitignore` or `.gitattributes` that is not downloaded stops the
 commit and names the command that fetches it. Keep the repository's own files out of a synced
 folder: `git init --separate-git-dir <a folder outside>` in the store folder leaves only a small
-`.git` file there. A sync service that evicts or duplicates files inside `.git` breaks a
+`.git` file there, and `curation.git_directory` names the folder outside
+([above](#a-commit-per-run)). A sync service that evicts or duplicates files inside `.git` breaks a
 repository, whoever commits into it; m2b's git never downloads such a file, it fails, and the
 review says so.
 
@@ -186,6 +208,8 @@ without a `.git` in the store folder; `found` with the git directory and the git
 when a run here commits; `found` with the reason when this machine does not curate or has the
 commit off; or `cannot commit` with the reason. A machine without git is such a reason, and
 doctor is the only place you learn of it, because a run there commits nothing and says nothing.
+A `.git` file that points at a directory the config does not name is another; a run says that
+one in its review task too.
 Doctor looks for git on the `PATH` it is started with; a run started by a schedule looks on the
 `PATH` the schedule gives it.
 

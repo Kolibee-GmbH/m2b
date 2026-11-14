@@ -115,11 +115,12 @@ class ImportsTest(unittest.TestCase):
 
         self.assertEqual(imported, {f"{boundaries.CORE}.{module}" for module in IMPORTED_FROM_THE_CORE})
 
-    def test_what_the_worklog_imports_imports_nothing_else_of_the_core(self) -> None:
+    def test_what_the_worklog_imports_imports_of_the_core_only_what_is_named_here(self) -> None:
+        named = {f"{boundaries.CORE}.{module}" for module in IMPORTED_FROM_THE_CORE}
         for module in IMPORTED_FROM_THE_CORE:
             for source in sources_an_import_runs(module):
                 with self.subTest(module=module, source=source.name):
-                    self.assertEqual(core_modules_imported_by(source), set())
+                    self.assertEqual(core_modules_imported_by(source) - named, set())
 
     def test_the_helper_that_reads_imports_knows_a_core_import_in_each_form(self) -> None:
         forms = ("import m2b.config", "from m2b.store import base", "from . import base", "from .base import Store")

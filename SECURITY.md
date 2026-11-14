@@ -46,12 +46,30 @@ that list is denied and reported in the run's review task
 When the store folder is a git repository, a curation run starts `git` there to commit what it
 changed and, before its first step, the captures in the inbox that git does not know yet
 ([docs/curation.md](docs/curation.md#a-commit-per-run)). git is given those files by
-name and is asked for nothing that reaches a remote: m2b never pushes or fetches. For these calls
-it points git's hooks folder at nothing and turns the file-system monitor off, so neither a hook
-nor a monitor program of the repository runs. What does run is a filter the repository's configuration or your own names
-for adding a file, as with your own `git add`. The configuration in the store's `.git` is
-therefore as trusted as your own: keep the store in a repository only you write to, and
-`curation.git_commit: false` in the machine config keeps m2b from starting git at all.
+name. m2b also starts git to read the remotes of the folders your sessions start in and, with the
+worklog add-on, your commits there. Every git it starts is started the same way, with settings
+that win over the repository's configuration and your own: the hooks folder points at nothing,
+the file-system monitor is off, no signature is checked, every transport is closed and objects a
+partial clone lacks are not fetched. So no hook, no monitor and no signature program that a
+repository names runs, nothing reaches a remote, and no command a remote names for fetching
+runs. m2b never pushes or fetches, and a store that is a partial clone is not committed into.
+
+What does run, in the commit of a run alone, is a filter the repository's configuration or your
+own names for adding a file, as with your own `git add`. The configuration of the store's
+repository is therefore as trusted as your own, and where it lies decides who can write it:
+
+- A `.git` folder in the store folder lies where everything that writes the store can write it,
+  a sync service with what another device sent included: its configuration, and what it says
+  about where its objects and branches are kept. Keep such a store in a folder only you write to.
+- A `.git` file that points at a git directory outside the store folder
+  (`git init --separate-git-dir`) keeps that configuration on this machine. The file itself is
+  still in the store and can be rewritten there, to point at another repository of yours or at a
+  folder made for the purpose. So m2b reads the file itself, without git, and a run commits only
+  into the directory this machine's config names (`curation.git_directory`). When the file
+  points anywhere else, or the config names no directory, the run commits nothing, starts no git
+  for a commit, and says so in its review task and in `m2b doctor`.
+
+`curation.git_commit: false` in the machine config keeps a run from starting git at all.
 
 ## Untrusted input
 

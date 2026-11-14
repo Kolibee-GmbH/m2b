@@ -15,7 +15,7 @@ A URL is kept and compared without the user and password it may carry, where a t
 both as the repository's configuration writes it and as git rewrites it (``url.<base>.insteadOf``):
 the owner names the address they see, which may be either.
 
-Standard library only and nothing else of m2b: the worklog add-on imports it.
+Standard library and ``git_program`` only, nothing else of m2b: the worklog add-on imports both.
 """
 
 from __future__ import annotations
@@ -32,11 +32,11 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from m2b.git_program import git_command, git_environment
+
 NOTES_FOLDER = "session-remotes"
 KEEP_FOR = datetime.timedelta(days=30)
 GIT_TIMEOUT_SECONDS = 10.0
-# Variables that would have git read another repository's configuration than the folder's.
-REDIRECTING_VARIABLES = ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_CONFIG")
 # The remotes' URLs, the address a remote is pushed to when that is another one, and the rules by
 # which git rewrites the beginning of a URL.
 _ASKED_KEYS = r"^(remote\..*\.(push)?url|url\..*\.(push)?insteadof)$"
@@ -72,12 +72,12 @@ def remotes_in(
         result = run(
             # A repository another user owns is read too: git would leave its configuration out and
             # answer as for a folder in no repository, and reading a URL starts nothing from it.
-            [git, "-c", "safe.directory=*", "-C", str(folder), "config", "-z", "--get-regexp", _ASKED_KEYS],
+            git_command(git, folder, ["config", "-z", "--get-regexp", _ASKED_KEYS], ["safe.directory=*"]),
             capture_output=True,
             text=True,
             timeout=timeout,
             stdin=subprocess.DEVNULL,
-            env={name: value for name, value in given.items() if name not in REDIRECTING_VARIABLES},
+            env=git_environment(given),
         )
     except (OSError, ValueError, subprocess.SubprocessError):
         return None

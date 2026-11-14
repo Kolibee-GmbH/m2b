@@ -31,6 +31,31 @@ All notable changes to this project are documented here. The format follows
   its first step, like every capture git does not know yet
   ([A commit per run](docs/curation.md#a-commit-per-run),
   [#23](https://github.com/Kolibee-GmbH/m2b/pull/23)).
+- A run follows a `.git` file in the store folder only to the git directory this machine's
+  config names. A store in a synced folder keeps its repository outside, and the `.git` file in the
+  store folder names where; git followed that line, and whoever writes the store can rewrite it,
+  so a run could be made to commit your notes into another repository, or into a folder whose
+  configuration names commands git then ran. Now m2b reads the line itself and commits only into
+  the directory `curation.git_directory` names; otherwise the run commits nothing, starts no git
+  for a commit, and its review task and `m2b doctor` say why. **If your store has such a `.git` file**, name
+  its directory once on the curating machine, or runs stop committing:
+  `m2b config set curation.git_directory <path>`; `m2b doctor` shows the path the file holds in
+  its line `store-git`. A `.git` folder in the store folder needs nothing
+  ([A commit per run](docs/curation.md#a-commit-per-run),
+  [#23](https://github.com/Kolibee-GmbH/m2b/pull/23)).
+- No git that m2b starts reaches a remote or starts a program a repository names for signatures.
+  The commit of a run could fetch: in a store that was a partial clone, git fetched the objects
+  it lacked and ran the command the repository named for that. The worklog's `git log`, run in
+  every folder a session ran in, started the `gpg.program` of a repository that asked for
+  signatures to be shown. Now every git m2b starts, for the commit, for a folder's remotes and
+  for the worklog's commits, gets the same settings: no hook, no file-system monitor, no
+  signature check, every transport closed and no fetching of missing objects. A store that is a
+  partial clone is not committed into, and the review task says so
+  ([Security](SECURITY.md#what-m2b-handles),
+  [#23](https://github.com/Kolibee-GmbH/m2b/pull/23)).
+- The worklog reads a commit whose author time has no offset from UTC on Python 3.9 too. git
+  writes such a time with a `Z`, which that Python does not read, so the commit was left out of
+  the day ([#23](https://github.com/Kolibee-GmbH/m2b/pull/23)).
 
 ## [0.4.2] - 2026-11-13
 

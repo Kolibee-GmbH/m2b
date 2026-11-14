@@ -120,6 +120,15 @@ class ParseTest(unittest.TestCase):
         with self.assertRaises(InvalidConfigError):
             machine.parse_machine_config(_config(curation={"git_commit": "no"}), HOME)
 
+    def test_the_git_directory_a_run_commits_into_is_named_as_a_path_and_unset_by_default(self) -> None:
+        """Covers: B168"""
+        self.assertIsNone(machine.parse_machine_config(_config(), HOME).curation.git_directory)
+        named = machine.parse_machine_config(_config(curation={"git_directory": "~/history/store.git"}), HOME)
+        self.assertEqual(named.curation.git_directory, HOME / "history/store.git")
+        for written in ("history/store.git", True, ""):
+            with self.subTest(written=written), self.assertRaises(InvalidConfigError):
+                machine.parse_machine_config(_config(curation={"git_directory": written}), HOME)
+
     def test_curation_is_not_paused_until_the_config_says_so(self) -> None:
         """Covers: B161"""
         self.assertFalse(machine.parse_machine_config(_config(), HOME).curation.paused)

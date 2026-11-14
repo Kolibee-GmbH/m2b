@@ -385,6 +385,36 @@ class RunInARepositoryTest(test_runner.RunnerTest):
         self.assertEqual([step.name for step in record.steps].count("commit"), 1)
         self.assertIsNone(machine_state.load_backoff(self.machine))
 
+    def test_a_git_file_rewritten_to_another_repository_reaches_the_review_and_nothing_is_committed_there(
+        self,
+    ) -> None:
+        """Covers: B168"""
+        outside = self.store_root.parent / "sb-test-history.git"
+        other = self.store_root.parent / "sb-test-other-work"
+        other.mkdir()
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=other, env=self.environ, check=True)
+        self.curating(curation={"git_directory": str(outside)})
+        self.git("init", "-q", "-b", "main", "--separate-git-dir", str(outside))
+        self.git("add", "--all")
+        self.git("commit", "-q", "-m", "the store as Alex set it up")
+        self.capture(CAPTURE_NAME)
+        self.model({"m2b:ingest": test_runner.INGEST_FILES_THE_CAPTURE})
+        (self.store_root / ".git").write_text(f"gitdir: {other / '.git'}\n", encoding="utf-8")
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED)
+        self.assertIn("commit: .git in the store folder leads to ", outcome.message)
+        (review,) = self.review_tasks()
+        self.assertIn("not to", review.notes)
+        self.assertIn("the git directory this machine's config names (curation.git_directory)", review.notes)
+        in_other = subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", "HEAD"], cwd=other, env=self.environ, capture_output=True
+        )
+        self.assertNotEqual(in_other.returncode, 0)
+        (self.store_root / ".git").write_text(f"gitdir: {outside}\n", encoding="utf-8")
+        self.assertEqual(self.authors(), ["Alex"])
+
     def test_a_store_that_cannot_be_listed_before_the_run_is_a_failed_commit_not_a_failed_run(self) -> None:
         """Covers: B141"""
         self.curating()
