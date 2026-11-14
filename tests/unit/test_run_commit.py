@@ -526,6 +526,215 @@ class WaitingCapturesTest(RunCommitTest):
         self.assertEqual(self.committed_paths(), [f"A\t{capture}"])
         self.assertEqual(self.git("status", "--porcelain").splitlines(), [f"?? {late}"])
 
+    def test_a_capture_that_came_in_during_the_run_and_still_waits_outlives_a_revert_of_the_run(self) -> None:
+        """Covers: B167"""
+        self.repository_with_a_commit()
+        before = self.a_run()
+        late = self.waiting("20261107T090030Z-cli-a7b8.md", "arrived while the run was filing\n")
+
+        self.commit(before)
+
+        self.assertNotIn(late, "\n".join(self.committed_paths()))
+        self.assertEqual(self.git("status", "--porcelain", "--untracked-files=all").splitlines(), [f"?? {late}"])
+
+        self.git("revert", "--no-edit", "HEAD")
+
+        self.assertEqual((self.root / late).read_text(encoding="utf-8"), "arrived while the run was filing\n")
+
+    def test_the_next_run_commits_a_capture_the_run_before_it_left_waiting(self) -> None:
+        """Covers: B167"""
+        self.repository_with_a_commit()
+        before = self.a_run()
+        late = self.waiting("20261107T090030Z-cli-a7b8.md", "arrived while the run was filing\n")
+        self.commit(before)
+
+        self.commit_captures()
+
+        self.assertEqual(self.committed_paths(), [f"A\t{late}"])
+        self.assertEqual(self.git("status", "--porcelain"), "")
+
+    def test_a_capture_that_came_in_while_a_run_changed_only_its_record_makes_no_commit(self) -> None:
+        """Covers: B167"""
+        self.repository_with_a_commit()
+        before = run_commit.listing(self.store)
+        self.write("state/core/last-run.json", '{"state": "succeeded"}\n')
+        self.waiting()
+
+        new = self.commit(before, no_reason_alone=("state/core/last-run.json",))
+
+        self.assertIsNone(new)
+        self.assertEqual(len(self.log()), 1)
+
+    def test_a_waiting_capture_the_run_wrote_into_goes_into_the_runs_commit(self) -> None:
+        """Covers: B167"""
+        self.repository_with_a_commit()
+        before = run_commit.listing(self.store)
+        self.write("inbox/20261107T070000Z-cli-a1b2.md", "Dana likes old maps\n\nfiled: waits for a download\n")
+
+        self.commit(before)
+
+        self.assertEqual(self.committed_paths(), ["M\tinbox/20261107T070000Z-cli-a1b2.md"])
+
+    def test_a_waiting_file_with_a_name_outside_the_schema_that_changed_goes_into_the_runs_commit(self) -> None:
+        """Covers: B167"""
+        self.repository_with_a_commit()
+        self.write("inbox/report.docx", "the report as Alex wrote it\n")
+        self.git("add", "inbox/report.docx")
+        self.git("commit", "-q", "-m", "a report Alex dropped into the inbox")
+        before = run_commit.listing(self.store)
+        self.write("inbox/report.docx", "the report, saved again while the run ran\n")
+
+        self.commit(before)
+
+        self.assertEqual(self.committed_paths(), ["M\tinbox/report.docx"])
+
+    def test_a_new_file_whose_name_only_begins_like_the_inbox_goes_into_the_runs_commit(self) -> None:
+        """Covers: B167"""
+        self.repository_with_a_commit()
+        before = run_commit.listing(self.store)
+        self.write("inbox-rules.md", "what Alex wants filed where\n")
+
+        self.commit(before)
+
+        self.assertEqual(self.committed_paths(), ["A\tinbox-rules.md"])
+
+    def test_a_capture_the_run_gave_a_new_name_goes_in_under_it_and_a_revert_takes_the_renaming_back(self) -> None:
+        """Covers: B167"""
+        self.repository_with_a_commit()
+        self.write("inbox/dentist.md", "Dentist on Friday at nine\n")
+        self.git("add", "inbox/dentist.md")
+        self.git("commit", "-q", "-m", "a note Alex dropped into the inbox")
+        before = run_commit.listing(self.store)
+        renamed = f"inbox/{NEW_CAPTURE}"
+        os.replace(self.root / "inbox/dentist.md", self.root / renamed)
+
+        self.commit(before, carried_on={renamed: "dentist.md"})
+
+        self.assertEqual(self.committed_paths(), [f"A\t{renamed}", "D\tinbox/dentist.md"])
+
+        self.git("revert", "--no-edit", "HEAD")
+
+        self.assertEqual((self.root / "inbox/dentist.md").read_text(encoding="utf-8"), "Dentist on Friday at nine\n")
+        self.assertFalse((self.root / renamed).exists())
+        self.assertEqual(self.git("status", "--porcelain"), "")
+
+    def test_a_capture_the_run_renamed_out_of_a_subfolder_of_the_inbox_goes_in_under_its_new_name(self) -> None:
+        """Covers: B167"""
+        self.repository_with_a_commit()
+        self.write("inbox/scans/dentist.md", "Dentist on Friday at nine\n")
+        self.git("add", "inbox/scans/dentist.md")
+        self.git("commit", "-q", "-m", "a note Alex dropped into a folder of the inbox")
+        before = run_commit.listing(self.store)
+        renamed = f"inbox/{NEW_CAPTURE}"
+        os.replace(self.root / "inbox/scans/dentist.md", self.root / renamed)
+
+        self.commit(before, carried_on={renamed: "dentist.md"})
+
+        self.assertEqual(self.committed_paths(), [f"A\t{renamed}", "D\tinbox/scans/dentist.md"])
+
+    def test_the_note_and_the_reading_copy_the_run_put_beside_a_waiting_file_go_into_the_runs_commit(self) -> None:
+        """Covers: B167"""
+        self.repository_with_a_commit()
+        self.write("inbox/scans/20261107T071500Z-phone-e5f6.heic", "a photo of the receipt\n")
+        self.git("add", "inbox/scans")
+        self.git("commit", "-q", "-m", "a photo Alex dropped into the inbox")
+        before = run_commit.listing(self.store)
+        self.write("inbox/20261107T071500Z-phone-e5f6.md", "A heic file.\n\nfacts_filed by the run\n")
+        self.write("inbox/20261107T071500Z-phone-e5f6.jpg", "a copy the model can read\n")
+
+        self.commit(before)
+
+        self.assertEqual(
+            self.committed_paths(),
+            ["A\tinbox/20261107T071500Z-phone-e5f6.jpg", "A\tinbox/20261107T071500Z-phone-e5f6.md"],
+        )
+
+        self.git("revert", "--no-edit", "HEAD")
+
+        self.assertEqual(self.git("status", "--porcelain", "--untracked-files=all"), "")
+
+    def test_a_file_that_came_in_and_shares_only_a_free_name_with_a_waiting_one_still_waits(self) -> None:
+        """Covers: B167"""
+        self.repository_with_a_commit()
+        self.write("inbox/report.docx", "the report as Alex wrote it\n")
+        self.git("add", "inbox/report.docx")
+        self.git("commit", "-q", "-m", "a report Alex dropped into the inbox")
+        before = run_commit.listing(self.store)
+        self.write("memory/dana.md", "# Dana\n\n- Likes old maps.\n")
+        self.write("inbox/report.pdf", "the report as a PDF, synced in later\n")
+
+        self.commit(before)
+
+        self.assertEqual(self.committed_paths(), ["A\tmemory/dana.md"])
+
+    def test_two_new_captures_that_claim_one_old_name_both_wait_and_a_revert_deletes_neither(self) -> None:
+        """Covers: B167"""
+        self.repository_with_a_commit()
+        self.write("inbox/scans/dentist.md", "Dentist on Friday at nine\n")
+        self.git("add", "inbox/scans/dentist.md")
+        self.git("commit", "-q", "-m", "a note Alex dropped into a folder of the inbox")
+        before = run_commit.listing(self.store)
+        renamed = f"inbox/{NEW_CAPTURE}"
+        os.replace(self.root / "inbox/scans/dentist.md", self.root / renamed)
+        late = self.waiting("20261107T090030Z-cli-a7b8.md", "another dentist.md, synced in and renamed\n")
+
+        self.commit(before, carried_on={renamed: "dentist.md", late: "dentist.md"})
+
+        self.assertEqual(self.committed_paths(), ["D\tinbox/scans/dentist.md"])
+
+        self.git("revert", "--no-edit", "HEAD")
+
+        self.assertTrue((self.root / late).exists())
+        self.assertTrue((self.root / renamed).exists())
+
+    def test_every_file_of_one_renamed_bundle_claims_the_old_name_once(self) -> None:
+        """Covers: B167"""
+        self.repository_with_a_commit()
+        self.write("inbox/IMG_0042.HEIC", "a photo of the receipt\n")
+        self.git("add", "inbox/IMG_0042.HEIC")
+        self.git("commit", "-q", "-m", "a photo Alex dropped into the inbox")
+        before = run_commit.listing(self.store)
+        stem = "inbox/20261107T071500Z-cli-e5f6"
+        os.replace(self.root / "inbox/IMG_0042.HEIC", self.root / f"{stem}.HEIC")
+        self.write(f"{stem}.md", "A HEIC file.\n")
+        self.write(f"{stem}.jpg", "a copy the model can read\n")
+
+        self.commit(before, carried_on={f"{stem}.{extension}": "IMG_0042.HEIC" for extension in ("HEIC", "md", "jpg")})
+
+        self.assertEqual(
+            self.committed_paths(),
+            [f"A\t{stem}.HEIC", f"A\t{stem}.jpg", f"A\t{stem}.md", "D\tinbox/IMG_0042.HEIC"],
+        )
+
+    def test_an_old_name_with_a_space_around_it_is_the_name_its_trailer_holds(self) -> None:
+        """Covers: B167"""
+        self.repository_with_a_commit()
+        self.write("inbox/ notes.txt", "milk\n")
+        self.git("add", "inbox/ notes.txt")
+        self.git("commit", "-q", "-m", "a note Alex dropped into the inbox")
+        before = run_commit.listing(self.store)
+        renamed = f"inbox/{NEW_CAPTURE}"
+        os.replace(self.root / "inbox/ notes.txt", self.root / renamed)
+
+        self.commit(before, carried_on={renamed: "notes.txt"})
+
+        self.assertEqual(self.committed_paths(), [f"A\t{renamed}", "D\tinbox/ notes.txt"])
+
+    def test_a_capture_that_names_a_file_the_run_did_not_take_out_of_the_inbox_still_waits(self) -> None:
+        """Covers: B167"""
+        self.repository_with_a_commit()
+        before = run_commit.listing(self.store)
+        self.write("memory/dana.md", "# Dana\n\n- Likes old maps.\n")
+        still_there = self.waiting("20261107T090030Z-cli-a7b8.md", "says it was 20261107T070000Z-cli-a1b2.md\n")
+        never_there = self.waiting("20261107T090100Z-cli-c9d0.md", "says it was dentist.md\n")
+
+        self.commit(
+            before,
+            carried_on={still_there: "20261107T070000Z-cli-a1b2.md", never_there: "dentist.md"},
+        )
+
+        self.assertEqual(self.committed_paths(), ["A\tmemory/dana.md"])
+
     def test_a_tracked_capture_renamed_in_its_letter_case_alone_is_known(self) -> None:
         self.repository_with_a_commit()
         self.write("inbox/Note.md", "a note Alex committed\n")

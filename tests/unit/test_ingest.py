@@ -201,6 +201,56 @@ class NormalizeTextTest(IngestFixture):
         self.assertEqual(len(self.inbox()), 2)
 
 
+class CarriedOnTest(IngestFixture):
+    """Which files in the inbox took the place of a file with another name."""
+
+    def test_a_renamed_capture_names_the_path_it_had(self) -> None:
+        """Covers: B167"""
+        self.write("inbox/Shopping list.txt", "milk\n")
+        self.write("inbox/20261107T091500Z-cli-a1b2.md", "---\nsource: cli\n---\nCall Dana\n")
+
+        report = self.normalize()
+
+        self.assertEqual(ingest.carried_on(self.store), {report.renamed[0][1]: "Shopping list.txt"})
+
+    def test_every_file_of_a_renamed_bundle_names_the_path_the_original_had(self) -> None:
+        """Covers: B167"""
+        self.write("inbox/IMG_0042.HEIC", b"heic bytes")
+
+        self.normalize()
+
+        stem = self.inbox()[0].rsplit(".", 1)[0]
+        self.assertEqual(
+            ingest.carried_on(self.store),
+            {f"inbox/{stem}.{extension}": "IMG_0042.HEIC" for extension in ("HEIC", "jpg", "md")},
+        )
+
+    def test_a_capture_renamed_out_of_a_subfolder_names_the_name_it_had_there(self) -> None:
+        """Covers: B167"""
+        self.write("inbox/scans/Shopping list.txt", "milk\n")
+
+        report = self.normalize()
+
+        self.assertEqual(report.renamed[0][0], "inbox/scans/Shopping list.txt")
+        self.assertEqual(ingest.carried_on(self.store), {report.renamed[0][1]: "Shopping list.txt"})
+
+    def test_a_capture_that_is_gone_before_it_is_read_names_nothing(self) -> None:
+        self.write("inbox/Shopping list.txt", "milk\n")
+        self.normalize()
+
+        with mock.patch.object(type(self.store), "read_text", side_effect=FileNotFoundError("gone")):
+            carried = ingest.carried_on(self.store)
+
+        self.assertEqual(carried, {})
+
+    def test_a_bundle_that_kept_its_name_carries_nothing_on(self) -> None:
+        self.write("inbox/20261107T091500Z-cli-a1b2.heic", b"heic bytes")
+
+        self.normalize()
+
+        self.assertEqual(ingest.carried_on(self.store), {})
+
+
 class NormalizeBinaryTest(IngestFixture):
     def test_a_photo_becomes_a_bundle_with_original_reading_copy_and_sidecar(self) -> None:
         """Covers: B20"""

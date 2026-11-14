@@ -35,7 +35,7 @@ from pathlib import Path, PurePosixPath
 from m2b.capture import FOLLOW_UP_KEY, task_title
 from m2b.notes import frontmatter as keys
 from m2b.notes.frontmatter import Note, NoteFormatError, read_created, set_created
-from m2b.notes.layout import CORPUS, INBOX, waiting_on_evicted
+from m2b.notes.layout import CORPUS, INBOX, bundle_stem, waiting_on_evicted
 from m2b.notes.names import NoteName
 from m2b.notes.trailer import MARKER_LINE, find_trailer
 from m2b.store.base import Store, StoreError
@@ -324,10 +324,30 @@ def _remove_conflict_copies(store: Store, report: NormalizeReport) -> None:
                     _write(store, copy.path, note)
 
 
+def carried_on(store: Store) -> dict[str, str]:
+    """The files in the inbox that took the place of a file with another name, each with the name
+    that file had.
+
+    Normalize records the old name where it renames: in the trailer of a renamed capture, and in
+    the sidecar of a renamed bundle, whose other files share the sidecar's name up to the
+    extension. It records the name alone, not the folder below the inbox the file lay in. The
+    trailer is text of the store, so the old name is a claim: whoever acts on it checks that a
+    file of that name was there.
+    """
+    files = store.scan(INBOX).files
+    renamed_from, sidecar_of = _originals(store, files)
+    carried = {new: old for old, renamed in renamed_from.items() for new in renamed}
+    for old, sidecars in sidecar_of.items():
+        stems = {bundle_stem(sidecar) for sidecar in sidecars}
+        carried.update({path: old for path in files if bundle_stem(path) in stems})
+    return carried
+
+
 def _originals(store: Store, files: list[str]) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
     """What earlier runs left behind: renamed captures and sidecars by the original name they record.
 
-    A file that cannot be read is skipped here; its own step reports it.
+    A file that cannot be read is skipped here; its own step reports it. One that is gone by the
+    time it is read, taken away by a sync service for one, is skipped as well.
     """
     renamed_from: dict[str, list[str]] = {}
     sidecar_of: dict[str, list[str]] = {}
@@ -336,7 +356,7 @@ def _originals(store: Store, files: list[str]) -> tuple[dict[str, list[str]], di
             continue
         try:
             note = Note.parse(store.read_text(relative))
-        except (UnicodeDecodeError, StoreError):
+        except (UnicodeDecodeError, StoreError, FileNotFoundError):
             continue
         original = _original_name(note)
         if original is None:

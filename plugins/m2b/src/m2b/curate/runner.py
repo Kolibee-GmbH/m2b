@@ -400,7 +400,8 @@ class _Run:
         # The message names the run's steps; a commit of the captures that failed is none of them.
         text = run_commit.message(started, [step for step in self.steps if step.name != COMMIT])
         try:
-            run_commit.commit(self.repository, self.listed_before, text, self.machine.temp_dir, (RUN_RECORD,))
+            renamed = ingest.carried_on(self.store)
+            run_commit.commit(self.repository, self.listed_before, text, self.machine.temp_dir, (RUN_RECORD,), renamed)
         except run_commit.StaleIndexError as error:
             # The commit is made, so a failed commit of the captures still says what a revert does.
             return str(error)

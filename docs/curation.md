@@ -104,8 +104,14 @@ the file, with every fact earlier runs wrote into it.
 What the commit holds:
 
 - every visible file that changed in the store while the run ran: the facts it wrote, the captures
-  it moved, task files, the finished run record. A run keeps no list of its own writes, so a
-  capture you took in those minutes is in it too;
+  it moved, task files, the finished run record. A run keeps no list of its own writes, so an
+  edit you made in those minutes is in it too;
+- with one exception: a capture that came into `inbox/` while the run ran and still waits there
+  when it ends. That is a capture you took in those minutes, one a sync service brought, or one
+  the run wrote itself and did not file. It stays a file git does not know, `git status` shows it
+  as untracked, and the next run commits it before its first step. What the run adds to a capture
+  that was there when it began is in the commit: the new name it gave the capture, and the note
+  and the reading copy it put beside a picture or a PDF;
 - nothing else. What you left uncommitted or staged stays as it is, hidden files stay out, and so
   does a file git ignores, unless the repository tracks it already. An edit of yours in a file the
   run also wrote goes in with that file.
@@ -154,6 +160,12 @@ left them.
   commit. `git restore state/core/last-run.json` drops that record; then revert.
 - A capture you changed after committing it comes back as you committed it. The text the run
   filed is in the run's commit: `git show <commit>:corpus/YYYY/MM/<file>`.
+- A capture that came in while the run was already under way and that no step filed stays where
+  it is: it was never in the run's commit, so the revert does not touch it, and it waits in
+  `inbox/` for the next run. It keeps what the run wrote into it. When the run filed its facts
+  and then could not file the capture, its front matter still says `facts_filed: true`, and the
+  next run would skip those facts although the revert took them out of `memory/`: delete that
+  line from the capture first.
 - A capture that came in while the run was already under way, and that the run still filed, is
   not put back: git did not know it when the run began. `git show` has it in the same way.
 - A capture you staged and did not commit is not put back either. m2b commits nothing you staged,

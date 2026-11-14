@@ -109,8 +109,8 @@ class CatalogTest(CatalogFolderTestCase):
     def test_the_real_catalog_is_read_with_every_testable_behavior(self) -> None:
         catalog = coverage_check.read_catalog(coverage_check.BEHAVIOR_CATALOG)
 
-        self.assertEqual(len(catalog), 185)
-        self.assertEqual(sum(i.startswith("B") for i in catalog), 164)
+        self.assertEqual(len(catalog), 186)
+        self.assertEqual(sum(i.startswith("B") for i in catalog), 165)
         self.assertNotIn("X15", catalog)
         self.assertEqual(set(catalog.values()), {"band", "core", "curation", "worklog"})
 

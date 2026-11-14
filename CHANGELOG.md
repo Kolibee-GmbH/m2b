@@ -22,6 +22,15 @@ All notable changes to this project are documented here. The format follows
   Code whether a step's Read of a symlink that leads out of the store is refused; with Claude Code
   2.1.325 it was ([Security](SECURITY.md#untrusted-input),
   [#23](https://github.com/Kolibee-GmbH/m2b/pull/23)).
+- Reverting a run's commit no longer deletes a capture the run never touched. The commit held
+  every file that changed while the run ran, so a capture that was taken or synced in during those
+  minutes and still waited in `inbox/` at the end was in it as a new file. `git revert` on that
+  commit deleted it from the store folder, and a sync service carried the deletion to every
+  device; the text stayed in git. Now a file that came into `inbox/` during a run and still lies
+  there stays out of the run's commit. It shows as untracked until the next run commits it before
+  its first step, like every capture git does not know yet
+  ([A commit per run](docs/curation.md#a-commit-per-run),
+  [#23](https://github.com/Kolibee-GmbH/m2b/pull/23)).
 
 ## [0.4.2] - 2026-11-13
 

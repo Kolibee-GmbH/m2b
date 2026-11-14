@@ -17,9 +17,27 @@ by that listing: one that came in later would stay in the repository's inbox aft
 The commit holds what changed in the store while the run ran. A run has no list of its own writes,
 because model steps and child processes write too, so the store is listed with each file's size
 and modification time before the run's first write and again after its last one, without opening
-a file, and the paths that differ go to git by name. A capture taken in those minutes is in the
-commit as well; whatever else lies uncommitted in the work tree is not. Hidden files are not
-content (``store.base``) and never go in.
+a file, and the paths that differ go to git by name. Whatever else lies uncommitted in the work
+tree is not in the commit. Hidden files are not content (``store.base``) and never go in.
+
+One change stays out: a capture that was not in the inbox when the run began and still lies there
+when it ends. It was taken or synced in during those minutes, and no step filed it. In the run's
+commit it would be a new file, which a revert deletes: from the store folder, and through a sync
+service from every device. A capture the run wrote itself and left in the inbox, a kept candidate
+that was not filed for one, cannot be told from it and is left out with it; harvest and the
+worklog know their own captures again, so nothing is written twice. Either waits where it is, a
+file git does not know, and the next run commits it before its first step.
+
+A new file of the inbox that belongs to a capture from before the run is no such capture, and it
+goes in: left out, a revert would put ``memory/`` back and leave that capture as the run changed
+it. Normalize makes such files in two ways. It puts a sidecar and a reading copy beside a file,
+which share that file's schema name up to the extension. And it gives a capture whose name is
+outside the schema a new one; without the new name the commit would hold the removal of the old
+one alone, and HEAD no copy of the capture until the next run. The first listing cannot show that
+a new name is an old capture, so the caller names the files that took another's place, each with
+the name the other had (``carried_on``), and one counts when a file of that name was in the inbox
+before the run and is gone after it. A name that more new captures claim than files of it left
+the inbox ties none of them: in doubt a file stays out, where nothing can delete it.
 
 git never looks at the work tree as a whole. ``git commit`` and ``git add -A`` stat every tracked
 file and read each one whose stat changed, which for a file a sync service has evicted means a
@@ -51,6 +69,7 @@ import sys
 import tempfile
 import time
 import unicodedata
+from collections import Counter
 from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -58,7 +77,8 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from m2b.git_program import usable_git
-from m2b.notes.layout import INBOX
+from m2b.notes.layout import INBOX, bundle_stem
+from m2b.notes.names import NoteName
 from m2b.run_record import FAILED, SKIPPED, SUCCEEDED, StepResult
 from m2b.store.base import Store, fetch_command
 
@@ -247,6 +267,49 @@ def _only_downloaded(path: str, before: StoreListing, after: StoreListing) -> bo
     return below and after.files[path][1] < before.taken_at_ns
 
 
+def _came_in_and_wait(before: StoreListing, after: StoreListing, carried_on: Mapping[str, str]) -> set[str]:
+    """The files of the inbox that belong to no capture that was there when the run began: the
+    next run commits them where they wait (``commit_waiting_captures``).
+
+    A new file belongs to a capture from before the run when it has that capture's schema name up
+    to the extension, as the sidecar and the reading copy beside a file have, or when
+    ``carried_on`` holds for it the name of a file the run took out of the inbox, in whatever
+    folder below it that file lay. A name outside the schema ties nothing: two files a person
+    named alike are two captures.
+    """
+    was_there = [path for path in before.files if _in_inbox(path)]
+    bundles = {bundle_stem(path) for path in was_there}
+    came_in = {path for path in after.files if _in_inbox(path) and path not in before.files}
+    beside = {path for path in came_in if _has_schema_name(path) and bundle_stem(path) in bundles}
+    taken_out = [path for path in was_there if path not in after.files]
+    return came_in - beside - _renamed(came_in, taken_out, carried_on)
+
+
+def _renamed(came_in: Collection[str], taken_out: Sequence[str], carried_on: Mapping[str, str]) -> set[str]:
+    """The new files that are a capture the run took out of the inbox, under a new name.
+
+    The old name is all there is to go by, read as the trailer holds it, without space around it.
+    Two captures of one name cannot be told apart by it, so when more new captures claim a name
+    than files of that name left the inbox, none of them counts: one that stays out by mistake
+    waits for the next run's commit, one that went in by mistake would be deleted by a revert.
+    The files of one capture share their name up to the extension and claim once.
+    """
+    left = Counter(PurePosixPath(path).name.strip() for path in taken_out)
+    claims: dict[str, set[str]] = {}
+    for path in came_in:
+        if path in carried_on:
+            claims.setdefault(carried_on[path], set()).add(bundle_stem(path))
+    return {path for path in came_in if path in carried_on and len(claims[carried_on[path]]) <= left[carried_on[path]]}
+
+
+def _in_inbox(path: str) -> bool:
+    return path.startswith(f"{INBOX}/")
+
+
+def _has_schema_name(path: str) -> bool:
+    return NoteName.parse(PurePosixPath(path).name) is not None
+
+
 def message(started: datetime.datetime, steps: Sequence[StepResult]) -> Message:
     """The commit message of a run: when it started, and how each of its steps ended, by name."""
     lines = []
@@ -272,6 +335,7 @@ def commit(
     text: Message,
     temp_dir: Path,
     no_reason_alone: Collection[str] = (),
+    carried_on: Mapping[str, str] | None = None,
 ) -> str | None:
     """Commits what changed in the store since ``before``; the commit's id, or None without one.
 
@@ -279,13 +343,19 @@ def commit(
     only paths of ``no_reason_alone`` changed: the run record changes with every run, and a run
     that did nothing else is not worth a commit. With another change they go in like any path.
     Changed means other bytes: a file written again as it was is no change, whatever its time says.
+    A capture that came into the inbox since ``before`` and still lies there is no change of the
+    run. ``carried_on`` holds, for a file that took another's place, the name the other had
+    (``ingest.carried_on``): a capture from before the run under a new name is a change.
     """
     store = repository.store
     after = listing(store)
+    waiting = _came_in_and_wait(before, after, carried_on or {})
     changed = sorted(
         path
         for path in before.files.keys() | after.files.keys()
-        if before.files.get(path) != after.files.get(path) and not _only_downloaded(path, before, after)
+        if before.files.get(path) != after.files.get(path)
+        and not _only_downloaded(path, before, after)
+        and path not in waiting
     )
     written = [path for path in changed if path in after.files and not store.is_evicted(path)]
     removed = [path for path in changed if path not in after.files and not os.path.lexists(store.path(path))]
