@@ -9,6 +9,7 @@ import type {
   BandProposals,
   BandReview,
   BandRun,
+  BandSession,
   BandSettle,
   BandSnapshot,
   PaneView,
@@ -33,10 +34,24 @@ import {
 } from './pane'
 import { plainLine } from './plain-text'
 import {
+  askCoreAgain,
+  beginLook,
+  countNote,
+  forgetSession,
+  givenTo,
+  lookAtSession,
+  lookFailed,
+  notesOf,
+  sessionIdOf,
+} from './session'
+import { SESSION_COMMAND, SESSION_PLACED, dueFirst, dueLine, sessionLines, sessionPane } from './session-view'
+import type { SessionActions, SessionModel } from './session-view'
+import {
   KEEP_ALL,
   PROPOSALS_COMMAND,
   PROPOSALS_PLACED,
   couldNotLookLine,
+  errorBesideTasks,
   isProposals,
   refusedLine,
   parseProposals,
@@ -82,6 +97,10 @@ const proposalsNoticeAtom = atom({ plugin: 'm2b', key: 'bandProposalsNotice' } a
 const paneViewAtom = atom({ plugin: 'm2b', key: 'paneView' } as const, null)
 const toastedRunAtom = atom({ plugin: 'm2b', key: 'bandToastedRun' } as const, null)
 const ownPromptsAtom = atom({ plugin: 'm2b', key: 'ownPrompts' } as const, [])
+// `session.ts` names the same two values and writes them too: a module's reads and writes are
+// listed from its own source, so each module that touches a value names it itself.
+const sessionAtom = atom({ plugin: 'm2b', key: 'bandSession' } as const, null)
+const notesAtom = atom({ plugin: 'm2b', key: 'sessionNotes' } as const, null)
 
 const REFRESH_EVERY_MS = 60_000
 // `m2b band` reaches and reads the task list (two Apple Reminders calls, 20 seconds each by
@@ -91,6 +110,18 @@ const BAND_TIMEOUT_MS = 90_000
 const WRITE_TIMEOUT_MS = 90_000
 // A press is written only once this is over, so undo takes it back without touching the task list.
 const UNDO_WINDOW_MS = 5_000
+// m2b's own hooks give a session its topics: before a prompt, and at the start that follows a
+// compaction. This long after either, the pane asks what the session holds now, so a topic that
+// came in with a prompt shows while the turn still works.
+const LOOK_AFTER_GIVING_MS = 3_000
+// A session not known right at its start is looked at once more: its start may still be noting.
+const SECOND_LOOK_MS = 5_000
+// After `/clear` or a resume the session goes on under another id. The pane asks this long after
+// the end, and while the session still answers with the ended id, this many times more.
+const LOOK_AFTER_NEW_ID_MS = 1_000
+const NEW_ID_TRIES = 5
+// How long `/m2b` waits for a fresh look before it shows what it holds.
+const COMMAND_WAITS_MS = 2_000
 // Read by `m2b doctor`: the core cannot see whether Claude Code loaded this module.
 const SEEN_FILE = '.local/state/m2b/band-seen.json'
 const MANIFEST = '.claude-plugin/plugin.json'
@@ -155,7 +186,7 @@ function snapshotOf(part: unknown): BandSnapshot {
     const tasks = parseBandTasks(part)
     return typeof tasks === 'string'
       ? failed(`m2b could not read the tasks: ${tasks}`)
-      : { candidates: tasks.candidates, review: tasks.review, error: null, due: tasks.due }
+      : { candidates: tasks.candidates, review: tasks.review, error: null, ...(tasks.due === undefined ? {} : { due: tasks.due }) }
   } catch (error) {
     return failed(String((error as Error).message))
   }
@@ -340,6 +371,7 @@ async function clearBand($: EngineInterface): Promise<void> {
   await update($, proposalsAtom, () => null)
   await update($, proposalsNoticeAtom, () => null)
   await update($, paneViewAtom, () => null)
+  await update($, sessionAtom, () => null)
   $.ui.status(undefined)
 }
 
@@ -355,6 +387,112 @@ async function refresh($: EngineInterface, isForced = false): Promise<void> {
     return
   }
   await reload($, isForced)
+}
+
+/**
+ * Asks what m2b gave this session, where m2b is set up and this is no curation run. It answers
+ * what was said, or null where nothing was asked. Whatever fails, the pane says it could not look.
+ */
+async function look($: EngineInterface): Promise<BandSession | null> {
+  const number = beginLook()
+  try {
+    return (await isCurationRun($)) || !(await isSetUp($)) ? null : await lookAtSession($, number)
+  } catch (error) {
+    try {
+      return await lookFailed($, number, plainLine(String(error)))
+    } catch {
+      return null
+    }
+  }
+}
+
+// The looks that wait for their moment; a session start cancels them with the module's other timers.
+const lookTimers = new Set<Timer>()
+
+/** A look once `afterMs` are over; `isStart` for the look of a session's start, which may look twice. */
+function lookLater($: EngineInterface, afterMs: number, isStart = false): void {
+  const timer = $.clock.after(afterMs, () => {
+    lookTimers.delete(timer)
+    const looked: Promise<unknown> = isStart ? lookAtStart($) : look($)
+    looked.catch(() => undefined)
+  })
+  lookTimers.add(timer)
+}
+
+/** The look at a session's start, and one more a little later for a session the first one did not know. */
+async function lookAtStart($: EngineInterface): Promise<void> {
+  const given = await look($)
+  if (given !== null && !given.known && given.error === null) {
+    lookLater($, SECOND_LOOK_MS)
+  }
+}
+
+/**
+ * The look after a session ended with `/clear` or a resume. Asked while the session still answers
+ * with the ended id, m2b would say what the ended conversation was given, so the look waits for
+ * the new id; after the last wait it looks all the same, for a resume into the same session.
+ */
+function lookUnderNewId($: EngineInterface, ended: string, triesLeft: number): void {
+  const timer = $.clock.after(LOOK_AFTER_NEW_ID_MS, () => {
+    lookTimers.delete(timer)
+    lookUnlessEnded($, ended, triesLeft).catch(() => undefined)
+  })
+  lookTimers.add(timer)
+}
+
+async function lookUnlessEnded($: EngineInterface, ended: string, triesLeft: number): Promise<void> {
+  if (triesLeft > 0 && (await sessionIdOf($)) === ended) {
+    lookUnderNewId($, ended, triesLeft - 1)
+    return
+  }
+  await lookAtStart($)
+}
+
+/**
+ * A fresh look, waited for no longer than `limitMs`: a command answers with what is true now, and
+ * still answers. False when the look did not come back in time, and what is kept may be older.
+ */
+async function lookWithin($: EngineInterface, limitMs: number): Promise<boolean> {
+  let timer: Timer | undefined
+  const limit = new Promise<false>(resolve => {
+    try {
+      timer = $.clock.after(limitMs, () => resolve(false))
+    } catch {
+      resolve(false)
+    }
+  })
+  const isFresh = await Promise.race([look($).then(() => true), limit])
+  timer?.cancel()
+  return isFresh
+}
+
+/**
+ * Everything the pane's start view draws, as this session holds it now. What was kept for another
+ * session id, the one before a `/clear`, counts as not looked at.
+ */
+async function sessionModel($: EngineInterface): Promise<SessionModel> {
+  const session = await sessionIdOf($)
+  return {
+    given: givenTo(await read($, sessionAtom), session),
+    notes: notesOf(await read($, notesAtom), session),
+    snapshot: await read($, snapshotAtom),
+    proposals: await read($, proposalsAtom),
+    presses: await read($, pressesAtom),
+  }
+}
+
+/** Turns the open pane to another of its views and reads the band again behind it. */
+async function turnPane($: EngineInterface, view: PaneView): Promise<void> {
+  await update($, paneViewAtom, () => view)
+  $.clock.after(0, inBackground($, () => refresh($, true)))
+}
+
+function sessionActions($: EngineInterface): SessionActions {
+  return {
+    ...rowActions($),
+    showProposals: () => turnPane($, { kind: 'proposals' }),
+    showReview: () => turnPane($, { kind: 'review' }),
+  }
 }
 
 /**
@@ -667,14 +805,6 @@ function failed(error: string): BandSnapshot {
   return { candidates: [], review: null, error }
 }
 
-/**
- * Today's tasks first, then the overdue ones, the most recent first: a task left overdue for weeks
- * would otherwise fill the three rows every day.
- */
-function dueFirst(due: BandDueTask[]): BandDueTask[] {
-  return [...due.filter(task => !task.overdue), ...due.filter(task => task.overdue).reverse()]
-}
-
 function andMore(hidden: number, what: string): string | null {
   return hidden > 0 ? `and ${hidden} more ${what}` : null
 }
@@ -687,14 +817,16 @@ export const register: Register = on => {
     }
     // A reload of the mod runs this again and cancels the old module's timers.
     minuteTimer?.cancel()
-    for (const timer of [...undoTimers.values(), ...lockTimers.values()]) {
+    for (const timer of [...undoTimers.values(), ...lockTimers.values(), ...lookTimers]) {
       timer.cancel()
     }
     undoTimers.clear()
     lockTimers.clear()
+    lookTimers.clear()
     await carryPressesOver($)
     loadedVersion = await readLoadedVersion($)
-    for (const command of [NOTE_COMMAND, REVIEW_COMMAND, SEARCH_COMMAND, PROPOSALS_COMMAND]) {
+    askCoreAgain()
+    for (const command of [SESSION_COMMAND, NOTE_COMMAND, REVIEW_COMMAND, SEARCH_COMMAND, PROPOSALS_COMMAND]) {
       try {
         await $.command.register(command)
       } catch {
@@ -711,6 +843,7 @@ export const register: Register = on => {
     }
     minuteTimer = $.clock.every(REFRESH_EVERY_MS, inBackground($, () => refresh($)))
     $.clock.after(0, inBackground($, () => refresh($)))
+    lookLater($, 0, true)
     void noteSeen($)
     return result
   })
@@ -719,8 +852,49 @@ export const register: Register = on => {
     const result = await next(e)
     if (e.agentId === undefined && !(await isCurationRun($))) {
       $.clock.after(0, inBackground($, () => refresh($, true)))
+      lookLater($, 0)
     }
     return result
+  })
+
+  // `/clear` and a resume end the conversation while the process goes on under a new session id,
+  // and no session start follows: what the pane holds is about the conversation that ended.
+  on('session.end', async ($, e, next) => {
+    const result = await next(e)
+    if ((e.reason === 'clear' || e.reason === 'resume') && !(await isCurationRun($))) {
+      await forgetSession($)
+      lookUnderNewId($, e.sessionId, NEW_ID_TRIES)
+    }
+    return result
+  })
+
+  // A compaction begins the list of what the session was given again, at the start that follows it.
+  on('session.compact', async ($, e, next) => {
+    const result = await next(e)
+    // Not what a precompute prepares, and not a compaction that was skipped.
+    if (e.agentId === undefined && e.trigger !== 'precompute' && !('skip' in result)) {
+      lookLater($, LOOK_AFTER_GIVING_MS)
+    }
+    return result
+  })
+
+  on('command.run', { command: SESSION_COMMAND.name }, async ($, e, next) => {
+    if (await isCurationRun($)) {
+      return next(e)
+    }
+    const notReady = await notSetUpLine($, 'not shown')
+    if (notReady !== null) {
+      return { text: notReady }
+    }
+    await update($, paneViewAtom, () => null)
+    // Opens with what the band holds and reads it again behind the pane. What the session was
+    // given is asked first: where no pane can be shown, the lines go into the conversation.
+    $.clock.after(0, inBackground($, () => refresh($, true)))
+    const isFresh = await lookWithin($, COMMAND_WAITS_MS)
+    const model = await sessionModel($)
+    // The pane draws the answer when it comes. The text is given once, so without a fresh answer
+    // it says that m2b has not looked, never what an earlier look said.
+    return { text: await showPane($, SESSION_PLACED, () => sessionLines(isFresh ? model : { ...model, given: null })) }
   })
 
   on('command.run', { command: NOTE_COMMAND.name }, async ($, e, next) => {
@@ -730,6 +904,7 @@ export const register: Register = on => {
     }
     const outcome = await note($, e.args, () => isSetUp($))
     if (outcome.isWritten) {
+      await countNote($)
       // The status line counts the new capture without waiting for the minute.
       $.clock.after(0, inBackground($, () => refresh($, true)))
     }
@@ -795,6 +970,7 @@ export const register: Register = on => {
     if ('error' in answer) {
       return { deny: answer.error }
     }
+    await countNote($)
     // The status line counts the new capture without waiting for the minute.
     $.clock.after(0, inBackground($, () => refresh($, true)))
     return { result: answer.text }
@@ -839,6 +1015,9 @@ export const register: Register = on => {
       const [proposals, notice] = [await read($, proposalsAtom), await read($, proposalsNoticeAtom)]
       return proposalsPane($, e, proposals, presses, notice, proposalActions($))
     }
+    if (view === null) {
+      return sessionPane($, e, await sessionModel($), sessionActions($))
+    }
     const snapshot = await read($, snapshotAtom)
     const run = await read($, runAtom)
     return paneTree($, e, view, snapshot, run, presses, rowActions($))
@@ -853,6 +1032,7 @@ export const register: Register = on => {
     if (isOwnPrompt(e)) {
       await update($, ownPromptsAtom, prompts => withPrompt(prompts ?? [], e.text))
     }
+    lookLater($, LOOK_AFTER_GIVING_MS)
     return next(e)
   }).catch(($, e, next) => next(e))
 
@@ -871,8 +1051,7 @@ export const register: Register = on => {
     const due = snapshot?.due ?? []
     const proposals = await read($, proposalsAtom)
     const waiting = proposals?.waiting.length ?? 0
-    // Beside a task list that could not be read, the store is most often the same reason: one line.
-    const proposalsError = error === null ? (proposals?.error ?? null) : null
+    const proposalsError = errorBesideTasks(error, proposals)
     const isEmpty =
       candidates.length === 0 && due.length === 0 && review === null && error === null && waiting === 0 && proposalsError === null
     if (isEmpty && notice === null && proposalsNotice === null && versionLine === null) {
@@ -906,7 +1085,7 @@ export const register: Register = on => {
         )}
         {dueFirst(due).slice(0, DUE_SHOWN).map(task => (
           <Text dimColor wrap="truncate-end">
-            {`${task.overdue ? 'overdue' : 'due today'}: ${plainLine(task.title)}`}
+            {dueLine(task)}
           </Text>
         ))}
         {moreDue !== null && <Text dimColor>{moreDue}</Text>}

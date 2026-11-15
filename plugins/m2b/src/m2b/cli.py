@@ -461,6 +461,9 @@ def _parser() -> argparse.ArgumentParser:
     band_command.add_argument(
         "--session", metavar="ID", action=_Once, help="also what m2b gave the session with this id"
     )
+    band_command.add_argument(
+        "--session-only", action="store_true", help="only what m2b gave the session --session names"
+    )
 
     launcher = _group(commands, "launcher", "the launcher in ~/.local/bin")
     _command(launcher, "install", launcher_commands.launcher_install, "write or refresh the launcher")

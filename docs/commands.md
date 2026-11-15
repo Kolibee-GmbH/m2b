@@ -56,6 +56,7 @@ do not do their work there. The first three start a curation run in the backgrou
 
 | Command | What it does |
 |---|---|
+| `/m2b` | shows in the m2b pane what m2b gave this session, what waits for you and what is due today |
 | `/m2b-note <text>` | writes the text into the inbox at once, through `m2b capture` |
 | `/m2b-search [--word] <text>` | shows the hits of `m2b search` in the m2b pane; `--word` matches whole words only |
 | `/m2b-review` | shows the last curation run in the m2b pane: every finding, candidate and question |
@@ -144,7 +145,7 @@ These are listed by `--help`, but the plugin is their caller.
 
 | Command | Who calls it |
 |---|---|
-| `m2b band [--tasks-only] [--session <id>] [--json]` | the band, for what it shows above the prompt; with `--session`, also what m2b gave that session |
+| `m2b band [--tasks-only] [--session <id> [--session-only]] [--json]` | the band, for what it shows above the prompt; with `--session`, also what m2b gave that session, and with `--session-only` nothing else |
 | `m2b refresh due [--json]` | the refresh step, for the memory lines past their day |
 | `m2b lint fix [--json]` | the lint step; it runs only inside a curation run |
 | `m2b curate model --skill <plugin:skill> --allow <rule>` | the worklog add-on's step in a curation run, for its fenced model step. Run by hand it starts that step on its own, with the tool rules you give it, outside a run |

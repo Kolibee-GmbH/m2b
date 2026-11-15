@@ -14,7 +14,14 @@ All notable changes to this project are documented here. The format follows
   it, and whether that start printed the distillate whole, cut or not at all, or the distillate
   is off for the folder. The session start and the prompt hook note this on the machine as they
   give it, so it is known for sessions that start from this release on
-  ([The band](docs/band.md)).
+  ([The band](docs/band.md)). With `--session-only` the answer is that part alone, without a look
+  at the task list, the calendar or the store.
+- `/m2b` opens the m2b pane in a view of three parts: what m2b gave this session (each topic with
+  its facts lines and current items, how the start printed the distillate, whether the distillate
+  is off for the folder, and the notes the session wrote), what waits for you (the proposals, the
+  memory candidates and questions with keep and drop, the review with `ok`) and the tasks due
+  today. A topic that comes in with a prompt shows there while the turn still works
+  ([The band](docs/band.md#this-session-what-waits-and-today-in-the-pane)).
 
 ## [0.5.0] - 2026-11-15
 

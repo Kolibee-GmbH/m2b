@@ -99,8 +99,38 @@ export type PaneSearch = {
   wholeWords?: boolean
 }
 
-/** What the m2b pane shows: the last curation run, a search, or the proposals from the sessions. */
+/**
+ * What the m2b pane shows beside the view it starts in, which is the one without a value: the last
+ * curation run, a search, or the proposals from the sessions.
+ */
 export type PaneView = { kind: 'review' } | { kind: 'search'; search: PaneSearch } | { kind: 'proposals' }
+
+/**
+ * A topic whose facts m2b gave this session, with the facts lines and current items its block held
+ * then; null where an m2b before the counts noted the name alone.
+ */
+export type SessionTopic = { name: string; facts: number | null; current: number | null }
+
+/**
+ * What m2b gave this session since its last start, as `m2b band --json --session <id>` names it.
+ * `id` is the session that was asked about, null where the session could not name itself: after
+ * `/clear` the session goes on under another id, and this is then no longer about it. `known` is
+ * false for a session this machine holds no note of, which is not "given nothing".
+ * `atStart` is how the start printed the distillate (`whole`, `cut`, `none`), `offUnder` the folder
+ * the distillate is turned off under now. `error` is why m2b could not look; nothing else is said
+ * then.
+ */
+export type BandSession = {
+  id: string | null
+  known: boolean
+  topics: SessionTopic[]
+  atStart: string | null
+  offUnder: string | null
+  error: string | null
+}
+
+/** The notes a session wrote through the mod's command and tool, with the id of that session. */
+export type SessionNotes = { session: string | null; count: number }
 
 declare module 'claude-code' {
   /**
@@ -128,8 +158,12 @@ declare module 'claude-code' {
       bandProposals: BandProposals | null
       /** What m2b said to the last answer to a proposal it refused or could not write; cleared by the next prompt. */
       bandProposalsNotice: string | null
-      /** What the m2b pane shows. */
+      /** What the m2b pane shows; null for the view it starts in. */
       paneView: PaneView | null
+      /** What m2b gave this session, from this session's own question; null until it is answered. */
+      bandSession: BandSession | null
+      /** The notes this session wrote through the mod; null before the first. */
+      sessionNotes: SessionNotes | null
       /** The start of the last failed run this session was shown, so it is shown once. */
       bandToastedRun: string | null
       /** The words of each prompt the person submitted in this session, the newest last. */

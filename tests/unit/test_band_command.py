@@ -253,6 +253,44 @@ class BandSessionTest(test_runner.RunnerTest):
         self.assertNotIn("session", self.run_json("band"))
         self.assertEqual(sorted(self.run_json("band", "--tasks-only", "--session", SESSION)), ["tasks"])
 
+    def test_asked_for_the_session_alone_nothing_else_is_reached_or_read(self) -> None:
+        """Covers: B184"""
+        self.curating()
+        self.start(topic_state.Given("Acme Ltd", 3, 1))
+        not_read = mock.Mock(side_effect=AssertionError("asked for the session alone, the answer read something else"))
+
+        with mock.patch.multiple(
+            band,
+            _tasks_part=not_read,
+            status_answer=not_read,
+            _proposals_part=not_read,
+            configured_store=not_read,
+            configured_tasks=not_read,
+        ):
+            answer: dict[str, Any] = self.run_json("band", "--session", SESSION, "--session-only")
+
+        self.assertEqual(sorted(answer), ["session", "version"])
+        self.assertEqual(answer["session"], self.session_part())
+        self.assertEqual(answer["session"]["topics"], [{"name": "Acme Ltd", "facts": 3, "current": 1}])
+
+    def test_the_session_alone_without_a_session_named_is_refused(self) -> None:
+        """Covers: B184"""
+        self.curating()
+
+        code, out, err = self.run_command("band", "--session-only")
+
+        self.assertEqual((code, out), (cli.EXIT_USAGE, ""))
+        self.assertIn("--session-only needs --session <id>", err)
+
+    def test_the_session_alone_does_not_go_with_the_tasks_alone(self) -> None:
+        """Covers: B184"""
+        self.curating()
+
+        code, out, err = self.run_command("band", "--tasks-only", "--session", SESSION, "--session-only")
+
+        self.assertEqual((code, out), (cli.EXIT_USAGE, ""))
+        self.assertIn("--session-only does not go with --tasks-only", err)
+
 
 class BandProposalsTest(test_proposals_command.ProposalsCommandTest):
     def band(self, *options: str) -> dict[str, Any]:

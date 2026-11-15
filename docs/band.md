@@ -94,6 +94,61 @@ text it writes nothing and says what it needs; when `m2b` fails, the line says w
 request. To note with the model's help, for instance with a follow-up date, ask the model: it uses
 the tool below, or the skill `/m2b:capture` where the mod does not run.
 
+## This session, what waits and today, in the pane
+
+`/m2b` opens the m2b pane in the view it starts in, with three parts:
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│ In this session                                              │
+│ Northwind: 3 facts, 1 current                                │
+│ Acme Ltd: 1 fact                                             │
+│ The distillate was printed whole at the start.               │
+│ 1 note written in this session                               │
+│ Waits for you                                                │
+│ [ show ] 1 proposal from your sessions                       │
+│ [ keep ] [ drop ] Remember? Dana prefers tea                 │
+│ [ ok ] m2b: review                                           │
+│ [ show ] the whole review                                    │
+│ Today                                                        │
+│ due today: Buy screws                                        │
+│ overdue: Return the ladder                                   │
+└──────────────────────────────────────────────────────────────┘
+```
+
+- **In this session** says what m2b put into this session: each topic whose facts it got, at its
+  start because the project path names it or before a prompt that named it, with the facts lines
+  and current items the topic held at that moment; how the start printed the distillate (whole,
+  cut to fit, or none because there was none to read); the folder the distillate is turned off
+  under, where it is (`m2b distillate off`); and how many notes the session wrote through
+  `/m2b-note` and the note tool. A note written with `m2b capture` in a shell is not counted.
+  `/clear` and a compaction begin the list of topics again, as the context no longer holds what
+  came before. A session this machine holds no note of, one that started under an earlier m2b or
+  without m2b's hooks, is said to be not known, which does not say it was given nothing.
+- **Waits for you** holds what the band holds, without its limit of three rows: one row for the
+  proposals from your sessions, every memory candidate and "Still current?" question with keep
+  and drop, and the open review with `ok`. They work as in the band, undo included. `show` on the
+  proposals turns the pane to [them](#the-proposals-from-your-sessions-in-the-pane), `show` under
+  the review to [the whole review](#the-whole-review-and-search-in-a-pane); `/m2b` turns it back.
+- **Today** lists your own tasks due today, then the overdue ones, the most recent first. With
+  `band.due_tasks` off it says that tasks due are not shown.
+
+The first part is asked for each session by itself, with
+`m2b band --json --session <id> --session-only`, which reads one small file on this machine and
+no task list: when the session starts, and once more five seconds later if m2b did not know the
+session yet; three seconds after you send a prompt, so a topic that came in with it shows while
+the turn still works; after a compaction; when a turn ends and when you type `/m2b`. It is kept
+in the session's own state and is not part of the answer the open sessions share. After `/clear`
+the session goes on under a new id: the part says that m2b has not looked yet until, a second or
+a few later, it has asked for the new one. When m2b could not look, the part says so with the reason;
+with an installed m2b older than the band, which does not know the question, it says to update
+m2b and to run `/reload-plugins`.
+
+Where Claude Code cannot show a pane, `/m2b` answers with the same lines as text, at most 20 of
+them and without any character that draws nothing, and names `/m2b-proposals` and `/m2b-review`
+where the pane has `show`. It waits up to two seconds for a fresh answer about the session, and
+without one the text says that m2b has not looked yet.
+
 ## The whole review, and search, in a pane
 
 The band keeps to a few rows. `/m2b-review` opens the m2b pane beside the conversation with the
@@ -436,6 +491,11 @@ topics, which does not say it was given nothing; a topic noted by an earlier m2b
 `"session": {"error": "not a session id"}`, and a folder that cannot be looked at with an error
 of its own; the other parts still answer. The notes are kept on this machine under
 `~/.local/state/m2b/topics/`, one small file per session.
+
+With `--session-only` beside `--session`, the answer is `version` and `session` alone, and the
+command reaches no task list, no calendar and no store: the band asks it for every session by
+itself, while the rest of the answer is one the open sessions share. Without `--session`, and
+together with `--tasks-only`, it is refused.
 
 While a review task is open, `tasks.review` names the changes of the facts the last runs made, as
 the curation run kept them for the review: per change its `kind` (`rewrote`, `removed`,

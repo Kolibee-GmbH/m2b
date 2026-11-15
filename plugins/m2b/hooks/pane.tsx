@@ -3,7 +3,7 @@ import type { CommandSpec, EngineInterface, ResolveInput } from 'claude-code'
 import type { BandPress, BandRun, BandSnapshot, PaneSearch, PaneView, SearchHit } from '../types'
 import { runM2b } from './m2b'
 import { untoldFindings } from './tasks'
-import { plainLine } from './plain-text'
+import { plainLine, withoutHidden } from './plain-text'
 import { candidateRow, changesSummary, reviewRow } from './rows'
 import type { RowActions } from './rows'
 
@@ -237,12 +237,14 @@ export async function showPane($: EngineInterface, placedLine: string, lines: ()
   }
   // Undrawn, it would stay open and appear once a surface that places panes attaches.
   await $.ui.close({ id: PANE_ID })
-  return [`the m2b pane cannot be shown here: ${plainLine(opened.reason)}`, ...fallback(lines())].join('\n')
+  return [`the m2b pane cannot be shown here: ${withoutHidden(plainLine(opened.reason))}`, ...fallback(lines())].join('\n')
 }
 
+/** The lines as a model gets them: no character that draws nothing, and no more than a few lines of a few words. */
 function fallback(lines: string[]): string[] {
   const cut = lines
     .slice(0, FALLBACK_LINES)
+    .map(withoutHidden)
     .map(line => (line.length <= FALLBACK_LINE_LENGTH ? line : `${Array.from(line).slice(0, FALLBACK_LINE_LENGTH).join('')}…`))
   return lines.length > FALLBACK_LINES ? [...cut, `and ${lines.length - FALLBACK_LINES} more lines`] : cut
 }
@@ -251,14 +253,14 @@ function fallback(lines: string[]): string[] {
 export function paneTree(
   $: EngineInterface,
   e: ResolveInput,
-  view: PaneView | null,
+  view: PaneView,
   snapshot: BandSnapshot | null,
   run: BandRun | null,
   presses: Record<string, BandPress>,
   actions: RowActions,
 ) {
   const { Box, Text } = $.ui.resolve(e)
-  if (view?.kind === 'search') {
+  if (view.kind === 'search') {
     return (
       <Box flexDirection="column">
         {searchLines(view.search).map(line => (

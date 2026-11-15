@@ -56,9 +56,30 @@ export const STATUS = {
   backends: { tasks: { state: 'reachable', detail: '' } },
 }
 
-/** The `m2b` launcher, answered from memory; every call is recorded. */
+/** A topic whose facts the core gave a session, with what its block held then. */
+export type FakeTopic = { name: string; facts: number | null; current: number | null }
+
+/** What the core noted of a session: its topics, how its start printed the distillate, and where the distillate is off. */
+export type FakeGiven = { topics: FakeTopic[]; atStart: string | null; offUnder: string | null }
+
+/**
+ * The `m2b` launcher, answered from memory; every call is recorded, the looks at what the session
+ * was given apart from the rest, in `looks`.
+ */
 export class FakeM2b {
   readonly calls: string[][] = []
+  /** The calls that asked what the session was given, which every session makes for itself. */
+  readonly looks: string[][] = []
+  /** The folder each of those calls was started in, as the mod named it; undefined where it named none. */
+  readonly lookFolders: (string | undefined)[] = []
+  /** What the core noted of the session that asks; null as for a session it holds no note of. */
+  given: FakeGiven | null = { topics: [], atStart: 'whole', offUnder: null }
+  /** When set, the session part of the answer is this instead, whatever its shape. */
+  sessionPart: unknown = undefined
+  /** When set, the look at what the session was given fails with this as its message. */
+  lookFails: string | null = null
+  /** Unset, the installed core is one from before sessions: it refuses the options as an unknown argument. */
+  knowsSessions = true
   tasks: FakeTask[] = []
   status: unknown = STATUS
   failure: string | null = null
@@ -182,12 +203,17 @@ export class FakeM2b {
     return standing.length === 0 ? ok('') : { ...fail(''), stderr: `${standing.join('\n')}\n` }
   }
 
-  handle(argv: readonly string[], stdin?: string): ProcessRunResult {
+  handle(argv: readonly string[], stdin?: string, cwd?: string): ProcessRunResult {
     expect(argv[0]).toBe(this.launcher)
     const args = argv.slice(1)
+    if (args[0] === 'band' && args.includes('--session-only')) {
+      this.looks.push(args)
+      this.lookFolders.push(cwd)
+      return this.isSetUp ? this.sessionAnswer(args) : fail(NOT_SET_UP)
+    }
     this.calls.push(args)
     if (!this.isSetUp) {
-      return fail('not set up: no machine config at /home/alex/.config/m2b/config.json')
+      return fail(NOT_SET_UP)
     }
     if (args[0] === 'band') {
       return this.bandAnswer()
@@ -243,6 +269,27 @@ export class FakeM2b {
     return ok('')
   }
 
+  /** As `m2b band --json --session <id> --session-only` answers: the version and what the session was given. */
+  sessionAnswer(args: readonly string[]): ProcessRunResult {
+    if (!this.knowsSessions) {
+      // As argparse refuses: its usage first, the reason on the line below.
+      const stderr = 'usage: m2b [-h] [--version]\nm2b: error: unrecognized arguments: --session-only\n'
+      return { ...fail(''), exitCode: 2, stderr }
+    }
+    if (this.lookFails !== null) {
+      return fail(this.lookFails)
+    }
+    const id = args[args.indexOf('--session') + 1]
+    const noted = this.given
+    const session = this.sessionPart ?? {
+      id,
+      known: noted !== null,
+      topics: noted?.topics ?? [],
+      distillate: { at_start: noted?.atStart ?? null, off_under: noted?.offUnder ?? null },
+    }
+    return ok(JSON.stringify({ version: this.version, session }))
+  }
+
   /** As `m2b band --json` answers: the open curator tasks by marker, or the error, and the status. */
   bandAnswer(): ProcessRunResult {
     if (this.statusFails) {
@@ -293,6 +340,8 @@ export class FakeM2b {
     return this.calls.filter(call => call[0] === 'tasks')
   }
 }
+
+const NOT_SET_UP = 'not set up: no machine config at /home/alex/.config/m2b/config.json'
 
 export function ok(stdout: string): ProcessRunResult {
   return { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
@@ -413,7 +462,7 @@ export async function start(
     if (fake.runFails !== null) {
       return { deny: fake.runFails }
     }
-    const value = fake.handle(e.argv, e.init?.stdin)
+    const value = fake.handle(e.argv, e.init?.stdin, e.init?.cwd)
     const delay = fake.delayMs(e.argv.slice(1))
     if (delay > 0) {
       await clock.sleep(delay)
@@ -427,6 +476,9 @@ export async function start(
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.id', () => (fake.sessionId === null ? { deny: 'the session has no id yet' } : { value: fake.sessionId }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
+  on('session.end', (_, e) => ({ sessionId: e.sessionId }))
+  // A compaction asked to `skip` is one a hook blocked: the conversation stays as it is.
+  on('session.compact', (_, e) => (e.instructions === 'skip' ? { skip: 'a hook blocked it' } : { messages: e.messages }))
   // Stands for the engine's own drawing, which is what the band leaves to when it has nothing to show.
   on('ui.render', ($, e) => {
     const { Text } = $.ui.resolve(e)

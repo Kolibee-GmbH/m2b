@@ -104,10 +104,10 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-/** The tasks due today or overdue; none when the part is absent, as with `band.due_tasks` off. */
-export function parseDue(list: unknown): BandDueTask[] {
+/** The tasks due today or overdue; undefined when the part is absent, as with `band.due_tasks` off: none to show, which is not none due. */
+export function parseDue(list: unknown): BandDueTask[] | undefined {
   if (list === undefined) {
-    return []
+    return undefined
   }
   return openTasks(list).map(task => ({ id: task.id, title: task.title, overdue: isOverdue(task) }))
 }
@@ -119,7 +119,7 @@ function isOverdue(task: TaskJson): boolean {
 /** The task part of `m2b band --json`: the band's rows, or the reason the task list could not be read. */
 export function parseBandTasks(
   part: unknown,
-): { candidates: BandCandidate[]; review: BandReview | null; due: BandDueTask[] } | string {
+): { candidates: BandCandidate[]; review: BandReview | null; due: BandDueTask[] | undefined } | string {
   if (typeof part !== 'object' || part === null) {
     throw new TaskJsonError()
   }

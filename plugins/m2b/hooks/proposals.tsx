@@ -126,6 +126,14 @@ export function couldNotLookLine(error: string): string {
   return `m2b could not look for proposals: ${plainLine(error)}`
 }
 
+/**
+ * Why the proposals could not be looked at, where that is worth a line of its own: beside a task
+ * list that could not be read, the store is most often the same reason, so one line says it.
+ */
+export function errorBesideTasks(tasksError: string | null, proposals: BandProposals | null): string | null {
+  return tasksError === null ? (proposals?.error ?? null) : null
+}
+
 /** `commitment, due 2026-03-06, topic Northwind`: what kind of thing is proposed, as `m2b proposals` heads it. */
 function heading(proposal: BandProposal): string {
   const parts = [writtenOut(proposal.kind)]
@@ -214,13 +222,19 @@ export function proposalLines(proposals: BandProposals | null): string[] {
   ]
 }
 
-/** The band's one row for all of them: the number, and `show`, which opens the pane. */
-export function proposalsRow($: EngineInterface, e: ResolveInput, count: number, onShow: () => Promise<void>) {
+/** One row for all of them: the number, and `show`, which opens them in the pane. Cut in the band, wrapped in the pane. */
+export function proposalsRow(
+  $: EngineInterface,
+  e: ResolveInput,
+  count: number,
+  onShow: () => Promise<void>,
+  wrap: 'truncate-end' | 'wrap' = 'truncate-end',
+) {
   const { Box, Button, Text } = $.ui.resolve(e)
   return (
     <Box key="row:proposals" flexDirection="row">
       <Button key="show:proposals" label="show" onPress={onShow} />
-      <Text wrap="truncate-end"> {countLine(count)}</Text>
+      <Text wrap={wrap}> {countLine(count)}</Text>
     </Box>
   )
 }

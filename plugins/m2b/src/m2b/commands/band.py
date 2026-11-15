@@ -29,6 +29,9 @@ then, and how the session's start printed the distillate. Whether the distillate
 folder is said as it is now, for the folder Claude Code names as the project or else the one the
 command runs in. A value that is no session id is answered in ``session.error`` and never looked
 up, and so is a folder that cannot be looked at: the other parts still answer.
+With ``--session-only`` the answer is that part and the version alone: every session asks it for
+itself, where the rest is one answer the open sessions share, so it reaches no task list, no
+calendar and no store. It needs ``--session`` and does not go with ``--tasks-only``.
 """
 
 from __future__ import annotations
@@ -41,7 +44,7 @@ import re
 from typing import Any
 
 from m2b import topic_state
-from m2b.commands import Context
+from m2b.commands import Context, UsageError
 from m2b.commands.backends import configured_store, configured_tasks
 from m2b.commands.doctor import NOT_REACHABLE, PROBE_FAILURES, REACHABLE, Check
 from m2b.commands.output import print_json
@@ -65,8 +68,16 @@ CALENDAR_BUDGET_SECONDS = 10
 
 def band_command(arguments: argparse.Namespace, context: Context) -> int:
     """Always JSON: the band is its only reader; ``--json`` is accepted like elsewhere. ``--tasks-only``
-    leaves the status and the proposals out, for the band's second look before a keep or drop."""
+    leaves the status and the proposals out, for the band's second look before a keep or drop;
+    ``--session-only`` leaves out everything but what the named session was given."""
     config = load_machine_config(context.machine)
+    if arguments.session_only:
+        if arguments.session is None:
+            raise UsageError("--session-only needs --session <id>")
+        if arguments.tasks_only:
+            raise UsageError("--session-only does not go with --tasks-only")
+        print_json({"version": core_version(), "session": _session_part(config, context, arguments.session)})
+        return 0
     tasks, tasks_check = _tasks_part(config, context, datetime.datetime.now().astimezone())
     if arguments.tasks_only:
         print_json({"tasks": tasks})
