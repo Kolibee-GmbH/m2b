@@ -7,6 +7,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-11-15
+
+### Changed
+
+- The reading of your sessions takes what you pasted into a prompt too. Until now a pasted block
+  was left out with what it held, because a mail or a document is somebody else's text. A longer
+  text of your own, written elsewhere and pasted, arrives the same way and was lost with it, and
+  who is who at a customer often stands in such a text. Now a prompt goes to the model with what
+  you typed and what you pasted kept apart, 2,000 characters together, the typed text first. A
+  proposal says where its words stand: `said on <day>` before words you typed, `pasted on <day>`
+  before words from pasted text, which may be someone else's. Code finds that; the model is not
+  asked. The line names where the quote stands, not who led the model to the proposal: text you
+  pasted can lead it to a proposal that quotes words you typed, so read every proposal before you
+  keep it, and before `m2b proposals keep --all`. A proposal that waited before reads as said.
+  `proposals.json` keeps its format until a proposal stands on pasted text; from then on an m2b
+  before this release on another machine says "update m2b on this machine", where it would show
+  that proposal as said
+  ([Reading your sessions](docs/curation.md#reading-your-sessions),
+  [#25](https://github.com/Kolibee-GmbH/m2b/pull/25)).
+
 ## [0.4.4] - 2026-11-14
 
 ### Fixed

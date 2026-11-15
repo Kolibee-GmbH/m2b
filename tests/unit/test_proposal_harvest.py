@@ -169,7 +169,7 @@ class CandidatesFailTest(ProposalHarvestFixture):
         """Covers: B121"""
         self.answered(KEEP, DANA)
         raw = self.written()
-        raw["format"] = 2
+        raw["format"] = 3
         self.write(raw)
         report = harvest.HarvestReport()
 
@@ -358,7 +358,7 @@ class CannotTellTest(ProposalHarvestFixture):
         """Covers: B121"""
         self.answered(KEEP, DANA)
         raw = self.written()
-        raw["format"] = 2
+        raw["format"] = 3
         self.write(raw)
 
         report = self.harvest()

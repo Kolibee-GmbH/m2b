@@ -187,11 +187,17 @@ it proposes in `state/core/proposals.json`:
 }
 ```
 
+A proposal whose `quote` stands in text you pasted into a prompt has one more field,
+`"source": "pasted"`; one without `source` stands on words you typed. While the file holds an
+entry with a `source`, its `format` is 2, and an m2b that knows only format 1 answers "update m2b
+on this machine" where it would show such a proposal as said and write the file back without the
+field; without such an entry the format is 1.
+
 `read_until` is the moment up to which the sessions were read. `announced_until` is when the
 newest proposal was added that the task for the waiting proposals has told you of: a task you
 completed or deleted comes back only for a proposal added after it. A proposal's id comes from its
-session and its `quote`, your own words; `kind` is `person`, `agreement`, `commitment` or
-`personal`; `day` is the day you said it, `due` the day a commitment names. `state` is `open`,
+session and its `quote`, the words of the session it stands on; `kind` is `person`, `agreement`, `commitment` or
+`personal`; `day` is the day those words were sent, `due` the day a commitment names. `state` is `open`,
 `kept`, `dropped` or `expired`, and `since` the moment it got that state. An open proposal that
 has no answer 14 days after it was added expires. A kept, dropped or expired proposal stays for 90
 days, so the same one is not proposed again; the first curation run after that removes it. The

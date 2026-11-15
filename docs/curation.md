@@ -251,10 +251,13 @@ nothing is filed before you say keep. It is off by default. Setup asks on the ma
 curates, and `m2b config set curation.read_sessions true` or `false` changes the answer later.
 
 **What is read.** Claude Code's transcripts on this machine, and of them only the prompts Claude
-Code marks as typed by a human, in the terminal or the desktop app. Left out: Claude's answers and
-tool results, a pasted block with what it holds, what a plugin, a finished task or another agent
-sent, a suggested prompt you only accepted, and the blocks Claude Code writes into a prompt.
-Credentials are redacted, and a prompt ends after 2,000 characters. A session that started in or
+Code marks as typed by a human, in the terminal or the desktop app, with what you pasted into one
+kept apart from what you typed. Left out: Claude's answers and tool results, what a plugin, a
+finished task or another agent sent, a suggested prompt you only accepted, and the blocks Claude
+Code writes into a prompt. Credentials are redacted, and a prompt ends after 2,000 characters,
+what you typed first and what you pasted in the room that is left. A longer text you wrote
+elsewhere reaches a prompt as pasted text, and so does a mail or a piece of an agent's answer, so
+a proposal says which of the two it stands on (below). A session that started in or
 below a folder of `worklog_leave_out` in the profile, or one where you ran `m2b distillate off`,
 does not reach the model, and neither does a headless run such as a curation run itself. The same
 setting names work by a git remote of its repository
@@ -265,25 +268,30 @@ information counts both.
 
 **When.** The step `glean` runs after harvest and before ingest, so what you captured yourself is
 in the store by then. It covers the time since the last reading ended: the last 24 hours at the
-first reading and never more than 7 days; what lies before is named as not read. Without a typed
-prompt in that time no model starts.
+first reading and never more than 7 days; what lies before is named as not read. Without a prompt
+of yours in that time no model starts.
 
 **What is kept.** The model gets the distillate, so it can leave out what is known, the proposals
 you kept and dropped lately (below), and per session its folder, its day and its prompts. It answers with proposals of four kinds, a person, an
-agreement, a commitment and something personal, each with the words of yours it stands on. Code
-keeps a proposal only when those words stand in one prompt of the session it names, with at least
-three words, and when you did not capture the same thing in that time. A proposal like one that
+agreement, a commitment and something personal, each with the words it stands on. Code keeps a
+proposal only when those words stand in one prompt of the session it names, typed or pasted, with
+at least three words, and when you did not capture the same thing in that time. A proposal like one that
 waits, or like one you kept or dropped or that expired within 90 days, is not kept a second time,
 so reading a period again adds nothing.
 
-**Your answer.** `m2b proposals` lists what waits, each with its id, its kind, the text, your words
-and the day you said them:
+**Your answer.** `m2b proposals` lists what waits, each with its id, its kind, the text, the words
+it stands on and their day: `said on <day>` before words you typed, `pasted on <day>` before words
+that stood in text you pasted, which may be someone else's:
 
 ```bash
 m2b proposals                 # what waits for an answer
 m2b proposals keep <id>...    # or: m2b proposals keep --all
 m2b proposals drop <id>...
 ```
+
+`keep --all` and the pane's keep all keep every proposal that waits as it is written. Text you
+pasted can try to lead the model, also to a proposal that quotes words you typed, so read each
+proposal's text before you keep it.
 
 With the band, one row above the prompt says how many wait, and `/m2b-proposals` opens them in a
 pane where keep, drop and keep all are buttons ([the band](band.md#the-proposals-from-your-sessions-in-the-pane));
@@ -309,7 +317,7 @@ the sessions.
 
 **What your answers change.** The next reading shows the model what you answered: up to 30
 proposals you kept and up to 30 you dropped, of each those a run settled last, with the kind, the
-text and your words. The model is told to leave out what is like something you dropped, also where
+text and the words it stood on. The model is told to leave out what is like something you dropped, also where
 it would otherwise propose it, and in doubt to propose what is like something you kept; the four
 kinds and what is never proposed stay as they are. So dropping the time of a call a few times is
 how you say that such things do not belong in your memory. It is a rule a model follows, not a

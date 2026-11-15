@@ -276,10 +276,12 @@ tasks from it, each with the words it stands on. The curation step `glean` runs 
 measures whether a model is good enough for that job.
 
 `tests/glean/day.json` is an invented day: twelve sessions with 120 typed prompts, in English and
-German. Twenty of them state something worth keeping, five each of a person, an agreement, a
-commitment and something personal. Eight are traps, one of each class a proposal must never come
-from: a pasted mail, a prompt a plugin sent, a sentence the person captured themselves, a fact the
-memory holds already, a question that only considers something, a name that is test data, a
+German, and one prompt that is pasted text only. Twenty typed prompts state something worth
+keeping, five each of a person, an agreement, a commitment and something personal, and two pasted
+texts each state who a person is: a mail, and notes of the person's own. Eight prompts are traps,
+one of each class a proposal must never come from: a prompt a plugin sent, a pasted text that
+tells its reader what to propose and which typed words to quote for it, a sentence the person
+captured themselves, a fact the memory holds already, a question that only considers something, a name that is test data, a
 todo of the project at hand, and a sentence like those the person dropped before. For that last
 one the day says what was answered earlier: five proposals kept, like what is planted, and four
 dropped, each the time of a call or a meeting. The model is shown them as the step shows them.
@@ -293,8 +295,9 @@ scripts/glean-eval --model haiku --runs 1
 scripts/glean-eval --without-examples       # the same day without what was kept and dropped
 ```
 
-Per answer it prints how many of the twenty were found, how many proposals were right, and each
-miss, wrong proposal and sprung trap by name. A model meets the bar with 0.80 found and 0.80
+Per answer it prints how many of the twenty-two were found, how many proposals were right, and
+each miss, wrong proposal and sprung trap by name. One more trap has no prompt of its own: a
+proposal whose source is wrong, pasted words kept as said or the other way round. A model meets the bar with 0.80 found and 0.80
 right on average and no trap sprung in any answer. Asked without the examples, a model has
 nothing that speaks against the sentence like the dropped ones, so that run shows what the
 examples change and is expected to miss the bar by that trap. Six answers take about a minute each on your
@@ -310,8 +313,8 @@ scripts/glean-eval --replay 7 --out ~/glean-replay.md
 
 It reads your last seven days from Claude Code's transcripts, asks the model once for each day
 and writes the proposals with their quotes to the file, which only you can read. It prints counts
-and no word of a prompt. What you typed goes to the model on your own login, as it did when you
-typed it. The model gets neither your memory nor your captures, so it also proposes what your
+and no word of a prompt. What you typed and pasted goes to the model on your own login, as it did
+when you sent it. The model gets neither your memory nor your captures, so it also proposes what your
 second brain knows already. A file inside this repository is refused.
 
 ## How well a model files an inbox

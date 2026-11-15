@@ -297,11 +297,11 @@ class StatusTest(test_runner.RunnerTest):
     def test_a_proposals_file_that_cannot_be_used_says_so_instead_of_nothing(self) -> None:
         """Covers: B133"""
         self.curating()
-        self.write(proposals.PROPOSALS_FILE, json.dumps({"format": 2, "proposals": {}}))
+        self.write(proposals.PROPOSALS_FILE, json.dumps({"format": 3, "proposals": {}}))
 
         _, out, _ = self.run_command("status")
 
-        self.assertIn("format 2", self.status()["proposal_answers"]["error"])
+        self.assertIn("format 3", self.status()["proposal_answers"]["error"])
         self.assertIn("\nproposals: could not look: ", out)
 
     def set_curating(self, machine_id: str) -> None:

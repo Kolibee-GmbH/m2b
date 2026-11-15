@@ -97,7 +97,7 @@
         "band",
         "--json"
       ],
-      "stdout": "\"proposals\": \\{\\s*\"proposals\": \\[\\s*\\{\\s*\"id\": \"[0-9a-f]{12}\",\\s*\"kind\": \"person\",\\s*\"text\": \"Dana is head of IT at Northwind\\.\",\\s*\"quote\": \"Dana runs IT at Northwind\",\\s*\"day\": \"\\d{4}-\\d{2}-\\d{2}\",\\s*\"topic\": null,\\s*\"due\": null\\s*\\}\\s*\\],\\s*\"answered\": 0\\s*\\}"
+      "stdout": "\"proposals\": \\{\\s*\"proposals\": \\[\\s*\\{\\s*\"id\": \"[0-9a-f]{12}\",\\s*\"kind\": \"person\",\\s*\"text\": \"Dana is head of IT at Northwind\\.\",\\s*\"quote\": \"Dana runs IT at Northwind\",\\s*\"day\": \"\\d{4}-\\d{2}-\\d{2}\",\\s*\"topic\": null,\\s*\"due\": null,\\s*\"source\": \"typed\"\\s*\\}\\s*\\],\\s*\"answered\": 0\\s*\\}"
     },
     {
       "run": [

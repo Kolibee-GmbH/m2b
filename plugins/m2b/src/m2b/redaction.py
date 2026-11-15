@@ -61,6 +61,17 @@ _CREDENTIAL_NAME = re.compile(
 )
 
 
+def is_removed_behind(text: str, word: str) -> bool:
+    """Whether ``word``, written right behind ``text``, is removed as a credential, whole or in part.
+
+    So a text cut in two keeps the rule of the whole: a value at the start of the second part goes
+    although its name, ``-u admin:`` or ``Bearer`` stands at the end of the first, and so does a
+    password that only the host behind it shows (``https://admin:`` before ``pw@host``). ``text``
+    ends as the first part ends, with or without white space before the second.
+    """
+    return not redact(f"{text}{word}").endswith(word)
+
+
 def redact(text: str) -> str:
     """``text`` without the credentials a pattern finds; each is replaced by ``[removed]``."""
     # The forms with a fixed place for the secret go first: "pw" after ``-u admin:`` is a password

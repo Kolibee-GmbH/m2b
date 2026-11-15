@@ -123,6 +123,27 @@ test('show opens the pane with every proposal: its kind, the text, the words, th
   await ui.unmount()
 })
 
+test('a proposal that stands on pasted text says pasted, one from a source the band does not know names it, and the others say said', async ($, on) => {
+  // Covers: B172
+  const fake = new FakeM2b()
+    .proposal(DANA, 'Dana is head of IT at Northwind.', 'Dana runs IT at Northwind', { day: '2026-03-04', source: 'pasted' })
+    .proposal(LADDER, 'Call Sam about the ladder.', 'I still have to call Sam', { day: '2026-03-04', source: 'typed' })
+    .proposal(SHED, 'The spare key is in the shed.', 'the spare key is in the shed', { day: '2026-03-05', source: 'tool' })
+    .proposal('d4d4d4d4d4d4', 'Kim moved to Globex.', 'Kim moved to Globex', { day: '2026-03-05' })
+  await start($, on, fake)
+  await typed($, 'm2b-proposals')
+
+  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  const said = (await texts(ui)).filter(line => line.includes(' on 2026-03-0'))
+  expect(said).toEqual([
+    'pasted on 2026-03-04: "Dana runs IT at Northwind"',
+    'said on 2026-03-04: "I still have to call Sam"',
+    'from tool on 2026-03-05: "the spare key is in the shed"',
+    'said on 2026-03-05: "Kim moved to Globex"',
+  ])
+  await ui.unmount()
+})
+
 test('the proposals command opens the same pane, also while nothing waits', async ($, on) => {
   // Covers: B127
   const fake = new FakeM2b()

@@ -179,7 +179,7 @@ class BandProposalsTest(test_proposals_command.ProposalsCommandTest):
         """Covers: B126"""
         target = self.store_root / proposals.PROPOSALS_FILE
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps({"format": 2, "proposals": {}}), encoding="utf-8")
+        target.write_text(json.dumps({"format": 3, "proposals": {}}), encoding="utf-8")
 
         answer = self.band()
 

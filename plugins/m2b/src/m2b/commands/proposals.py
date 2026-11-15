@@ -48,7 +48,7 @@ def _list(store: Store, as_json: bool) -> int:
         one = len(waiting.proposals) == 1
         print(f"{len(waiting.proposals)} {'proposal waits' if one else 'proposals wait'} for an answer:\n")
         for key, entry in waiting.proposals:
-            said = f'said on {entry.day.isoformat()}: "{_shown(entry.quote)}"'
+            said = proposals.said_line(entry, _shown(entry.quote))
             print(f"{key}  {_heading(entry)}\n  {_shown(entry.text)}\n  {said}\n")
         print(HOW_TO_ANSWER)
     else:
@@ -126,4 +126,5 @@ def _as_json(key: str, entry: Entry) -> dict[str, Any]:
         "day": entry.day.isoformat(),
         "topic": entry.topic,
         "due": entry.due.isoformat() if entry.due else None,
+        "source": entry.source,
     }

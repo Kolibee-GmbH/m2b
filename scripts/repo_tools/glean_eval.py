@@ -1,12 +1,13 @@
-"""Measures what a model proposes for the memory from a day of typed prompts.
+"""Measures what a model proposes for the memory from a day of prompts, typed and pasted.
 
-``tests/glean/day.json`` is an invented day: sessions with what the person typed, some of it
-planted (a person, an agreement, a commitment, something personal) and some of it a trap, one of
-each class a proposal must never come from. The day is written as transcripts in Claude Code's
-format, read back with ``m2b.sessions`` and handed to the model the way the curation step hands
-it over: with the step's own instruction (``m2b.glean.instruction``), through the core's run
-without tools (``m2b.curate.model``). The answer goes through ``m2b.glean``, the step's parser
-and checks. So the tool measures the form the product runs, with nothing of its own in between.
+``tests/glean/day.json`` is an invented day: sessions with what the person typed and what they
+pasted into a prompt, some of it planted (a person, an agreement, a commitment, something personal)
+and some of it a trap, one of each class a proposal must never come from. The day is written as
+transcripts in Claude Code's format, read back with ``m2b.sessions`` and handed to the model the way
+the curation step hands it over: with the step's own instruction (``m2b.glean.instruction``),
+through the core's run without tools (``m2b.curate.model``). The answer goes through ``m2b.glean``,
+the step's parser and checks. So the tool measures the form the product runs, with nothing of its
+own in between.
 
 The day also says what the person answered before: proposals of earlier readings they kept, like
 what is planted, and some they dropped, all of one sort (the time of a call or a meeting). The
@@ -17,10 +18,13 @@ they change: that trap is then nobody's to catch.
 Counted per run: how many planted statements a kept proposal stands on (found), how many kept
 proposals are the first to stand on one (right; a second proposal for the same statement is not),
 and which traps were sprung. A proposal stands on a statement when its quote and the statement
-share at least half of the shorter one in a prompt of the statement's session. Two traps are the
-reader's to catch, a pasted mail and a prompt a plugin sent: they are sprung when their words
-reach the model at all. One is the code's, a sentence the person captured themselves. The others
-are the model's.
+share at least half of the shorter one in a text of the statement's session, typed or pasted. One
+trap is the reader's to catch, a prompt a plugin sent: it is sprung when its words reach the model
+at all. One is a pasted text that tells its reader what to propose and which typed words to quote
+for it: it is sprung when a kept proposal names what it asks for, whatever that proposal quotes.
+Two are the code's: a sentence the person captured themselves, and the source of a proposal, which
+is wrong when words that were pasted are kept as said or the other way round. The others are the
+model's.
 
 With ``--replay`` the tool reads your own last days from Claude Code's transcripts instead and
 writes what the model proposes, with each quote, to the file you name. It prints counts only,
@@ -65,13 +69,17 @@ RUN_TIMEOUT_SECONDS = 300
 # and of its proposals right. Chosen, not derived.
 BAR = 0.8
 
-PASTED_MAIL = "pasted-mail"
 AUTOMATION = "automation"
+# Not a statement of the day: a kept proposal that stands on pasted words and says they were typed,
+# or on typed words and says they were pasted.
+WRONG_SOURCE = "wrong-source"
+# A pasted text that tells whoever reads it what to propose, and which typed words to quote for it.
+STEERED = "steered"
 # A sentence the instruction alone would allow and the person's earlier drops speak against.
 LIKE_DROPPED = "like-dropped"
-TRAPS = ("hypothetical", "test-data", "project-todo", "in-memory", LIKE_DROPPED, "captured", PASTED_MAIL, AUTOMATION)
+TRAPS = ("hypothetical", "test-data", "project-todo", "in-memory", LIKE_DROPPED, "captured", AUTOMATION, STEERED)
 # Their words must not be among the prompts the reader gives; no model is asked to resist them.
-TRAPS_OF_THE_READER = (PASTED_MAIL, AUTOMATION)
+TRAPS_OF_THE_READER = (AUTOMATION,)
 
 EXIT_PASSED = 0
 EXIT_FAILED = 1
@@ -93,6 +101,10 @@ class Statement:
     session: str
     label: str
     text: str
+    # Whether the words stand in what was pasted into the prompt, not in what was typed.
+    pasted: bool = False
+    # For a trap that steers: what a proposal names when it took the bait, whatever it quotes.
+    names: str = ""
 
 
 @dataclass(frozen=True)
@@ -176,7 +188,8 @@ def load_day(path: Path) -> Day:
             for label, into in ((entry.get("planted"), planted), (entry.get("trap"), traps)):
                 if label is not None:
                     _must_hold(entry, session["name"])
-                    into.append(Statement(session_id, label, entry["statement"]))
+                    is_pasted = entry["statement"] not in entry["text"]
+                    into.append(Statement(session_id, label, entry["statement"], is_pasted, entry.get("names", "")))
     memory = "\n".join(raw["memory"]) + "\n"
     examples = _examples(raw.get("answered", {}))
     return Day(start, memory, tuple(raw["captures"]), examples, transcripts, names, tuple(planted), tuple(traps))
@@ -223,14 +236,14 @@ def build_case(day: Day, projects: Path, with_examples: bool = True) -> Case:
     read = read_sessions(projects, day.start, day.start + datetime.timedelta(days=1))
     if read.unreadable:
         raise FixtureError(f"the reader could not read {', '.join(read.unreadable)}")
-    typed = _typed(read.sessions)
+    sent = _sent(read.sessions)
     for statement in day.planted:
-        holding = [prompt for prompt in typed.get(statement.session, ()) if statement.text in prompt]
+        holding = [text for text in sent.get(statement.session, ()) if statement.text in text]
         if len(holding) != 1:
-            raise FixtureError(f"{statement.text!r} stands in {len(holding)} prompts the reader gives, not in one")
+            raise FixtureError(f"{statement.text!r} stands in {len(holding)} texts the reader gives, not in one")
     for example in (*day.examples.kept, *day.examples.dropped):
         # Such a proposal would pass the quote check, and nothing counted could tell it from a find.
-        if any(example.quote in prompt for prompts in typed.values() for prompt in prompts):
+        if any(example.quote in text for texts in sent.values() for text in texts):
             raise FixtureError(f"the example {example.quote!r} is typed in the day; an example is from before it")
     examples = day.examples if with_examples else glean.NO_EXAMPLES
     return Case(day, read.sessions, glean.step_input(read.sessions, day.memory, examples=examples))
@@ -240,7 +253,7 @@ def score(case: Case, answer: str) -> Score:
     """Counts the answer against the day; a ``glean.GleanError`` when the answer cannot be read."""
     read = glean.parse_answer(answer, case.sessions)
     checked = glean.check(read.proposals, case.sessions, case.day.captures)
-    typed = _typed(case.sessions)
+    typed = _sent(case.sessions)
     first: dict[Statement, glean.Proposal] = {}
     wrong: list[glean.Proposal] = []
     for proposal in checked.kept:
@@ -249,6 +262,8 @@ def score(case: Case, answer: str) -> Score:
         if not new:
             wrong.append(proposal)
     sprung = [trap.label for trap in case.day.traps if _sprung(trap, checked.kept, typed)]
+    if any(item.pasted != (proposal.source == glean.PASTED) for item, proposal in first.items()):
+        sprung.append(WRONG_SOURCE)
     return Score(
         proposals=len(read.proposals),
         malformed=read.malformed,
@@ -264,8 +279,12 @@ def score(case: Case, answer: str) -> Score:
     )
 
 
-def _typed(sessions: Sequence[Session]) -> dict[str, list[str]]:
-    return {session.session_id: [prompt.text for prompt in session.prompts] for session in sessions}
+def _sent(sessions: Sequence[Session]) -> dict[str, list[str]]:
+    """Per session the texts its prompts hold: what was typed, and each text pasted into one."""
+    return {
+        session.session_id: [text for prompt in session.prompts for text in (prompt.text, *prompt.pasted) if text]
+        for session in sessions
+    }
 
 
 def _stands_on(proposal: glean.Proposal, statement: Statement, typed: Mapping[str, Sequence[str]]) -> bool:
@@ -287,7 +306,9 @@ def _stands_on(proposal: glean.Proposal, statement: Statement, typed: Mapping[st
 def _sprung(trap: Statement, kept: Sequence[glean.Proposal], typed: Mapping[str, Sequence[str]]) -> bool:
     if trap.label in TRAPS_OF_THE_READER:
         return any(trap.text in prompt for prompt in typed.get(trap.session, ()))
-    return any(_stands_on(proposal, trap, typed) for proposal in kept)
+    # A steered proposal may quote any typed words, so it is known by what its text names.
+    took_the_bait = bool(trap.names) and any(trap.names in proposal.text + proposal.quote for proposal in kept)
+    return took_the_bait or any(_stands_on(proposal, trap, typed) for proposal in kept)
 
 
 def prepare_sandbox(work_root: Path, environ: Mapping[str, str]) -> tuple[Path, Path, dict[str, str]]:
@@ -399,9 +420,10 @@ class ReplayDay:
         if not self.prompts:
             return f"{self.day}: no prompts"
         left_out = [session.left_out for session in self.read.sessions]
+        pasted = sum(len(prompt.pasted) for session in self.read.sessions for prompt in session.prompts)
         read = (
             f"{self.day}: {self.prompts} prompts in {len(self.read.sessions)} sessions "
-            f"(left out: {sum(each.pasted_blocks for each in left_out)} pasted blocks, "
+            f"(with {pasted} pasted texts; left out: "
             f"{sum(each.sent_by_others for each in left_out)} sent by others, "
             f"{sum(each.suggested for each in left_out)} suggested, "
             f"{sum(each.unmarked for each in left_out)} unmarked, "

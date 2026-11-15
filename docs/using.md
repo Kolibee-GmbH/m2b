@@ -91,12 +91,12 @@ distillate.
 **Proposals from your sessions.** Much of what belongs in a second brain you say in passing,
 without "remember this": who runs what at a customer, what was agreed, what you promised by
 Friday. A curation run can read what you typed in Claude Code since the last reading and propose
-it, each proposal with your own words beside it. It is off until you say yes in setup
+it, each proposal with the words it stands on beside it, said or pasted. It is off until you say yes in setup
 (`curation.read_sessions` in the machine config), and nothing is filed before you say keep: in
 the band's pane, which `/m2b-proposals` opens, or with `m2b proposals`, `m2b proposals keep <id>`
-and `m2b proposals drop <id>`. Only the prompts you typed are read, with credentials redacted: no
-answer of Claude, no tool result, no pasted block, nothing a plugin or another agent sent, and no
-session you left out by its folder or its git remote ([Reading your sessions](curation.md#reading-your-sessions)).
+and `m2b proposals drop <id>`. Only the prompts you typed are read, with what you pasted into them
+and with credentials redacted: no answer of Claude, no tool result, nothing a plugin or another
+agent sent, and no session you left out by its folder or its git remote ([Reading your sessions](curation.md#reading-your-sessions)).
 
 **Memory candidates.** `m2b tasks add --candidate "<a fact>"` proposes one fact as a task
 "Remember? ...", for a script or an integration of yours: tick it and the next run files it; drop
@@ -152,7 +152,7 @@ What m2b has that Claude Code's memory does not:
 | fact file | one file in `memory/` for one subject, such as `dana.md`: its facts, and under "Evidence" links to the captures they came from |
 | topic | a heading in the distillate for one subject, such as a customer or a club, whose facts come in only when a session is about it |
 | review task | the one task m2b keeps in your task list for what a run needs you to look at: a step that failed, a finding, a facts line it removed or rewrote. Ticking it, or `ok` in the band, closes it |
-| proposal | a fact a curation run suggests from what you typed in your sessions, with your own words beside it. Off until you say yes in setup, and nothing is filed before you keep it |
+| proposal | a fact a curation run suggests from what you typed and pasted in your sessions, with the words it stands on beside it. Off until you say yes in setup, and nothing is filed before you keep it |
 | memory candidate | a task "Remember? ..." that proposes one fact, put into your list by a script or an integration of yours: tick it and the next run files it |
 | band | the rows above the prompt where you keep or drop what curation proposes, and the status line below it |
 | mod | a module Claude Code loads with a plugin. m2b's mod is the band, with its `/m2b-...` commands and the two tools the model notes and searches with |
