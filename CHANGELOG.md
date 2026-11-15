@@ -7,76 +7,96 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-15
+
 ### Added
 
-- `/m2b-settings`, or `settings` at the end of the pane's start view, shows every setting of
-  m2b in the pane: a list under this machine, the store and the owner, and a card per setting
-  with what it does and what changes it. `previous` and `next` walk through all of them, and with
-  the keyboard in the pane Enter on `next` goes from card to card: the band puts the focus on the
-  button that leads on, never on a switch. A switch is pressed on its card, waits five seconds
-  with `undo` and is then written by `m2b settings set`; what the command refuses stands on the
-  card ([The band](docs/band.md#every-setting-in-the-pane)).
-- The card of `sessions.propose` turns handing in on by a press, where the pane is drawn in a
-  terminal, the desktop app or VS Code: the one setting a session's shell does not turn on no
-  longer needs a terminal outside Claude Code. In the mobile app the card names the command for
-  such a terminal. The press is a threshold in the band and no boundary: nothing says who
-  pressed, so another plugin, a client attached to the session that names itself the terminal,
-  the desktop app or VS Code, or whatever types into your terminal or steers your screen can
-  pass it ([Security](SECURITY.md#what-a-session-hands-in)).
-- `m2b settings` lists every setting of the three files, this machine's, the store's and the
-  owner's: its value, its default, what it does and what changes it, a command, a setup skill or
-  nothing by hand. A list, the paths of programs and an add-on come as a count or as on and off,
-  never with what they hold, and a text from a file your other devices can write comes on one
-  line, with a line break or an escape sequence written out. `--json` gives the same for a program
-  ([Configuration](docs/configuration.md#every-setting-in-one-list)).
-- `m2b settings set <key> <value>` changes a switch to one of its values: `curation.read_sessions`,
-  `curation.paused`, `curation.git_commit`, `band.due_tasks`, `sessions.propose`, `curation.model`
-  and the profile's `language`. Every other key is refused with one line that names what changes
-  it. It refuses what `m2b config set` refuses, in the same words: inside a Claude Code session
-  neither turns `sessions.propose` on.
-- `m2b band --json --session <id>` says what m2b gave a session since its last start: the topics
-  whose facts it got, each with the facts lines and current items it held when the session got
-  it, and whether that start printed the distillate whole, cut or not at all, or the distillate
-  is off for the folder. The session start and the prompt hook note this on the machine as they
-  give it, so it is known for sessions that start from this release on
-  ([The band](docs/band.md)). With `--session-only` the answer is that part alone, without a look
-  at the task list, the calendar or the store.
 - `/m2b-pane` opens the m2b pane in a view of three parts: what m2b gave this session (each topic
   with its facts lines and current items, how the start printed the distillate, whether the
-  distillate is off for the folder, and the notes the session wrote), what waits for you (the
+  distillate is off for the folder, and how many notes the session wrote), what waits for you (the
   proposals, the memory candidates and questions with keep and drop, the review with `ok`) and the
   tasks due today. A topic that comes in with a prompt shows there while the turn still works
-  ([The band](docs/band.md#this-session-what-waits-and-today-in-the-pane)).
+  ([The band](docs/band.md#this-session-what-waits-and-today-in-the-pane),
+  [#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
 - Under the fullscreen layout the m2b pane opens by itself beside the conversation, in its start
   view and without taking the keyboard. Closing it there by hand keeps it closed, also in later
-  sessions, until you open it again with `/m2b-pane` or another command of the band. On the main
-  screen, where a pane is a block above the prompt, it still opens only when asked
-  ([The band](docs/band.md#it-opens-by-itself-beside-the-chat)).
-- The review, a search and the proposals are views of that pane now: Escape, the close mark or
-  the new `back` button above them lead back to the start view instead of closing the pane
-  ([The band](docs/band.md#back-to-the-start-view)).
-- In the pane's start view, `leave m2b out` turns the distillate off for the session's folder,
-  after five seconds in which `undo` takes the press back, and `turn on` brings it back. It is
-  `m2b distillate off` and `on` for the folder the pane names, one press away from where you see
-  a customer's facts in a session about something else
-  ([The band](docs/band.md#leaving-m2b-out-of-a-folder)).
-- `show` beside a topic in the start view shows the topic's facts and current items, as the
-  distillate holds them now. The band keeps them only while the pane shows them: they are in no
-  text its commands answer, not in the session's state and in nothing handed to the model
-  ([The band](docs/band.md#a-topics-lines)).
+  sessions, until you open it again with `/m2b-pane`, another command that shows the pane or
+  `show` in the band. On the main screen, where a pane is a block above the prompt, it still opens
+  only when asked
+  ([The band](docs/band.md#it-opens-by-itself-beside-the-chat),
+  [#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
 - While the m2b pane sits beside the conversation in its start view, the band above the prompt
   steps back to one line, so nothing stands twice: why a press wrote nothing, the hint of an older
   band or an error where there is one, and else the counts of what needs an answer (`Waits for
   you: 2 to keep or drop, 1 proposal from your sessions, the review`). Where the pane is not in
   view (the main screen, a terminal too narrow for it, after you closed it, behind another
   plugin's pane) the band keeps every row and gets one more, `2 topics given to this session`,
-  whose `show` opens the pane ([The band](docs/band.md#the-band-beside-the-pane)).
+  whose `show` opens the pane ([The band](docs/band.md#the-band-beside-the-pane),
+  [#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
 - Minimized to its small form in the desktop app, the m2b pane draws three counts and no button:
   the topics this session was given, what waits for you and the tasks due
-  ([The band](docs/band.md#the-band-beside-the-pane)).
-- `m2b distillate topic <name>` prints one topic's facts and current items from the distillate;
-  `m2b band --json --session <id>` names the session's folder under `distillate.folder`
-  ([Commands](docs/commands.md)).
+  ([The band](docs/band.md#the-band-beside-the-pane),
+  [#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
+- In the pane's start view, `leave m2b out` turns the distillate off for the session's folder,
+  after five seconds in which `undo` takes the press back, and `turn on` brings it back. It is
+  `m2b distillate off` and `on` for the folder the pane names, one press away from where you see
+  a customer's facts in a session about something else
+  ([The band](docs/band.md#leaving-m2b-out-of-a-folder),
+  [#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
+- `show` beside a topic in the start view shows the topic's facts and current items, as the
+  distillate holds them now. The band keeps them only while the pane shows them: they are in no
+  text its commands answer, not in the session's state and in nothing handed to the model
+  ([The band](docs/band.md#a-topics-lines),
+  [#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
+- `/m2b-settings`, or `settings` at the end of the pane's start view, shows every setting of
+  m2b in the pane: a list under this machine, the store and the owner, and a card per setting
+  with what it does and what changes it. `previous` and `next` walk through all of them, and with
+  the keyboard in the pane Enter on `next` goes from card to card: the band puts the focus on the
+  button that leads on, never on a switch. A switch is pressed on its card, waits five seconds
+  with `undo` and is then written by `m2b settings set`; what the command refuses stands on the
+  card ([The band](docs/band.md#every-setting-in-the-pane),
+  [#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
+- The card of `sessions.propose` turns handing in on by a press, where the pane is drawn in a
+  terminal, the desktop app or VS Code: the one setting a session's shell does not turn on no
+  longer needs a terminal outside Claude Code. In the mobile app the card names the command for
+  such a terminal. The press is a threshold in the band and no boundary: nothing says who
+  pressed, so another plugin, a client attached to the session that names itself the terminal,
+  the desktop app or VS Code, or whatever types into your terminal or steers your screen can
+  pass it ([Security](SECURITY.md#what-a-session-hands-in),
+  [#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
+- `m2b settings` lists every setting of the three files, this machine's, the store's and the
+  owner's: its value, its default, what it does and how it is changed, by a command, by a setup
+  skill, by hand or not at all. A list, the paths of programs and an add-on come as a count or as
+  on and off,
+  never with what they hold, and a text from a file your other devices can write comes on one
+  line, with a line break or an escape sequence written out. `--json` gives the same for a program
+  ([Configuration](docs/configuration.md#every-setting-in-one-list),
+  [#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
+- `m2b settings set <key> <value>` changes a switch to one of its values: `curation.read_sessions`,
+  `curation.paused`, `curation.git_commit`, `band.due_tasks`, `sessions.propose`, `curation.model`
+  and the profile's `language`. Every other key is refused with one line that names what changes
+  it. It refuses what `m2b config set` refuses, in the same words: where `CLAUDECODE` is set, as
+  it is in the shell of a Claude Code session, neither turns `sessions.propose` on
+  ([#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
+- `m2b band --json --session <id>` says what m2b gave a session since its last start: the topics
+  whose facts it got, each with the facts lines and current items it held when the session got
+  it, and whether that start printed the distillate whole, cut or not at all, or the distillate
+  is off for the folder. The session start and the prompt hook note this on the machine as they
+  give it, so it is known for sessions that start from this release on
+  ([The band](docs/band.md)). It names the session's folder under `distillate.folder`. With
+  `--session-only` the answer is that part alone, without a look at the task list, the calendar or
+  the store
+  ([#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
+- `m2b distillate topic <name>` prints one topic's facts and current items from the distillate
+  ([Commands](docs/commands.md),
+  [#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
+
+### Changed
+
+- The review, a search and the proposals are views of the m2b pane now: Escape, the close mark or
+  the new `back` button above them lead back to the start view instead of closing the pane
+  ([The band](docs/band.md#back-to-the-start-view),
+  [#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
 
 ## [0.5.0] - 2026-11-15
 
