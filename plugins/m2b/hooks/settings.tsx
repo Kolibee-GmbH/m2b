@@ -13,6 +13,12 @@ import { OLDER_CORE } from './session'
  * it. The list is the core's (`m2b settings --json`), and so is the one command a press runs
  * (`m2b settings set`), which refuses whatever is no switch.
  *
+ * One switch a session's shell does not turn on: `sessions.propose`, with which a session hands in
+ * proposals with words from what its agent read. The core refuses it while `CLAUDECODE` is set, as
+ * it is for every command of a session's shell. No tool of Claude Code hands the mod a press: one
+ * arrives as input on a client that draws the session. So a press on its card does turn it on;
+ * `pressTurnsHandingInOn` is the one place that says which press that is.
+ *
  * The values hold folders, the owner's name and what the store is called. This module hands them
  * to the pane's drawing alone: they stand in a variable of the module, never in the session's
  * state, which every plugin can read, and in no text a command answers. No command sets a value;
@@ -60,8 +66,19 @@ export type SettingsLook = { state: 'reading' } | { state: 'read'; catalog: Cata
  * A press on a switch: it waits for undo, then it is written. It names its setting and the value
  * by what they are, never by a place in the list: the list is read again after every write, and a
  * place could then be another setting's. `press` is the opening of the view it was made in.
+ * `isTurningHandingInOn` marks the one press `pressTurnsHandingInOn` names, settled when the
+ * press is made, from the surface the press itself said: the card can be drawn on several
+ * surfaces at once.
  */
-type Change = { token: string; press: string; scope: Scope; key: string; choice: Choice; phase: 'waiting' | 'writing' }
+type Change = {
+  token: string
+  press: string
+  scope: Scope
+  key: string
+  choice: Choice
+  isTurningHandingInOn: boolean
+  phase: 'waiting' | 'writing'
+}
 /** What the command said to the last change it refused, with the setting it was about. */
 type Refusal = { scope: Scope; key: string; line: string }
 /**
@@ -174,27 +191,64 @@ export function afterBack(view: PaneView | null, isCardShown: boolean, isRightAf
   return isRightAfterBack ? 'stay' : 'start'
 }
 
-// The one switch no session turns on: the core refuses it wherever Claude Code started the
-// command, and the mod's command is started by Claude Code.
 const HANDING_IN = 'sessions.propose'
+// The surfaces on which the card offers to turn handing in on. A surface is what the client that
+// draws names itself: a fact about drawing, no proof of who presses. The list keeps a tap in the
+// mobile app from turning it on, and holds out no client that names itself otherwise.
+const OFFERED_THE_TURN_ON: readonly string[] = ['terminal', 'desktop', 'vscode']
 
 /** A choice as `m2b settings set` takes it: a text as it is, anything else as its JSON. */
 function argumentOf(choice: Choice): string {
   return typeof choice === 'string' ? choice : JSON.stringify(choice)
 }
 
+/** Whether `setting` is the switch for handing in of this machine's config, by its file and its key. */
+function isHandingInOfThisMachine(setting: Pick<Setting, 'scope' | 'key'>): boolean {
+  return setting.scope === 'machine' && setting.key === HANDING_IN
+}
+
 /**
- * The places, among a switch's choices, of the values the card offers: every value but the one
- * that is set, and never the one that turns handing in on, by what the command would be handed.
+ * Whether `value` is the one that turns handing in on, by what the command would be handed for
+ * `key`: whatever file the list names the key under, and however a core spells the value.
  */
-export function offered(setting: Setting): number[] {
+function turnsHandingInOn(key: string, value: unknown): boolean {
+  return key === HANDING_IN && isChoice(value) && argumentOf(value) === 'true'
+}
+
+/**
+ * Whether a press on `choice` of `setting`, from a client that names itself `surface`, turns
+ * handing in on: this machine's switch, the value the command takes for it, a surface the card
+ * offers it on. Only the write of such a press is handed to m2b as made outside a session; every
+ * other write is handed on as a session's, and the core decides.
+ *
+ * What this stands on is that no tool of Claude Code hands the mod a press: a press arrives as
+ * input on a client that draws the session. That is a threshold and no boundary. Claude Code
+ * does not say who pressed, and the surface is the client's own word, so another plugin can
+ * change what a press says, and whatever attaches to the session as a client, types into the
+ * terminal or steers the screen presses as the person does, a model whose tools steer that
+ * input among them.
+ */
+export function pressTurnsHandingInOn(setting: Pick<Setting, 'scope' | 'key'>, choice: Choice, surface: string): boolean {
+  return isHandingInOfThisMachine(setting) && turnsHandingInOn(setting.key, choice) && OFFERED_THE_TURN_ON.includes(surface)
+}
+
+/** The places of every value of a switch but the one that is set; none where the setting is no switch or was not read. */
+function otherValues(setting: Setting): number[] {
   if (setting.kind !== 'switch' || !setting.isRead) {
     return []
   }
-  return setting.choices
-    .map((choice, place) => ({ choice, place }))
-    .filter(({ choice }) => choice !== setting.value && !(setting.key === HANDING_IN && argumentOf(choice) === 'true'))
-    .map(({ place }) => place)
+  return setting.choices.flatMap((choice, place) => (choice === setting.value ? [] : [place]))
+}
+
+/**
+ * The places, among a switch's choices, of the values the card offers on `surface`: every value
+ * but the one that is set, and the one that turns handing in on only as the press that may.
+ */
+export function offered(setting: Setting, surface: string): number[] {
+  return otherValues(setting).filter(place => {
+    const choice = setting.choices[place]
+    return choice !== undefined && (!turnsHandingInOn(setting.key, choice) || pressTurnsHandingInOn(setting, choice, surface))
+  })
 }
 
 function settingNamed(catalog: Catalog, scope: Scope, key: string): Setting | undefined {
@@ -202,22 +256,24 @@ function settingNamed(catalog: Catalog, scope: Scope, key: string): Setting | un
 }
 
 /**
- * Notes a press on a switch, which writes nothing yet. False where the press is not one the card
- * offers, or another change waits or is being written, in whatever opening: one change at a time
- * from this pane, so two of its writes never race for a file and a refusal is about the press the
- * person just made. A change made elsewhere meanwhile, in a terminal or another session, is not
- * known here.
+ * Notes a press on a switch, made on `surface`, which writes nothing yet. False where the press is
+ * not one the card offers there, or another change waits or is being written, in whatever
+ * opening: one change at a time from this pane, so two of its writes never race for a file and a
+ * refusal is about the press the person just made. A change made elsewhere meanwhile, in a
+ * terminal or another session, is not known here.
  */
-export function beginChange(press: string, at: number, place: number, token: string): boolean {
+export function beginChange(press: string, at: number, place: number, token: string, surface: string): boolean {
   if (held === null || held.press !== press || change !== null || held.look.state !== 'read') {
     return false
   }
   const setting = held.look.catalog.settings[at]
   const choice = setting?.choices[place]
-  if (setting === undefined || choice === undefined || !offered(setting).includes(place)) {
+  if (setting === undefined || choice === undefined || !offered(setting, surface).includes(place)) {
     return false
   }
-  change = { token, press, scope: setting.scope, key: setting.key, choice, phase: 'waiting' }
+  // Asked of the rule itself, not taken from what `offered` let through.
+  const isTurningHandingInOn = pressTurnsHandingInOn(setting, choice, surface)
+  change = { token, press, scope: setting.scope, key: setting.key, choice, isTurningHandingInOn, phase: 'waiting' }
   held = { ...held, refusal: null }
   return true
 }
@@ -233,22 +289,24 @@ export function undoChange(press: string): boolean {
 
 /**
  * Turns the waiting press `token` names into one being written and answers what to hand to
- * `m2b settings set`. Null, and the press dropped, where the list as it is now no longer offers
- * that value for that setting; null where the press was taken back or the view left meanwhile.
+ * `m2b settings set`, and whether this is the press that turns handing in on, as it was settled
+ * when the press was made. Null, and the press dropped, where the list as it is now no longer has
+ * that value for that setting as one to change to; null where the press was taken back or the
+ * view left meanwhile.
  */
-export function startWriting(token: string): { key: string; argument: string } | null {
+export function startWriting(token: string): { key: string; argument: string; isTurningHandingInOn: boolean } | null {
   if (change === null || change.token !== token || change.phase !== 'waiting') {
     return null
   }
-  const { scope, key, choice } = change
+  const { scope, key, choice, isTurningHandingInOn } = change
   // A press that waits is of the opening the module holds: every other way out took it back.
   const setting = held !== null && held.look.state === 'read' ? settingNamed(held.look.catalog, scope, key) : undefined
-  if (setting === undefined || !offered(setting).some(place => setting.choices[place] === choice)) {
+  if (setting === undefined || !otherValues(setting).some(place => setting.choices[place] === choice)) {
     change = null
     return null
   }
   change = { ...change, phase: 'writing' }
-  return { key, argument: argumentOf(choice) }
+  return { key, argument: argumentOf(choice), isTurningHandingInOn }
 }
 
 /**
@@ -362,11 +420,14 @@ export function parseSettings(text: string): SettingsLook {
   }
 }
 
-/** What the view's buttons do. `open` turns the pane to the card at a place of the list. */
+/**
+ * What the view's buttons do. `open` turns the pane to the card at a place of the list; `choose`
+ * is a press on a switch, with the surface the press named.
+ */
 export type SettingsActions = {
   open: (at: number) => Promise<void>
   toList: () => Promise<void>
-  choose: (at: number, place: number) => Promise<void>
+  choose: (at: number, place: number, surface: string) => Promise<void>
   undo: () => Promise<void>
 }
 
@@ -387,6 +448,11 @@ const GROUPS: readonly { scope: Scope; heading: string; where: string }[] = [
 const DOES_NOT_CURATE = 'This machine does not curate.'
 const NOTHING_HERE = `${DOES_NOT_CURATE.slice(0, -1)}: the settings of the curation run do nothing here.`
 const IN_YOUR_OWN_TERMINAL = `Turned on in a terminal of your own: m2b settings set ${HANDING_IN} true`
+const BY_YOUR_PRESS = 'Your press here turns it on, as a terminal of your own does.'
+const EVERY_MACHINE = 'Every machine that shares the store needs an m2b that knows handing in.'
+// The mod registers the tool when it loads, at a session's start and on a reload; the command takes a call at once.
+const AT_ITS_START =
+  'A session gets the tool when it starts or its plugins are reloaded: until then, one that ran before this was turned on does not have it.'
 const KEPT_BY_M2B = 'kept by m2b, never changed by hand'
 // Below this width a row is two lines, the title and below it the value: beside the chat the pane can be 24 columns wide.
 const NARROW_BELOW = 41
@@ -523,6 +589,9 @@ export function settingsPane(
   const refused = refusal !== null && refusal.scope === setting.scope && refusal.key === setting.key ? refusal.line : null
   const hasDefault = setting.isRead && setting.defaultValue !== null && setting.defaultValue !== undefined
   const reason = notRead[setting.file]
+  const isHandingIn = isHandingInOfThisMachine(setting) && setting.kind === 'switch' && setting.isRead
+  const isHandingInOn = isHandingIn && turnsHandingInOn(setting.key, setting.value)
+  const turnsOnHere = setting.choices.some(choice => pressTurnsHandingInOn(setting, choice, e.surface))
   const previous = at > 0 ? <Button key="settings:previous" label="previous" onPress={() => actions.open(at - 1)} /> : null
   const next = at < settings.length - 1 ? <Button key="settings:next" label="next" onPress={() => actions.open(at + 1)} /> : null
   const list = <Button key="settings:list" label="list" onPress={actions.toList} />
@@ -555,9 +624,13 @@ export function settingsPane(
       <Text wrap="wrap">{`now: ${shown(setting)}`}</Text>
       {hasDefault && setting.defaultValue !== setting.value && quiet(`default: ${inWords(setting.defaultValue)}`)}
       <Text wrap="wrap">{plainLine(setting.does)}</Text>
+      {isHandingIn && quiet(EVERY_MACHINE)}
+      {isHandingInOn && quiet(AT_ITS_START)}
       {!setting.isRead && reason !== undefined && quiet(`${NOT_READ}: ${plainLine(reason)}`)}
       {idles(setting) && quiet(DOES_NOT_CURATE)}
       {refused !== null && failure(`not changed: ${plainLine(refused)}`)}
+      {/* How it is turned on stands above whatever is pressed, so it is on the screen for the press. */}
+      {isHandingIn && !isHandingInOn && <Text wrap="wrap">{turnsOnHere ? BY_YOUR_PRESS : IN_YOUR_OWN_TERMINAL}</Text>}
       {isPressed && change.phase === 'waiting' && (
         <Box key="row:change" flexDirection="row">
           <Button key="settings:undo" label="undo" onPress={actions.undo} />
@@ -569,16 +642,15 @@ export function settingsPane(
       {isPressed && change.phase === 'writing' && quiet(`${changeLine(change.key, change.choice)}…`)}
       {change !== null && !isPressed && quiet(underWay(change))}
       {change === null &&
-        offered(setting).map(place => {
+        offered(setting, e.surface).map(place => {
           const choice = setting.choices[place]
           // The key names the card: a key that follows the keyboard from card to card must not land on another switch.
+          // No button here has a hotkey or takes the focus by itself, so no single key presses a switch.
+          // The press names its surface, which is not always the one this drawing is for.
           return choice === undefined ? null : (
-            <Button key={`set:${at}:${place}`} label={choiceLabel(choice)} onPress={() => actions.choose(at, place)} />
+            <Button key={`set:${at}:${place}`} label={choiceLabel(choice)} onPress={pressed => actions.choose(at, place, pressed.surface)} />
           )
         })}
-      {setting.kind === 'switch' && setting.key === HANDING_IN && setting.isRead && setting.value !== true && (
-        <Text wrap="wrap">{IN_YOUR_OWN_TERMINAL}</Text>
-      )}
       {setting.kind !== 'switch' && quiet(howItChanges(setting))}
     </Box>
   )

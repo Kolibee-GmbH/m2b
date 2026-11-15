@@ -17,6 +17,7 @@ import {
   offered,
   openSettings,
   parseSettings,
+  pressTurnsHandingInOn,
   showsCard,
   startWriting,
   undoChange,
@@ -33,6 +34,18 @@ const NOTES = '/home/alex/Notes'
 const DOES_NOT_CURATE = 'This machine does not curate: the settings of the curation run do nothing here.'
 const IN_YOUR_OWN_TERMINAL = 'Turned on in a terminal of your own: m2b settings set sessions.propose true'
 const LIST = ['settings', '--json']
+const BY_YOUR_PRESS = 'Your press here turns it on, as a terminal of your own does.'
+const EVERY_MACHINE = 'Every machine that shares the store needs an m2b that knows handing in.'
+const AT_ITS_START =
+  'A session gets the tool when it starts or its plugins are reloaded: until then, one that ran before this was turned on does not have it.'
+/** The surfaces whose card offers to turn handing in on; `mobile` is how the mobile app names itself. */
+const OFFERED_THE_TURN_ON = ['terminal', 'desktop', 'vscode'] as const
+type Surface = (typeof OFFERED_THE_TURN_ON)[number] | 'mobile'
+/** What the core says to a session that turns handing in on, in short. */
+const NO_SESSION_TURNS_IT_ON = 'sessions.propose is turned on in a terminal of your own, outside Claude Code'
+/** What a call of `m2b settings set` is handed: the core takes an empty `CLAUDECODE` as a terminal of the owner's own. */
+const OUTSIDE_A_SESSION = { CLAUDECODE: '' }
+const INSIDE_A_SESSION = { CLAUDECODE: '1' }
 
 type Entry = {
   key: string
@@ -83,6 +96,8 @@ const inStore: Partial<Entry> = { file: 'store.json', scope: 'store' }
 const ofOwner: Partial<Entry> = { file: 'profile.json', scope: 'owner' }
 
 const [MACHINE_ID, PATH, MODEL, PAUSED, PROPOSE, EXECUTABLES, BACKEND, TIMEOUT, LANGUAGE, CUSTOMERS] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+/** The button that turns handing in on: the first of its switch's two values, on its card. */
+const TURN_ON = `set:${PROPOSE}:0`
 
 /** Ten settings as `m2b settings --json` lists them: each kind, each file, each way a setting changes. */
 function catalog(): Entry[] {
@@ -144,6 +159,10 @@ class FakeSettings {
     }
     this.changedWith.push(env)
     const [key, value] = args[1] === '--' ? args.slice(2) : args.slice(1)
+    // As the core: no call that carries a `CLAUDECODE` with a value turns handing in on.
+    if (key === 'sessions.propose' && value === 'true' && env?.['CLAUDECODE']) {
+      return { ...fail(NO_SESSION_TURNS_IT_ON), exitCode: 2 }
+    }
     const found = this.entries.find(one => one.key === key && one.kind === 'switch')
     if (this.refuses !== null || found === undefined) {
       return { ...fail(this.refuses ?? `${key} is no switch`), exitCode: 2 }
@@ -167,23 +186,31 @@ function typed($: Engine, command: string, args = ''): Promise<CommandRunResult>
 type Clock = Awaited<ReturnType<typeof start>>['clock']
 
 /** The list, opened with the command and read. */
-async function openList($: Engine, clock: Clock, columns = 80) {
+async function openList($: Engine, clock: Clock, columns = 80, surface: Surface = 'terminal') {
   await typed($, 'm2b-settings')
   await clock.advance(1)
-  return $.ui.mount({ ...pane(PANE, columns), surface: 'terminal' })
+  return $.ui.mount({ ...pane(PANE, columns), surface })
 }
 
 /** The card of the setting at `at`, opened from the list. */
-async function openCard($: Engine, clock: Clock, at: number, columns = 80) {
-  const ui = await openList($, clock, columns)
+async function openCard($: Engine, clock: Clock, at: number, columns = 80, surface: Surface = 'terminal') {
+  const ui = await openList($, clock, columns, surface)
   await ui.press({ key: `setting:${at}` })
   return ui
 }
 
-type Mounted = Awaited<ReturnType<typeof openList>>
+/** A drawing of the pane, on whatever surface it was mounted. */
+type Mounted = Pick<Awaited<ReturnType<typeof openList>>, 'findAll'>
 
 async function buttons(ui: Mounted): Promise<string[]> {
   return (await ui.findAll({ type: 'Button' })).map(button => String(button.key))
+}
+
+/** What the pane draws, in the order of its tree: a button as `[key]`, a text as it reads. */
+async function inOrder(ui: Mounted): Promise<string[]> {
+  return (await ui.findAll({}))
+    .filter(found => found.type === 'Button' || found.type === 'Text')
+    .map(found => (found.type === 'Button' ? `[${String(found.key)}]` : found.text.trim()))
 }
 
 async function labels(ui: Mounted): Promise<string[]> {
@@ -445,22 +472,259 @@ test('what the command refuses stands on the card in its own words, and the valu
   await ui.unmount()
 })
 
-test('the switch that lets sessions hand in is not turned on from the pane: its card names the command', async ($, on) => {
-  // Covers: B197
+test('in a terminal, the desktop app and VS Code the card of handing in offers turn on: on the card alone, below the buttons that lead on and the line that says how, under no key of its own', async ($, on) => {
+  // Covers: B199
+  const { fake } = world()
+  const { clock } = await start($, on, fake)
+
+  for (const surface of OFFERED_THE_TURN_ON) {
+    const ui = await openList($, clock, 80, surface)
+    // The list has rows to open and the way back, never a switch.
+    expect(await buttons(ui)).toContain(`setting:${PROPOSE}`)
+    expect((await buttons(ui)).every(key => key === 'back' || key.startsWith('setting:'))).toBe(true)
+    await ui.press({ key: `setting:${PROPOSE}` })
+
+    expect(await buttons(ui)).toEqual(['settings:previous', 'settings:next', 'settings:list', TURN_ON])
+    expect(await labels(ui)).toEqual(['previous', 'next', 'list', 'turn on'])
+    const turnOn = await ui.find({ key: TURN_ON })
+    for (const reach of ['hotkey', 'action', 'autoFocus', 'variant', 'role']) {
+      expect(turnOn?.props[reach]).toBeUndefined()
+    }
+    expect(await texts(ui)).not.toContain(IN_YOUR_OWN_TERMINAL)
+    // What it needs, then how it is turned on, then the button: the last thing on the card.
+    const drawn = await inOrder(ui)
+    expect(drawn.indexOf(EVERY_MACHINE)).toBeGreaterThan(drawn.indexOf('[settings:list]'))
+    expect(drawn.slice(drawn.indexOf(EVERY_MACHINE) + 1)).toEqual([BY_YOUR_PRESS, `[${TURN_ON}]`])
+    expect(drawn).not.toContain(AT_ITS_START)
+    await ui.unmount()
+  }
+})
+
+test('the press on turn on waits five seconds with undo, is then the one call handed to m2b as made outside a session, and the card says what it reaches', async ($, on) => {
+  // Covers: B199
+  const { fake, settings } = world()
+  const { clock } = await start($, on, fake)
+
+  for (const [turn, surface] of OFFERED_THE_TURN_ON.entries()) {
+    Object.assign(settings.entries[PROPOSE] ?? {}, onOff('sessions.propose', false))
+    const ui = await openCard($, clock, PROPOSE, 80, surface)
+
+    await ui.press({ key: TURN_ON })
+
+    expect(await texts(ui)).toContain('turning sessions.propose on')
+    expect(await buttons(ui)).toEqual(['settings:previous', 'settings:next', 'settings:list', 'settings:undo'])
+    await clock.advance(4_999)
+    expect(settings.changedWith).toHaveLength(turn)
+    await clock.advance(1)
+    await clock.advance(1)
+
+    expect(settings.changedWith).toHaveLength(turn + 1)
+    expect((await texts(ui)).some(shown => shown.startsWith('not changed'))).toBe(false)
+    expect(await texts(ui)).toContain('now: on')
+    expect(await texts(ui)).toContain(AT_ITS_START)
+    expect(await texts(ui)).toContain(EVERY_MACHINE)
+    expect(await texts(ui)).not.toContain(BY_YOUR_PRESS)
+    expect(await labels(ui)).toEqual(['previous', 'next', 'list', 'turn off'])
+    await ui.unmount()
+  }
+
+  const written = fake.settingCalls().filter(call => call[1] === 'set')
+  expect(written).toEqual(OFFERED_THE_TURN_ON.map(() => ['settings', 'set', '--', 'sessions.propose', 'true']))
+  expect(settings.changedWith).toEqual(OFFERED_THE_TURN_ON.map(() => OUTSIDE_A_SESSION))
+})
+
+test('undo, and leaving the card, take the press on turn on back: nothing is handed to m2b', async ($, on) => {
+  // Covers: B199
   const { fake, settings } = world()
   const { clock } = await start($, on, fake)
   const ui = await openCard($, clock, PROPOSE)
 
+  await ui.press({ key: TURN_ON })
+  await ui.press({ key: 'settings:undo' })
+  await clock.advance(10_000)
+  expect(await labels(ui)).toEqual(['previous', 'next', 'list', 'turn on'])
+
+  await ui.press({ key: TURN_ON })
+  await ui.press({ key: 'settings:next' })
+  await clock.advance(10_000)
+
+  expect(settings.changedWith).toEqual([])
+  expect(fake.settingCalls()).toEqual([LIST])
+  await ui.unmount()
+})
+
+test('in the mobile app the card of handing in names the command for a terminal and offers nothing that turns it on', async ($, on) => {
+  // Covers: B199
+  const { fake, settings } = world()
+  const { clock } = await start($, on, fake)
+  const ui = await openCard($, clock, PROPOSE, 80, 'mobile')
+
   expect(await texts(ui)).toContain(IN_YOUR_OWN_TERMINAL)
+  expect(await texts(ui)).not.toContain(BY_YOUR_PRESS)
+  expect(await texts(ui)).toContain(EVERY_MACHINE)
   expect(await buttons(ui)).toEqual(['settings:previous', 'settings:next', 'settings:list'])
   await ui.unmount()
 
-  // Turned on already, it can be turned off here: that way no session gains anything.
+  // Turned on already, it is turned off from anywhere, as a change made inside a session: that way no session gains anything.
   Object.assign(settings.entries[PROPOSE] ?? {}, { value: true, shows: 'on' })
-  const on2 = await openCard($, clock, PROPOSE)
-  expect(await labels(on2)).toEqual(['previous', 'next', 'list', 'turn off'])
-  expect(await texts(on2)).not.toContain(IN_YOUR_OWN_TERMINAL)
-  await on2.unmount()
+  const whereOn = await openCard($, clock, PROPOSE, 80, 'mobile')
+  expect(await labels(whereOn)).toEqual(['previous', 'next', 'list', 'turn off'])
+  expect(await texts(whereOn)).not.toContain(IN_YOUR_OWN_TERMINAL)
+  expect(await texts(whereOn)).toContain(AT_ITS_START)
+  await whereOn.press({ key: `set:${PROPOSE}:1` })
+  await clock.advance(5_000)
+  await clock.advance(1)
+
+  expect(fake.settingCalls().filter(call => call[1] === 'set')).toEqual([['settings', 'set', '--', 'sessions.propose', 'false']])
+  expect(settings.changedWith).toEqual([INSIDE_A_SESSION])
+  expect(await texts(whereOn)).toContain('now: off')
+  await whereOn.unmount()
+})
+
+test('the surface is the one the press came from, not the one the card was drawn on', async ($, on) => {
+  // Covers: B199
+  const { fake, settings } = world()
+  // A card drawn for the terminal, pressed from a client that names itself the mobile app: what the press says counts.
+  on('ui.press', { plugin: 'm2b', element: TURN_ON }, (_, e, next) => next({ ...e, surface: 'mobile' }))
+  const { clock } = await start($, on, fake)
+  const ui = await openCard($, clock, PROPOSE)
+  expect(await buttons(ui)).toContain(TURN_ON)
+
+  await ui.press({ key: TURN_ON })
+
+  expect(await buttons(ui)).not.toContain('settings:undo')
+  await clock.advance(10_000)
+  expect(settings.changedWith).toEqual([])
+  expect(await texts(ui)).toContain('now: off')
+  await ui.unmount()
+})
+
+test('while another change is being written, the card of handing in still says how it is turned on, and offers nothing', async ($, on) => {
+  // Covers: B199
+  const { fake } = world()
+  fake.delayMs = args => (args[0] === 'settings' && args[1] === 'set' ? 3_000 : 0)
+  const { clock } = await start($, on, fake)
+  const ui = await openCard($, clock, PAUSED)
+
+  await ui.press({ key: `set:${PAUSED}:0` })
+  await clock.advance(5_000)
+  await ui.press({ key: 'settings:next' })
+
+  expect(await texts(ui)).toContain('Sessions hand in proposals')
+  expect(await texts(ui)).toContain(BY_YOUR_PRESS)
+  expect(await texts(ui)).toContain('A change of curation.paused is under way.')
+  expect(await buttons(ui)).toEqual(['settings:previous', 'settings:next', 'settings:list'])
+  await clock.advance(3_001)
+  await clock.advance(1)
+  expect(await buttons(ui)).toContain(TURN_ON)
+  await ui.unmount()
+})
+
+test('a core that spells on and off as texts is read the same: on is on, and the value that turns it on is the one the command takes', async ($, on) => {
+  // Covers: B199
+  const { fake, settings } = world()
+  const { clock } = await start($, on, fake)
+  const asTexts = (value: string): Partial<Entry> => ({ value, shows: value === 'true' ? 'on' : 'off', choices: ['true', 'false'] })
+
+  Object.assign(settings.entries[PROPOSE] ?? {}, asTexts('true'))
+  const whereOn = await openCard($, clock, PROPOSE)
+  expect(await texts(whereOn)).toContain(AT_ITS_START)
+  expect(await texts(whereOn)).not.toContain(BY_YOUR_PRESS)
+  expect(await labels(whereOn)).toEqual(['previous', 'next', 'list', 'set to false'])
+  await whereOn.unmount()
+
+  Object.assign(settings.entries[PROPOSE] ?? {}, asTexts('false'))
+  const whereOff = await openCard($, clock, PROPOSE)
+  expect(await texts(whereOff)).toContain(BY_YOUR_PRESS)
+  expect(await labels(whereOff)).toEqual(['previous', 'next', 'list', 'set to true'])
+  await whereOff.press({ key: TURN_ON })
+  await clock.advance(5_000)
+  await clock.advance(1)
+  expect(settings.changedWith).toEqual([OUTSIDE_A_SESSION])
+  await whereOff.unmount()
+
+  Object.assign(settings.entries[PROPOSE] ?? {}, asTexts('false'))
+  const inTheApp = await openCard($, clock, PROPOSE, 80, 'mobile')
+  expect(await labels(inTheApp)).toEqual(['previous', 'next', 'list'])
+  expect(await texts(inTheApp)).toContain(IN_YOUR_OWN_TERMINAL)
+  await inTheApp.unmount()
+})
+
+test('in a pane 24 columns wide the card of handing in wraps its lines and keeps its button below them', async ($, on) => {
+  // Covers: B199
+  const { fake } = world()
+  const { clock } = await start($, on, fake)
+  const ui = await openCard($, clock, PROPOSE, 24)
+
+  for (const line of [EVERY_MACHINE, BY_YOUR_PRESS]) {
+    expect((await ui.findAll({ type: 'Text', text: line }))[0]?.props['wrap']).toBe('wrap')
+  }
+  const drawn = await inOrder(ui)
+  expect(drawn.slice(-2)).toEqual([BY_YOUR_PRESS, `[${TURN_ON}]`])
+  // A terminal draws a button as `[ label ]`: four cells more than its label.
+  const label = String((await ui.find({ key: TURN_ON }))?.props['label'])
+  expect(label).toBe('turn on')
+  expect(label.length + 4).toBeLessThanOrEqual(24)
+  await ui.unmount()
+})
+
+test('a setting of that name that is no switch of this machine, or was not read, says nothing about turning it on', async ($, on) => {
+  // Covers: B199
+  const { fake, settings } = world()
+  const { clock } = await start($, on, fake)
+  const ABOUT_TURNING_ON = [BY_YOUR_PRESS, IN_YOUR_OWN_TERMINAL, EVERY_MACHINE, AT_ITS_START]
+
+  for (const other of [inStore, { kind: 'shown' }, { read: false }, { ...ofOwner, value: true, shows: 'on' }]) {
+    settings.entries[PROPOSE] = entry('sessions.propose', 'Sessions hand in proposals', { ...onOff('sessions.propose', false), ...other })
+    const ui = await openCard($, clock, PROPOSE)
+
+    expect(await texts(ui)).toContain('Sessions hand in proposals')
+    for (const line of ABOUT_TURNING_ON) {
+      expect(await texts(ui)).not.toContain(line)
+    }
+    expect(await buttons(ui)).not.toContain(TURN_ON)
+    await ui.unmount()
+  }
+})
+
+test('no other press and no command is handed to m2b as made outside a session', async ($, on) => {
+  // Covers: B199
+  const { fake, settings } = world()
+  // A core that spells the switch otherwise, and one that lists a setting of that name for the store.
+  Object.assign(settings.entries[PROPOSE] ?? {}, { value: 'off', shows: 'off', choices: ['on', 'off'] })
+  settings.entries.push(entry('sessions.propose', 'Handing in, of the store', { ...inStore, ...onOff('sessions.propose', false) }))
+  const [IN_WORDS, OF_THE_STORE] = [PROPOSE, settings.entries.length - 1]
+  const { clock } = await start($, on, fake)
+
+  // The command with words behind it writes nothing at all.
+  await typed($, 'm2b-settings', 'sessions.propose true')
+  await clock.advance(10_000)
+  expect(settings.changedWith).toEqual([])
+
+  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  // Another switch, pressed in the terminal.
+  await ui.press({ key: `setting:${PAUSED}` })
+  await ui.press({ key: `set:${PAUSED}:0` })
+  await clock.advance(5_000)
+  await clock.advance(1)
+  // A value that is not the one the command takes to turn handing in on: the core decides, as for a session.
+  await ui.press({ key: 'settings:list' })
+  await ui.press({ key: `setting:${IN_WORDS}` })
+  expect(await labels(ui)).toEqual(['previous', 'next', 'list', 'set to on'])
+  await ui.press({ key: `set:${IN_WORDS}:0` })
+  await clock.advance(5_000)
+  await clock.advance(1)
+  // A setting of that name in another file is not this machine's switch: nothing turns it on.
+  await ui.press({ key: 'settings:list' })
+  await ui.press({ key: `setting:${OF_THE_STORE}` })
+  expect(await labels(ui)).toEqual(['previous', 'list'])
+
+  expect(fake.settingCalls().filter(call => call[1] === 'set')).toEqual([
+    ['settings', 'set', '--', 'curation.paused', 'true'],
+    ['settings', 'set', '--', 'sessions.propose', 'on'],
+  ])
+  expect(settings.changedWith).toEqual([INSIDE_A_SESSION, INSIDE_A_SESSION])
+  await ui.unmount()
 })
 
 test('the settings of a file that could not be read are listed as not read, with why, and nothing to press', async ($, on) => {
@@ -683,7 +947,7 @@ test('the change is handed to m2b as one made inside a session, whatever the mod
   await ui.press({ key: `set:${PAUSED}:0` })
   await clock.advance(5_000)
 
-  expect(settings.changedWith).toEqual([{ CLAUDECODE: '1' }])
+  expect(settings.changedWith).toEqual([INSIDE_A_SESSION])
   await ui.unmount()
 })
 
@@ -959,16 +1223,89 @@ test('a first read that fails is could not read; a later one keeps the list and 
   forgetSettingsUnless(null)
 })
 
-test('a card offers every value of its switch but the one set, and never the one that turns handing in on', () => {
-  // Covers: B198
+test('a card offers every value of its switch but the one set, and the one that turns handing in on only where the client names itself the terminal, the desktop app or VS Code', () => {
+  // Covers: B198, B199
   const settings = settingsOf()
 
-  expect(settings.map(offered)).toEqual([[], [], [1], [0], [], [], [], [], [0], []])
-  expect(offered({ ...(settings[PAUSED] as Setting), kind: 'shown' })).toEqual([])
-  expect(offered({ ...(settings[PAUSED] as Setting), isRead: false })).toEqual([])
-  // However a core spells the value that turns it on.
-  expect(offered({ ...(settings[PROPOSE] as Setting), choices: ['true', 'false'], value: 'false' })).toEqual([])
-  expect(offered({ ...(settings[PROPOSE] as Setting), value: true })).toEqual([1])
+  for (const surface of OFFERED_THE_TURN_ON) {
+    expect(settings.map(setting => offered(setting, surface))).toEqual([[], [], [1], [0], [0], [], [], [], [0], []])
+  }
+  for (const surface of ['mobile', 'watch']) {
+    expect(settings.map(setting => offered(setting, surface))).toEqual([[], [], [1], [0], [], [], [], [], [0], []])
+    // However a core spells the value that turns it on.
+    expect(offered({ ...(settings[PROPOSE] as Setting), choices: ['true', 'false'], value: 'false' }, surface)).toEqual([])
+    expect(offered({ ...(settings[PROPOSE] as Setting), value: true }, surface)).toEqual([1])
+  }
+  expect(offered({ ...(settings[PROPOSE] as Setting), choices: ['true', 'false'], value: 'false' }, 'terminal')).toEqual([0])
+  // A setting of that name in the store's file or the owner's is not this machine's switch.
+  expect(offered({ ...(settings[PROPOSE] as Setting), scope: 'store' }, 'terminal')).toEqual([])
+  expect(offered({ ...(settings[PAUSED] as Setting), kind: 'shown' }, 'terminal')).toEqual([])
+  expect(offered({ ...(settings[PAUSED] as Setting), isRead: false }, 'terminal')).toEqual([])
+})
+
+test('a press turns handing in on only for this machine, with the value the command takes for it, where it names one of the three surfaces', () => {
+  // Covers: B199
+  const settings = settingsOf()
+  const propose = settings[PROPOSE] as Setting
+
+  for (const surface of OFFERED_THE_TURN_ON) {
+    expect(pressTurnsHandingInOn(propose, true, surface)).toBe(true)
+    // As the command would be handed it, however the core spells it.
+    expect(pressTurnsHandingInOn(propose, 'true', surface)).toBe(true)
+  }
+  // The mobile app, a surface the mod does not know, and names that only look like one it knows.
+  for (const surface of ['mobile', 'watch', '', 'Terminal', 'terminal ', 'desktop\n']) {
+    expect(pressTurnsHandingInOn(propose, true, surface)).toBe(false)
+  }
+  for (const choice of [false, 'on', ' true', 'TRUE', 'True', 1, 'false']) {
+    expect(pressTurnsHandingInOn(propose, choice, 'terminal')).toBe(false)
+  }
+  expect(pressTurnsHandingInOn({ ...propose, scope: 'store' }, true, 'terminal')).toBe(false)
+  expect(pressTurnsHandingInOn({ ...propose, scope: 'owner' }, true, 'terminal')).toBe(false)
+  expect(pressTurnsHandingInOn({ ...propose, key: 'sessions.propose ' }, true, 'terminal')).toBe(false)
+  expect(pressTurnsHandingInOn({ ...propose, key: 'sessions' }, true, 'terminal')).toBe(false)
+  expect(pressTurnsHandingInOn(settings[PAUSED] as Setting, true, 'terminal')).toBe(false)
+})
+
+test('a press is marked as the one that turns handing in on when it is made, by the surface it named, and only that one is', () => {
+  // Covers: B199
+  beginSettings('open')
+  fill('open', readLook())
+
+  expect(beginChange('open', PROPOSE, 0, 't-0', 'mobile')).toBe(false)
+  expect(beginChange('open', PROPOSE, 0, 't-0', 'watch')).toBe(false)
+  expect(heldSettings('open').change).toBeNull()
+  expect(beginChange('open', PROPOSE, 0, 't-1', 'desktop')).toBe(true)
+  expect(startWriting('t-1')).toEqual({ key: 'sessions.propose', argument: 'true', isTurningHandingInOn: true })
+  endChange('t-1', null)
+
+  // Any other switch, pressed in the terminal or in the mobile app, is written as a session's change.
+  for (const [token, surface] of [
+    ['t-2', 'terminal'],
+    ['t-3', 'mobile'],
+  ] as const) {
+    expect(beginChange('open', PAUSED, 0, token, surface)).toBe(true)
+    expect(startWriting(token)).toEqual({ key: 'curation.paused', argument: 'true', isTurningHandingInOn: false })
+    endChange(token, null)
+  }
+
+  // Turning it off is a session's change too.
+  const turnedOn = catalog()
+  Object.assign(turnedOn[PROPOSE] ?? {}, { value: true, shows: 'on' })
+  fill('open', readLook(turnedOn))
+  expect(beginChange('open', PROPOSE, 1, 't-4', 'terminal')).toBe(true)
+  expect(startWriting('t-4')).toEqual({ key: 'sessions.propose', argument: 'false', isTurningHandingInOn: false })
+  endChange('t-4', null)
+
+  // The list read again meanwhile no longer names it for this machine: the press is dropped, not written.
+  fill('open', readLook())
+  expect(beginChange('open', PROPOSE, 0, 't-5', 'terminal')).toBe(true)
+  const moved = catalog()
+  Object.assign(moved[PROPOSE] ?? {}, inStore)
+  fill('open', readLook(moved))
+  expect(startWriting('t-5')).toBeNull()
+  expect(heldSettings('open').change).toBeNull()
+  forgetSettingsUnless(null)
 })
 
 test('a press is noted only where the card offers it, one at a time, and written as the setting and the value it named', () => {
@@ -976,23 +1313,23 @@ test('a press is noted only where the card offers it, one at a time, and written
   beginSettings('open')
   fill('open', readLook())
 
-  // The value that is set, turning handing in on, a place the list does not have, another opening.
-  expect(beginChange('open', PAUSED, 1, 't-0')).toBe(false)
-  expect(beginChange('open', PROPOSE, 0, 't-0')).toBe(false)
-  expect(beginChange('open', 99, 0, 't-0')).toBe(false)
-  expect(beginChange('other', PAUSED, 0, 't-0')).toBe(false)
+  // The value that is set, turning handing in on in the mobile app, a place the list does not have, another opening.
+  expect(beginChange('open', PAUSED, 1, 't-0', 'terminal')).toBe(false)
+  expect(beginChange('open', PROPOSE, 0, 't-0', 'mobile')).toBe(false)
+  expect(beginChange('open', 99, 0, 't-0', 'terminal')).toBe(false)
+  expect(beginChange('other', PAUSED, 0, 't-0', 'terminal')).toBe(false)
   expect(heldSettings('open').change).toBeNull()
 
-  expect(beginChange('open', PAUSED, 0, 't-1')).toBe(true)
+  expect(beginChange('open', PAUSED, 0, 't-1', 'terminal')).toBe(true)
   expect(heldSettings('open').change).toMatchObject({ scope: 'machine', key: 'curation.paused', choice: true, phase: 'waiting' })
   // One at a time.
-  expect(beginChange('open', MODEL, 1, 't-2')).toBe(false)
+  expect(beginChange('open', MODEL, 1, 't-2', 'terminal')).toBe(false)
   // Only the press that waits is written, under its own name; another opening does not take it back.
   expect(startWriting('t-2')).toBeNull()
   expect(undoChange('other')).toBe(false)
   // The list was read again meanwhile, in another order: the press still names its setting.
   fill('open', readLook([...catalog()].reverse()))
-  expect(startWriting('t-1')).toEqual({ key: 'curation.paused', argument: 'true' })
+  expect(startWriting('t-1')).toEqual({ key: 'curation.paused', argument: 'true', isTurningHandingInOn: false })
   expect(startWriting('t-1')).toBeNull()
   // Being written, it is no longer taken back, by undo or by leaving.
   expect(undoChange('open')).toBe(false)
@@ -1003,13 +1340,13 @@ test('a press is noted only where the card offers it, one at a time, and written
   // It ends under its own name, and the refusal is kept for the view that is open then.
   beginSettings('later')
   fill('later', readLook())
-  expect(beginChange('later', MODEL, 1, 't-3')).toBe(false)
+  expect(beginChange('later', MODEL, 1, 't-3', 'terminal')).toBe(false)
   endChange('t-3', 'not this one')
   expect(heldSettings('later').change?.phase).toBe('writing')
   endChange('t-1', 'refused')
   expect(heldSettings('later')).toMatchObject({ change: null, refusal: { scope: 'machine', key: 'curation.paused', line: 'refused' } })
   // The next press clears what the last one met.
-  expect(beginChange('later', MODEL, 1, 't-4')).toBe(true)
+  expect(beginChange('later', MODEL, 1, 't-4', 'terminal')).toBe(true)
   expect(heldSettings('later').refusal).toBeNull()
   forgetSettingsUnless(null)
   expect(heldSettings('later').change).toBeNull()
@@ -1022,19 +1359,19 @@ test('a press is not written when the list no longer offers its value, or the vi
 
   beginSettings('open')
   fill('open', readLook())
-  expect(beginChange('open', PAUSED, 0, 't-1')).toBe(true)
+  expect(beginChange('open', PAUSED, 0, 't-1', 'terminal')).toBe(true)
   // Another session turned it on meanwhile.
   fill('open', readLook(turnedOn))
   expect(startWriting('t-1')).toBeNull()
   expect(heldSettings('open').change).toBeNull()
 
-  expect(beginChange('open', MODEL, 1, 't-2')).toBe(true)
+  expect(beginChange('open', MODEL, 1, 't-2', 'terminal')).toBe(true)
   // A list that no longer names the setting.
   fill('open', readLook(catalog().filter(one => one.key !== 'curation.model')))
   expect(startWriting('t-2')).toBeNull()
 
   fill('open', readLook())
-  expect(beginChange('open', MODEL, 1, 't-3')).toBe(true)
+  expect(beginChange('open', MODEL, 1, 't-3', 'terminal')).toBe(true)
   // The view is opened anew: the press that waited in the opening before is taken back.
   beginSettings('later')
   expect(heldSettings('later').change).toBeNull()
@@ -1043,8 +1380,8 @@ test('a press is not written when the list no longer offers its value, or the vi
   // Two files can have a setting of one name: a press names the file with it.
   const twice = [entry('curation.paused', 'Paused elsewhere', { ...ofOwner, kind: 'shown' }), ...catalog()]
   fill('later', readLook(twice))
-  expect(beginChange('later', PAUSED + 1, 0, 't-4')).toBe(true)
-  expect(startWriting('t-4')).toEqual({ key: 'curation.paused', argument: 'true' })
+  expect(beginChange('later', PAUSED + 1, 0, 't-4', 'terminal')).toBe(true)
+  expect(startWriting('t-4')).toEqual({ key: 'curation.paused', argument: 'true', isTurningHandingInOn: false })
   endChange('t-4', null)
   forgetSettingsUnless(null)
 })

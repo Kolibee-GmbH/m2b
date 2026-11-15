@@ -58,7 +58,9 @@ refuses any other key with one line that says what changes that setting, so a ca
 switches to press cannot write a path or a program through it. `m2b config set` stays the command
 for every other key of the machine config, and for a `curation.model` other than the two the
 switch offers. Both refuse the same changes in the same words; `sessions.propose` is turned on by
-neither inside a Claude Code session.
+neither where `CLAUDECODE` is set, as it is in the shell of a Claude Code session. A press on that
+setting's card in the band's pane runs the command with the variable empty
+([The band](band.md#every-setting-in-the-pane)).
 
 A file that cannot be read, a store out of reach or one without a profile yet, leaves its settings
 in the list as `not read`, with the reason under the file's heading. Of a file that does not follow
@@ -100,7 +102,7 @@ An example with invented values:
 | `curation.git_directory` | the git directory a curation run on this machine commits into when the store folder holds a `.git` file that points at one kept outside the folder (`git init --separate-git-dir`): a path, absolute or starting with `~/`. A run commits there only when the file points at this directory; pointed elsewhere, or with nothing named here, it commits nothing and says why ([A commit per run](curation.md#a-commit-per-run)). The directory lies outside the store folder; one inside it or reached through a link in it, other than the store's own `.git` folder, is refused. A `.git` folder in the store folder needs no entry | none |
 | `curation.paused` | whether this machine starts no curation run by itself: none at a session start, none from a schedule. `m2b curate --force` still runs one, captures keep reaching the inbox, and `m2b status` says `paused` ([Pausing](curation.md#pausing)) | `false` |
 | `band.due_tasks` | whether the band shows your tasks due today or overdue below the candidates | `true` |
-| `sessions.propose` | whether a session on this machine may hand in a proposal for your memory by itself, with words from what its agent read for the task: a mail, a document, a tool's result. A session that worked in a folder or repository the profile's `worklog_leave_out` names, or with the distillate off, hands nothing in. Only `m2b settings set sessions.propose true` or `m2b config set sessions.propose true` turns it on, typed in a terminal of your own: setup never does, and inside a Claude Code session either command refuses | `false` |
+| `sessions.propose` | whether a session on this machine may hand in a proposal for your memory by itself, with words from what its agent read for the task: a mail, a document, a tool's result. A session that worked in a folder or repository the profile's `worklog_leave_out` names, or with the distillate off, hands nothing in. You turn it on yourself: with `m2b settings set sessions.propose true` or `m2b config set sessions.propose true` typed in a terminal of your own, or with a press on its card in the band's pane, where the pane is drawn in a terminal, the desktop app or VS Code. Setup never does, and in the shell of a Claude Code session either command refuses | `false` |
 | `distillate.skip_under` | folders, absolute or starting with `~/`, in and below which sessions get no distillate; `m2b distillate off` and `on` change it | none |
 | `addons.<add-on>.on` | whether an add-on runs on this machine: `worklog` | off |
 | `addons.<add-on>.*` | the add-on's own settings; kept when the add-on is turned off. An entry for `band`, `herdr` or `backup`, which are no longer add-ons, is ignored, and `m2b addons off <name>` removes it | |

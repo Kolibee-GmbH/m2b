@@ -235,8 +235,8 @@ def _of_this_machine() -> tuple[Setting, ...]:
             "sessions.propose",
             "Sessions hand in proposals",
             "An agent of a session may propose a fact for your memory by itself, with words from what it read "
-            "for you: a mail, a document, a tool's result. Nothing is filed before you keep it. No session turns "
-            "this on: inside Claude Code the command refuses.",
+            "for you: a mail, a document, a tool's result. Nothing is filed before you keep it. A session's shell "
+            "does not turn this on: there the command refuses.",
             False,
         ),
         *(

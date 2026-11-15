@@ -249,10 +249,46 @@ that begins a paste right after a name you typed goes like one typed whole.
 
 ## What a session hands in
 
-Off until you turn it on yourself with `m2b config set sessions.propose true`, typed in a terminal
-outside Claude Code ([docs/band.md](docs/band.md#handing-in-a-proposal-a-tool-you-turn-on)). Setup
-never writes the setting, and inside a Claude Code session the command does not turn it on. That
-is a threshold, not a boundary: a session that may run any command can write the config file.
+Off until you turn it on yourself: with `m2b config set sessions.propose true` typed in a terminal
+outside Claude Code, or with a press on the setting's card in the band's pane
+([docs/band.md](docs/band.md#handing-in-a-proposal-a-tool-you-turn-on)). Setup never writes the
+setting, and the command does not turn it on where `CLAUDECODE` is set, as Claude Code sets it
+for every command of a session's shell. That is a threshold, not a boundary: a session that may
+run any command can write the config file, or run the command with that variable set empty.
+
+The press in the pane is the one call of the band that sets the variable empty. It rests on the
+way a press arrives: no tool of Claude Code hands the band a press. A press arrives as input on a
+client that draws the session, and a model whose tools steer that input presses as you do
+(below). The band then starts `m2b settings set sessions.propose true` itself; no permission
+rule of yours is asked or used for it. The band does that for this one call and no other, after
+the five seconds in which `undo` takes the press back. Claude Code does not say who pressed: a
+press carries no mark of a person, as a prompt you typed at the terminal does. The card offers
+the button where the client that draws it names itself the terminal, the desktop app or VS Code,
+and names the command to type where it names itself the mobile app. That name is the client's
+own word: it keeps a tap in the mobile app from turning the setting on, and nothing more. So the
+threshold for the press lies in the band, and it holds as far as the band and those clients are
+what runs:
+
+- Another plugin you installed can start the same command with an empty `CLAUDECODE` itself, with
+  the pane or without it, and could also change what a press says, what the pane draws and the
+  command the band starts. That holds without the press as well: the refusal goes by a variable,
+  and a command a plugin starts carries the value that plugin gives it. A plugin with code of its
+  own runs as you.
+- Whatever attaches to the session as a client presses as you do. A client over Remote Control
+  passes where it names itself the terminal, the desktop app or VS Code; what name the web
+  client gives itself, m2b does not know. The desktop app and VS Code can also draw a session
+  that runs on another machine. A process that runs as you needs no press: it can run the
+  command outside Claude Code itself.
+- Whatever types into your terminal or steers your screen can open the settings and press as you
+  do, and that includes the model of a session, this one or another, with a tool for it: computer
+  use, a browser on a page of Remote Control where that page offers the button, a shell that
+  sends keys to a terminal multiplexer.
+  A model that steers the keyboard could type the command into a terminal of your own as well. A
+  model that can only click could not: for it the press is a lower threshold than the command.
+
+What shows a press you did not make: while it waits, every client that draws the card shows it
+with `undo`, whichever client it was made on, and for those five seconds it can be taken back
+there. Afterwards the card says `now: on`, and so does `m2b settings`.
 
 With it on, the agent of a session can hand in a proposal by itself: a kind, a text it worded, and
 the words that text stands on. The words can be yours, or stand in what the agent read for its

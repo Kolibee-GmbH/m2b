@@ -13,8 +13,15 @@ All notable changes to this project are documented here. The format follows
   m2b in the pane: a list under this machine, the store and the owner, and a card per setting
   with what it does and what changes it. `previous` and `next` walk through all of them. A switch
   is pressed on its card, waits five seconds with `undo` and is then written by
-  `m2b settings set`; what the command refuses stands on the card. `sessions.propose` is not
-  turned on from the pane ([The band](docs/band.md#every-setting-in-the-pane)).
+  `m2b settings set`; what the command refuses stands on the card
+  ([The band](docs/band.md#every-setting-in-the-pane)).
+- The card of `sessions.propose` turns handing in on by a press, where the pane is drawn in a
+  terminal, the desktop app or VS Code: the one setting a session's shell does not turn on no
+  longer needs a terminal outside Claude Code. In the mobile app the card names the command for
+  such a terminal. The press is a threshold in the band and no boundary: nothing says who
+  pressed, so another plugin, a client attached to the session that names itself the terminal,
+  the desktop app or VS Code, or whatever types into your terminal or steers your screen can
+  pass it ([Security](SECURITY.md#what-a-session-hands-in)).
 - `m2b settings` lists every setting of the three files, this machine's, the store's and the
   owner's: its value, its default, what it does and what changes it, a command, a setup skill or
   nothing by hand. A list, the paths of programs and an add-on come as a count or as on and off,

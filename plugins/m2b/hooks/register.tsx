@@ -597,6 +597,10 @@ async function showSettings($: EngineInterface): Promise<void> {
 // Claude Code started the command, and it knows that by this variable. The mod names it itself,
 // so that refusal does not rest on what the child happens to inherit.
 const FROM_A_SESSION = { CLAUDECODE: '1' } as const
+// What the core is told for the one press that turns handing in on, on its card: an empty value,
+// which the core reads as a terminal of the owner's own, set over whatever the mod inherited. No
+// other call of the mod carries it.
+const BY_THE_PERSONS_PRESS = { CLAUDECODE: '' } as const
 
 /**
  * Writes a press on a switch once its undo window is over, with the core's own command, which
@@ -615,7 +619,8 @@ async function settleSetting($: EngineInterface, token: string): Promise<void> {
   try {
     await drawOpenSettings($)
     // `--`: a key and a value are handed on as the core named them, whatever they begin with.
-    const outcome = await runM2b($, ['settings', 'set', '--', write.key, write.argument], WRITE_TIMEOUT_MS, undefined, FROM_A_SESSION)
+    const from = write.isTurningHandingInOn ? BY_THE_PERSONS_PRESS : FROM_A_SESSION
+    const outcome = await runM2b($, ['settings', 'set', '--', write.key, write.argument], WRITE_TIMEOUT_MS, undefined, from)
     refused = outcome.ok ? null : outcome.error
   } catch (error) {
     refused = plainLine(String(error))
@@ -651,9 +656,9 @@ function settingsActions($: EngineInterface, press: string): SettingsActions {
   return {
     open: at => leaveFor(at),
     toList: () => leaveFor(null),
-    choose: async (at, place) => {
+    choose: async (at, place, surface) => {
       const token = await newPressToken($)
-      if (beginChange(press, at, place, token)) {
+      if (beginChange(press, at, place, token, surface)) {
         // A press taken back, or a view that was left, finds nothing to write when this fires.
         $.clock.after(
           UNDO_WINDOW_MS,

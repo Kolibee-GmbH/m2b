@@ -234,9 +234,18 @@ on; the list says which one is under way, and reads again when it has ended. Eve
 is shown with the command or the skill that changes it; the pane has no field to type into and
 changes no path, no program and no time limit.
 
-`sessions.propose` is not turned on from the pane: inside a Claude Code session the command
-refuses, so its card names the command for a terminal of your own. Where it is on, the card
-offers `turn off`.
+`sessions.propose` is the one switch a session's shell does not turn on: the command refuses
+where `CLAUDECODE` is set, as Claude Code sets it there. A press on its card does turn it on.
+Where the pane is drawn in a terminal, in the desktop app or in VS Code, the card offers
+`turn on`, below a line that says so, and the press waits its five seconds like every other; the
+band then runs the command with that variable empty, for this one press and no other. In the
+mobile app, and on a surface the band does not know, the card names the command for a terminal
+of your own and offers nothing that turns it on. On every surface the card says that every
+machine sharing the store needs an m2b that knows handing in, and it offers `turn off` where the
+setting is on, beside a line that a session gets the tool when it starts or its plugins are
+reloaded. Nothing checks who made a press: what it rests on, and what it does not hold against,
+is in
+[Security](../SECURITY.md#what-a-session-hands-in).
 
 A setting of a file that could not be read (a store out of reach, no profile yet) is listed as
 `not read` with the reason. On a machine that does not curate, the settings of the curation run
