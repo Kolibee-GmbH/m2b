@@ -383,7 +383,7 @@ of the backends. With invented tasks:
     "reviews": []
   },
   "proposals": {
-    "proposals": [{"id": "0c1d2e3f4a5b", "kind": "person", "text": "Dana is head of IT at Northwind.", "quote": "Dana runs IT at Northwind", "day": "2026-03-04", "topic": "Northwind", "due": null}],
+    "proposals": [{"id": "0c1d2e3f4a5b", "kind": "person", "text": "Dana is head of IT at Northwind.", "quote": "Dana runs IT at Northwind", "day": "2026-03-04", "topic": "Northwind", "due": null, "source": "typed", "tool": null, "by": null}],
     "answered": 0
   },
   "status": {"machine_id": "alex-laptop", "inbox": {"count": 2, "evicted": 0}, "run": {"state": "succeeded", "last_succeeded_at": "2026-03-14T21:36:00+01:00"}, "backends": {"store": {"state": "reachable", "detail": ""}, "tasks": {"state": "reachable", "detail": ""}, "calendar": {"state": "not configured", "detail": ""}}}
@@ -398,7 +398,10 @@ for at most 10 seconds whatever `calendar.timeout_seconds` says; a calendar that
 by then is reported as not reachable. `--tasks-only` leaves `proposals` and `status` out.
 
 `proposals` lists what a reading of your sessions proposed or a session handed in and still waits for your answer (one
-without an answer for 14 days no longer does), the earliest said first, and in `answered` how many answers wait for the next curation run. When
+without an answer for 14 days no longer does), the earliest said first, and in `answered` how many answers wait for the next curation run. Each
+names where its words stand in `source` (`typed`, `pasted`, `tool` for a tool's result or `agent` for an
+answer of Claude), the tool in `tool` where it is a tool's result, and in `by` who proposed: `session`
+for one a session handed in, null for one a reading found. When
 that cannot be looked at (the proposals file or the answers folder is not downloaded, a newer m2b
 wrote the proposals file, the store is out of reach), `proposals` is `{"error": "<why>"}` and the
 other parts still answer. An entry of the proposals file that is not in the form, or holds half a

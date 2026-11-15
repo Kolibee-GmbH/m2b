@@ -8,6 +8,7 @@ folder in iCloud Drive. Every machine captures, searches and lists tasks. **One 
 |---|---|---|
 | capture, search, todos, rediscover | yes | |
 | the distillate at session start | yes | |
+| a session handing in a proposal, where `sessions.propose` is on | yes | |
 | curation runs (at session start or scheduled) | | yes |
 | the worklog's step in the curation run | | yes |
 | worklog recording in herdr | | yes |
@@ -58,3 +59,10 @@ has reads the store and captures into it, but refuses to curate it and says to u
 store at the start of its next run. Until the other machine is updated, its sessions get what its
 own version knows: beside a store of format 3, every current item, also one that stands under a
 topic.
+
+Turn `sessions.propose` on ([Curation](curation.md#what-a-session-hands-in)) only once every
+machine has an m2b that knows what a session hands in. An older one on the curating machine takes
+no such proposal in, and its run stops at its start while a handed-in file is not downloaded. An
+older one on any machine answers "update m2b on this machine" where it would list the proposals,
+from the first proposal a session handed in until 90 days after the last of them was answered
+or expired: so long the proposals file remembers one.
