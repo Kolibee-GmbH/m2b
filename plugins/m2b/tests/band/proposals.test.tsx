@@ -37,8 +37,9 @@ function proposedFake(): FakeM2b {
     .proposal(SHED, 'The spare key is in the shed.', 'the spare key is in the shed', { kind: 'personal', day: '2026-03-05' })
 }
 
+/** The buttons of the proposals themselves: `back`, which stands above every view but the pane's first, is left out. */
 async function buttons(ui: { findAll: (q: { type: string }) => Promise<{ key?: string }[]> }): Promise<(string | undefined)[]> {
-  return (await ui.findAll({ type: 'Button' })).map(button => button.key)
+  return (await ui.findAll({ type: 'Button' })).map(button => button.key).filter(key => key !== 'back')
 }
 
 test('while proposals wait the band shows one row with their number, whatever the number', async ($, on) => {

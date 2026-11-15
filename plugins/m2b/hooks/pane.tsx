@@ -2,6 +2,7 @@ import type { CommandSpec, EngineInterface, ResolveInput } from 'claude-code'
 
 import type { BandPress, BandRun, BandSnapshot, PaneSearch, PaneView, SearchHit } from '../types'
 import { runM2b } from './m2b'
+import { CLOSED_BY_HAND } from './pane-seat'
 import { untoldFindings } from './tasks'
 import { plainLine, withoutHidden } from './plain-text'
 import { candidateRow, changesSummary, reviewRow } from './rows'
@@ -225,19 +226,41 @@ export function searchLines(search: PaneSearch): string[] {
   return lines
 }
 
+/** The pane as a dialog: it asks for the keyboard, and Escape closes it as the person's close mark does. */
+export const AS_A_DIALOG = { id: PANE_ID, title: PANE_TITLE, closeOnEscape: true, focus: true } as const
+
 /**
  * Opens the pane and says where to look. A surface that cannot show it (no pane there, or none
- * attached) gets the content as the command's own lines instead.
+ * attached) gets the content as the command's own lines instead. `staysOpen` is for the start view
+ * where it sits beside the chat: Escape hands the keyboard back there and the pane stays.
  */
-export async function showPane($: EngineInterface, placedLine: string, lines: () => string[]): Promise<string> {
+export async function showPane(
+  $: EngineInterface,
+  placedLine: string,
+  lines: () => string[],
+  staysOpen = false,
+): Promise<string> {
   // `focus` is a request: the pane takes the keyboard, so the arrows scroll it, only over an empty prompt.
-  const opened = await $.ui.open({ id: PANE_ID, title: PANE_TITLE, closeOnEscape: true, focus: true })
+  const opened = await $.ui.open(staysOpen ? { id: PANE_ID, title: PANE_TITLE, focus: true } : AS_A_DIALOG)
   if (opened.isPlaced) {
+    await openedByThePerson($)
     return placedLine
   }
   // Undrawn, it would stay open and appear once a surface that places panes attaches.
   await $.ui.close({ id: PANE_ID })
   return [`the m2b pane cannot be shown here: ${withoutHidden(plainLine(opened.reason))}`, ...fallback(lines())].join('\n')
+}
+
+/**
+ * The person opened the pane, with a command or a press: it opens by itself again from the next
+ * session on, also after they once closed it by hand.
+ */
+async function openedByThePerson($: EngineInterface): Promise<void> {
+  try {
+    await $.store.delete(CLOSED_BY_HAND)
+  } catch {
+    // The pane is shown all the same; it then stays one that does not open by itself.
+  }
 }
 
 /** The lines as a model gets them: no character that draws nothing, and no more than a few lines of a few words. */

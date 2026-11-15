@@ -144,6 +144,8 @@ export class FakeM2b {
   machineConfigText: string | null = null
   /** The id of this session, as the engine names it; null when it cannot say. */
   sessionId: string | null = SESSION_ID
+  /** The mod's own store, which outlives a session: what an earlier one kept, and what this one keeps. */
+  stored: Record<string, unknown> = {}
   /** What `m2b proposals add` was handed on standard input, one entry per call. */
   readonly handedIn: string[] = []
   /** How `m2b proposals add` ends. */
@@ -357,8 +359,8 @@ export type Registered = { name: string; immediate?: true }
 /** A tool the mod registered for the model, as `$.tool.register` was handed it. */
 export type RegisteredTool = { name: string; description: string; inputSchema: Record<string, unknown>; isDeferred?: boolean }
 
-/** A pane the mod asked to open, and whether the surface placed it. */
-export type Opened = { id: string; title?: string }
+/** A pane the mod asked to open, with the manners it asked for. */
+export type Opened = { id: string; title?: string; focus?: true; closeOnEscape?: true }
 
 export type World = {
   toasts: string[]
@@ -367,10 +369,12 @@ export type World = {
   commands: Registered[]
   tools: RegisteredTool[]
   opened: Opened[]
+  /** The ids of the panes that are open now: opened, and not closed since. */
+  openPanes: Set<string>
 }
 
-/** The pane as Claude Code hands it to the render hook, at a width the test chooses. */
-export function pane(id: string, bodyColumns = 80) {
+/** The pane as Claude Code hands it to the render hook, at a width and in a seat the test chooses. */
+export function pane(id: string, bodyColumns = 80, placement: 'dock' | 'inline' = 'dock') {
   return {
     plugin: 'm2b',
     component: 'Pane',
@@ -379,7 +383,7 @@ export function pane(id: string, bodyColumns = 80) {
       title: id,
       isFocused: false,
       bodyColumns,
-      placement: 'dock',
+      placement,
       scroll: { offset: 0, bodyRows: 40 },
       view: {},
     },
@@ -398,6 +402,15 @@ export async function start(
 ): Promise<World> {
   const clock = mock.clock(on, { now: NOW })
   mock.env(on, { HOME, ...env })
+  on('store.get', (_, e) => ({ value: fake.stored[e.key] }))
+  on('store.set', (_, e) => {
+    fake.stored[e.key] = e.value
+    return { value: undefined }
+  })
+  on('store.delete', (_, e) => {
+    delete fake.stored[e.key]
+    return { value: undefined }
+  })
   on('fs.exists', (_, e) => {
     if (fake.existsFails) {
       return { deny: `ETIMEDOUT: ${e.path}` }
@@ -426,7 +439,15 @@ export async function start(
   const statuses: (string | undefined)[] = []
   const commands: Registered[] = []
   const opened: Opened[] = []
-  on('ui.close', () => ({ value: undefined }))
+  const openPanes = new Set<string>()
+  // Reached only by a close no hook of the mod answered for: the pane is gone then.
+  on('ui.close', (_, e) => {
+    openPanes.delete(e.id)
+    return { value: undefined }
+  })
+  on('ui.panes', () => ({
+    value: [...openPanes].map(id => ({ id, title: id, isShown: true, isFocused: false, isPlaced: fake.paneWaits === null })),
+  }))
   const toasts: string[] = []
   on('ui.toast', (_, e) => {
     if (fake.toastFails) {
@@ -437,6 +458,7 @@ export async function start(
   })
   on('ui.open', (_, e) => {
     opened.push(e)
+    openPanes.add(e.id)
     return fake.paneWaits === null
       ? { value: { isPlaced: true } }
       : { value: { isPlaced: false, reason: fake.paneWaits } }
@@ -486,7 +508,7 @@ export async function start(
   })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await clock.advance(1)
-  return { clock, statuses, commands, tools, opened, toasts }
+  return { clock, statuses, commands, tools, opened, toasts, openPanes }
 }
 
 type Mounted = { findAll: (q: { type: string }) => Promise<{ text: string }[]> }

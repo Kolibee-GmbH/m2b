@@ -22,6 +22,14 @@ All notable changes to this project are documented here. The format follows
   memory candidates and questions with keep and drop, the review with `ok`) and the tasks due
   today. A topic that comes in with a prompt shows there while the turn still works
   ([The band](docs/band.md#this-session-what-waits-and-today-in-the-pane)).
+- Under the fullscreen layout the m2b pane opens by itself beside the conversation, in its start
+  view and without taking the keyboard. Closing it there by hand keeps it closed, also in later
+  sessions, until you open it again with `/m2b` or another command of the band. On the main
+  screen, where a pane is a block above the prompt, it still opens only when asked
+  ([The band](docs/band.md#it-opens-by-itself-beside-the-chat)).
+- The review, a search and the proposals are views of that pane now: Escape, the close mark or
+  the new `back` button above them lead back to the start view instead of closing the pane
+  ([The band](docs/band.md#back-to-the-start-view)).
 
 ## [0.5.0] - 2026-11-15
 

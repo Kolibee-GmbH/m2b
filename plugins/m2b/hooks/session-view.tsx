@@ -171,6 +171,15 @@ export function sessionLines(model: SessionModel): string[] {
   ]
 }
 
+/**
+ * The way back to the start view, drawn above the pane's other views. Escape goes the same way
+ * there; the button is for a pointer, and for a pane that does not hold the keyboard.
+ */
+export function backRow($: EngineInterface, e: ResolveInput, back: () => Promise<void>) {
+  const { Button } = $.ui.resolve(e)
+  return <Button key="back" label="back" onPress={back} />
+}
+
 /** The start view's drawing. Every line wraps: docked beside the chat, the pane can be 24 columns wide. */
 export function sessionPane($: EngineInterface, e: ResolveInput, model: SessionModel, actions: SessionActions) {
   const { Box, Button, Text } = $.ui.resolve(e)

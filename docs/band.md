@@ -129,7 +129,8 @@ the tool below, or the skill `/m2b:capture` where the mod does not run.
   proposals from your sessions, every memory candidate and "Still current?" question with keep
   and drop, and the open review with `ok`. They work as in the band, undo included. `show` on the
   proposals turns the pane to [them](#the-proposals-from-your-sessions-in-the-pane), `show` under
-  the review to [the whole review](#the-whole-review-and-search-in-a-pane); `/m2b` turns it back.
+  the review to [the whole review](#the-whole-review-and-search-in-a-pane); `back` above that view,
+  Escape or `/m2b` turn it [back](#back-to-the-start-view).
 - **Today** lists your own tasks due today, then the overdue ones, the most recent first. With
   `band.due_tasks` off it says that tasks due are not shown.
 
@@ -148,6 +149,33 @@ Where Claude Code cannot show a pane, `/m2b` answers with the same lines as text
 them and without any character that draws nothing, and names `/m2b-proposals` and `/m2b-review`
 where the pane has `show`. It waits up to two seconds for a fresh answer about the session, and
 without one the text says that m2b has not looked yet.
+
+### It opens by itself beside the chat
+
+Under the fullscreen layout Claude Code seats a pane beside the conversation. There the band opens
+the m2b pane by itself, with its first drawing on the terminal in a session: in the start view,
+without taking the keyboard, and Escape does not close it. After `/clear` it does so once more. Claude Code draws a pane nobody asked for only on a
+terminal wide enough for it (from 144 columns, from 110 once you have opened the pane yourself);
+below that the pane stays open undrawn and appears when you widen the terminal, and `/m2b` shows
+it at once.
+
+On the main screen, where a pane is a block above the prompt that takes rows from the
+conversation, nothing opens by itself: `/m2b` opens the pane there, as a dialog that Escape
+closes. Nothing opens in a curation run, nor before m2b is set up, and only a terminal's drawing
+opens the pane: in the desktop app and the other surfaces, `/m2b` does.
+
+Closing the pane beside the chat on its start view is kept on this machine: from then on it does
+not open by itself, in this session or a later one, until you open it again with `/m2b`, one of
+the band's other commands or `show` in the band. Closing the block above the prompt keeps nothing.
+
+### Back to the start view
+
+`/m2b-review`, `/m2b-search`, `/m2b-proposals` and `show` in the start view turn the pane to
+their view and give it the keyboard. Escape there, the pane's close mark or the `back` button
+above the view lead back to the start view; the pane stays open. Beside the chat it then stays
+without closing on Escape, so an Escape at the empty prompt does not take it away, and an Escape
+pressed twice within half a second leads back once and closes nothing. Above the prompt the pane
+stays a dialog, and a later Escape closes the block.
 
 ## The whole review, and search, in a pane
 
@@ -192,9 +220,9 @@ Where Claude Code cannot show a pane, for instance with no terminal attached, th
 with the content as text instead, its first 20 lines, each cut at 200 characters; that text stays
 in the conversation the model reads. A search without hits answers in one line and opens no pane,
 and one with more hits than `m2b` can hand over asks for a narrower search. The pane takes its data from the same refresh as the band, so it
-follows the next curation run within a minute. Its close mark closes it, and so does Escape while
-the pane holds the keyboard; it asks for the keyboard when it opens over an empty prompt, so the
-arrows scroll a long review.
+follows the next curation run within a minute. It asks for the keyboard when it opens over an
+empty prompt, so the arrows scroll a long review; Escape, the close mark and `back` above the view
+lead [back to the start view](#back-to-the-start-view).
 
 ## The proposals from your sessions, in the pane
 
@@ -419,7 +447,9 @@ minute and after each of your turns, so the answer is shared between sessions fo
 than now, is not used. However many turns end while `m2b` is slow, at most one more refresh waits.
 That folder holds titles, findings and the proposals with the words they stand on, so m2b keeps it readable by
 you only. At each session start
-it writes `~/.local/state/m2b/band-seen.json`, which `m2b doctor` reads. Apart from keep and drop, which
+it writes `~/.local/state/m2b/band-seen.json`, which `m2b doctor` reads. That you closed the pane
+beside the chat by hand is one value, `paneClosedByHand`, in the store Claude Code keeps for the
+plugin under its own configuration folder. Apart from keep and drop, which
 change that one task in your task list (with the `markdown` backend, its file in `tasks/` of the
 store) or add your answer to a proposal as an empty file in `state/core/proposal-answers/`, it
 writes nothing in the store.

@@ -18,7 +18,9 @@ import { launcherPath, m2bHome, machineConfigPath, runM2b } from './m2b'
 import { NOTE_COMMAND, note } from './note'
 import { isInOwnWords, isOwnPrompt, withPrompt } from './own-words'
 import {
+  AS_A_DIALOG,
   PANE_ID,
+  PANE_TITLE,
   REVIEW_COMMAND,
   SEARCH_COMMAND,
   isRun,
@@ -32,6 +34,7 @@ import {
   searchSummary,
   showPane,
 } from './pane'
+import { CLOSED_BY_HAND, closeAnswer, docksFor, staysBesideChat } from './pane-seat'
 import { plainLine } from './plain-text'
 import {
   askCoreAgain,
@@ -44,7 +47,7 @@ import {
   notesOf,
   sessionIdOf,
 } from './session'
-import { SESSION_COMMAND, SESSION_PLACED, dueFirst, dueLine, sessionLines, sessionPane } from './session-view'
+import { SESSION_COMMAND, SESSION_PLACED, backRow, dueFirst, dueLine, sessionLines, sessionPane } from './session-view'
 import type { SessionActions, SessionModel } from './session-view'
 import {
   KEEP_ALL,
@@ -481,10 +484,91 @@ async function sessionModel($: EngineInterface): Promise<SessionModel> {
   }
 }
 
-/** Turns the open pane to another of its views and reads the band again behind it. */
+/**
+ * Turns the open pane to another of its views, as a dialog, and reads the band again behind it. A
+ * pane that opened by itself does not close on Escape; opened anew it does, and Escape on the view
+ * leads back to the one the pane starts in.
+ */
 async function turnPane($: EngineInterface, view: PaneView): Promise<void> {
   await update($, paneViewAtom, () => view)
+  try {
+    await $.ui.open(AS_A_DIALOG)
+  } catch {
+    // The view is turned all the same; the button above it leads back.
+  }
   $.clock.after(0, inBackground($, () => refresh($, true)))
+}
+
+// Where the pane's last drawing sat on each surface, as that surface said. The module's own: after
+// a reload of the mod the pane is drawn anew before the person can act on it.
+const paneSeats = new Map<string, string>()
+
+// When the person's close last led back to the start view. A second close this soon after it is
+// the same key pressed twice.
+let wentBackAtMs: number | null = null
+const SAME_KEY_TWICE_MS = 500
+
+/**
+ * Back to the view the pane starts in, for Escape and the button above the other views. Beside the
+ * chat the pane is opened once more, without the manners of a dialog: each open sets them anew, and
+ * a pane that stays must not close on an Escape at the empty prompt. That comes before the view is
+ * turned, so a close that arrives meanwhile still meets the other view and leads back as well.
+ * Above the prompt the pane stays the dialog it was, so the next Escape closes the block.
+ */
+async function backToStart($: EngineInterface): Promise<void> {
+  if (staysBesideChat(paneSeats.values())) {
+    try {
+      await $.ui.open({ id: PANE_ID, title: PANE_TITLE })
+    } catch {
+      // The pane shows its start view all the same.
+    }
+  }
+  await update($, paneViewAtom, () => null)
+  lookLater($, 0)
+  $.clock.after(0, inBackground($, () => refresh($, true)))
+}
+
+// Whether the pane may still open by itself: once per session, and once more after `/clear` or a
+// resume, which go on as another session without a session start. The try is spent when it
+// starts: one that fails is not made again in the session, and `/m2b` opens the pane. A reload of
+// the mod starts the module anew and tries once more, which opens nothing while the pane is open
+// or was closed by hand.
+let isOpeningDue = true
+// A terminal's drawing said it runs under the fullscreen layout, which is fixed for a session.
+let isTerminalFullscreen = false
+
+/** Spends this session's try to open the pane by itself, a moment later: no state is written while a drawing is made. */
+function openSoon($: EngineInterface): void {
+  isOpeningDue = false
+  try {
+    $.clock.after(0, () => {
+      openByItself($).catch(() => undefined)
+    })
+  } catch {
+    // The band draws all the same; /m2b opens the pane.
+  }
+}
+
+/**
+ * Opens the pane beside the chat without being asked, where m2b is set up and this is no curation
+ * run: in the view it starts in, without the keyboard, and not closing on Escape. A pane the
+ * terminal is too narrow to draw stays open and appears once it is wider. Not after the person
+ * closed it by hand, until they open it again; and a pane that is open is left as it is, since
+ * opening it anew would take the manners of a dialog from it.
+ */
+async function openByItself($: EngineInterface): Promise<void> {
+  if ((await isCurationRun($)) || !(await isSetUp($))) {
+    return
+  }
+  if ((await $.store.get(CLOSED_BY_HAND)) === true) {
+    return
+  }
+  if ((await $.ui.panes()).some(pane => pane.id === PANE_ID)) {
+    return
+  }
+  // A pane that closed left its start view behind, so there is no view to turn here. A command
+  // that opens the pane in this very moment is retitled without its Escape; `back` still leads out.
+  await $.ui.open({ id: PANE_ID, title: PANE_TITLE })
 }
 
 function sessionActions($: EngineInterface): SessionActions {
@@ -823,6 +907,7 @@ export const register: Register = on => {
     undoTimers.clear()
     lockTimers.clear()
     lookTimers.clear()
+    isOpeningDue = true
     await carryPressesOver($)
     loadedVersion = await readLoadedVersion($)
     askCoreAgain()
@@ -862,6 +947,11 @@ export const register: Register = on => {
   on('session.end', async ($, e, next) => {
     const result = await next(e)
     if ((e.reason === 'clear' || e.reason === 'resume') && !(await isCurationRun($))) {
+      isOpeningDue = true
+      // The band reads nothing that `/clear` changes, so its next drawing may be a minute away.
+      if (isTerminalFullscreen) {
+        openSoon($)
+      }
       await forgetSession($)
       lookUnderNewId($, e.sessionId, NEW_ID_TRIES)
     }
@@ -894,7 +984,9 @@ export const register: Register = on => {
     const model = await sessionModel($)
     // The pane draws the answer when it comes. The text is given once, so without a fresh answer
     // it says that m2b has not looked, never what an earlier look said.
-    return { text: await showPane($, SESSION_PLACED, () => sessionLines(isFresh ? model : { ...model, given: null })) }
+    const lines = (): string[] => sessionLines(isFresh ? model : { ...model, given: null })
+    // Beside the chat the start view stays; above the prompt it is a dialog that Escape closes.
+    return { text: await showPane($, SESSION_PLACED, lines, docksFor(e.presentation)) }
   })
 
   on('command.run', { command: NOTE_COMMAND.name }, async ($, e, next) => {
@@ -1008,19 +1100,57 @@ export const register: Register = on => {
     verdictFor($, e, await next(e), PROPOSE_COMMAND_LINE),
   )
 
+  // The person's close on the review, a search or the proposals leads back to the view the pane
+  // starts in: answered here without `next`, the pane stays open. On the start view it closes, and
+  // beside the chat that is kept, so the pane does not open by itself until they open it again.
+  // When this throws, the pane closes as it was asked to: a pane that cannot be closed is worse
+  // than one that closes a view too early.
+  on('ui.close', { id: PANE_ID }, async ($, e, next) => {
+    const nowMs = await $.clock.now()
+    const isOnStartView = (await read($, paneViewAtom)) === null
+    const isRightAfterBack = wentBackAtMs !== null && nowMs - wentBackAtMs < SAME_KEY_TWICE_MS
+    const answer = closeAnswer(e.origin.kind, isOnStartView, staysBesideChat(paneSeats.values()), isRightAfterBack)
+    if (answer === 'back') {
+      if (!isOnStartView) {
+        wentBackAtMs = nowMs
+      }
+      // Not awaited: the way back opens the pane anew, and from inside the pane's own close that
+      // open could wait for this hook to end.
+      $.clock.after(0, () => {
+        backToStart($).catch(() => undefined)
+      })
+      return { value: undefined }
+    }
+    if (answer === 'by hand') {
+      try {
+        await $.store.set(CLOSED_BY_HAND, true)
+      } catch {
+        // The pane closes all the same; it then opens by itself again in the next session.
+      }
+    }
+    // Whoever closes it, the pane starts in its start view when it opens next.
+    await update($, paneViewAtom, () => null)
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
+    paneSeats.set(e.surface, e.props.placement)
     const view = await read($, paneViewAtom)
     const presses = await read($, pressesAtom)
-    if (view?.kind === 'proposals') {
-      const [proposals, notice] = [await read($, proposalsAtom), await read($, proposalsNoticeAtom)]
-      return proposalsPane($, e, proposals, presses, notice, proposalActions($))
-    }
     if (view === null) {
       return sessionPane($, e, await sessionModel($), sessionActions($))
     }
+    const { Box } = $.ui.resolve(e)
     const snapshot = await read($, snapshotAtom)
     const run = await read($, runAtom)
-    return paneTree($, e, view, snapshot, run, presses, rowActions($))
+    return (
+      <Box flexDirection="column">
+        {backRow($, e, () => backToStart($))}
+        {view.kind === 'proposals'
+          ? proposalsPane($, e, await read($, proposalsAtom), presses, await read($, proposalsNoticeAtom), proposalActions($))
+          : paneTree($, e, view, snapshot, run, presses, rowActions($))}
+      </Box>
+    )
   })
 
   // The band clears its notice here and keeps the words of the person's own prompt for the note
@@ -1037,6 +1167,17 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    // A session start says nothing of the layout; every drawing does. So the pane opens by itself
+    // with the band's first drawing on a terminal under the fullscreen layout, where it sits beside
+    // the chat. On the main screen it would be a block above the prompt in every session, and never
+    // opens unasked. Another surface's drawing opens nothing: the pane is one for the session, and
+    // a terminal on the main screen would seat it above the prompt.
+    if (e.surface === 'terminal' && e.viewport?.isFullscreen === true) {
+      isTerminalFullscreen = true
+      if (isOpeningDue) {
+        openSoon($)
+      }
+    }
     if (e.props.hasSurvey) {
       return next(e)
     }
