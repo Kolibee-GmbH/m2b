@@ -355,6 +355,12 @@ without closing on Escape, so an Escape at the empty prompt does not take it awa
 pressed twice within half a second leads back once and closes nothing. Above the prompt the pane
 stays a dialog, and a later Escape closes the block.
 
+With the keyboard in the pane, the band asks Claude Code to put the focus where a second Enter
+writes nothing: on `back` after `show` or `settings` turned the pane, and after `back` on the
+button that led there (on `settings` where that button is gone, as after the last proposal was
+answered). Outside the settings the band moves no focus within a view: after keep it is on
+`undo`.
+
 ## The whole review, and search, in a pane
 
 The band keeps to a few rows. `/m2b-review` opens the m2b pane beside the conversation with the

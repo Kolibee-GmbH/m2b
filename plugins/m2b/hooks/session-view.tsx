@@ -1,8 +1,17 @@
 import type { CommandSpec, EngineInterface, ResolveInput } from 'claude-code'
 
-import type { BandDueTask, BandPress, BandProposals, BandSession, BandSnapshot, FolderSwitch, SessionTopic } from '../types'
+import type {
+  BandDueTask,
+  BandPress,
+  BandProposals,
+  BandSession,
+  BandSnapshot,
+  FolderSwitch,
+  PaneView,
+  SessionTopic,
+} from '../types'
 import { plainLine, wholePath } from './plain-text'
-import { couldNotLookLine, countLine, errorBesideTasks, proposalsRow } from './proposals'
+import { SHOW_PROPOSALS, couldNotLookLine, countLine, errorBesideTasks, proposalsRow } from './proposals'
 import { candidateRow, reviewRow } from './rows'
 import type { RowActions } from './rows'
 
@@ -261,13 +270,46 @@ export function glancePane($: EngineInterface, e: ResolveInput, model: SessionMo
   )
 }
 
+/** The key of `back`, which every view but the start view draws first, and the start view never. */
+export const BACK = 'back'
+const SHOW_REVIEW = 'show:review'
+const SHOW_SETTINGS = 'show:settings'
+
+function topicKey(index: number): string {
+  return `topic:${index}`
+}
+
 /**
  * The way back to the start view, drawn above the pane's other views. Escape goes the same way
  * there; the button is for a pointer, and for a pane that does not hold the keyboard.
  */
 export function backRow($: EngineInterface, e: ResolveInput, back: () => Promise<void>) {
   const { Button } = $.ui.resolve(e)
-  return <Button key="back" label="back" onPress={back} />
+  return <Button key={BACK} label="back" onPress={back} />
+}
+
+/**
+ * The key of the start view's button the focus is asked for when `back` turns the pane from
+ * `view`: the button that leads to that kind of view, however this one was opened, where the
+ * start view draws it now, else `settings`, which it always draws and which every other view
+ * falls to. Each of them turns the pane and writes nothing; left at its place in the
+ * row of buttons, the focus would stand on the first button of the start view, which may be the
+ * one that leaves m2b out of the folder.
+ */
+export function focusKeyAfterBack(view: PaneView | null, model: SessionModel): string {
+  if (view?.kind === 'proposals' && (model.proposals?.waiting.length ?? 0) > 0) {
+    return SHOW_PROPOSALS
+  }
+  if (view?.kind === 'review' && (model.snapshot?.review ?? null) !== null) {
+    return SHOW_REVIEW
+  }
+  if (view?.kind === 'topic') {
+    const line = givenLines(model.given).find(one => one.topic?.name === view.name)
+    if (line?.topic !== undefined) {
+      return topicKey(line.topic.index)
+    }
+  }
+  return SHOW_SETTINGS
 }
 
 /**
@@ -343,7 +385,7 @@ export function sessionPane($: EngineInterface, e: ResolveInput, model: SessionM
   const row = ({ text, tone, topic }: GivenLine) =>
     topic !== undefined ? (
       <Box key={`row:topic:${topic.index}`} flexDirection="row">
-        <Button key={`topic:${topic.index}`} label="show" onPress={() => actions.showTopic(topic.name)} />
+        <Button key={topicKey(topic.index)} label="show" onPress={() => actions.showTopic(topic.name)} />
         <Text wrap="wrap"> {text}</Text>
       </Box>
     ) : tone === 'error' ? (
@@ -372,7 +414,7 @@ export function sessionPane($: EngineInterface, e: ResolveInput, model: SessionM
       {review !== null && reviewRow($, e, review, presses[review.id], actions, 'wrap')}
       {review !== null && (
         <Box key="row:whole-review" flexDirection="row">
-          <Button key="show:review" label="show" onPress={actions.showReview} />
+          <Button key={SHOW_REVIEW} label="show" onPress={actions.showReview} />
           <Text dimColor wrap="wrap">
             {' '}
             {WHOLE_REVIEW}
@@ -384,7 +426,7 @@ export function sessionPane($: EngineInterface, e: ResolveInput, model: SessionM
       {nothingDue === null
         ? dueFirst(snapshot?.due ?? []).map(task => <Text wrap="wrap">{dueLine(task)}</Text>)
         : quiet(nothingDue)}
-      <Button key="show:settings" label="settings" onPress={actions.showSettings} />
+      <Button key={SHOW_SETTINGS} label="settings" onPress={actions.showSettings} />
     </Box>
   )
 }

@@ -55,7 +55,9 @@ import {
   FOLDER_PRESS,
   SESSION_COMMAND,
   SESSION_PLACED,
+  BACK,
   backRow,
+  focusKeyAfterBack,
   glancePane,
   sessionLines,
   sessionPane,
@@ -527,7 +529,9 @@ async function sessionModel($: EngineInterface): Promise<SessionModel> {
  */
 async function turnPane($: EngineInterface, view: PaneView): Promise<void> {
   await asDialog($, view)
+  const focusMoved = focusOnBack($)
   $.clock.after(0, inBackground($, () => refresh($, true)))
+  await focusMoved
 }
 
 async function asDialog($: EngineInterface, view: PaneView): Promise<void> {
@@ -560,10 +564,13 @@ async function showTopic($: EngineInterface, name: string): Promise<void> {
   const press = await newPressToken($)
   beginTopic(press)
   await asDialog($, { kind: 'topic', name, press, isRead: false })
+  // The read does not wait for the focus.
+  const focusMoved = focusOnBack($)
   if (fillTopic(press, await readTopic($, name))) {
     // The lines are the module's; this write is what draws the pane again.
     await update($, paneViewAtom, view => (view !== null && view.kind === 'topic' && view.press === press ? { ...view, isRead: true } : view))
   }
+  await focusMoved
 }
 
 type SettingsView = Extract<PaneView, { kind: 'settings' }>
@@ -594,7 +601,10 @@ async function showSettings($: EngineInterface): Promise<void> {
   const press = await newPressToken($)
   beginSettings(press)
   await asDialog($, { kind: 'settings', press, at: null, drawn: 0 })
+  // The read does not wait for the focus.
+  const focusMoved = focusOnBack($)
   await loadSettings($, press)
+  await focusMoved
 }
 
 // What the core is told of where a change comes from: it refuses to turn handing in on wherever
@@ -664,10 +674,10 @@ async function drawOpenSettings($: EngineInterface): Promise<void> {
 /**
  * Asks Claude Code for the focus of the pane on the button drawn under `key`. Claude Code keeps
  * the focus at its place in the row of buttons when a view is drawn anew, not on its button: left
- * alone, Enter on `next` would land on whatever stands at that place of the next card. So after a
- * press that leads to a card or to the list, and around a press on a switch, the mod says where
- * the focus goes. Where the pane does not hold the keyboard, as after Escape, Claude Code
- * refuses, and the view is as drawn. Never throws.
+ * alone, Enter pressed again would land on whatever stands at that place of the new drawing. So
+ * where a press turns the pane to another view or to another card of the settings, and around a
+ * press on a switch, the mod says where the focus goes. Where the pane does not hold the
+ * keyboard, as after Escape, Claude Code refuses, and the view is as drawn. Never throws.
  */
 async function focusInPane($: EngineInterface, key: string | null): Promise<void> {
   if (key === null) {
@@ -678,6 +688,31 @@ async function focusInPane($: EngineInterface, key: string | null): Promise<void
   } catch {
     // The view is drawn all the same.
   }
+}
+
+/**
+ * After a press on the start view turned the pane to another view: the focus goes to `back`, the
+ * first button of that view, which the start view does not draw. Left at its place in the row of
+ * buttons it would stand on whatever the new view has there, `keep all` after `show` on the
+ * proposals.
+ */
+function focusOnBack($: EngineInterface): Promise<void> {
+  return focusInPane($, BACK)
+}
+
+/**
+ * The pane's `back` button: back to the start view, with the focus on the button that leads to the
+ * view that is left. Escape leads back without it: it hands the keyboard back to the prompt.
+ */
+async function backByPress($: EngineInterface): Promise<void> {
+  let key: string | null = null
+  try {
+    key = focusKeyAfterBack(await read($, paneViewAtom), await sessionModel($))
+  } catch {
+    // The pane turns back all the same.
+  }
+  await backToStart($)
+  await focusInPane($, key)
 }
 
 /**
@@ -1641,14 +1676,14 @@ export const register: Register = on => {
       const kept = heldSettings(view.press)
       return (
         <Box flexDirection="column">
-          {!showsCard(view, kept) && backRow($, e, () => backToStart($))}
+          {!showsCard(view, kept) && backRow($, e, () => backByPress($))}
           {settingsPane($, e, view, kept, settingsActions($, view.press), e.props.bodyColumns)}
         </Box>
       )
     }
     return (
       <Box flexDirection="column">
-        {backRow($, e, () => backToStart($))}
+        {backRow($, e, () => backByPress($))}
         {view.kind === 'proposals'
           ? proposalsPane($, e, await read($, proposalsAtom), presses, await read($, proposalsNoticeAtom), proposalActions($))
           : view.kind === 'topic'

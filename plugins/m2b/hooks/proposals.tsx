@@ -222,6 +222,9 @@ export function proposalLines(proposals: BandProposals | null): string[] {
   ]
 }
 
+/** The key of `show` in the row for all of them. */
+export const SHOW_PROPOSALS = 'show:proposals'
+
 /** One row for all of them: the number, and `show`, which opens them in the pane. Cut in the band, wrapped in the pane. */
 export function proposalsRow(
   $: EngineInterface,
@@ -233,7 +236,7 @@ export function proposalsRow(
   const { Box, Button, Text } = $.ui.resolve(e)
   return (
     <Box key="row:proposals" flexDirection="row">
-      <Button key="show:proposals" label="show" onPress={onShow} />
+      <Button key={SHOW_PROPOSALS} label="show" onPress={onShow} />
       <Text wrap={wrap}> {countLine(count)}</Text>
     </Box>
   )
