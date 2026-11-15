@@ -94,6 +94,18 @@ class PromptHookTest(PromptHookFixture):
         )
         self.assertEqual(topic_state.shown_topics(self.machine, SESSION), {"Acme Ltd", "Globex"})
 
+    def test_the_session_keeps_how_many_lines_a_topic_brought(self) -> None:
+        """Covers: B183"""
+        export = "- Building the Acme export (since 2026-11-02)\n"
+        self.write_memory(f"{MEMORY}\n### Acme Ltd (Acme, Kim Lee)\n{export}")
+
+        self.added("Mail an Kim Lee wegen Export")
+
+        self.assertEqual(
+            topic_state.session(self.machine, SESSION),
+            topic_state.Session((topic_state.Given("Acme Ltd", 1, 1),), None),
+        )
+
     def test_characters_that_hide_or_reorder_text_are_taken_out_of_a_topic(self) -> None:
         """Covers: B56"""
         planted = MEMORY.replace("leads Acme's IT", "leads Acme's⁦ IT\U000e0041")

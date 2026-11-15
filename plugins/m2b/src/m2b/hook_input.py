@@ -7,8 +7,13 @@ import it without loading the rest of the core.
 from __future__ import annotations
 
 import json
+import os
+from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TextIO
+
+PROJECT_DIR_VARIABLE = "CLAUDE_PROJECT_DIR"
 
 
 @dataclass(frozen=True)
@@ -36,3 +41,9 @@ def read_hook_input(stream: TextIO | None) -> HookInput:
         return HookInput()
     fields = {name: raw.get(name) for name in ("session_id", "source", "cwd", "prompt")}
     return HookInput(**{name: value if isinstance(value, str) else None for name, value in fields.items()})
+
+
+def project_folder(environ: Mapping[str, str], hook_input: HookInput | None = None) -> Path:
+    """The folder a session counts as its project: the one Claude Code names, else the hook input's
+    working directory, else this process's."""
+    return Path(environ.get(PROJECT_DIR_VARIABLE) or (hook_input.cwd if hook_input else None) or os.getcwd())

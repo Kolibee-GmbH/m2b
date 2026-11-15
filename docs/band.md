@@ -407,6 +407,36 @@ wrote the proposals file, the store is out of reach), `proposals` is `{"error": 
 other parts still answer. An entry of the proposals file that is not in the form, or holds half a
 character, is left out.
 
+With `--session <id>` the answer has one more part, `session`: what m2b gave the session with that
+id, as this machine noted it when it gave it.
+
+```json
+"session": {
+  "id": "0a1b2c3d-1111-4222-8333-444455556666",
+  "known": true,
+  "topics": [{"name": "Northwind", "facts": 3, "current": 1}],
+  "distillate": {"at_start": "whole", "off_under": null}
+}
+```
+
+`topics` are the topics whose facts the session got since its last start, at that start because
+the project path names them or before a prompt that named them, each with the facts lines and
+current items its block held at that moment; a curation run that changed the topic since does not
+change the numbers. `/clear` and a compaction are a start too: the context no longer holds what
+came before, so the list begins again, as it does for the topics that come in once per session.
+`distillate.at_start` says how that start printed the distillate: `whole`, `cut` to fit the
+start, `none` where there was none to read, and `null` where the start noted nothing of it.
+`distillate.off_under` is the folder the distillate is turned off under (`m2b distillate off`),
+as it is now, for the folder Claude Code names as the project or else the one the command runs
+in; a session that got topics before it was turned off still holds them. A session this machine
+holds no note of (the note is removed once it was not written for seven days, an m2b before these
+notes wrote none, and neither does a session without m2b's hooks) is `"known": false` with no
+topics, which does not say it was given nothing; a topic noted by an earlier m2b comes with
+`null` for its numbers. A value that is not 1 to 128 letters, digits and dashes is answered with
+`"session": {"error": "not a session id"}`, and a folder that cannot be looked at with an error
+of its own; the other parts still answer. The notes are kept on this machine under
+`~/.local/state/m2b/topics/`, one small file per session.
+
 While a review task is open, `tasks.review` names the changes of the facts the last runs made, as
 the curation run kept them for the review: per change its `kind` (`rewrote`, `removed`,
 `file_removed`, `file_emptied`), the fact `file`, a short `topic`, the statement `before` and

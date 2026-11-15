@@ -458,6 +458,9 @@ def _parser() -> argparse.ArgumentParser:
         commands, "band", band_commands.band_command, "what the band above the prompt shows, as JSON", json_flag=True
     )
     band_command.add_argument("--tasks-only", action="store_true", help="only the curator tasks, nothing else")
+    band_command.add_argument(
+        "--session", metavar="ID", action=_Once, help="also what m2b gave the session with this id"
+    )
 
     launcher = _group(commands, "launcher", "the launcher in ~/.local/bin")
     _command(launcher, "install", launcher_commands.launcher_install, "write or refresh the launcher")

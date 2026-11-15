@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `m2b band --json --session <id>` says what m2b gave a session since its last start: the topics
+  whose facts it got, each with the facts lines and current items it held when the session got
+  it, and whether that start printed the distillate whole, cut or not at all, or the distillate
+  is off for the folder. The session start and the prompt hook note this on the machine as they
+  give it, so it is known for sessions that start from this release on
+  ([The band](docs/band.md)).
+
 ## [0.5.0] - 2026-11-15
 
 A session can hand in a proposal for your memory by itself. That is off until you turn it on.

@@ -144,7 +144,7 @@ These are listed by `--help`, but the plugin is their caller.
 
 | Command | Who calls it |
 |---|---|
-| `m2b band [--tasks-only] [--json]` | the band, for what it shows above the prompt |
+| `m2b band [--tasks-only] [--session <id>] [--json]` | the band, for what it shows above the prompt; with `--session`, also what m2b gave that session |
 | `m2b refresh due [--json]` | the refresh step, for the memory lines past their day |
 | `m2b lint fix [--json]` | the lint step; it runs only inside a curation run |
 | `m2b curate model --skill <plugin:skill> --allow <rule>` | the worklog add-on's step in a curation run, for its fenced model step. Run by hand it starts that step on its own, with the tool rules you give it, outside a run |

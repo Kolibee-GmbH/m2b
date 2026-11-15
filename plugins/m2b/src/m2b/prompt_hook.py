@@ -22,15 +22,14 @@ import json
 import os
 import sys
 from collections.abc import Mapping, Sequence
-from pathlib import Path
 from typing import TextIO
 
 from m2b import topic_state
 from m2b.config.machine import MachineConfig, load_machine_config
-from m2b.hook_input import HookInput, read_hook_input
+from m2b.hook_input import HookInput, project_folder, read_hook_input
 from m2b.notes.characters import without_hidden
 from m2b.notes.layout import MEMORY, MEMORY_INDEX
-from m2b.notes.memory_index import TopicBlock, split_topics
+from m2b.notes.memory_index import TopicBlock, item_counts, split_topics
 from m2b.paths import MachinePaths, machine_paths
 from m2b.store.base import Store
 from m2b.store.factory import open_store
@@ -39,7 +38,6 @@ from m2b.topic_match import names_topic, names_topic_in_path, project_place
 MAX_ADDED_BYTES = 4 * 1024
 # Set on the curation run's model runs; the same variable the session hooks honour.
 CURATION_RUN_VARIABLE = "M2B_CURATION_RUN"
-PROJECT_DIR_VARIABLE = "CLAUDE_PROJECT_DIR"
 CHECK_ARGUMENT = "--check"
 TOPIC_HEADER = (
     "m2b topic facts (from memory/MEMORY.md: curated facts for a topic this prompt or the project named). "
@@ -67,7 +65,8 @@ def main(
         # ASCII with escapes, which any terminal encoding can carry and Claude Code decodes.
         print(json.dumps(answer), flush=True)
         # Noted only once written, so a topic that never reached the session can still come.
-        topic_state.add_shown(machine, hook_input.session_id, [block.topic.name for block in due])
+        given = [topic_state.Given(block.topic.name, *item_counts(block)) for block in due]
+        topic_state.add_shown(machine, hook_input.session_id, given)
     # Whatever went wrong, the prompt goes on without topic facts.
     except Exception:
         return 0
@@ -78,7 +77,7 @@ def due_topics(
     config: MachineConfig, machine: MachinePaths, environ: Mapping[str, str], hook_input: HookInput
 ) -> list[TopicBlock]:
     """The topics to add before this prompt: named, not shown in this session yet, within the cap."""
-    folder = Path(environ.get(PROJECT_DIR_VARIABLE) or hook_input.cwd or os.getcwd())
+    folder = project_folder(environ, hook_input)
     if config.distillate.covering(folder) is not None:
         return []
     text = _distillate(open_store(config.store, machine.temp_dir))

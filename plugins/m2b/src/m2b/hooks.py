@@ -37,10 +37,10 @@ from m2b.config.machine import MachineConfig
 from m2b.curate import machine_state
 from m2b.curate.detach import NOT_DOWNLOADED, start_detached
 from m2b.git_program import usable_git
-from m2b.hook_input import HookInput
+from m2b.hook_input import PROJECT_DIR_VARIABLE, HookInput, project_folder
 from m2b.notes.characters import without_hidden
 from m2b.notes.layout import MEMORY, MEMORY_INDEX
-from m2b.notes.memory_index import TopicBlock, split_topics
+from m2b.notes.memory_index import TopicBlock, item_counts, split_topics
 from m2b.paths import MachinePaths
 from m2b.run_record import FAILED, RUN_RECORD, RunRecord, RunRecordError, is_interrupted, load_run_record
 from m2b.store.base import EvictedFileError, Store, StoreError, fetch_command
@@ -48,8 +48,6 @@ from m2b.store.factory import open_store
 from m2b.topic_match import names_topic_in_path, project_place
 
 MEMORY_INDEX_PATH = f"{MEMORY}/{MEMORY_INDEX}"
-# Claude Code sets it for hooks: the project folder the session started in.
-PROJECT_DIR_VARIABLE = "CLAUDE_PROJECT_DIR"
 MAX_DISTILLATE_BYTES = 8 * 1024
 # Claude Code replaces a hook's stdout over 10,000 characters by a preview Claude is not asked to
 # read, so the whole output stays below this, with room for the cut line.
@@ -102,39 +100,43 @@ def distillate(
 ) -> None:
     """Prints nothing at all in a project the owner turned it off for (``distillate.skip_under``)."""
     hook_input = hook_input or HookInput()
-    folder = Path(environ.get(PROJECT_DIR_VARIABLE) or hook_input.cwd or os.getcwd())
+    folder = project_folder(environ, hook_input)
     if config.distillate.covering(folder) is not None:
         return
-    shown_topics: list[str] = []
+    shown: list[TopicBlock] = []
+    # How the distillate was printed; None when the printing itself failed.
+    printed: str | None = None
     try:
-        shown_topics = _print_distillate(config, machine, environ, folder)
+        shown, printed = _print_distillate(config, machine, environ, folder)
     finally:
         # Also when nothing could be printed: after a compaction the list must start over, or the
         # prompt hook would skip topics the context no longer holds. Without the note it may bring a
         # topic a second time; the session start stands either way.
         with contextlib.suppress(OSError):
-            topic_state.start_session(machine, hook_input.session_id, hook_input.source, shown_topics, now())
+            given = [topic_state.Given(block.topic.name, *item_counts(block)) for block in shown]
+            topic_state.start_session(machine, hook_input.session_id, hook_input.source, given, now(), printed)
 
 
 def _print_distillate(
     config: MachineConfig, machine: MachinePaths, environ: Mapping[str, str], folder: Path
-) -> list[str]:
-    """Prints the notices and the session's view of the distillate; gives back the topics it showed."""
+) -> tuple[list[TopicBlock], str]:
+    """Prints the notices and the session's view of the distillate; gives back the topics it showed
+    and whether the distillate came whole, cut or not at all."""
     store = open_store(config.store, machine.temp_dir)
     # A notice can name a machine or a file, and neither is m2b's own text.
     notices = "".join(f"m2b: {without_hidden(line)}\n" for line in _run_notices(store, machine, config.machine_id))
     print(notices, end="")
     text = _distillate_text(store)
     if text is None:
-        return []
+        return [], topic_state.NONE
     head = f"{DISTILLATE_HEADER}\n\n"
     rule = f"\n{ROUTING_RULE} {WORK_PEOPLE_RULE}\n"
     room = OUTPUT_LIMIT - len(notices) - len(head) - len(rule) - len(CUT_LINE) - 2
     split = split_topics(text)
     named = _named_by_path(split.blocks, folder, environ)
-    body, shown_topics, cut = _session_view(split.general, split.blocks, named, room)
+    body, shown, cut = _session_view(split.general, split.blocks, named, room)
     print(head + body + (f"{CUT_LINE}\n" if cut else "") + rule, end="")
-    return shown_topics
+    return shown, topic_state.CUT if cut else topic_state.WHOLE
 
 
 def _named_by_path(blocks: Sequence[TopicBlock], folder: Path, environ: Mapping[str, str]) -> list[TopicBlock]:
@@ -144,7 +146,7 @@ def _named_by_path(blocks: Sequence[TopicBlock], folder: Path, environ: Mapping[
 
 def _session_view(
     general: str, blocks: Sequence[TopicBlock], named: Sequence[TopicBlock], room: int
-) -> tuple[str, list[str], bool]:
+) -> tuple[str, list[TopicBlock], bool]:
     """What the session start prints, the topics it showed, and whether anything was left out.
 
     The general part is cut like the whole distillate was before topics; the topic line and each
@@ -154,13 +156,16 @@ def _session_view(
     body = shown if shown.endswith("\n") else shown + "\n"
     if cut or not blocks:
         return body, [], cut
-    shown_topics: list[str] = []
-    for part, name in ((_topic_line(blocks), None), *((block.text, block.topic.name) for block in named)):
-        if not _fits(body + part, room):
+    names = _topic_line(blocks)
+    if not _fits(body + names, room):
+        return body, [], True
+    body += names
+    shown_topics: list[TopicBlock] = []
+    for block in named:
+        if not _fits(body + block.text, room):
             return body, shown_topics, True
-        body += part
-        if name is not None:
-            shown_topics.append(name)
+        body += block.text
+        shown_topics.append(block)
     return body, shown_topics, False
 
 

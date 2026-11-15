@@ -9,7 +9,7 @@ from unittest import mock
 
 import test_proposals_command
 import test_runner
-from m2b import launcher, proposals
+from m2b import cli, launcher, proposals, topic_state
 from m2b.commands import band, doctor
 from m2b.tasks import markers
 from test_proposal_answers import DANA_ID, LADDER_ID
@@ -130,6 +130,128 @@ class BandCommandTest(test_runner.RunnerTest):
 
         self.assertIn("sb-test-missing", answer["tasks"]["error"])
         self.assertEqual(answer["status"]["backends"]["tasks"]["state"], "not reachable")
+
+
+SESSION = "ea4af7eb-7f1d-4eab-aac2-987397455c4b"
+STARTED = datetime.datetime(2026, 11, 8, 9, 0).astimezone()
+
+
+class BandSessionTest(test_runner.RunnerTest):
+    """What m2b gave one session: its topics with their lines, and the distillate."""
+
+    def session_part(self, session_id: str = SESSION) -> dict[str, Any]:
+        answer: dict[str, Any] = self.run_json("band", "--session", session_id)
+        part: dict[str, Any] = answer["session"]
+        return part
+
+    def start(self, *given: topic_state.Given, printed: str | None = topic_state.WHOLE) -> None:
+        topic_state.start_session(self.machine, SESSION, "startup", given, STARTED, printed)
+
+    def test_the_topics_a_session_was_given_come_with_their_lines_and_how_the_start_printed(self) -> None:
+        """Covers: B183"""
+        self.curating()
+        self.start(topic_state.Given("Globex", 2, 0), topic_state.Given("Acme Ltd", 3, 1))
+
+        self.assertEqual(
+            self.session_part(),
+            {
+                "id": SESSION,
+                "known": True,
+                "topics": [
+                    {"name": "Acme Ltd", "facts": 3, "current": 1},
+                    {"name": "Globex", "facts": 2, "current": 0},
+                ],
+                "distillate": {"at_start": "whole", "off_under": None},
+            },
+        )
+
+    def test_a_start_that_cut_the_distillate_or_had_none_is_named_so(self) -> None:
+        """Covers: B183"""
+        self.curating()
+        for printed in (topic_state.CUT, topic_state.NONE):
+            with self.subTest(printed=printed):
+                self.start(printed=printed)
+                self.assertEqual(self.session_part()["distillate"]["at_start"], printed)
+
+    def test_a_session_this_machine_noted_nothing_of_is_not_known_and_has_no_topics(self) -> None:
+        """Covers: B183"""
+        self.curating()
+
+        self.assertEqual(
+            self.session_part(),
+            {"id": SESSION, "known": False, "topics": [], "distillate": {"at_start": None, "off_under": None}},
+        )
+
+    def test_a_folder_the_distillate_is_off_for_is_named_as_it_is_now(self) -> None:
+        """Covers: B183"""
+        self.curating()
+        self.start(topic_state.Given("Acme Ltd", 3, 1))
+        customer = self.home / "code" / "acme"
+        (customer / "api").mkdir(parents=True)
+        self.run_command("distillate", "off", str(customer))
+        self.environ["CLAUDE_PROJECT_DIR"] = str(customer / "api")
+
+        part = self.session_part()
+
+        self.assertEqual(part["distillate"], {"at_start": "whole", "off_under": str(customer.resolve())})
+        self.assertEqual([topic["name"] for topic in part["topics"]], ["Acme Ltd"])
+
+    def test_without_a_project_named_the_folder_is_the_one_the_command_runs_in(self) -> None:
+        """Covers: B183"""
+        self.curating()
+        customer = self.home / "code" / "acme"
+        customer.mkdir(parents=True)
+        self.run_command("distillate", "off", str(customer))
+
+        with mock.patch("m2b.hook_input.os.getcwd", return_value=str(customer)):
+            part = self.session_part()
+
+        self.assertEqual(part["distillate"]["off_under"], str(customer.resolve()))
+
+    def test_a_folder_that_cannot_be_looked_at_costs_only_this_part(self) -> None:
+        """Covers: B183"""
+        self.curating()
+
+        with mock.patch("m2b.hook_input.os.getcwd", side_effect=FileNotFoundError("the folder is gone")):
+            answer: dict[str, Any] = self.run_json("band", "--session", SESSION)
+
+        self.assertEqual(answer["session"], {"error": "the session's folder cannot be looked at: the folder is gone"})
+        self.assertIn("candidates", answer["tasks"])
+        self.assertIn("inbox", answer["status"])
+
+    def test_a_session_named_twice_is_refused(self) -> None:
+        self.curating()
+
+        code, out, err = self.run_command("band", "--session", "../escape", "--session", SESSION)
+
+        self.assertEqual((code, out), (cli.EXIT_USAGE, ""))
+        self.assertIn("--session given twice", err)
+
+    def test_an_id_that_is_no_session_id_is_named_and_never_becomes_a_file(self) -> None:
+        """Covers: B183"""
+        self.curating()
+        for session_id in ("../escape", "a/b", "", "x" * 200):
+            with self.subTest(session_id=session_id):
+                answer: dict[str, Any] = self.run_json("band", "--session", session_id)
+                self.assertEqual(answer["session"], {"error": "not a session id"})
+                self.assertIn("candidates", answer["tasks"])
+        self.assertFalse((self.machine.state_dir / topic_state.TOPICS_FOLDER).exists())
+
+    def test_topics_from_before_the_counts_come_with_their_names_alone(self) -> None:
+        self.curating()
+        folder = self.machine.state_dir / topic_state.TOPICS_FOLDER
+        folder.mkdir(parents=True)
+        (folder / f"{SESSION}.json").write_text('{"shown": ["Acme Ltd"]}', encoding="utf-8")
+
+        self.assertEqual(self.session_part()["topics"], [{"name": "Acme Ltd", "facts": None, "current": None}])
+        self.assertIsNone(self.session_part()["distillate"]["at_start"])
+
+    def test_without_a_session_named_the_answer_has_no_such_part(self) -> None:
+        """Covers: B183"""
+        self.curating()
+
+        self.assertNotIn("session", self.run_json("band"))
+        self.assertEqual(sorted(self.run_json("band", "--tasks-only", "--session", SESSION)), ["tasks"])
 
 
 class BandProposalsTest(test_proposals_command.ProposalsCommandTest):

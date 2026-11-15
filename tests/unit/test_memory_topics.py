@@ -10,6 +10,7 @@ from m2b.notes.memory_index import (
     MemoryIndex,
     Topic,
     TopicBlock,
+    item_counts,
     parse_topic_heading,
     split_topics,
 )
@@ -204,6 +205,38 @@ class SplitTopicsTest(unittest.TestCase):
 
         self.assertTrue(split.general.startswith("# Memory\r\n"))
         self.assertEqual(split.blocks[1].topic, Topic("Riverside Choir", ("Riverside Choir", "Petra Lang")))
+
+
+class ItemCountsTest(unittest.TestCase):
+    """How many facts lines and current items a topic brings into a session."""
+
+    def test_facts_lines_and_current_items_are_counted_apart(self) -> None:
+        block = _block(
+            "Acme Ltd",
+            ("Acme",),
+            "### Acme Ltd (Acme)\n- Kim Lee leads IT (kim-lee.md)\n- Acme pays in 30 days (acme.md)\n"
+            "#### Current\n- Building the export (since 2026-11-02)\n",
+        )
+
+        self.assertEqual(item_counts(block), (2, 1))
+
+    def test_a_topic_under_current_alone_has_no_facts_lines(self) -> None:
+        block = _block("Globex", ("Globex",), "### Globex (Globex)\n#### Current\n- Auditing the backups\n")
+
+        self.assertEqual(item_counts(block), (0, 1))
+
+    def test_a_line_ends_where_the_split_of_the_distillate_ends_one(self) -> None:
+        # A line separator other than the line feed stays inside a line there, and so here.
+        block = _block(
+            "Acme Ltd", ("Acme",), "### Acme Ltd (Acme)\r\n- Kim leads IT\u2028- still that line (kim.md)\r\n"
+        )
+
+        self.assertEqual(item_counts(block), (1, 0))
+
+    def test_only_list_items_count(self) -> None:
+        block = _block("Acme Ltd", ("Acme",), "### Acme Ltd (Acme)\n\nA line that is no item\n- One fact (acme.md)\n")
+
+        self.assertEqual(item_counts(block), (1, 0))
 
 
 def _block(name: str, words: tuple[str, ...], text: str) -> TopicBlock:

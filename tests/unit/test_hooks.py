@@ -491,9 +491,53 @@ class DistillateTopicsTest(HookFixture):
 
         self.assertEqual(topic_state.shown_topics(self.machine, SESSION), {"Acme Ltd"})
 
+    def test_the_session_keeps_the_lines_its_start_gave_and_that_the_distillate_was_printed_whole(self) -> None:
+        """Covers: B183"""
+        export = "- Building the Acme export (since 2026-11-02)\n"
+        self.write("memory/MEMORY.md", f"{TOPICS}\n### Acme Ltd (Acme, Kim Lee)\n{export}")
+        project = str(self.home / "code" / "acme-api")
+
+        self.hook("distillate", {"session_id": SESSION, "source": "startup"}, CLAUDE_PROJECT_DIR=project)
+
+        self.assertEqual(
+            topic_state.session(self.machine, SESSION),
+            topic_state.Session((topic_state.Given("Acme Ltd", 1, 1),), topic_state.WHOLE),
+        )
+
+    def test_a_cut_between_two_topics_notes_the_one_that_came_and_that_the_start_was_cut(self) -> None:
+        """Covers: B183"""
+        acme = "### Acme Ltd (Acme)\n- Kim Lee leads Acme's IT (kim-lee.md)\n"
+        globex = "### Globex (Globex)\n- " + "x" * 400 + " (globex.md)\n"
+        general = "## Facts\n\n"
+        topic_line = f"{TOPIC_LINE}Acme Ltd, Globex.\n"
+        # Room for the topic line and the first topic, not for the second.
+        room_left = len(topic_line) + len(acme) + 60
+        filler = (
+            "- " + "x" * (MAX_DISTILLATE_BYTES - len(general) - len("-  (filler.md)\n") - room_left) + " (filler.md)\n"
+        )
+        self.write("memory/MEMORY.md", f"{general}{filler}\n{acme}\n{globex}")
+        project = str(self.home / "code" / "acme-globex")
+
+        _, out, _ = self.hook("distillate", {"session_id": SESSION}, CLAUDE_PROJECT_DIR=project)
+
+        self.assertIn(acme, out)
+        self.assertNotIn("globex.md", out)
+        self.assertEqual(
+            topic_state.session(self.machine, SESSION),
+            topic_state.Session((topic_state.Given("Acme Ltd", 1, 0),), topic_state.CUT),
+        )
+
+    def test_a_start_without_a_distillate_is_noted_as_one_that_printed_none(self) -> None:
+        """Covers: B183"""
+        (self.store_root / "memory" / "MEMORY.md").unlink()
+
+        self.hook("distillate", {"session_id": SESSION, "source": "startup"}, CLAUDE_PROJECT_DIR=self.elsewhere)
+
+        self.assertEqual(topic_state.session(self.machine, SESSION), topic_state.Session((), topic_state.NONE))
+
     def test_a_compaction_starts_the_list_over_even_when_the_distillate_cannot_be_read(self) -> None:
         """Covers: B47"""
-        topic_state.start_session(self.machine, SESSION, "startup", ["Acme Ltd"], NOW)
+        topic_state.start_session(self.machine, SESSION, "startup", [topic_state.Given("Acme Ltd")], NOW)
         (self.store_root / "memory" / "MEMORY.md").unlink()
 
         self.hook("distillate", {"session_id": SESSION, "source": "compact"}, CLAUDE_PROJECT_DIR=self.elsewhere)
@@ -541,6 +585,7 @@ class DistillateTopicsTest(HookFixture):
         self.assertNotIn("Kim Lee leads", out)
         self.assertIn(f"\n{CUT_LINE}\n", out)
         self.assertEqual(topic_state.shown_topics(self.machine, SESSION), set())
+        self.assertEqual(topic_state.session(self.machine, SESSION), topic_state.Session((), topic_state.CUT))
 
         self.write("memory/MEMORY.md", TOPICS.replace(dana, dana + "- " + "x" * MAX_DISTILLATE_BYTES + " (f.md)\n"))
         _, out, _ = self.hook("distillate", CLAUDE_PROJECT_DIR=project)
