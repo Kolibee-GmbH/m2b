@@ -9,9 +9,9 @@ from unittest import mock
 
 import test_runner
 import test_sessions
-from m2b import glean, proposal_answers, proposals, session_remotes
+from m2b import folders_left_out, glean, proposal_answers, proposals, session_remotes
 from m2b.config.profile import save_profile
-from m2b.curate import glean_step, machine_state, model
+from m2b.curate import machine_state, model
 from m2b.run_record import SUCCEEDED, load_run_record
 from m2b.tasks import markers
 from m2b.tasks.base import TasksError
@@ -398,7 +398,7 @@ class RemotesLeftOutTest(GleanStepTest):
         self.typed(DANA_SAID, START - HOUR)
         self.answers()
 
-        with mock.patch.object(glean_step, "usable_git", return_value=None):
+        with mock.patch.object(folders_left_out, "usable_git", return_value=None):
             self.run_curate()
 
         self.assertEqual(self.prompts_asked(), [[DANA_SAID]])

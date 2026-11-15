@@ -40,15 +40,13 @@ import dataclasses
 import datetime
 import re
 from collections import Counter
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 
-from m2b import claude_code, glean, proposals, session_remotes, sessions
+from m2b import claude_code, folders_left_out, glean, proposals, sessions
 from m2b.config.machine import MachineConfig
-from m2b.config.profile import require_profile
 from m2b.curate import model
-from m2b.git_program import usable_git
 from m2b.ingest import TEXT_EXTENSIONS
 from m2b.notes.frontmatter import Note
 from m2b.notes.layout import CORPUS, INBOX, MEMORY, MEMORY_INDEX
@@ -60,10 +58,6 @@ FIRST_PERIOD = datetime.timedelta(hours=24)
 LONGEST_PERIOD = datetime.timedelta(days=7)
 
 _MOMENT = "%Y-%m-%d %H:%M"
-# Why a session does not reach the model.
-_IN_A_FOLDER_LEFT_OUT = "folder"
-_OF_A_REPOSITORY_LEFT_OUT = "repository"
-_OF_NO_KNOWN_REPOSITORY = "unknown repository"
 # A slash command as the reader gives it: only its name.
 _COMMAND_NAME = re.compile(r"/\S+")
 
@@ -119,8 +113,8 @@ def propose(
             f"{_count(without_mark, 'text')} {'is' if without_mark == 1 else 'are'} without it: "
             "Claude Code may write its transcripts in a way this m2b does not read"
         )
-    why_left_out = _reasons_to_leave_out(store, config, machine, environ, started)
-    reasons = {session.session_id: why_left_out(session.folder) for session in found.sessions}
+    left_out = folders_left_out.rule(store, config, machine, environ, started)
+    reasons = {session.session_id: left_out.reason(session.folder) for session in found.sessions}
     considered = [session for session in found.sessions if reasons[session.session_id] is None]
     read = [session for session in considered if session.prompts]
     notes += _left_out_notes(Counter(reason for reason in reasons.values() if reason is not None))
@@ -201,57 +195,12 @@ def _left_out_of(read: Sequence[sessions.Session]) -> list[str]:
     return [f"left out of these sessions: {', '.join(named)}"] if named else []
 
 
-def _reasons_to_leave_out(
-    store: Store, config: MachineConfig, machine: MachinePaths, environ: Mapping[str, str], started: datetime.datetime
-) -> Callable[[str], str | None]:
-    """For a session's folder, why the session does not reach the model, or None when it does."""
-    left_out = require_profile(store).worklog_leave_out
-    named = left_out.folders(machine.home)
-    by_remote = session_remotes.RemoteRule(
-        left_out.git_remote_contains,
-        machine.state_dir / session_remotes.NOTES_FOLDER,
-        started,
-        _asking_git(environ),
-    )
-
-    def reason(folder: str) -> str | None:
-        path = Path(folder)
-        # A folder that cannot be compared with the list is not shown to be outside it.
-        if not path.is_absolute() or any(path == root or root in path.parents for root in named):
-            return _IN_A_FOLDER_LEFT_OUT
-        if config.distillate.covering(path) is not None:
-            return _IN_A_FOLDER_LEFT_OUT
-        judged = by_remote.judge(folder)
-        if judged is session_remotes.ByRemote.UNKNOWN:
-            return _OF_NO_KNOWN_REPOSITORY
-        return _OF_A_REPOSITORY_LEFT_OUT if judged is session_remotes.ByRemote.LEFT_OUT else None
-
-    return reason
-
-
-def _asking_git(environ: Mapping[str, str]) -> Callable[[Path], frozenset[str] | None]:
-    """What git names as a folder's remotes now; nothing on a machine without a git to start.
-
-    Which git that is, is looked up at the first folder asked about, so a run in which no folder
-    needs it starts nothing.
-    """
-    found: list[str | None] = []
-
-    def ask(folder: Path) -> frozenset[str] | None:
-        if not found:
-            found.append(usable_git(environ))
-        git = found[0]
-        return session_remotes.remotes_in(folder, git, environ=environ) if git is not None else None
-
-    return ask
-
-
 def _left_out_notes(reasons: Mapping[str, int]) -> list[str]:
-    """How many sessions were not read for each reason, in the order of the reasons above."""
+    """How many sessions were not read for each reason: folder, repository, no known repository."""
     notes = []
-    in_folder = reasons.get(_IN_A_FOLDER_LEFT_OUT, 0)
-    of_repository = reasons.get(_OF_A_REPOSITORY_LEFT_OUT, 0)
-    unknown = reasons.get(_OF_NO_KNOWN_REPOSITORY, 0)
+    in_folder = reasons.get(folders_left_out.IN_A_FOLDER_LEFT_OUT, 0)
+    of_repository = reasons.get(folders_left_out.OF_A_REPOSITORY_LEFT_OUT, 0)
+    unknown = reasons.get(folders_left_out.OF_NO_KNOWN_REPOSITORY, 0)
     if in_folder:
         notes.append(f"{_count(in_folder, 'session')} in a folder that is left out {_were(in_folder)} not read")
     if of_repository:

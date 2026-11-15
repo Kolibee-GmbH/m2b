@@ -62,9 +62,13 @@ AGREEMENT = "agreement"
 COMMITMENT = "commitment"
 PERSONAL = "personal"
 KINDS = (PERSON, AGREEMENT, COMMITMENT, PERSONAL)
-# Where in a prompt a proposal's quote stands. What was pasted may be anyone's words.
+# Where in a session a proposal's quote stands. What was pasted may be anyone's words. A reading
+# finds a quote in a prompt only; a session that hands a proposal in can also stand on what a tool
+# returned to it or on what Claude answered.
 TYPED = "typed"
 PASTED = "pasted"
+TOOL = "tool"
+AGENT = "agent"
 # A proposal is one fact or one task; a longer text is a summary, which nobody asked for.
 TEXT_LENGTH = 300
 QUOTE_WORDS = 3

@@ -88,6 +88,14 @@ class BandSettings:
 
 
 @dataclass(frozen=True)
+class SessionsSettings:
+    # Whether a session on this machine may hand in a proposal for the memory by itself. Off until
+    # the owner turns it on: with it, words from what an agent read, a mail or a document, reach
+    # the store.
+    propose: bool = False
+
+
+@dataclass(frozen=True)
 class MachineConfig:
     version: int
     machine_id: str
@@ -97,6 +105,7 @@ class MachineConfig:
     curation: CurationSettings
     distillate: DistillateSettings = field(default_factory=DistillateSettings)
     band: BandSettings = field(default_factory=BandSettings)
+    sessions: SessionsSettings = field(default_factory=SessionsSettings)
     # Each add-on's settings as written, ``on`` included; ``m2b.addons.is_on`` reads them.
     addons: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
 
@@ -108,7 +117,18 @@ def parse_machine_config(raw: object, home: Path) -> MachineConfig:
     if version > KNOWN_CONFIG_VERSION:
         raise FormatTooNewError(CONFIG_FILE_NAME, version, KNOWN_CONFIG_VERSION)
     fields.reject_unknown(
-        ("version", "machine_id", "store", "calendar", "executables", "curation", "distillate", "band", "addons")
+        (
+            "version",
+            "machine_id",
+            "store",
+            "calendar",
+            "executables",
+            "curation",
+            "distillate",
+            "band",
+            "sessions",
+            "addons",
+        )
     )
     return MachineConfig(
         version=version,
@@ -119,6 +139,7 @@ def parse_machine_config(raw: object, home: Path) -> MachineConfig:
         curation=_curation(fields.section("curation", required=False), home),
         distillate=_distillate(fields.section("distillate", required=False), home),
         band=_band(fields.section("band", required=False)),
+        sessions=_sessions(fields.section("sessions", required=False)),
         addons=_addons(fields.section("addons", required=False)),
     )
 
@@ -203,6 +224,11 @@ def _distillate(fields: Fields, home: Path) -> DistillateSettings:
 def _band(fields: Fields) -> BandSettings:
     fields.reject_unknown(("due_tasks",))
     return BandSettings(due_tasks=fields.boolean("due_tasks", default=True))
+
+
+def _sessions(fields: Fields) -> SessionsSettings:
+    fields.reject_unknown(("propose",))
+    return SessionsSettings(propose=fields.boolean("propose", default=False))
 
 
 def _addons(fields: Fields) -> Mapping[str, Mapping[str, Any]]:
