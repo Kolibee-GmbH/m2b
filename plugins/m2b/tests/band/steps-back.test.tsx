@@ -339,7 +339,7 @@ test('a close that a hook beneath held back leaves the band at its one line', as
   // A command whose pane is not placed closes it; here something beneath keeps it open.
   fake.isCloseHeld = true
   fake.paneWaits = 'no surface attached places panes'
-  await typed($, 'm2b')
+  await typed($, 'm2b-pane')
   fake.paneWaits = null
   expect(openPanes.has(PANE)).toBe(true)
   await band.redraw()
@@ -367,7 +367,7 @@ test('once the pane is closed, the band draws its rows again, with the row for t
   expect(await texts(band)).toEqual(expect.arrayContaining([...ROWS_OF_TODAY, TOPICS_ROW]))
 
   // Opened again and not drawn on this surface yet: where it sat before it closed says nothing.
-  await typed($, 'm2b', { isFullscreen: true, columns: 160 })
+  await typed($, 'm2b-pane', { isFullscreen: true, columns: 160 })
   expect(openPanes.has(PANE)).toBe(true)
   expect(await texts(band)).toEqual(expect.arrayContaining([...ROWS_OF_TODAY, TOPICS_ROW]))
   await band.unmount()
@@ -425,7 +425,7 @@ test('the band of a surface steps back only for the pane docked on that surface'
   const { clock } = await start($, on, busyFake())
   const onTerminal = await drawBand($, clock, MAIN_SCREEN)
   const onDesktop = await drawBand($, clock, WIDE, 'desktop')
-  await typed($, 'm2b')
+  await typed($, 'm2b-pane')
 
   const beside = await drawPane($, clock, 'dock', 50, 'desktop')
 
@@ -585,7 +585,7 @@ test('where the pane cannot be shown, a press on the row says so in the band and
 
   expect(openPanes.has(PANE)).toBe(false)
   expect(await texts(band)).toContain(
-    'the m2b pane cannot be shown here: no surface attached places panes; /m2b answers with the lines',
+    'the m2b pane cannot be shown here: no surface attached places panes; /m2b-pane answers with the lines',
   )
   await band.unmount()
 })
@@ -601,7 +601,7 @@ test('a press on the row that Claude Code refuses to open a pane for says so in 
 
   expect(opened).toEqual([])
   expect((await texts(band)).some(line => line.startsWith('the m2b pane could not be opened:'))).toBe(true)
-  expect((await texts(band)).some(line => line.endsWith('; /m2b answers with the lines'))).toBe(true)
+  expect((await texts(band)).some(line => line.endsWith('; /m2b-pane answers with the lines'))).toBe(true)
   await band.unmount()
 })
 
@@ -624,7 +624,7 @@ test('the desktop app: docked there, the band of the app draws the one line', as
   // Covers: B191
   const { clock } = await start($, on, busyFake())
   const band = await drawBand($, clock, WIDE, 'desktop')
-  await typed($, 'm2b', { isFullscreen: true, columns: 160 })
+  await typed($, 'm2b-pane', { isFullscreen: true, columns: 160 })
 
   const beside = await drawPane($, clock, 'dock', 60, 'desktop')
 
@@ -637,7 +637,7 @@ test('the desktop app: as a widget the pane draws counts and no button, and the 
   // Covers: B193
   const { clock } = await start($, on, busyFake())
   const band = await drawBand($, clock, WIDE, 'desktop')
-  await typed($, 'm2b', { isFullscreen: true, columns: 160 })
+  await typed($, 'm2b-pane', { isFullscreen: true, columns: 160 })
 
   const widget = await drawPane($, clock, 'widget', 30, 'desktop')
 
@@ -698,7 +698,7 @@ test('the small form says each thing it could not count in place of the count', 
   expect(glance({ given: known, snapshot: { ...quiet, due: due.slice(0, 1) } })[2]).toBe('1 due today')
 })
 
-test('claude -p, no surface: nothing opens or stays open, and the m2b command answers as text', async ($, on) => {
+test('claude -p, no surface: nothing opens or stays open, and /m2b-pane answers as text', async ($, on) => {
   // Covers: B185
   const fake = busyFake()
   fake.paneWaits = NO_SURFACE
@@ -707,7 +707,7 @@ test('claude -p, no surface: nothing opens or stays open, and the m2b command an
   // No surface draws a band, so nothing asks for a pane.
   expect(opened).toEqual([])
 
-  const { text } = (await typed($, 'm2b')) as { text: string }
+  const { text } = (await typed($, 'm2b-pane')) as { text: string }
 
   expect(openPanes.has(PANE)).toBe(false)
   const lines = text.split('\n')

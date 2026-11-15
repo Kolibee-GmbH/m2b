@@ -13,8 +13,10 @@ import type { RowActions } from './rows'
  * pane's other views.
  */
 
+// Not `m2b`: Claude Code gives the plugin's skill of that name the short name `/m2b`. A command
+// named so does not appear in its menu, and the name typed starts the skill, with a model turn.
 export const SESSION_COMMAND: CommandSpec = {
-  name: 'm2b',
+  name: 'm2b-pane',
   description: 'Show in a pane what m2b gave this session, what waits for you and what is due today',
   immediate: true,
 }

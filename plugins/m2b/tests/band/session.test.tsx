@@ -38,9 +38,9 @@ function called($: Engine, tool: string, args: Record<string, unknown>) {
 
 type On = Parameters<typeof start>[1]
 
-/** The start view as the pane draws it after `/m2b`. */
+/** The start view as the pane draws it after `/m2b-pane`. */
 async function startView($: Engine) {
-  await typed($, 'm2b')
+  await typed($, 'm2b-pane')
   return $.ui.mount({ ...pane(PANE), surface: 'terminal' })
 }
 
@@ -66,13 +66,25 @@ function busyFake(): FakeM2b {
   return fake
 }
 
-test('the m2b command opens the pane on what this session was given, what waits and what is due', async ($, on) => {
+test('no command of the band is named m2b, like the skill: each begins with m2b-, the one that opens the pane is m2b-pane', async ($, on) => {
+  // Covers: B185
+  // Claude Code gives the skill m2b of the plugin m2b the short name /m2b: it does not list a command of
+  // the mod named so, and the name typed starts the skill with the model. The kit loads no skill, so no
+  // test of a press or a command shows that; the names are held here, by the pattern the docs are checked with.
+  const { commands } = await start($, on, busyFake())
+  const names = commands.map(command => command.name)
+
+  expect(names.filter(name => !/^m2b-[a-z-]+$/.test(name))).toEqual([])
+  expect(names).toContain('m2b-pane')
+})
+
+test('/m2b-pane opens the pane on what this session was given, what waits and what is due', async ($, on) => {
   // Covers: B185
   const fake = busyFake()
   const { opened, commands } = await start($, on, fake)
-  expect(commands.map(command => command.name)).toContain('m2b')
+  expect(commands.map(command => command.name)).toContain('m2b-pane')
 
-  const answer = await typed($, 'm2b')
+  const answer = await typed($, 'm2b-pane')
 
   expect(opened.map(one => one.id)).toContain(PANE)
   expect(answer.text).toBe(PLACED)
@@ -109,7 +121,7 @@ test('what the session was given is asked for this session alone, where the sess
   await clock.advance(30_000)
   expect(fake.looks).toEqual([LOOK])
 
-  await typed($, 'm2b')
+  await typed($, 'm2b-pane')
   expect(fake.looks).toEqual([LOOK, LOOK])
   expect(fake.calls.filter(call => call.includes('--session'))).toEqual([])
 })
@@ -422,10 +434,10 @@ test('without a fresh answer in time, the text for the conversation says not loo
   fake.given = NORTHWIND
   fake.paneWaits = 'no surface attached places panes'
   const { clock } = await start($, on, fake)
-  expect((await typed($, 'm2b')).text).toContain('  Northwind: 3 facts')
+  expect((await typed($, 'm2b-pane')).text).toContain('  Northwind: 3 facts')
 
   fake.delayMs = args => (args.includes('--session-only') ? 5_000 : 0)
-  const pending = typed($, 'm2b')
+  const pending = typed($, 'm2b-pane')
   await clock.advance(2_000)
   const answer = (await pending).text ?? ''
 
@@ -560,7 +572,7 @@ test('every candidate and question stands in the start view, where the band show
   await ui.unmount()
 })
 
-test('show on the proposals and on the review turns the pane to them, and the m2b command turns it back', async ($, on) => {
+test('show on the proposals and on the review turns the pane to them, and /m2b-pane turns it back', async ($, on) => {
   // Covers: B185
   const fake = busyFake()
   fake.status = { ...STATUS, run: { state: 'succeeded', started_at: '2026-03-14T18:00:05+01:00' } }
@@ -571,13 +583,13 @@ test('show on the proposals and on the review turns the pane to them, and the m2
   expect(await texts(ui)).toContain('said on 2026-03-12: "Dana runs IT at Northwind"')
   expect(await texts(ui)).not.toContain('In this session')
 
-  await typed($, 'm2b')
+  await typed($, 'm2b-pane')
   expect(await texts(ui)).toContain('In this session')
   await ui.press({ key: 'show:review' })
   expect(await texts(ui)).toContain('Last curation run: succeeded, started 2026-03-14 18:00')
   expect(await texts(ui)).toContain('lint: broken link in a.md')
 
-  await typed($, 'm2b')
+  await typed($, 'm2b-pane')
   expect(await texts(ui)).toContain('In this session')
   await ui.unmount()
 })
@@ -628,13 +640,13 @@ test('with the tasks due turned off, the third part says they are not shown', as
   await ui.unmount()
 })
 
-test('where the pane cannot be shown, the m2b command answers with the same lines', async ($, on) => {
+test('where the pane cannot be shown, /m2b-pane answers with the same lines', async ($, on) => {
   // Covers: B185
   const fake = busyFake()
   fake.paneWaits = 'no surface attached places panes'
   await start($, on, fake)
 
-  const answer = (await typed($, 'm2b')).text ?? ''
+  const answer = (await typed($, 'm2b-pane')).text ?? ''
 
   expect(answer.split('\n')).toEqual([
     'the m2b pane cannot be shown here: no surface attached places panes',
@@ -661,7 +673,7 @@ test('the lines for the conversation hold no character that draws nothing', asyn
   fake.paneWaits = 'no surface attached places panes'
   await start($, on, fake)
 
-  const answer = (await typed($, 'm2b')).text ?? ''
+  const answer = (await typed($, 'm2b-pane')).text ?? ''
 
   expect(answer).toContain('  Northwind: 2 facts')
   expect(answer).toContain('  Remember? Dana prefers tea')
@@ -686,13 +698,13 @@ test('a look that fails once does not hide that a later one answered', async ($,
   await ui.unmount()
 })
 
-test('before m2b is set up the m2b command says so and opens nothing', async ($, on) => {
+test('before m2b is set up /m2b-pane says so and opens nothing', async ($, on) => {
   // Covers: B185
   const fake = new FakeM2b()
   fake.isSetUp = false
   const { opened } = await start($, on, fake)
 
-  expect((await typed($, 'm2b')).text).toBe('not shown: m2b is not set up on this machine; /m2b:m2b sets it up')
+  expect((await typed($, 'm2b-pane')).text).toBe('not shown: m2b is not set up on this machine; /m2b:m2b sets it up')
   expect(opened).toEqual([])
   expect(fake.looks).toEqual([])
 })
@@ -701,7 +713,7 @@ test('the start view wraps its lines in a pane as narrow as a dock gets', async 
   // Covers: B185
   const fake = busyFake()
   await start($, on, fake)
-  await typed($, 'm2b')
+  await typed($, 'm2b-pane')
   const ui = await $.ui.mount({ ...pane(PANE, 24), surface: 'terminal' })
   const wraps = (await ui.findAll({ type: 'Text' })).filter(found => found.text.trim() !== '').map(found => found.props['wrap'])
   expect(wraps.every(wrap => wrap === 'wrap' || wrap === undefined)).toBe(true)

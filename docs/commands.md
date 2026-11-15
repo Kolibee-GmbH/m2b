@@ -38,7 +38,7 @@ There are two spellings, and they are two different things:
 
 | Skill | What it does |
 |---|---|
-| `/m2b:m2b` | says what m2b is and what to type; `/m2b:m2b setup` guides through setup, `/m2b:m2b status` shows the inbox, the last curation run and the backends, `/m2b:m2b doctor` checks the machine, `/m2b:m2b addons` shows the add-ons |
+| `/m2b:m2b` | says what m2b is and what to type; `/m2b:m2b setup` guides through setup, `/m2b:m2b status` shows the inbox, the last curation run and the backends, `/m2b:m2b doctor` checks the machine, `/m2b:m2b addons` shows the add-ons. Claude Code also runs it for `/m2b` alone; the pane is `/m2b-pane` |
 | `/m2b:setup` | sets this machine up, for a new store or one another machine already uses; `/m2b:m2b setup` starts it |
 | `/m2b:capture` | captures a note, a task or a calendar entry; saying "remember ..." does the same |
 | `/m2b:search` | searches archive, memory and inbox in full text |
@@ -56,7 +56,7 @@ do not do their work there. The first three start a curation run in the backgrou
 
 | Command | What it does |
 |---|---|
-| `/m2b` | shows in the m2b pane what m2b gave this session, what waits for you and what is due today; there a press shows a topic's lines or leaves m2b out of the session's folder; under the fullscreen layout that pane opens by itself |
+| `/m2b-pane` | shows in the m2b pane what m2b gave this session, what waits for you and what is due today; there a press shows a topic's lines or leaves m2b out of the session's folder; under the fullscreen layout that pane opens by itself |
 | `/m2b-note <text>` | writes the text into the inbox at once, through `m2b capture` |
 | `/m2b-search [--word] <text>` | shows the hits of `m2b search` in the m2b pane; `--word` matches whole words only |
 | `/m2b-review` | shows the last curation run in the m2b pane: every finding, candidate and question |

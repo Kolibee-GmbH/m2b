@@ -279,7 +279,7 @@ test('the button on the start view opens the list too, as a dialog that leads ba
   // Covers: B197
   const { fake } = world()
   const { clock, opened } = await start($, on, fake)
-  await typed($, 'm2b')
+  await typed($, 'm2b-pane')
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
   const opensBefore = opened.length
 

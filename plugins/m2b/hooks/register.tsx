@@ -160,7 +160,7 @@ const SECOND_LOOK_MS = 5_000
 // the end, and while the session still answers with the ended id, this many times more.
 const LOOK_AFTER_NEW_ID_MS = 1_000
 const NEW_ID_TRIES = 5
-// How long `/m2b` waits for a fresh look before it shows what it holds.
+// How long `/m2b-pane` waits for a fresh look before it shows what it holds.
 const COMMAND_WAITS_MS = 2_000
 // Read by `m2b doctor`: the core cannot see whether Claude Code loaded this module.
 const SEEN_FILE = '.local/state/m2b/band-seen.json'
@@ -878,7 +878,7 @@ async function backToStart($: EngineInterface): Promise<void> {
 
 // Whether the pane may still open by itself: once per session, and once more after `/clear` or a
 // resume, which go on as another session without a session start. The try is spent when it
-// starts: one that fails is not made again in the session, and `/m2b` opens the pane. A reload of
+// starts: one that fails is not made again in the session, and `/m2b-pane` opens the pane. A reload of
 // the mod starts the module anew and tries once more, which opens nothing while the pane is open
 // or was closed by hand.
 let isOpeningDue = true
@@ -893,7 +893,7 @@ function openSoon($: EngineInterface): void {
       openByItself($).catch(() => undefined)
     })
   } catch {
-    // The band draws all the same; /m2b opens the pane.
+    // The band draws all the same; /m2b-pane opens the pane.
   }
 }
 

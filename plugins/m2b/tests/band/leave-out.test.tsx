@@ -17,7 +17,7 @@ function typed($: Engine, command: string): Promise<CommandRunResult> {
 }
 
 async function startView($: Engine) {
-  await typed($, 'm2b')
+  await typed($, 'm2b-pane')
   return $.ui.mount({ ...pane(PANE), surface: 'terminal' })
 }
 
@@ -268,7 +268,7 @@ test('where the pane cannot be shown, the lines say the state and offer no butto
   fake.paneWaits = 'no surface attached places panes'
   await start($, on, fake)
 
-  const answer = (await typed($, 'm2b')).text ?? ''
+  const answer = (await typed($, 'm2b-pane')).text ?? ''
 
   expect(answer).toContain(`  ${OFF_UNDER_ACME}`)
   expect(answer).toContain(`  ${KEEPS}`)
@@ -279,7 +279,7 @@ test('where the pane cannot be shown, the lines say the state and offer no butto
 test('the row wraps in a pane as narrow as a dock gets', async ($, on) => {
   // Covers: B189
   await start($, on, inAcme())
-  await typed($, 'm2b')
+  await typed($, 'm2b-pane')
 
   const ui = await $.ui.mount({ ...pane(PANE, 24), surface: 'terminal' })
 

@@ -100,7 +100,8 @@ the tool below, or the skill `/m2b:capture` where the mod does not run.
 
 ## This session, what waits and today, in the pane
 
-`/m2b` opens the m2b pane in the view it starts in, with three parts:
+`/m2b-pane` opens the m2b pane in the view it starts in, with three parts. (`/m2b` alone is not
+this command: Claude Code runs the skill `/m2b:m2b` for it, which asks the model what m2b is.)
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
@@ -139,7 +140,7 @@ the tool below, or the skill `/m2b:capture` where the mod does not run.
   and drop, and the open review with `ok`. They work as in the band, undo included. `show` on the
   proposals turns the pane to [them](#the-proposals-from-your-sessions-in-the-pane), `show` under
   the review to [the whole review](#the-whole-review-and-search-in-a-pane); `back` above that view,
-  Escape or `/m2b` turn it [back](#back-to-the-start-view).
+  Escape or `/m2b-pane` turn it [back](#back-to-the-start-view).
 - **Today** lists your own tasks due today, then the overdue ones, the most recent first. With
   `band.due_tasks` off it says that tasks due are not shown.
 
@@ -147,14 +148,14 @@ The first part is asked for each session by itself, with
 `m2b band --json --session <id> --session-only`, which reads one small file on this machine and
 no task list, and is told the session's project root: when the session starts, and once more five seconds later if m2b did not know the
 session yet; three seconds after you send a prompt, so a topic that came in with it shows while
-the turn still works; after a compaction; when a turn ends and when you type `/m2b`. It is kept
+the turn still works; after a compaction; when a turn ends and when you type `/m2b-pane`. It is kept
 in the session's own state and is not part of the answer the open sessions share. After `/clear`
 the session goes on under a new id: the part says that m2b has not looked yet until, a second or
 a few later, it has asked for the new one. When m2b could not look, the part says so with the reason;
 with an installed m2b older than the band, which does not know the question, it says to update
 m2b and to run `/reload-plugins`.
 
-Where Claude Code cannot show a pane, `/m2b` answers with the same lines as text, at most 20 of
+Where Claude Code cannot show a pane, `/m2b-pane` answers with the same lines as text, at most 20 of
 them and without any character that draws nothing, and names `/m2b-proposals` and `/m2b-review`
 where the pane has `show`. It waits up to two seconds for a fresh answer about the session, and
 without one the text says that m2b has not looked yet.
@@ -164,15 +165,15 @@ without one the text says that m2b has not looked yet.
 `show` beside a topic turns the pane to that topic: its facts and its current items, read with
 `m2b distillate topic` at the press. m2b keeps the names and counts of what it gave a session and
 not the lines, so these are the lines the distillate holds now; a curation run since the session
-got the topic may have changed them, and the view says so. `back`, Escape or `/m2b` lead
+got the topic may have changed them, and the view says so. `back`, Escape or `/m2b-pane` lead
 [back](#back-to-the-start-view).
 
 The lines are your facts, often about a customer. The band keeps them while the pane shows them
 and drops them when you go back, close the pane, turn it to another view or type `/clear`. They
 are not in the session's state, which other plugins can read; no command of the band answers with
 them as text, they are written to no file, and nothing of them is handed to the model: where
-Claude Code cannot show a pane, `/m2b` lists the topics with their counts, as before. In a shell,
-`m2b distillate topic <name>` prints them, as `m2b search` prints what it finds.
+Claude Code cannot show a pane, `/m2b-pane` lists the topics with their counts, as before. In a
+shell, `m2b distillate topic <name>` prints them, as `m2b search` prints what it finds.
 A topic the distillate no longer holds is said, and so is a distillate m2b could not read, with
 the reason.
 
@@ -273,16 +274,16 @@ Under the fullscreen layout Claude Code seats a pane beside the conversation. Th
 the m2b pane by itself, with its first drawing on the terminal in a session: in the start view,
 without taking the keyboard, and Escape does not close it. After `/clear` it does so once more. Claude Code draws a pane nobody asked for only on a
 terminal wide enough for it (from 144 columns, from 110 once you have opened the pane yourself);
-below that the pane stays open undrawn and appears when you widen the terminal, and `/m2b` or
+below that the pane stays open undrawn and appears when you widen the terminal, and `/m2b-pane` or
 `show` on the band's row for this session shows it at once.
 
 On the main screen, where a pane is a block above the prompt that takes rows from the
-conversation, nothing opens by itself: `/m2b` opens the pane there, as a dialog that Escape
+conversation, nothing opens by itself: `/m2b-pane` opens the pane there, as a dialog that Escape
 closes. Nothing opens in a curation run, nor before m2b is set up, and only a terminal's drawing
-opens the pane: in the desktop app and the other surfaces, `/m2b` does.
+opens the pane: in the desktop app and the other surfaces, `/m2b-pane` does.
 
 Closing the pane beside the chat on its start view is kept on this machine: from then on it does
-not open by itself, in this session or a later one, until you open it again with `/m2b`, one of
+not open by itself, in this session or a later one, until you open it again with `/m2b-pane`, one of
 the band's other commands or `show` in the band. Closing the block above the prompt keeps nothing.
 
 ### The band beside the pane
@@ -317,19 +318,19 @@ this session was given at least one topic:
 any width: under the fullscreen layout from 110 columns beside the chat, where it stays, and
 elsewhere as a dialog that Escape closes, on a terminal the block above the prompt. A session
 that was given no topic, that m2b holds no note of or has not looked at yet has no such row;
-`/m2b` says which it is. Where no pane can be shown, or Claude Code refuses to open one, the band
-says so and names `/m2b`, which answers with the lines.
+`/m2b-pane` says which it is. Where no pane can be shown, or Claude Code refuses to open one, the
+band says so and names `/m2b-pane`, which answers with the lines.
 
 What each way of running Claude Code gets:
 
 | Layout | The pane | The band |
 |---|---|---|
 | fullscreen, wide (from 144 columns, from 110 once you opened the pane) | beside the chat, opened by itself | one line at most; every row while the pane is turned to another view |
-| fullscreen, narrower | open and undrawn until the terminal is wider; `show` in the band or `/m2b` shows it now | every row, and the row for this session |
+| fullscreen, narrower | open and undrawn until the terminal is wider; `show` in the band or `/m2b-pane` shows it now | every row, and the row for this session |
 | the main screen, any width | only when asked, as a block above the prompt | every row, and the row for this session; while the block shows, without that row |
 | beside the chat but narrow (a body of 24 to 40 columns) | every line wraps; topics by name and count, a topic's lines after `show` | one line at most |
 | the desktop app | as the app seats it; minimized to its small form, three counts and no button | one line at most beside the docked pane, every row beside the small form |
-| `claude -p`, no surface | none | none; `/m2b` answers as text |
+| `claude -p`, no surface | none | none; `/m2b-pane` answers as text |
 
 The small form says how many topics this session was given, how many things wait for you and how
 many tasks are due today and overdue, or what m2b could not look at in place of a count. A click

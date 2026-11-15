@@ -161,7 +161,7 @@ test('a session that starts after the pane was closed by hand opens nothing by i
   await band.unmount()
 })
 
-for (const command of ['m2b', 'm2b-review', 'm2b-search', 'm2b-proposals']) {
+for (const command of ['m2b-pane', 'm2b-review', 'm2b-search', 'm2b-proposals']) {
   test(`after the person opened the pane with /${command}, it opens by itself again`, async ($, on) => {
     // Covers: B186
     const fake = searchedFake()
@@ -181,7 +181,7 @@ test('a command whose pane cannot be shown leaves the pane one that was closed b
   fake.paneWaits = 'no surface attached places panes'
   await start($, on, fake)
 
-  await typed($, 'm2b')
+  await typed($, 'm2b-pane')
 
   expect(fake.stored[CLOSED_BY_HAND]).toBe(true)
 })
@@ -297,7 +297,7 @@ for (const [command, shows] of [
 test('the view the pane starts in has no way back to itself', async ($, on) => {
   // Covers: B187
   await start($, on, searchedFake())
-  await typed($, 'm2b')
+  await typed($, 'm2b-pane')
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
 
   expect(await ui.find({ key: 'back' })).toBeUndefined()
@@ -363,13 +363,13 @@ test('show in the start view turns the pane as a dialog, so Escape comes back fr
   await band.unmount()
 })
 
-test('the m2b command opens the pane to stay where it sits beside the chat, and as a dialog elsewhere', async ($, on) => {
+test('/m2b-pane opens the pane to stay where it sits beside the chat, and as a dialog elsewhere', async ($, on) => {
   // Covers: B187
   const { opened } = await start($, on, new FakeM2b())
 
-  await typed($, 'm2b', { isFullscreen: true, columns: 110 })
-  await typed($, 'm2b', { isFullscreen: true, columns: 109 })
-  await typed($, 'm2b', { isFullscreen: false, columns: 160 })
+  await typed($, 'm2b-pane', { isFullscreen: true, columns: 110 })
+  await typed($, 'm2b-pane', { isFullscreen: true, columns: 109 })
+  await typed($, 'm2b-pane', { isFullscreen: false, columns: 160 })
 
   expect(opened).toEqual([TO_STAY, AS_A_DIALOG, AS_A_DIALOG])
   expect(docksFor({ isFullscreen: true, columns: 110 })).toBe(true)

@@ -22,7 +22,7 @@ function typed($: Engine, command: string, args = ''): Promise<CommandRunResult>
 }
 
 async function startView($: Engine) {
-  await typed($, 'm2b')
+  await typed($, 'm2b-pane')
   return $.ui.mount({ ...pane(PANE), surface: 'terminal' })
 }
 
@@ -161,7 +161,7 @@ test('no line of a topic reaches a text for the conversation or a file the sessi
   // No surface draws the pane any more: every command answers with its lines as text.
   fake.paneWaits = 'no surface attached places panes'
   const answers = [
-    (await typed($, 'm2b')).text ?? '',
+    (await typed($, 'm2b-pane')).text ?? '',
     (await typed($, 'm2b-review')).text ?? '',
     (await typed($, 'm2b-proposals')).text ?? '',
   ]
@@ -339,7 +339,7 @@ test('the lines are drawn without what a terminal would run, and wrap in a narro
   fake.given = { topics: [{ name: 'Ac\u001b[31mme Ltd', facts: 1, current: 1 }], atStart: 'whole', offUnder: null }
   fake.topicLines = { 'Ac\u001b[31mme Ltd': { facts: ['Kim\u001b[2J leads\nIT'], current: ['Audit\u0007 under way'] } }
   await start($, on, fake)
-  await typed($, 'm2b')
+  await typed($, 'm2b-pane')
   const ui = await $.ui.mount({ ...pane(PANE, 24), surface: 'terminal' })
 
   await ui.press({ key: 'topic:0' })

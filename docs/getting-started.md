@@ -120,7 +120,7 @@ From the next session on, [the band](band.md) above the prompt shows what curati
 keep or drop. It is a mod, a module Claude Code loads with the plugin, and runs only while mods are
 on in Claude Code: `m2b doctor` says in its line `band` whether it ran, and
 [What it needs](band.md#what-it-needs) what to do when it did not. With it come
-`/m2b-note <text>`, which notes a text at once without a model turn, `/m2b`, `/m2b-review`,
+`/m2b-note <text>`, which notes a text at once without a model turn, `/m2b-pane`, `/m2b-review`,
 `/m2b-proposals` and `/m2b-search <text>`, which show in a pane what m2b gave this session and
 what waits for you, the last curation run, the proposals from your sessions and search hits, and
 two tools through which the model notes and searches

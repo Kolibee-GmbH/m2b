@@ -45,7 +45,7 @@ export type BandLine = { text: string; tone: 'plain' | 'warning' | 'error' }
 /**
  * How many topics the band's row names. A session that was given none, that m2b has not looked at
  * or holds no note of, and a look that failed give no row: the row is a count, a count of nothing
- * would cost a line in every session, and `/m2b` says which of these it is.
+ * would cost a line in every session, and `/m2b-pane` says which of these it is.
  */
 export function topicsGiven(given: BandSession | null): number {
   return given !== null && given.error === null && given.known ? given.topics.length : 0
