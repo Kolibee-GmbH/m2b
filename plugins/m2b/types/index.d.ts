@@ -24,12 +24,17 @@ export type BandReview = {
 /** One of the owner's own tasks due today or overdue. */
 export type BandDueTask = { id: string; title: string; overdue: boolean }
 
+/** What the band shows of the tasks due and of the topics, as the machine's `band` settings say. */
+export type BandShows = { dueTasks: 'off' | 'count' | 'list'; topics: boolean }
+
 export type BandSnapshot = {
   candidates: BandCandidate[]
   review: BandReview | null
   error: string | null
-  /** Absent in an answer of a band before due tasks, and with `band.due_tasks` off: none to show. */
+  /** The tasks due today or overdue, whatever the band shows of them. Absent where the core named none: not known, which is not none due. */
   due?: BandDueTask[]
+  /** Absent in an answer a band before these settings shared: the band then shows what a machine without an entry shows. */
+  shows?: BandShows
 }
 
 /** What a press on keep or drop asks the task list for. */
@@ -176,8 +181,6 @@ declare module 'claude-code' {
       bandProposalsNotice: string | null
       /** What the m2b pane shows; null for the view it starts in. */
       paneView: PaneView | null
-      /** Where the pane's last drawing sat on each surface, by the surface's name; empty once the pane closed. */
-      paneSeats: Record<string, string>
       /** What m2b gave this session, from this session's own question; null until it is answered. */
       bandSession: BandSession | null
       /** The notes this session wrote through the mod; null before the first. */

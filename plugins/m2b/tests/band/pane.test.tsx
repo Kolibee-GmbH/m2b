@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { CommandRunResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { BAND, FakeM2b, HOME, NOW, STATUS, pane, start, texts } from './harness'
+import { BAND, FakeM2b, HOME, NOW, STATUS, pane, rowSaying, shownBand, start, texts } from './harness'
 import type { Files } from './harness'
 
 const PANE = 'm2b'
@@ -60,12 +60,15 @@ test('the review command opens the pane with every finding whole, every candidat
   await ui.unmount()
 })
 
-test('drop in the pane waits for undo like the band, and undo writes nothing', async ($, on) => {
+test('drop in the view of the review waits for undo as in the start view, undo writes nothing, and the band counts what is left', async ($, on) => {
   // Covers: B101
   const fake = reviewedFake()
   const { clock } = await start($, on, fake)
   await typed($, 'm2b-review')
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  // Four candidates, the question and the review.
+  expect(await shownBand(band)).toEqual(rowSaying('6 wait for you'))
 
   await ui.press({ key: 'drop:c4' })
   expect(await texts(ui)).toContain('dropping: Remember? Dana prefers tea 4')
@@ -74,10 +77,11 @@ test('drop in the pane waits for undo like the band, and undo writes nothing', a
   await clock.advance(UNDO_MS)
 
   expect(fake.writes()).toEqual([['tasks', 'complete', '--', 'q1']])
-  await ui.unmount()
-  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(await texts(band)).not.toContain('Still current? Planning the trip to Porto')
+  expect(await texts(ui)).not.toContain('Still current? Planning the trip to Porto')
+  expect(await texts(ui)).toContain('Remember? Dana prefers tea 4')
+  expect(await shownBand(band)).toEqual(rowSaying('5 wait for you'))
   await band.unmount()
+  await ui.unmount()
 })
 
 test('a run that has not happened yet, and one that failed, say so', async ($, on) => {
@@ -199,8 +203,8 @@ test('an answer an older session shared, without the run, leaves the run line as
   // The refresh the command starts lands first; the older session writes after it.
   await clock.advance(1)
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
-  const older = { snapshot: { candidates: [], review: null, error: null }, status: '2 in inbox', version: '0.3.0' }
-  files.set(`${HOME}/.local/state/m2b/band-view.json`, JSON.stringify({ writtenAtMs: NOW + 59_500, value: older }))
+  const older = { snapshot: { candidates: [], review: null, error: null }, status: null, version: '0.3.0' }
+  files.set(`${HOME}/.local/state/m2b/band-answer.json`, JSON.stringify({ writtenAtMs: NOW + 59_500, value: older }))
   await clock.advance(60_000)
   expect(await texts(ui)).toContain('Last curation run: succeeded, 2026-03-14 18:00 to 18:02')
   await ui.unmount()
@@ -209,8 +213,8 @@ test('an answer an older session shared, without the run, leaves the run line as
 test('a shared answer whose run has the wrong shape is loaded again', async ($, on) => {
   // Covers: B101
   const snapshot = { candidates: [], review: null, error: null }
-  const view = { snapshot, status: '2 in inbox', version: '0.3.0', run: { state: 7 } }
-  const files: Files = new Map([[`${HOME}/.local/state/m2b/band-view.json`, JSON.stringify({ writtenAtMs: NOW, value: view })]])
+  const view = { snapshot, status: null, version: '0.3.0', run: { state: 7 } }
+  const files: Files = new Map([[`${HOME}/.local/state/m2b/band-answer.json`, JSON.stringify({ writtenAtMs: NOW, value: view })]])
   const fake = reviewedFake()
   await start($, on, fake, {}, files)
   expect(fake.calls.map(call => call[0])).toContain('band')
@@ -237,7 +241,7 @@ test('where the pane cannot be shown, the command answers with its content inste
   ])
 })
 
-test('the pane wraps findings and titles, where the band cuts them', async ($, on) => {
+test('the pane wraps findings and titles, where the band cuts its row', async ($, on) => {
   // Covers: B101
   const fake = reviewedFake()
   await start($, on, fake)
@@ -250,7 +254,7 @@ test('the pane wraps findings and titles, where the band cuts them', async ($, o
   expect(await wrapOf(inPane, 'Remember? Dana prefers tea 1')).toBe('wrap')
   await inPane.unmount()
   const inBand = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(await wrapOf(inBand, 'Remember? Dana prefers tea 1')).toBe('truncate-end')
+  expect(await wrapOf(inBand, '6 wait for you')).toBe('truncate-end')
   await inBand.unmount()
 })
 

@@ -9,45 +9,68 @@ function isObject(value: unknown): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-/** The status line for one `m2b status --json` answer: one line, shorter than 80 characters. */
-export function statusLine(answer: unknown, nowMs: number): string {
+/**
+ * The status line for one `m2b status --json` answer: what is wrong with m2b, in one line shorter
+ * than 80 characters, or null while nothing is. Claude Code draws a plugin's status line as a
+ * warning, with its sign and in the warning color, so a line while all is well would warn all day:
+ * when m2b last curated and what waits in the inbox are said by `curationLine`, for the pane.
+ * What waits for an answer is the band's.
+ */
+export function statusLine(answer: unknown): string | null {
   if (!isObject(answer)) {
     return COULD_NOT_LOOK
   }
-  const parts = [runPart(answer, nowMs), ...problemParts(answer)]
-  return fit(parts.join(' · '))
+  const parts = [...runTrouble(answer['run']), ...inboxTrouble(answer['inbox']), ...problemParts(answer)]
+  return parts.length === 0 ? null : fit(parts.join(' · '))
 }
 
-function runPart(answer: JsonObject, nowMs: number): string {
+/**
+ * How curation stands while nothing is wrong, in one line: a run under way, or how many notes
+ * wait in the inbox, where any do, and when m2b last curated; then that this machine starts no
+ * run by itself. A count of none is not said, and nothing of a last run that failed or could not be
+ * read, which `statusLine` says: null where that leaves nothing.
+ */
+export function curationLine(answer: unknown, nowMs: number): string | null {
+  if (!isObject(answer)) {
+    return null
+  }
   const run = answer['run']
+  const isRunning = isObject(run) && run['state'] === 'running'
+  const parts = [
+    ...(isRunning ? ['curating'] : [...inboxCount(answer['inbox']), ...lastCurated(run, nowMs)]),
+    ...(answer['paused'] === true ? ['curation paused'] : []),
+  ]
+  return parts.length === 0 ? null : fit(parts.join(' · '))
+}
+
+function runTrouble(run: unknown): string[] {
   if (!isObject(run) || 'error' in run) {
-    return 'could not read the last run'
+    return ['could not read the last curation run']
   }
-  switch (run['state']) {
-    case 'running':
-      return 'curating'
-    case 'failed':
-      return 'last run failed, see review'
-    case 'interrupted':
-      return 'last run interrupted'
-    default:
-      return `${inboxPart(answer['inbox'])} · ${curatedPart(run, nowMs)}`
+  if (run['state'] === 'failed') {
+    return ['last curation run failed']
   }
+  return run['state'] === 'interrupted' ? ['last curation run interrupted'] : []
 }
 
-function inboxPart(inbox: unknown): string {
-  if (!isObject(inbox) || typeof inbox['count'] !== 'number') {
-    return 'could not read the inbox'
-  }
-  return `${inbox['count']} in inbox`
+function inboxTrouble(inbox: unknown): string[] {
+  return isObject(inbox) && typeof inbox['count'] === 'number' ? [] : ['could not read the inbox']
 }
 
-function curatedPart(run: JsonObject, nowMs: number): string {
+function inboxCount(inbox: unknown): string[] {
+  return isObject(inbox) && typeof inbox['count'] === 'number' && inbox['count'] > 0 ? [`${inbox['count']} in inbox`] : []
+}
+
+/** When a run last succeeded, or that none ever ran; nothing for a run that could not be read or never succeeded. */
+function lastCurated(run: unknown, nowMs: number): string[] {
+  if (!isObject(run) || 'error' in run) {
+    return []
+  }
   const succeededAt = run['last_succeeded_at']
-  if (typeof succeededAt !== 'string') {
-    return 'not curated yet'
+  if (typeof succeededAt === 'string') {
+    return [`curated ${localTimeOrDay(succeededAt, nowMs)}`]
   }
-  return `curated ${localTimeOrDay(succeededAt, nowMs)}`
+  return run['state'] === 'none' ? ['not curated yet'] : []
 }
 
 /**

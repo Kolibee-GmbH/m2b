@@ -86,7 +86,7 @@ fact until that Saturday in another. The last line of the archived note says wha
 ## What a run asks you
 
 A line under Current that no capture has touched for a month comes back as a task "Still
-current? ...": tick it and it stays; drop it in the band, or delete the task, and it leaves the
+current? ...": tick it and it stays; drop it in the m2b pane, or delete the task, and it leaves the
 distillate.
 
 **Proposals from your sessions.** Much of what belongs in a second brain you say in passing,
@@ -106,7 +106,7 @@ the list that a session handed it in and where its words stand
 
 **Memory candidates.** `m2b tasks add --candidate "<a fact>"` proposes one fact as a task
 "Remember? ...", for a script or an integration of yours: tick it and the next run files it; drop
-it in the band, or delete the task, and it does not come back for 90 days.
+it in the m2b pane, or delete the task, and it does not come back for 90 days.
 
 **Ticking a task.** Say in a session that a task is done, "I returned Sam's ladder, tick it
 off", and the `todos` skill ticks it: it finds the task in your list and asks when more than one
@@ -157,7 +157,7 @@ What m2b has that Claude Code's memory does not:
 | distillate | `memory/MEMORY.md`: lasting facts, each pointing to its fact file in `memory/`, and under "Current" what is going on now |
 | fact file | one file in `memory/` for one subject, such as `dana.md`: its facts, and under "Evidence" links to the captures they came from |
 | topic | a heading in the distillate for one subject, such as a customer or a club, whose facts come in only when a session is about it |
-| review task | the one task m2b keeps in your task list for what a run needs you to look at: a step that failed, a finding, a facts line it removed or rewrote. Ticking it, or `ok` in the band, closes it |
+| review task | the one task m2b keeps in your task list for what a run needs you to look at: a step that failed, a finding, a facts line it removed or rewrote. Ticking it, or `ok` in the m2b pane, closes it |
 | proposal | a fact a curation run suggests from what you typed and pasted in your sessions, or a session hands in by itself, with the words it stands on beside it. Each way is off until you turn it on, the reading in setup and handing in with `m2b config set sessions.propose true` in a terminal of your own or a press on its card in the pane, and nothing is filed before you keep it |
 | memory candidate | a task "Remember? ..." that proposes one fact, put into your list by a script or an integration of yours: tick it and the next run files it |
 | band | the rows above the prompt where you keep or drop what curation proposes, and the status line below it |

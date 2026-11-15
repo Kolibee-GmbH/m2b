@@ -11,8 +11,7 @@ export type RowActions = {
 
 /**
  * One candidate or question: keep and drop, or while a press waits undo and what it will do, or
- * while it writes that line alone. `wrap` is how a long title is drawn: cut in the band, wrapped in
- * the pane.
+ * while it writes that line alone. `wrap` is how a long title is drawn.
  */
 export function candidateRow(
   $: EngineInterface,

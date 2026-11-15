@@ -510,20 +510,17 @@ run left neither a record nor a line in the run log.
 
 ## The status line
 
-While [the band](band.md) runs, one line below the prompt sums up the brain. It is refreshed about
-once a minute and after each of your turns. Normally it reads `0 in inbox · curated 17:07`: the
-captures waiting for the next run, and when the last successful run ended (the time today, the date
-on an earlier day), or `not curated yet` while no curation run has succeeded. Claude Code draws a
-⚠ in front of every plugin's status line; it is not a warning. In place of the pair it can say:
+While [the band](band.md) runs, one line below the prompt says what is wrong with m2b, and there
+is no line while nothing is: Claude Code draws every plugin's status line with a ⚠ and in the
+color of a warning. It is refreshed about once a minute and after each of your turns.
 
 | Status line says | Meaning |
 |---|---|
-| `curating` | a curation run is going on now |
-| `last run failed, see review` | the last run failed; the review task in your list names the step and the cause |
-| `last run interrupted` | the last run ended without finishing, for example because the computer shut down or its process was killed |
-| `could not read the last run` or `could not read the inbox` | that part of the store could not be read |
+| `last curation run failed` | the last run failed; the review task in your list names the step and the cause, and `/m2b-review` shows it |
+| `last curation run interrupted` | the last run ended without finishing, for example because the computer shut down or its process was killed |
+| `could not read the last curation run` or `could not read the inbox` | that part of the store could not be read |
+| `could not read store.json`, `tasks not reachable` (likewise for the store and the calendar) | that file or backend; the task list, store and calendar are checked every 5 minutes, so such a problem can show up or clear that much later |
+| `could not look` | `m2b status` gave no answer at all; run it in a terminal to see why |
 
-A problem is added after it, such as `could not read store.json` or `tasks not reachable` (likewise
-for the store and the calendar); the task list, store and calendar are checked every 5 minutes, so
-such a problem can show up or clear that much later. `could not look` means `m2b status` gave no answer at all;
-run it in a terminal to see why.
+Several are joined with ` · `. When m2b last curated, whether a run is going on and how many
+captures wait in the inbox is what `m2b status` says in a terminal.

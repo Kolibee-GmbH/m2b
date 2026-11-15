@@ -150,13 +150,13 @@ the model's step, m2b is plain code: standard library Python, no database.
 
 ![The pane after /m2b-review: the last curation run with its times, the review row "1 fact changed: Sam", the fact about Sam with the old day struck through in red and the new one in green, where the facts from before the run lie, and a "Still current?" question with keep and drop; below the pane the band with its rows and the status line](docs/images/review.png)
 
-Above the prompt, the band shows what needs an answer from you: a "Still current?" question for a
+Above the prompt, the band says in one row how many things wait for an answer from you, and its
+one button, `open`, shows the m2b pane. There you answer them: a "Still current?" question for a
 line under Current that no note has touched for a month, a "Remember?" fact that a script of
-yours proposed, how many
-proposals from your sessions wait, the tasks due today or overdue, and the review of the last run
-with the facts it changed. `keep`, `drop` and `ok` are buttons you click with the mouse; a click
-waits 5 seconds with `undo` before it writes. Below the prompt, a status line says how many notes
-wait and when curation last ran.
+yours proposed, the proposals from your sessions, and the review of the last run with the facts
+it changed. `keep`, `drop` and `ok` are buttons; a press waits 5 seconds with `undo` before it
+writes. The row also names your tasks due today or overdue, as a count or by name, as you set
+it. Below the prompt, a status line appears only while something is wrong with m2b.
 
 `/m2b-review` opens the pane in the picture with the whole last run, `/m2b-proposals` the
 proposals from your sessions, `/m2b-search <text>` search hits, and `/m2b-note <text>` notes a

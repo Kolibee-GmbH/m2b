@@ -87,7 +87,8 @@ WORK_PEOPLE_RULE = (
     "Knowledge about people and verbal agreements may be captured from work sessions; documents and "
     "confidential statements of customers or other third parties never."
 )
-# Caches older bands wrote, one answer per call; the band now shares one answer in band-view.json.
+# Caches older bands wrote, one answer per call; the band now shares one answer in band-answer.json,
+# and a band from before its one row, while a session still runs it, in band-view.json.
 OLD_BAND_CACHES = ("band-addons.json", "band-snapshot.json", "band-status.json")
 
 

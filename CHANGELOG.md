@@ -9,10 +9,26 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The band above the prompt is one row: `m2b`, how many things wait for your answer
+  (`4 wait for you`), your tasks due, and one button, `open`, which shows the m2b pane. keep,
+  drop and ok are pressed in the pane, where every candidate, question and the review stand
+  with their buttons; the band holds no button that writes. The row is the same whether the
+  pane is in view or not, and a press that wrote nothing is said in it as one sentence.
+- The status line under the prompt says only what is wrong with m2b, such as `last curation run
+  failed` or `calendar not reachable`, and is gone while nothing is. Claude Code draws a plugin's
+  status line as a warning, so `0 in inbox · curated 18:02` warned in every session.
 - `band.due_tasks` takes three values in place of on and off: `off`, `count` and `list`, and is
   `count` where the config names none. A config that holds `true` reads as `list`, `false` as
   `off`. `m2b band --json` names the tasks due in `tasks.due_by_today` whatever the band shows
-  of them, and the machine's `band` settings in `band`.
+  of them, and the machine's `band` settings in `band`. With `count` the band names how many
+  are overdue and due today, with `list` the first three by name below its row, each with
+  `overdue` or `due today` in color and its title at full strength; with `off` none. The pane
+  lists them whatever the setting says.
+
+### Added
+
+- `band.topics`, a switch that is off until you turn it on: whether the band's row says how
+  many topics m2b gave the session. Before, a row of its own said it in every such session.
 
 ## [0.5.0] - 2026-11-15
 

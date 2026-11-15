@@ -172,7 +172,7 @@ test('no line of a topic reaches a text for the conversation or a file the sessi
     expect(said).not.toContain(PAYS)
     expect(said).not.toContain(AUDIT)
   }
-  expect(files.get(`${HOME}/.local/state/m2b/band-view.json`) ?? '').not.toBe('')
+  expect(files.get(`${HOME}/.local/state/m2b/band-answer.json`) ?? '').not.toBe('')
   await ui.unmount()
 })
 

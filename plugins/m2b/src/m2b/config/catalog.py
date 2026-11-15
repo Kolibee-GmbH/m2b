@@ -239,7 +239,7 @@ def _of_this_machine() -> tuple[Setting, ...]:
             "band.due_tasks",
             "Tasks in the band",
             "Your tasks due today or overdue in the band above the prompt: off shows none there, count says how "
-            "many, list names the first three.",
+            "many, list names the first three. The pane lists them whatever this says.",
             machine.DEFAULT_DUE_TASKS,
             machine.DUE_TASKS_CHOICES,
         ),
@@ -247,7 +247,7 @@ def _of_this_machine() -> tuple[Setting, ...]:
             MACHINE,
             "band.topics",
             "Topics in the band",
-            "The band says how many topics m2b gave the session.",
+            "The band says how many topics m2b gave the session. The pane names them whatever this says.",
             False,
         ),
         _switch(

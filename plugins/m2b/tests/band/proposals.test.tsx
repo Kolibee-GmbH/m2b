@@ -2,7 +2,23 @@ import { expect, test } from 'claude-code/testing'
 import type { CommandRunResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { BAND, ENGINES_OWN_DRAWING, everyText, FakeM2b, HOME, NOW, pane, start, texts } from './harness'
+import {
+  BAND,
+  ENGINES_OWN_DRAWING,
+  FakeM2b,
+  HOME,
+  NOW,
+  OPEN,
+  answerKeys,
+  everyText,
+  pane,
+  rowSaying,
+  sentenceOfM2b,
+  shownBand,
+  start,
+  startView,
+  texts,
+} from './harness'
 import type { Files } from './harness'
 
 const PANE = 'm2b'
@@ -10,7 +26,7 @@ const UNDO_MS = 5_000
 const DANA = 'a1a1a1a1a1a1'
 const LADDER = 'b2b2b2b2b2b2'
 const SHED = 'c3c3c3c3c3c3'
-const CACHE = `${HOME}/.local/state/m2b/band-view.json`
+const CACHE = `${HOME}/.local/state/m2b/band-answer.json`
 const NO_TASKS = { candidates: [], review: null, error: null }
 const NOT_LOOKED = 'm2b has not looked for proposals yet; m2b proposals lists them in a shell'
 const LIST_AND_ANSWER =
@@ -42,35 +58,51 @@ async function buttons(ui: { findAll: (q: { type: string }) => Promise<{ key?: s
   return (await ui.findAll({ type: 'Button' })).map(button => button.key).filter(key => key !== 'back')
 }
 
-test('while proposals wait the band shows one row with their number, whatever the number', async ($, on) => {
+/** The lines of the start view's part "Waits for you", between its heading and the next. */
+async function waits(ui: { findAll: (q: { type: string }) => Promise<{ text: string }[]> }): Promise<string[]> {
+  const shown = await texts(ui)
+  return shown.slice(shown.indexOf('Waits for you') + 1, shown.indexOf('Today'))
+}
+
+test('while proposals wait the band counts each, and the pane has one row with their number, whatever the number', async ($, on) => {
   // Covers: B127
   const fake = proposedFake()
   const { clock } = await start($, on, fake)
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const ui = await startView($)
 
-  expect(await texts(ui)).toEqual(['3 proposals from your sessions'])
-  expect(await buttons(ui)).toEqual(['show:proposals'])
+  expect(await shownBand(band)).toEqual(rowSaying('3 wait for you'))
+  // One row for all of them, never one per proposal.
+  expect(await waits(ui)).toEqual(['3 proposals from your sessions'])
+  expect(await buttons(ui)).toEqual(['show:proposals', 'show:settings'])
 
   fake.proposals = fake.proposals?.slice(0, 1) ?? null
   await clock.advance(60_000)
-  expect(await texts(ui)).toEqual(['1 proposal from your sessions'])
+  expect(await shownBand(band)).toEqual(rowSaying('1 waits for you'))
+  expect(await waits(ui)).toEqual(['1 proposal from your sessions'])
+  expect(await buttons(ui)).toEqual(['show:proposals', 'show:settings'])
   await ui.unmount()
+  await band.unmount()
 })
 
-test('with no proposal waiting the band has no row for them', async ($, on) => {
+test('with no proposal waiting the band counts none and the pane has no row for them', async ($, on) => {
   // Covers: B127
   const fake = proposedFake()
   for (const proposed of fake.proposals ?? []) {
     proposed.answer = 'keep'
   }
   await start($, on, fake)
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await everyText(band)).toEqual([ENGINES_OWN_DRAWING])
+  await band.unmount()
 
-  expect(await everyText(ui)).toEqual([ENGINES_OWN_DRAWING])
+  const ui = await startView($)
+  expect(await texts(ui)).toContain('Nothing waits for you.')
+  expect(await buttons(ui)).toEqual(['show:settings'])
   await ui.unmount()
 })
 
-test('the task that tells a phone proposals wait is no row beside the one of the band', async ($, on) => {
+test('the task that tells a phone proposals wait is not counted in the band and is no row in the pane', async ($, on) => {
   // Covers: B127
   const fake = proposedFake().candidate('c1', 'Remember? Acme moved')
   fake.tasks.push({
@@ -82,24 +114,30 @@ test('the task that tells a phone proposals wait is no row beside the one of the
     marker: 'proposals',
   })
   await start($, on, fake)
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  // The three proposals and the candidate.
+  expect(await shownBand(band)).toEqual(rowSaying('4 wait for you'))
+  await band.unmount()
 
-  expect(await texts(ui)).toEqual(['Remember? Acme moved', '3 proposals from your sessions'])
-  expect(await buttons(ui)).toEqual(['keep:c1', 'drop:c1', 'show:proposals'])
+  const ui = await startView($)
+  expect(await waits(ui)).toEqual(['3 proposals from your sessions', 'Remember? Acme moved'])
+  expect(await buttons(ui)).toEqual(['show:proposals', 'keep:c1', 'drop:c1', 'show:settings'])
   await ui.unmount()
 })
 
-test('show opens the pane with every proposal: its kind, the text, the words, the day, keep and drop, and keep all', async ($, on) => {
+test('open in the band, then show on the row of the pane, lead to every proposal: its kind, the text, the words, the day, keep and drop, and keep all', async ($, on) => {
   // Covers: B127
   const fake = proposedFake()
   const { opened } = await start($, on, fake)
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
 
-  await band.press({ key: 'show:proposals' })
+  await band.press({ key: OPEN })
   await band.unmount()
 
   expect(opened.map(one => one.id)).toEqual([PANE])
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  expect(await texts(ui)).toContain('In this session')
+  await ui.press({ key: 'show:proposals' })
   expect(await texts(ui)).toEqual([
     '3 proposals from your sessions',
     'Dana is head of IT at Northwind.',
@@ -260,18 +298,21 @@ test('before the band could look, the pane and the text answer say so and never 
   expect(answer.text?.split('\n')).toEqual(['the m2b pane cannot be shown here: no terminal is attached', NOT_LOOKED])
 })
 
-test('show on a surface without panes says so in the band', async ($, on) => {
+test('open on a surface without panes says so in the band, and names the command that answers with the lines', async ($, on) => {
   // Covers: B127
   const fake = proposedFake()
   fake.paneWaits = 'no terminal is attached'
-  await start($, on, fake)
+  const { openPanes } = await start($, on, fake)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
 
-  await ui.press({ key: 'show:proposals' })
+  await ui.press({ key: OPEN })
 
-  expect(await texts(ui)).toContain(
-    'the m2b pane cannot be shown here: no terminal is attached; m2b proposals lists them in a shell',
+  expect(await shownBand(ui)).toEqual(
+    rowSaying('the m2b pane cannot be shown here: no terminal is attached; /m2b-pane answers with the lines'),
   )
+  expect(openPanes.has(PANE)).toBe(false)
+  const answer = await typed($, 'm2b-pane')
+  expect(answer.text?.split('\n')).toContain('  3 proposals from your sessions: /m2b-proposals')
   await ui.unmount()
 })
 
@@ -280,8 +321,9 @@ test('keep is written once the undo window is over, and the pane and the band fo
   const fake = proposedFake()
   const { clock } = await start($, on, fake)
   await typed($, 'm2b-proposals')
-  // Above the prompt, where the band below it keeps its rows.
-  const ui = await $.ui.mount({ ...pane(PANE, 80, 'inline'), surface: 'terminal' })
+  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await shownBand(band)).toEqual(rowSaying('3 wait for you'))
 
   await ui.press({ key: `keep:${DANA}` })
   expect(await texts(ui)).toContain('keeping: Dana is head of IT at Northwind.')
@@ -295,10 +337,9 @@ test('keep is written once the undo window is over, and the pane and the band fo
   expect(shown[0]).toBe('2 proposals from your sessions')
   expect(shown).not.toContain('Dana is head of IT at Northwind.')
   expect(shown.at(-1)).toBe(`1 answer waits ${FILED_BY_THE_NEXT_RUN}`)
-  await ui.unmount()
-  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(await texts(band)).toEqual(['2 proposals from your sessions'])
+  expect(await shownBand(band)).toEqual(rowSaying('2 wait for you'))
   await band.unmount()
+  await ui.unmount()
 })
 
 test('drop, then undo within the window, answers nothing', async ($, on) => {
@@ -391,8 +432,7 @@ test('an answer m2b refuses stands in the pane and in the band until the next pr
   const fake = proposedFake()
   const { clock } = await start($, on, fake)
   await typed($, 'm2b-proposals')
-  // Above the prompt, where the band below it keeps its rows.
-  const ui = await $.ui.mount({ ...pane(PANE, 80, 'inline'), surface: 'terminal' })
+  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
 
   await ui.press({ key: `keep:${DANA}` })
   // Another machine drops it while the press waits.
@@ -409,10 +449,10 @@ test('an answer m2b refuses stands in the pane and in the band until the next pr
   expect(await buttons(ui)).not.toContain(`keep:${DANA}`)
   await ui.unmount()
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(await texts(band)).toContain(refused)
+  expect(await shownBand(band)).toEqual(sentenceOfM2b(refused))
 
   await $.prompt.submit({ text: 'what is on today?', context: [], wait: false, origin: { kind: 'composer' } })
-  expect(await texts(band)).toEqual(['2 proposals from your sessions'])
+  expect(await shownBand(band)).toEqual(rowSaying('2 wait for you'))
   await band.unmount()
 })
 
@@ -467,9 +507,13 @@ test('proposals m2b could not look at say so in the band and the pane, beside th
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
 
   const line = `m2b could not look for proposals: ${fake.proposalsError}`
-  expect(await texts(band)).toEqual(['Remember? Acme moved', line])
-  expect(await buttons(band)).toEqual(['keep:c1', 'drop:c1'])
+  expect(await shownBand(band)).toEqual(sentenceOfM2b(line))
   await band.unmount()
+
+  const first = await startView($)
+  expect(await waits(first)).toEqual([line, 'Remember? Acme moved'])
+  expect(await buttons(first)).toEqual(['keep:c1', 'drop:c1', 'show:settings'])
+  await first.unmount()
 
   await typed($, 'm2b-proposals')
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
@@ -485,20 +529,26 @@ test('with the task list out of reach too, the band keeps to that one error line
   await start($, on, fake)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
 
-  expect(await texts(ui)).toEqual([
-    'm2b could not read the tasks: not set up: no store.json in the store /home/alex/Notes. Run /m2b:m2b setup in Claude Code; without Claude Code, m2b setup apply (https://github.com/Kolibee-GmbH/m2b/blob/main/docs/getting-started.md).',
-  ])
+  expect(await shownBand(ui)).toEqual(
+    sentenceOfM2b(
+      'm2b could not read the tasks: not set up: no store.json in the store /home/alex/Notes. Run /m2b:m2b setup in Claude Code; without Claude Code, m2b setup apply (https://github.com/Kolibee-GmbH/m2b/blob/main/docs/getting-started.md).',
+    ),
+  )
   await ui.unmount()
 })
 
-test('a core that does not know proposals leaves the band without a row for them', async ($, on) => {
+test('a core that does not know proposals leaves the band counting none and the pane without a row for them', async ($, on) => {
   // Covers: B127
   const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
   fake.proposals = null
   await start($, on, fake)
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await shownBand(band)).toEqual(rowSaying('1 waits for you'))
+  await band.unmount()
 
-  expect(await texts(ui)).toEqual(['Remember? Acme moved'])
+  const ui = await startView($)
+  expect(await waits(ui)).toEqual(['Remember? Acme moved'])
+  expect(await buttons(ui)).toEqual(['keep:c1', 'drop:c1', 'show:settings'])
   await ui.unmount()
 })
 
@@ -510,16 +560,21 @@ test('a proposals part of another shape, or an id that is none, is could not loo
     answered: 0,
   }
   const { clock } = await start($, on, fake)
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const ui = await startView($)
 
   const line = 'm2b could not look for proposals: m2b answered something other than the proposals that wait'
-  expect(await texts(ui)).toEqual([line])
-  expect(await buttons(ui)).toEqual([])
+  expect(await shownBand(band)).toEqual(sentenceOfM2b(line))
+  expect(await waits(ui)).toEqual([line])
+  expect(await buttons(ui)).toEqual(['show:settings'])
 
   fake.proposalsPart = ['not', 'an', 'object']
   await clock.advance(60_000)
-  expect(await texts(ui)).toEqual([line])
+  expect(await shownBand(band)).toEqual(sentenceOfM2b(line))
+  expect(await waits(ui)).toEqual([line])
+  expect(await buttons(ui)).toEqual(['show:settings'])
   await ui.unmount()
+  await band.unmount()
 })
 
 test('while keep all is being written its rows offer nothing, and it still says how many it keeps', async ($, on) => {
@@ -540,12 +595,12 @@ test('while keep all is being written its rows offer nothing, and it still says 
   await ui.unmount()
 })
 
-test('once m2b is no longer set up on this machine the row for the proposals goes with the band', async ($, on) => {
+test('once m2b is no longer set up on this machine the count of the proposals goes with the band', async ($, on) => {
   // Covers: B127
   const fake = proposedFake()
   const { clock } = await start($, on, fake)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(await texts(ui)).toEqual(['3 proposals from your sessions'])
+  expect(await shownBand(ui)).toEqual(rowSaying('3 wait for you'))
 
   fake.isSetUp = false
   await clock.advance(60_000)
@@ -558,20 +613,20 @@ test('a shared answer whose proposals are of another shape is loaded again inste
   // Covers: B127
   const fake = proposedFake()
   const proposals = { waiting: [{ id: '--all', kind: 'person', text: 'Dana', quote: 'Dana', day: '2026-03-04', topic: null, due: null }], answered: 0, error: null }
-  const stored = { writtenAtMs: NOW - 1_000, value: { snapshot: NO_TASKS, status: '7 in inbox', version: '0.3.0', proposals } }
+  const stored = { writtenAtMs: NOW - 1_000, value: { snapshot: NO_TASKS, status: null, version: '0.3.0', proposals } }
   const files: Files = new Map([[CACHE, JSON.stringify(stored)]])
   await start($, on, fake, {}, files)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
 
   expect(fake.calls).toEqual([['band', '--json']])
-  expect(await texts(ui)).toEqual(['3 proposals from your sessions'])
+  expect(await shownBand(ui)).toEqual(rowSaying('3 wait for you'))
   await ui.unmount()
 })
 
 test('a shared answer of a band that does not know proposals says nothing about them, and the next own look does', async ($, on) => {
   // Covers: B127
   const fake = proposedFake()
-  const stored = { writtenAtMs: NOW - 1_000, value: { snapshot: NO_TASKS, status: '7 in inbox', version: '0.3.0' } }
+  const stored = { writtenAtMs: NOW - 1_000, value: { snapshot: NO_TASKS, status: null, version: '0.3.0' } }
   const files: Files = new Map([[CACHE, JSON.stringify(stored)]])
   const { clock } = await start($, on, fake, {}, files)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -580,7 +635,7 @@ test('a shared answer of a band that does not know proposals says nothing about 
   expect(await everyText(ui)).toEqual([ENGINES_OWN_DRAWING])
 
   await clock.advance(60_000)
-  expect(await texts(ui)).toEqual(['3 proposals from your sessions'])
+  expect(await shownBand(ui)).toEqual(rowSaying('3 wait for you'))
   await ui.unmount()
 })
 
@@ -613,13 +668,17 @@ test('what the band says about a candidate is not drawn in the proposals pane as
   const fake = proposedFake().candidate('c1', 'Remember? Acme moved')
   const { clock } = await start($, on, fake)
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  await band.press({ key: 'drop:c1' })
+  const first = await startView($)
+  await first.press({ key: 'drop:c1' })
   const task = fake.tasks[0]
   if (task !== undefined) {
     task.completed = true
   }
   await clock.advance(UNDO_MS)
-  expect(await texts(band)).toContain('Already settled in another session, nothing written: Remember? Acme moved')
+  expect(fake.writes()).toEqual([])
+  expect(await shownBand(band)).toEqual(rowSaying('Already settled in another session, nothing written: Remember? Acme moved'))
+  expect(await answerKeys(first)).toEqual([])
+  await first.unmount()
   await band.unmount()
 
   await typed($, 'm2b-proposals')

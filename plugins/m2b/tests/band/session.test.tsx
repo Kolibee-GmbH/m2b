@@ -147,10 +147,13 @@ test('what one session was given never reaches the answer the sessions share', a
   const files: Files = new Map()
   await start($, on, busyFake(), {}, files)
 
-  const shared = files.get(`${HOME}/.local/state/m2b/band-view.json`) ?? ''
+  const shared = files.get(`${HOME}/.local/state/m2b/band-answer.json`) ?? ''
   expect(shared).toContain('Remember? Dana prefers tea')
   expect(shared).not.toContain('Northwind: ')
-  expect(shared).not.toContain('"topics"')
+  // The one word on topics there is the machine's setting, whether the band counts them: no session's topics.
+  expect(JSON.parse(shared).value.snapshot.shows).toEqual({ dueTasks: 'count', topics: false })
+  expect(shared.split('"topics"')).toHaveLength(2)
+  expect(Object.keys(JSON.parse(shared).value).sort()).toEqual(['proposals', 'run', 'snapshot', 'status', 'version'])
   expect([...files.values()].join('\n')).not.toContain('Acme Ltd')
 })
 
@@ -534,7 +537,7 @@ test('the notes this session wrote through the command and the tool are counted,
   await ui.unmount()
 })
 
-test('keep and drop in the start view wait for undo and write like the band', async ($, on) => {
+test('keep, drop and ok in the start view wait for undo and then write', async ($, on) => {
   // Covers: B185
   const fake = busyFake()
   const { clock } = await start($, on, fake)
@@ -558,7 +561,7 @@ test('keep and drop in the start view wait for undo and write like the band', as
   await ui.unmount()
 })
 
-test('every candidate and question stands in the start view, where the band shows three', async ($, on) => {
+test('every candidate and question stands in the start view, however many there are', async ($, on) => {
   // Covers: B185
   const fake = new FakeM2b()
   for (const n of [1, 2, 3, 4, 5]) {
@@ -571,7 +574,7 @@ test('every candidate and question stands in the start view, where the band show
   for (const n of [1, 2, 3, 4, 5]) {
     expect(shown).toContain(`Remember? Dana prefers tea ${n}`)
   }
-  expect(shown.some(line => line.includes('more candidates'))).toBe(false)
+  expect(shown.some(line => /^and \d+ more/.test(line))).toBe(false)
   await ui.unmount()
 })
 
@@ -632,9 +635,10 @@ test('beside a task list that cannot be read, the proposals that could not be lo
   await again.unmount()
 })
 
-test('with the tasks due turned off, the third part says they are not shown', async ($, on) => {
+test('where the core names no tasks due, as one from before the settings of the band does with them turned off, the third part says they are not shown', async ($, on) => {
   // Covers: B185
   const fake = new FakeM2b()
+  fake.shows = null
   fake.dueTasks = null
   await start($, on, fake)
 
@@ -642,6 +646,19 @@ test('with the tasks due turned off, the third part says they are not shown', as
   expect((await texts(ui)).slice(-2)).toEqual(['Today', 'Tasks due are not shown.'])
   await ui.unmount()
 })
+
+for (const dueTasks of ['off', 'count', 'list'] as const) {
+  test(`the third part lists the tasks due whatever the band shows of them, with ${dueTasks} too`, async ($, on) => {
+    // Covers: B185
+    const fake = busyFake()
+    fake.shows = { dueTasks, topics: false }
+    await start($, on, fake)
+
+    const ui = await startView($)
+    expect((await texts(ui)).slice(-3)).toEqual(['Today', 'due today: Buy screws', 'overdue: Return the ladder'])
+    await ui.unmount()
+  })
+}
 
 test('where the pane cannot be shown, /m2b-pane answers with the same lines', async ($, on) => {
   // Covers: B185

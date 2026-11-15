@@ -9,9 +9,9 @@ import { candidateRow, changesSummary, reviewRow } from './rows'
 import type { RowActions } from './rows'
 
 /*
- * The m2b pane: the last curation run in full, or the hits of a search. The band above the prompt
- * shows the first few findings and candidates; this shows all of them, each finding whole, and the
- * search without asking the model. Both commands run at once, also while a turn is working.
+ * The m2b pane: the last curation run in full, with every finding whole and every candidate, or
+ * the hits of a search, without asking the model. Both commands run at once, also while a turn is
+ * working.
  */
 
 export const PANE_ID = 'm2b'

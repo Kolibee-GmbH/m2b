@@ -5,9 +5,9 @@ import { plainLine, writtenOut } from './plain-text'
 import { candidateRow } from './rows'
 
 /*
- * What a reading of the sessions proposed for the memory and still waits for an answer: one row in
- * the band with their number, and the m2b pane with each proposal, the words it stands on beside
- * it, said or pasted, to keep or drop. Every text of a proposal is drawn written out, never cleaned: what the
+ * What a reading of the sessions proposed for the memory and still waits for an answer: one row
+ * with their number in the pane's start view, and the m2b pane with each proposal, the words it
+ * stands on beside it, said or pasted, to keep or drop. Every text of a proposal is drawn written out, never cleaned: what the
  * person keeps is what they were shown.
  */
 

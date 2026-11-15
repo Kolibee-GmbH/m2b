@@ -66,8 +66,8 @@ nor a model. Both end with a first capture, a curation run and a first search.
    ```
 
    **You should see** a short confirmation; its words are the model's. What does not vary: the
-   note is one new file in the store's `inbox/`, `!m2b status` begins with `inbox: 1`, and with
-   the band the status line below the prompt reads `1 in inbox`. Nothing is filed yet.
+   note is one new file in the store's `inbox/`, and `!m2b status` begins with `inbox: 1`.
+   Nothing is filed yet.
    **If not:** when Claude answered without noting anything, say that you want it kept
    ("remember ...", "note ..."), or type `/m2b-note the spare key is under the blue pot`, which
    asks no model. When the answer is that m2b is not set up, go back to step 2.
@@ -77,8 +77,8 @@ nor a model. Both end with a first capture, a curation run and a first search.
    three (2026-11-12, with the model `haiku`).
 
    **You should see** nothing in the conversation: the run is silent. `!m2b status` says
-   `run: running ...` while it goes on, then `run: succeeded ...` and `inbox: 0`; the status line
-   reads `curating`, then `0 in inbox · curated 17:26` with the time the run ended. The note has
+   `run: running ...` while it goes on, then `run: succeeded ...` and `inbox: 0`, with the time the
+   run ended. The note has
    moved from `inbox/` to `corpus/YYYY/MM/`, and `memory/MEMORY.md` has a line with the fact.
 
    This session started before the run ended, so the fact is not among what it was given at its

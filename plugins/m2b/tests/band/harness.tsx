@@ -3,6 +3,8 @@ import { expect, mock } from 'claude-code/testing'
 import type { Engine, MockClock } from 'claude-code/testing'
 import type { EngineResultOf, On, ProcessRunResult } from 'claude-code'
 
+import type { BandShows } from '../../types'
+
 export const HOME = '/home/alex'
 export const NOW = Date.parse('2026-03-14T17:30:00Z')
 export const SESSION_ID = '0f6a3c1e-5b7d-4e2a-9c48-1d2e3f4a5b6c'
@@ -50,11 +52,16 @@ export type FakeProposal = {
   answer?: 'keep' | 'drop'
 }
 
+/** A status with nothing wrong, which clears the status line. */
 export const STATUS = {
   inbox: { count: 2, evicted: 0 },
   run: { state: 'succeeded', last_succeeded_at: '2026-03-14T18:02:00+01:00' },
   backends: { tasks: { state: 'reachable', detail: '' } },
 }
+
+/** A status with something wrong, and what the status line says to it: a line that was written, not cleared. */
+export const TROUBLED_STATUS = { ...STATUS, backends: { tasks: { state: 'not reachable', detail: 'no grant' } } }
+export const TROUBLE_LINE = 'tasks not reachable'
 
 /** A topic whose facts the core gave a session, with what its block held then. */
 export type FakeTopic = { name: string; facts: number | null; current: number | null }
@@ -153,7 +160,17 @@ export class FakeM2b {
   searchCut = false
   /** When set, `m2b search` fails with this as its message. */
   searchFails: string | null = null
-  /** The tasks due today or overdue as `m2b band --json` answers them; null when `band.due_tasks` is off. */
+  /**
+   * The machine's `band` settings as `m2b band --json` names them: how the band shows the tasks
+   * due, and whether it counts the topics. Null as a core before these settings answers: no `band`
+   * part, and the tasks due under `due` alone.
+   */
+  shows: BandShows | null = { dueTasks: 'count', topics: false }
+  /**
+   * The tasks due today or overdue. `m2b band --json` names them under `due_by_today` whatever the
+   * band shows, and under `due` too while it lists them. Null where the answer names none under
+   * either key, as a core before the `band` settings answers with `band.due_tasks` off.
+   */
   dueTasks: { id: string; title: string; due: string; overdue: boolean }[] | null = []
   /** The changes of the facts `m2b band --json` names for an open review; null as a core before 0.3.3 answers. */
   reviewDetails: { changes: unknown[]; copies: unknown[]; paragraphs: string[] } | null = null
@@ -368,7 +385,19 @@ export class FakeM2b {
     return ok(JSON.stringify({ version: this.version, session }))
   }
 
-  /** As `m2b band --json` answers: the open curator tasks by marker, or the error, and the status. */
+  /** The tasks due as the tasks part names them: by the key of the core that answers, and by what the band shows. */
+  duePart(): Record<string, unknown> {
+    if (this.dueTasks === null) {
+      return {}
+    }
+    const due = this.dueTasks.map(task => ({ ...task, notes: '', completed: false, dropped: false, marker: null }))
+    if (this.shows === null) {
+      return { due }
+    }
+    return { due_by_today: due, ...(this.shows.dueTasks === 'list' ? { due } : {}) }
+  }
+
+  /** As `m2b band --json` answers: the band's settings, the open curator tasks by marker, or the error, and the status. */
   bandAnswer(): ProcessRunResult {
     if (this.statusFails) {
       return fail('could not read the machine config')
@@ -387,12 +416,13 @@ export class FakeM2b {
             candidates: open('candidate'),
             questions: open('current'),
             reviews: open('review'),
-            ...(this.dueTasks === null ? {} : { due: this.dueTasks.map(task => ({ ...task, notes: '', completed: false, dropped: false, marker: null })) }),
+            ...this.duePart(),
             ...(this.reviewDetails !== null && open('review').length > 0 ? { review: this.reviewDetails } : {}),
           }
         : { error }
     const proposals = this.proposalsPart ?? this.waitingProposals()
-    return ok(JSON.stringify({ version: this.version, tasks, ...(proposals === null ? {} : { proposals }), status: this.status }))
+    const band = this.shows === null ? {} : { band: { due_tasks: this.shows.dueTasks, topics: this.shows.topics } }
+    return ok(JSON.stringify({ version: this.version, ...band, tasks, ...(proposals === null ? {} : { proposals }), status: this.status }))
   }
 
   waitingProposals(): unknown {
@@ -609,7 +639,111 @@ export async function start(
   return { clock, statuses, commands, tools, opened, toasts, openPanes }
 }
 
+/** An element inside a drawing, as the kit hands it on: its tag, its props and what it holds. */
+type Element = { type: string; props: Record<string, unknown>; children?: unknown[] }
+
 type Mounted = { findAll: (q: { type: string }) => Promise<{ text: string }[]> }
+
+type Searchable = {
+  find: (q: { key: string }) => Promise<{ children: unknown[] } | undefined>
+  findAll: (q: { type: string }) => Promise<{ key: string | undefined }[]>
+}
+
+function isElement(value: unknown): value is Element {
+  return typeof value === 'object' && value !== null && 'type' in value && 'props' in value
+}
+
+function elementsIn(children: unknown[] | undefined, type?: string): Element[] {
+  return (children ?? []).filter(isElement).filter(child => type === undefined || child.type === type)
+}
+
+/** The text an element shows: its own strings and those of the texts inside it, in the order drawn. */
+function shownText(element: Element): string {
+  return (element.children ?? []).map(child => (isElement(child) ? shownText(child) : String(child))).join('')
+}
+
+/** The key of the band's row, of the tasks listed below it, and of its one button. */
+const BAND_ROW = 'row:m2b'
+const BAND_TASKS = 'tasks'
+export const OPEN = 'open'
+
+/** The line of the band's row: the one text that is cut where the row is too narrow, with its pieces inside. */
+async function bandLineOf(ui: Searchable): Promise<{ texts: Element[]; line: Element | undefined } | null> {
+  const row = await ui.find({ key: BAND_ROW })
+  if (row === undefined) {
+    return null
+  }
+  const texts = elementsIn(row.children, 'Text')
+  return { texts, line: texts.find(text => text.props['wrap'] === 'truncate-end') }
+}
+
+/**
+ * The band as m2b drew it. `isNamed`: `m2b` stands before the row as a text of its own. `says`:
+ * the row's pieces as the one line they are drawn in. `below`: the lines under the row, a task as
+ * its word and its title. `buttons`: the keys of every button of the band.
+ */
+export type ShownBand = { isNamed: boolean; says: string; below: string[]; buttons: (string | undefined)[] }
+
+/** The band's row and what stands below it; null where m2b drew no band. */
+export async function shownBand(ui: Searchable): Promise<ShownBand | null> {
+  const row = await bandLineOf(ui)
+  if (row === null) {
+    return null
+  }
+  const below = elementsIn((await ui.find({ key: BAND_TASKS }))?.children)
+  return {
+    isNamed: row.texts.some(text => text !== row.line && shownText(text) === 'm2b'),
+    says: row.line === undefined ? '' : shownText(row.line),
+    below: below.map(under =>
+      under.type === 'Box'
+        ? elementsIn(under.children, 'Text')
+            .map(text => shownText(text).trim())
+            .join(' ')
+        : shownText(under),
+    ),
+    buttons: (await ui.findAll({ type: 'Button' })).map(button => button.key),
+  }
+}
+
+/** A band of one row: what it says after `m2b`, and `open`. */
+export function rowSaying(says: string): ShownBand {
+  return { isNamed: true, says, below: [], buttons: [OPEN] }
+}
+
+/** A band whose row is a sentence that names m2b itself, so no `m2b` stands before it. */
+export function sentenceOfM2b(says: string): ShownBand {
+  return { isNamed: false, says, below: [], buttons: [OPEN] }
+}
+
+/** A piece of text in the band with the props it is drawn by. */
+export type BandPiece = { text: string; color: unknown; dimColor: unknown }
+
+function pieceOf(text: Element): BandPiece {
+  return { text: shownText(text), color: text.props['color'], dimColor: text.props['dimColor'] }
+}
+
+/** The pieces of the band's row in the order drawn, each with its color and whether it is dimmed. */
+export async function bandPieces(ui: Searchable): Promise<BandPiece[]> {
+  return elementsIn((await bandLineOf(ui))?.line?.children, 'Text').map(pieceOf)
+}
+
+/** The two texts of a task listed below the band's row: when it is due, as wide as drawn, and its title. */
+export async function listedTask(ui: Searchable, id: string): Promise<{ due: BandPiece; title: BandPiece & { wrap: unknown } } | null> {
+  const [due, title] = elementsIn((await ui.find({ key: `task:${id}` }))?.children, 'Text')
+  return due === undefined || title === undefined ? null : { due: pieceOf(due), title: { ...pieceOf(title), wrap: title.props['wrap'] } }
+}
+
+/** The view the pane starts in, drawn beside the chat: every row that is answered stands there with its buttons. */
+export function startView($: Engine, surface: 'terminal' | 'desktop' = 'terminal') {
+  return $.ui.mount({ ...pane('m2b'), surface })
+}
+
+const ANSWERS = /^(keep|drop|undo|ok):/
+
+/** The keys of the buttons that answer a row: keep, drop, ok and undo, without those that turn the pane. */
+export async function answerKeys(ui: { findAll: (q: { type: string }) => Promise<{ key?: string | undefined }[]> }): Promise<string[]> {
+  return (await ui.findAll({ type: 'Button' })).map(button => button.key ?? '').filter(key => ANSWERS.test(key))
+}
 
 /**
  * The texts m2b drew, without the engine's own drawing. Whether the engine draws beside a band that

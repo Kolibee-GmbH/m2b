@@ -10,6 +10,7 @@ import type {
   PaneView,
   SessionTopic,
 } from '../types'
+import { dueCounts, waitForYou } from './look'
 import { plainLine, wholePath } from './plain-text'
 import { SHOW_PROPOSALS, couldNotLookLine, countLine, errorBesideTasks, proposalsRow } from './proposals'
 import { candidateRow, reviewRow } from './rows'
@@ -17,8 +18,8 @@ import type { RowActions } from './rows'
 
 /*
  * The view the m2b pane starts in, in three parts: what m2b gave this session, so the owner sees
- * which topic's facts it holds without scrolling to its start; what waits for an answer, with the
- * buttons the band has; and the tasks due today. The review, a search and the proposals are the
+ * which topic's facts it holds without scrolling to its start; what waits for an answer, each with
+ * its buttons, which the band only counts; and the tasks due today. The review, a search and the proposals are the
  * pane's other views.
  */
 
@@ -44,7 +45,7 @@ const KEEPS = 'This session keeps what it was given and gets no more topics.'
 const NOTHING_WAITS = 'Nothing waits for you.'
 const NOTHING_DUE = 'Nothing due today.'
 const TASKS_NOT_READ = 'The task list could not be read.'
-// With `band.due_tasks` off, and in an answer a session with an earlier band shared.
+// Where the answer names no tasks due: from a core before it named them whatever the band shows, or one a session with an earlier band shared.
 const DUE_NOT_SHOWN = 'Tasks due are not shown.'
 const WHOLE_REVIEW = 'the whole review'
 // The short forms of the small pane, where the long ones would be most of what it draws.
@@ -75,7 +76,7 @@ export type SessionModel = {
 }
 
 /**
- * What the start view's buttons do: keep, drop and `ok` as in the band; `show`, which turns the
+ * What the start view's buttons do: keep, drop and `ok`; `show`, which turns the
  * pane, also to the lines of one topic; and the distillate off or on for a folder, with its undo.
  */
 export type SessionActions = RowActions & {
@@ -236,15 +237,12 @@ function waitsGlance(model: SessionModel): string | null {
     return couldNotLookLine(storeError)
   }
   const waits = snapshot.candidates.length + (proposals?.waiting.length ?? 0) + (snapshot.review === null ? 0 : 1)
-  return waits === 0 ? NOTHING_WAITS : `${waits} ${waits === 1 ? 'waits' : 'wait'} for you`
+  return waits === 0 ? NOTHING_WAITS : waitForYou(waits)
 }
 
 function dueGlance(snapshot: BandSnapshot | null): string | null {
-  const due = snapshot?.due ?? []
-  const overdue = due.filter(task => task.overdue).length
-  const today = due.length - overdue
-  const parts = [...(today > 0 ? [`${today} due today`] : []), ...(overdue > 0 ? [`${overdue} overdue`] : [])]
-  return parts.length === 0 ? null : parts.join(', ')
+  const counts = dueCounts(snapshot?.due ?? []).map(count => count.text)
+  return counts.length === 0 ? null : counts.join(', ')
 }
 
 /**

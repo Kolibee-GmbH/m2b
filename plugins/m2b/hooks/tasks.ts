@@ -1,4 +1,4 @@
-import type { BandCandidate, BandChangePart, BandDueTask, BandFactChange, BandReview } from '../types'
+import type { BandCandidate, BandChangePart, BandDueTask, BandFactChange, BandReview, BandShows } from '../types'
 
 export class TaskJsonError extends Error {
   constructor() {
@@ -69,7 +69,7 @@ export function parseReview(list: unknown, details?: unknown): BandReview | null
   }
 }
 
-/** The findings the band draws as written: those no change or copy stands for. */
+/** The findings that are drawn as written: those no change or copy stands for. */
 export function untoldFindings(review: BandReview): string[] {
   const told = new Set(review.told ?? [])
   return review.findings.filter(finding => !told.has(finding))
@@ -104,7 +104,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-/** The tasks due today or overdue; undefined when the part is absent, as with `band.due_tasks` off: none to show, which is not none due. */
+/** The tasks due today or overdue; undefined when the part is absent: not known, which is not none due. */
 export function parseDue(list: unknown): BandDueTask[] | undefined {
   if (list === undefined) {
     return undefined
@@ -131,6 +131,22 @@ export function parseBandTasks(
     // Whether a current item still holds is answered the same way as a candidate: keep or drop.
     candidates: [...parseCandidates(fields['candidates']), ...parseCandidates(fields['questions'])],
     review: parseReview(fields['reviews'], fields['review']),
-    due: parseDue(fields['due']),
+    // A core before the three ways to show them names the tasks under `due`, and only while they are shown.
+    due: parseDue(fields['due_by_today'] ?? fields['due']),
   }
+}
+
+const DUE_TASKS_SHOWN: readonly BandShows['dueTasks'][] = ['off', 'count', 'list']
+
+/**
+ * The `band` part of `m2b band --json`, the machine's settings of that name; undefined where a
+ * core before the part answered, or one of its values is none this band knows.
+ */
+export function parseBandShows(part: unknown): BandShows | undefined {
+  if (!isObject(part)) {
+    return undefined
+  }
+  const dueTasks = DUE_TASKS_SHOWN.find(shown => shown === part['due_tasks'])
+  const topics = part['topics']
+  return dueTasks === undefined || typeof topics !== 'boolean' ? undefined : { dueTasks, topics }
 }
