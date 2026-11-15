@@ -7,10 +7,51 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-## [0.6.0] - 2026-11-15
+## [0.5.0] - 2026-11-15
+
+A session can hand in a proposal for your memory by itself. That is off until you turn it on.
+Before you do, update m2b on every machine that shares the store: an m2b before this release
+takes in nothing a session handed in, and on the curating machine its run stops at its start
+while such a file is not downloaded.
 
 ### Added
 
+- `m2b proposals add` takes a proposal a session hands in by itself, with the words it stands on,
+  and checks them against that session's transcript before anything is written: the quote must
+  stand in one text of the session, and the proposal says whether the person typed it, pasted it,
+  a tool returned it or Claude wrote it. A session that worked in a folder or repository you
+  leave out hands nothing in. It is off until you turn it on, with a press on its card in the m2b
+  pane or with `m2b config set sessions.propose true` in a terminal of your own; in the shell of a
+  Claude Code session that command refuses
+  ([What a session hands in](SECURITY.md#what-a-session-hands-in),
+  [#26](https://github.com/Kolibee-GmbH/m2b/pull/26)).
+- With that setting on, the band's mod gives the model a third tool, `mcp__m2b__propose`. The
+  model calls it by itself when a session states who someone is, an agreement, a commitment of
+  yours or something about your own life that your memory does not hold, also where the words
+  stand in a mail or a document it read for you. The tool passes the proposal with the id of the
+  session to `m2b proposals add` and answers with its line. It runs without a permission
+  question; a rule of yours for `Bash(m2b proposals:*)` or for the tool's name comes first. Only
+  the main conversation hands in, not a subagent, and the setting is read when a session
+  starts. The tool's description, about 3,200 characters, is in the prompt of every session
+  that has it
+  ([Handing in a proposal](docs/band.md#handing-in-a-proposal-a-tool-you-turn-on),
+  [#26](https://github.com/Kolibee-GmbH/m2b/pull/26)).
+- Every curation run that reaches its step for the proposals takes in what sessions handed in,
+  whether or not it reads your sessions: each proposal then waits in the list with the others.
+  It says that a session handed it in, also where its words were typed, and its line reads
+  `in a result of <tool> on <day>` or `Claude wrote on <day>` for words a tool returned or
+  Claude answered. The run reads no transcript; it checks the form again, takes the ten
+  earliest of one session and removes the others, and leaves out what you captured yourself
+  since the day before that day and what is like a proposal that waits, was answered or
+  expired, so the same fact from several sessions waits once
+  ([What a session hands in](docs/curation.md#what-a-session-hands-in),
+  [#26](https://github.com/Kolibee-GmbH/m2b/pull/26)).
+- `m2b status` counts the proposals per way they came, a reading or a session, and per source of
+  their words: how many wait and how many were kept, dropped and expired in the last 30 days,
+  also on a machine that only lets sessions hand in; `--json` has them under
+  `proposal_answers.ways`. In `m2b proposals --json` and `m2b band --json` each proposal names
+  its `tool` and who proposed it, `by`
+  ([#26](https://github.com/Kolibee-GmbH/m2b/pull/26)).
 - `/m2b-pane` opens the m2b pane in a view of three parts: what m2b gave this session (each topic
   with its facts lines and current items, how the start printed the distillate, whether the
   distillate is off for the folder, and how many notes the session wrote), what waits for you (the
@@ -57,8 +98,8 @@ All notable changes to this project are documented here. The format follows
   card ([The band](docs/band.md#every-setting-in-the-pane),
   [#26](https://github.com/Kolibee-GmbH/m2b/pull/26)).
 - The card of `sessions.propose` turns handing in on by a press, where the pane is drawn in a
-  terminal, the desktop app or VS Code: the one setting a session's shell does not turn on no
-  longer needs a terminal outside Claude Code. In the mobile app the card names the command for
+  terminal, the desktop app or VS Code: the one setting a session's shell does not turn on
+  needs no terminal outside Claude Code. In the mobile app the card names the command for
   such a terminal. The press is a threshold in the band and no boundary: nothing says who
   pressed, so another plugin, a client attached to the session that names itself the terminal,
   the desktop app or VS Code, or whatever types into your terminal or steers your screen can
@@ -93,58 +134,6 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
-- The review, a search and the proposals are views of the m2b pane now: Escape, the close mark or
-  the new `back` button above them lead back to the start view instead of closing the pane
-  ([The band](docs/band.md#back-to-the-start-view),
-  [#26](https://github.com/Kolibee-GmbH/m2b/pull/26)).
-
-## [0.5.0] - 2026-11-15
-
-A session can hand in a proposal for your memory by itself. That is off until you turn it on.
-Before you do, update m2b on every machine that shares the store: an m2b before this release
-takes in nothing a session handed in, and on the curating machine its run stops at its start
-while such a file is not downloaded.
-
-### Added
-
-- `m2b proposals add` takes a proposal a session hands in by itself, with the words it stands on,
-  and checks them against that session's transcript before anything is written: the quote must
-  stand in one text of the session, and the proposal says whether the person typed it, pasted it,
-  a tool returned it or Claude wrote it. A session that worked in a folder or repository you
-  leave out hands nothing in. It is off until you run `m2b config set sessions.propose true` in a
-  terminal of your own; inside a Claude Code session that command refuses
-  ([What a session hands in](SECURITY.md#what-a-session-hands-in),
-  [#26](https://github.com/Kolibee-GmbH/m2b/pull/26)).
-- With that setting on, the band's mod gives the model a third tool, `mcp__m2b__propose`. The
-  model calls it by itself when a session states who someone is, an agreement, a commitment of
-  yours or something about your own life that your memory does not hold, also where the words
-  stand in a mail or a document it read for you. The tool passes the proposal with the id of the
-  session to `m2b proposals add` and answers with its line. It runs without a permission
-  question; a rule of yours for `Bash(m2b proposals:*)` or for the tool's name comes first. Only
-  the main conversation hands in, not a subagent, and the setting is read when a session
-  starts. The tool's description, about 3,200 characters, is in the prompt of every session
-  that has it
-  ([Handing in a proposal](docs/band.md#handing-in-a-proposal-a-tool-you-turn-on),
-  [#26](https://github.com/Kolibee-GmbH/m2b/pull/26)).
-- Every curation run that reaches its step for the proposals takes in what sessions handed in,
-  whether or not it reads your sessions: each proposal then waits in the list with the others.
-  It says that a session handed it in, also where its words were typed, and its line reads
-  `in a result of <tool> on <day>` or `Claude wrote on <day>` for words a tool returned or
-  Claude answered. The run reads no transcript; it checks the form again, takes the ten
-  earliest of one session and removes the others, and leaves out what you captured yourself
-  since the day before that day and what is like a proposal that waits, was answered or
-  expired, so the same fact from several sessions waits once
-  ([What a session hands in](docs/curation.md#what-a-session-hands-in),
-  [#26](https://github.com/Kolibee-GmbH/m2b/pull/26)).
-- `m2b status` counts the proposals per way they came, a reading or a session, and per source of
-  their words: how many wait and how many were kept, dropped and expired in the last 30 days,
-  also on a machine that only lets sessions hand in; `--json` has them under
-  `proposal_answers.ways`. In `m2b proposals --json` and `m2b band --json` each proposal names
-  its `tool` and who proposed it, `by`
-  ([#26](https://github.com/Kolibee-GmbH/m2b/pull/26)).
-
-### Changed
-
 - `m2b proposals keep --all` and the pane's `keep all` leave the proposals a session handed in,
   and the command says how many: an agent worded them from what it read, so each is kept or
   dropped by its id, or with its own row in the pane
@@ -158,6 +147,10 @@ while such a file is not downloaded.
 - Where the store is a git repository, a handed-in proposal is committed with the waiting
   captures before a run's first step, so taking a run back puts it where the next run takes it in
   again ([A commit per run](docs/curation.md#a-commit-per-run),
+  [#26](https://github.com/Kolibee-GmbH/m2b/pull/26)).
+- The review, a search and the proposals are views of the m2b pane now: Escape, the close mark or
+  the new `back` button above them lead back to the start view instead of closing the pane
+  ([The band](docs/band.md#back-to-the-start-view),
   [#26](https://github.com/Kolibee-GmbH/m2b/pull/26)).
 
 ### Fixed
