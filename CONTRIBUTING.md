@@ -119,6 +119,7 @@ scripts/e2e --level model                                   # every scenario wit
 scripts/e2e --level model E18-remember-beside-auto-memory   # after each Claude Code minor update
 scripts/e2e --level model E22-recall-across-projects        # the same
 scripts/e2e --level model E26-tick-a-task                   # the same
+scripts/e2e --level model E27-session-hands-in              # the same
 scripts/e2e --level model E17-planted-capture               # and after a change to the ingest skill
 scripts/e2e --level model E14-topics                        # after a change to the ingest skill
 ```
@@ -142,6 +143,15 @@ one of them is done. It passes when that task is ticked, the other is still open
 reached the inbox: the todos skill ticked it, through the two commands its own allowed-tools
 cover. One session on Haiku, well under a minute; run it after a change to the todos skill or to
 the note tool's description.
+
+`E27-session-hands-in` turns `sessions.propose` on, as the owner does in a terminal of their own,
+and asks a session to read notes of a meeting and to hand in who a person is. It passes when one
+file under `state/core/handed-in/` names that person with the source `tool` and the tool `Read`,
+no file there claims another source, and no note reached the inbox: the mod's tool passed the
+session's id to `m2b proposals add`, and the command found the quote in the transcript of a
+headless session, where the result of `Read` stands on disk by the time the next call runs. The
+session is asked outright; how often one hands in unasked is what the evals measure. One session
+on Sonnet, well under a minute.
 
 `E17-planted-capture` runs a real ingest step over two captures written to steer it, one with an
 instruction in invisible characters and one that addresses the assistant in plain words, and over
@@ -231,18 +241,20 @@ and `claude plugin eval` scores both. [Evals](docs/evals.md) lists what each cas
 passes, how to read the scores, and the scores of the last run.
 
 Every case starts from the same invented store, `evals/demo-store.sh`: it sets m2b up in the
-fresh `HOME` the eval gives each run, so your own store is never read. Run it from the plugin,
+fresh `HOME` the eval gives each run, so your own store is never read. Its owner turned
+`sessions.propose` on, so every run with m2b carries the third tool, also in the cases that ask
+for no proposal. Run it from the plugin,
 then write its scores into the page:
 
 ```bash
 cd plugins/m2b
 claude plugin eval . --ablation with-without --scaffold --trust-plugin --no-publish --keep-temp \
-  -j 4 --max-cost-usd 6 --allow-tools mcp__m2b__search mcp__m2b__note Write Read Edit
+  -j 4 --max-cost-usd 15 --allow-tools mcp__m2b__search mcp__m2b__note mcp__m2b__propose Write Read Edit
 ../../scripts/evals-page
 ```
 
-It runs each case three times per arm, 48 runs in all, and takes a few minutes on your own login.
-The report prices the runs as the API would, a few dollars; on a Claude subscription nothing is
+It runs each case three times per arm, 84 runs in all, and takes a few minutes on your own login.
+The report prices the runs as the API would, about six dollars; on a Claude subscription nothing is
 billed and the runs count against the plan's usage limits instead. `--max-cost-usd` stops the
 suite once that price passes the ceiling. The report lands in
 `evals/results/`, which git ignores. The runs ask nothing, so the m2b tools and the file tools a

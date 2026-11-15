@@ -55,11 +55,18 @@ import {
   NOTE_COMMAND_LINE,
   NOTE_TOOL,
   NOTE_TOOL_NAME,
+  NOT_HANDED_IN,
+  ONLY_THE_MAIN_CONVERSATION,
+  PROPOSE_COMMAND_LINE,
+  PROPOSE_TOOL,
+  PROPOSE_TOOL_NAME,
   SEARCH_COMMAND_LINE,
   SEARCH_TOOL,
   SEARCH_TOOL_NAME,
+  isHandingInOn,
   noteTextOf,
   noteTool,
+  proposeTool,
   searchTool,
   verdictFor,
 } from './tools'
@@ -694,7 +701,8 @@ export const register: Register = on => {
         // Without the command the band still runs; the skills note and search the same way.
       }
     }
-    for (const tool of [NOTE_TOOL, SEARCH_TOOL]) {
+    const tools = [NOTE_TOOL, SEARCH_TOOL, ...((await isHandingInOn($)) ? [PROPOSE_TOOL] : [])]
+    for (const tool of tools) {
       try {
         await $.tool.register(tool)
       } catch {
@@ -801,6 +809,17 @@ export const register: Register = on => {
     return 'error' in answer ? { deny: answer.error } : { result: answer.text }
   })
 
+  // Offered only where the owner turned handing in on. A session that started before they turned
+  // it off still has the tool, and the command refuses.
+  on('tool.call', { tool: PROPOSE_TOOL_NAME }, async ($, e, next) => {
+    if (await isCurationRun($)) {
+      return next(e)
+    }
+    const refusal = e.agentId === undefined ? await notSetUpLine($, NOT_HANDED_IN) : ONLY_THE_MAIN_CONVERSATION
+    const answer = refusal === null ? await proposeTool($, e) : { error: refusal }
+    return 'error' in answer ? { deny: answer.error } : { result: answer.text }
+  })
+
   on('tool.check', { tool: NOTE_TOOL_NAME }, async ($, e, next) => {
     const verdict = await next(e)
     const isOwn = isInOwnWords(noteTextOf(e.input), await read($, ownPromptsAtom))
@@ -808,6 +827,9 @@ export const register: Register = on => {
   })
   on('tool.check', { tool: SEARCH_TOOL_NAME }, async ($, e, next) =>
     verdictFor($, e, await next(e), SEARCH_COMMAND_LINE),
+  )
+  on('tool.check', { tool: PROPOSE_TOOL_NAME }, async ($, e, next) =>
+    verdictFor($, e, await next(e), PROPOSE_COMMAND_LINE),
   )
 
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {

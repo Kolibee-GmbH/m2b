@@ -15,6 +15,13 @@ All notable changes to this project are documented here. The format follows
   a tool returned it or Claude wrote it. A session that worked in a folder or repository you
   leave out hands nothing in. It is off until you run `m2b config set sessions.propose true` in a
   terminal of your own; inside a Claude Code session that command refuses.
+- With that setting on, the band's mod gives the model a third tool, `mcp__m2b__propose`. The
+  model calls it by itself when a session states who someone is, an agreement, a commitment of
+  yours or something about your own life that your memory does not hold, also where the words
+  stand in a mail or a document it read for you. The tool passes the proposal with the id of the
+  session to `m2b proposals add` and answers with its line. It runs without a permission
+  question; a rule of yours for `Bash(m2b proposals:*)` or for the tool's name comes first. Its
+  description, about 3,200 characters, is in the prompt of every session that has the tool.
 
 ## [0.4.5] - 2026-11-15
 

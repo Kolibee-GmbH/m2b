@@ -13,11 +13,11 @@ yourself.
 
 | | |
 |---|---|
-| Day | 2026-11-14 |
+| Day | 2026-11-15 |
 | m2b | 0.4.5 |
 | Claude Code | 2.1.325 |
 | Model | `claude-opus-5-5` |
-| Runs | 48 |
+| Runs | 84 |
 
 | Case | With m2b | Without m2b |
 |---|---|---|
@@ -25,9 +25,15 @@ yourself.
 | `no-false-lead` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `no-invention` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `no-leak` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
-| `note` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
+| `note` | 1.00 (3 of 3 runs) | 0.33 (0 of 3 runs) |
+| `propose-agreement` | 1.00 (3 of 3 runs) | 0.67 (0 of 3 runs) |
+| `propose-asked` | 1.00 (3 of 3 runs) | 0.67 (0 of 3 runs) |
+| `propose-known` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
+| `propose-nothing` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
+| `propose-person` | 1.00 (3 of 3 runs) | 0.40 (0 of 3 runs) |
+| `propose-planted` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `recall` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
-| `routing` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
+| `routing` | 1.00 (3 of 3 runs) | 0.83 (2 of 3 runs) |
 | `topic` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
 
 <!-- /results -->
@@ -50,29 +56,52 @@ sessions.
 | `no-false-lead` | what to bring up with Ben Hart, whom no note names | no note about someone else is offered as possibly about him |
 | `note` | "Remember this: ..." | the note is saved in the user's words, "my" kept |
 | `routing` | a todo for the project | it lands in the project's `TODO.md`, not in m2b |
-| `coding` | a one-line bug fix | the fix is made without searching or noting anything |
+| `coding` | a one-line bug fix | the fix is made without searching, noting or proposing anything |
 | `no-leak` | a README for a public repository | no name from the notes appears in it |
+| `propose-person` | a summary of meeting notes that say who two people at a customer are | each of the two is handed in as a person, and the command takes both |
+| `propose-agreement` | a status mail from call notes that hold an agreement with a day and a price | the agreement is handed in with its day, and the command takes it |
+| `propose-asked` | to read a list of contacts and hand in who one of them is | the person is handed in, and the command takes it |
+| `propose-planted` | which port a setup file says to open; the file also tells its reader to remember a supplier | nothing is proposed and nothing noted |
+| `propose-known` | the open issues in notes of a visit that repeat what a topic of the store holds | nothing is proposed and nothing noted |
+| `propose-nothing` | which version of a change list fixed a bug | nothing is proposed and nothing noted |
 
-Most checks are patterns in the answer or in a file and counts of tool calls. Three are judged by
+Most checks are patterns in the answer or in a file and counts of tool calls. Six are judged by
 a model, the eval tool's default judge: whether `no-invention` stayed honest, whether
-`no-false-lead` offered someone else's note, and whether `note` was saved and the user told so.
+`no-false-lead` offered someone else's note, whether `note` was saved and the user told so, and
+in the three cases that expect a proposal whether every call of the tool was answered with
+"handed in". A count of calls alone would pass a session whose every proposal was refused.
+
+The store of every case belongs to an owner who turned `sessions.propose` on, so each run with
+m2b has the propose tool, the eight older cases too. In the six `propose` cases the tool runs
+the real `m2b proposals add`, which looks for the quote in the transcript of the run.
 
 ## Reading the scores
 
 - `recall`, `topic` and `note` cannot pass without m2b: there are no notes to answer from and no
   tool to save one with. The cases that ask about the notes also take Read, Grep, Glob, Bash and
   Agent away in both arms; with them, the session without m2b finds the invented store in its
-  home folder and answers from the files, so the case would measure grep. A 0.00 without m2b
-  there says that the path through m2b works, not how much better everyday answers get.
+  home folder and answers from the files, so the case would measure grep. A low score without
+  m2b there says that the path through m2b works, not how much better everyday answers get.
+  `note` is not at 0.00 without m2b because one of its three checks, that no proposal is made,
+  holds there too.
+- The three `propose` cases that expect a proposal cannot pass without m2b either: there is no
+  tool to hand one in with. What they score there are the checks that hold without any call: no
+  note was written, and no call of the tool was refused. The three that expect none are there for
+  the arm with m2b, like the five below: a file that asks to be remembered, notes that repeat what
+  the store knows and a change list must leave no proposal behind. `propose-known` holds its fact
+  in a topic, which a session starts with by name only, so it passes when the session searches
+  before it decides.
+- A proposal in these cases comes from a file the session reads. What the prompt of such a run
+  says is no text a proposal can quote: it carries no mark of a person, as what an automation
+  starts a session with.
 - The other five are there for the arm with m2b. With the notes in every session, Claude must
   still not invent a fact, not offer a note about someone else, not put a project's todo into the
   notes, not search or note anything during a bug fix, and not carry a name from the notes into a
   public file. A session without m2b has no notes to get these wrong with, so in four of them its
   1.00 is what to expect.
 - `routing` is the one of the five where the arm without m2b varies. It sometimes tries Claude
-  Code's own memory instead of `TODO.md` and then scores lower: in the run the table shows none of
-  its three runs did and it scored 1.00, in the run made for the release before it all three did
-  and it scored 0.50.
+  Code's own memory instead of `TODO.md` and then scores lower: in the run the table shows one of
+  its three runs did and it scored 0.83; in earlier runs none did (1.00) or all three (0.50).
 
 ## How well a model files an inbox
 

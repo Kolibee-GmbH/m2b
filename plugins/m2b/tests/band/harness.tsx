@@ -5,6 +5,9 @@ import type { EngineResultOf, On, ProcessRunResult } from 'claude-code'
 
 export const HOME = '/home/alex'
 export const NOW = Date.parse('2026-03-14T17:30:00Z')
+export const SESSION_ID = '0f6a3c1e-5b7d-4e2a-9c48-1d2e3f4a5b6c'
+/** A machine config in which the owner turned handing in on. */
+export const HANDING_IN_ON = JSON.stringify({ version: 1, sessions: { propose: true } })
 
 export const ENGINES_OWN_DRAWING = 'engine'
 
@@ -114,6 +117,14 @@ export class FakeM2b {
   proposalsPart: unknown = undefined
   /** When set, starting `m2b proposals keep` or `drop` fails with this, before anything is answered. */
   answerFails: string | null = null
+  /** What the machine config holds, as `$.fs.read` gives it; null as a file that cannot be read. */
+  machineConfigText: string | null = null
+  /** The id of this session, as the engine names it; null when it cannot say. */
+  sessionId: string | null = SESSION_ID
+  /** What `m2b proposals add` was handed on standard input, one entry per call. */
+  readonly handedIn: string[] = []
+  /** How `m2b proposals add` ends. */
+  handInAnswer: ProcessRunResult = ok('handed in; go on with the task\n')
   /** The installed core's version, as `m2b band --json` answers it. */
   version = '0.3.0'
   /** The version in the manifest of the plugin the band was loaded from; null when it cannot be read. */
@@ -209,6 +220,10 @@ export class FakeM2b {
       const result = ok(`${stdout}\n`)
       return this.captureNotice === null ? result : { ...result, stderr: `m2b: ${this.captureNotice}\n` }
     }
+    if (args[0] === 'proposals' && args[1] === 'add') {
+      this.handedIn.push(stdin ?? '')
+      return this.handInAnswer
+    }
     if (args[0] === 'proposals') {
       return this.answer(args[1], args.slice(2))
     }
@@ -269,7 +284,7 @@ export class FakeM2b {
 
   /** The calls that answered proposals. */
   answers(): string[][] {
-    return this.calls.filter(call => call[0] === 'proposals')
+    return this.calls.filter(call => call[0] === 'proposals' && call[1] !== 'add')
   }
 
   writes(): string[][] {
@@ -342,6 +357,9 @@ export async function start(
     if (e.path.endsWith('/.claude-plugin/plugin.json') && fake.bandVersion !== null) {
       return { value: JSON.stringify({ name: 'm2b', version: fake.bandVersion }) }
     }
+    if (e.path === fake.machineConfig && fake.machineConfigText !== null) {
+      return { value: fake.machineConfigText }
+    }
     const text = files?.get(e.path)
     if (text === undefined) {
       throw new Error(`ENOENT: ${e.path}`)
@@ -405,6 +423,7 @@ export async function start(
     return { value: undefined }
   })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('session.id', () => (fake.sessionId === null ? { deny: 'the session has no id yet' } : { value: fake.sessionId }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
   // Stands for the engine's own drawing, which is what the band leaves to when it has nothing to show.
   on('ui.render', ($, e) => {

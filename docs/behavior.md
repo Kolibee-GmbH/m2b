@@ -10,7 +10,7 @@ The rules stand in four parts, by what a rule is about:
 |---|---|---|
 | [Core](behavior/core.md) | capture, the store and its backends, setup and configuration, what a session is given at its start and before a prompt, search, tasks and calendar, what holds for every add-on | [Getting started](getting-started.md), [Store format](store-format.md), [Configuration](configuration.md) |
 | [Curation](behavior/curation.md) | the curation run: when it is due, its steps, the fence around a model step, the proposals and their answers, the review task, the commit of a run | [The curation run](curation.md) |
-| [Band](behavior/band.md) | the core's mod: the band, the m2b pane, the slash commands, the model's two tools, and `m2b band`, the core's command for it | [The band](band.md) |
+| [Band](behavior/band.md) | the core's mod: the band, the m2b pane, the slash commands, the model's tools, and `m2b band`, the core's command for it | [The band](band.md) |
 | [Worklog](behavior/worklog.md) | the worklog add-on | [The worklog add-on](addons/worklog.md) |
 
 A rule stands in one part: the part of what it is about, not of the command that shows it. What

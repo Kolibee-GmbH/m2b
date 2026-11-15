@@ -97,13 +97,14 @@ export type PaneView = { kind: 'review' } | { kind: 'search'; search: PaneSearch
 
 declare module 'claude-code' {
   /**
-   * The arguments of the two tools the mod registers. Without them a hook on one of the tools is
+   * The arguments of the tools the mod registers. Without them a hook on one of the tools is
    * refused wherever the types in the plugin's folder declare the MCP tools of a session: once one
    * tool is declared, a name that is not declared is no tool.
    */
   interface McpToolInputs {
     mcp__m2b__note: { text: string; follow_up?: string; quiet?: boolean }
     mcp__m2b__search: { terms: string[]; question_language: string; whole_words?: boolean }
+    mcp__m2b__propose: { kind: string; text: string; quote: string; due?: string }
   }
 
   interface PluginState {

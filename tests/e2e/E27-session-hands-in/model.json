@@ -1,0 +1,75 @@
+{
+  "description": "E27 at the model level: the owner turned handing in on, in a terminal of their own, which the empty CLAUDECODE of that step stands for. A real Claude Code session is asked to read notes of a meeting and to hand in who a person is; what she does stands only in that file. The session calls the propose tool of the mod, the tool hands the proposal with the session's id to m2b proposals add, and the command finds the quote in the session's transcript: one file under state/core/handed-in/ names the person, the source tool and the tool Read. That the file is there shows that the transcript on disk holds a tool's result by the time the next call runs, in a headless session too, whose prompt is no text a quote can stand in. Nothing handed in claims another source, and no note reaches the inbox. The session is asked outright, so the scenario holds the way from the tool to the file; how often a session hands in unasked is what the evals measure. Run it after each Claude Code minor update.",
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "config",
+        "set",
+        "sessions.propose",
+        "true"
+      ],
+      "env": {
+        "CLAUDECODE": ""
+      }
+    },
+    {
+      "run": [
+        "sh",
+        "-c",
+        "printf '%s\\n' \"$@\" > meeting-notes.md",
+        "sh",
+        "# Kick-off with Contoso, 12 November",
+        "",
+        "- Riley Chen is head of purchasing at Contoso.",
+        "- The warehouse scanners lose their connection in aisle 4.",
+        "- The label printer needs new firmware before the pilot."
+      ]
+    },
+    {
+      "run": [
+        "claude",
+        "-p",
+        "Read meeting-notes.md. Hand in who Riley Chen is as a proposal for my second brain, do not note it, then give me a three-line summary for my team.",
+        "--setting-sources",
+        "project",
+        "--plugin-dir",
+        "{core_plugin}",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Read,mcp__m2b__propose,mcp__m2b__note,mcp__m2b__search",
+        "--max-turns",
+        "10",
+        "--model",
+        "sonnet",
+        "--output-format",
+        "stream-json",
+        "--verbose"
+      ]
+    }
+  ],
+  "invariants": [
+    {
+      "count": 1,
+      "glob": "state/core/handed-in/*.json",
+      "content": "(?s)Riley Chen.*\"source\": \"tool\",\\s*\"tool\": \"Read\""
+    },
+    {
+      "count": 0,
+      "glob": "state/core/handed-in/*.json",
+      "content": "\"source\": \"(?!tool\")"
+    },
+    {
+      "count": 0,
+      "glob": "inbox/*.md"
+    }
+  ]
+}

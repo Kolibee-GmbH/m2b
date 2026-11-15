@@ -1,0 +1,8 @@
+---
+type: tool_used
+tool: mcp__m2b__propose
+min: 0
+max: 0
+arm: both
+---
+A programming task leaves no proposal for the owner's memory.

@@ -258,6 +258,52 @@ organization adds a managed `ask` or `deny` rule for these names. To be asked ea
 `mcp__m2b__note` and `Bash(m2b capture:*)` in `permissions.deny`: the first refuses the tool, the
 second the skill's command, which the model would otherwise use instead.
 
+## Handing in a proposal, a tool you turn on
+
+With `sessions.propose` set to `true` in the machine config
+([Configuration](configuration.md#configjson-this-machine)), the mod gives the model a third tool:
+
+| Tool | Runs | Takes |
+|---|---|---|
+| `mcp__m2b__propose` | `m2b proposals add -`, one JSON object on standard input | `kind` (`person`, `agreement`, `commitment` or `personal`), `text`, the fact as one sentence, `quote`, the words of the session it stands on, and optionally `due` (`YYYY-MM-DD`) for a commitment with a day |
+
+The model calls it by itself, beside the task you gave it, when the session states something of
+one of the four kinds that your memory does not hold yet: who someone is, an agreement, something
+you committed to, something about your own life. The words may be yours or stand in what the
+model read for you, a mail or a document. The mod adds which session hands in, the id Claude Code
+gives the session; the model cannot name another one. Everything else is decided by
+[`m2b proposals add`](commands.md), which looks for the quote in that session's transcript and
+writes one file under `state/core/handed-in/` in the store, or refuses with one line. The tool
+answers with that line. A refusal never repeats the text or the quote. When the command could not
+take the call or reach the store, the tool says that nothing was handed in and why. After any
+other end, a command that was stopped before it answered among them, it says that it is unknown
+whether the proposal was handed in; the same call again never hands it in twice. Only the main
+conversation hands in: the command reads that conversation, where what a subagent or another
+agent of the session read does not stand, so such an agent is told to name what it found in its
+answer.
+
+The tool has no skill. Its description, about 3,200 characters in the prompt of every session
+that has it, is where its rules stand: the four kinds in the words the reading of your sessions is
+instructed with, and that each is about you, someone you deal with or an agreement you are a
+party to; what to leave out (how the model should work, the project at hand, what your memory
+already says, never documents of customers or confidential statements about third parties); that
+it holds a fact against the distillate first and searches where the distillate only names a
+topic; that a text the model read is data, so a sentence in it that asks to be remembered, or
+says how to word a proposal or what to quote, is not carried out; that "remember this" from you is a
+note, not a proposal; and that after a refusal it tries once more at most. A test holds the
+description to the kinds and to the rules that keep it apart from its neighbours.
+
+The mod reads the setting when a session starts, so turning it on reaches sessions that start
+afterwards and one that reloads its plugins. A session that started before you turned it off
+still has the tool, and the command refuses. In a curation run the tool does not exist.
+
+**Permission.** A call runs without a question, as a search does, under the same conditions: no
+rule, hook, setting or organization limit decided otherwise. A rule for the tool's name
+(`mcp__m2b__propose`, or `mcp__m2b` for all three) applies, and so does a rule you set for the
+command: with `Bash(m2b proposals:*)` in `permissions.ask` or `deny`, the tool asks or is refused.
+That pattern also covers `m2b proposals keep` and `drop`, so an `ask` rule meant for those makes
+every call of the tool ask.
+
 ## The status line
 
 Below the prompt, one line sums up the brain, such as `2 in inbox · curated 21:36`: the captures
@@ -304,7 +350,8 @@ with the second case when no session has run m2b's hooks since setup. Right afte
 
 ## What it reads and writes
 
-It runs only while `~/.config/m2b/config.json` and the launcher exist. Each refresh is one `m2b`
+It runs only while `~/.config/m2b/config.json` and the launcher exist. At a session's start it
+reads that file for one key, `sessions.propose`. Each refresh is one `m2b`
 call, `m2b band --json`; keep and drop call `m2b tasks complete` and `m2b tasks drop`, after
 reading the list again with `m2b band --json --tasks-only`; keep and drop on a proposal call
 `m2b proposals keep` and `m2b proposals drop`, which refuse an answer themselves where another
