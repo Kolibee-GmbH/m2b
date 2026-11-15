@@ -204,16 +204,16 @@ class SourceTest(ProposalsFixture):
         self.kept(DANA)
         raw = self.written()
         (key,) = raw["proposals"]
-        raw["proposals"][key]["source"] = "tool"
+        raw["proposals"][key]["source"] = "letter"
         self.write(raw)
 
         (loaded,) = proposals.load(self.store).entries.values()
         proposals.save(self.store, proposals.load(self.store))
 
-        self.assertEqual(loaded.source, "tool")
-        self.assertEqual(self.written()["proposals"][key]["source"], "tool")
+        self.assertEqual(loaded.source, "letter")
+        self.assertEqual(self.written()["proposals"][key]["source"], "letter")
         self.assertEqual(
-            proposals.said_line(loaded, loaded.quote), 'from tool on 2026-03-04: "Dana runs IT at Northwind"'
+            proposals.said_line(loaded, loaded.quote), 'from letter on 2026-03-04: "Dana runs IT at Northwind"'
         )
 
     def test_an_entry_whose_source_is_no_word_is_left_out(self) -> None:
@@ -237,6 +237,168 @@ class SourceTest(ProposalsFixture):
 
         self.assertEqual(lines["typed"], 'said on 2026-03-04: "Dana runs IT at Northwind"')
         self.assertTrue(lines["pasted"].startswith("pasted on 2026-03-04: "))
+
+
+class HandedInTest(ProposalsFixture):
+    """A proposal a session handed in, as the file keeps it."""
+
+    READ = dataclasses.replace(DANA, source="tool")
+    WRITTEN = dataclasses.replace(LADDER, source="agent")
+
+    def handed_in(self, proposal: Proposal, tool: str | None = None, now: datetime.datetime = NOW) -> proposals.Added:
+        found = [Said(proposal, DAY, tool, proposals.SESSION)]
+        added = proposals.add(proposals.load(self.store), found, now)
+        proposals.save(self.store, added.proposals)
+        return added
+
+    def test_a_handed_in_proposal_keeps_its_source_its_tool_and_who_proposed(self) -> None:
+        """Covers: B179"""
+        self.handed_in(self.READ, "Read")
+
+        (written,) = self.written()["proposals"].values()
+        (loaded,) = proposals.load(self.store).entries.values()
+
+        self.assertEqual((written["source"], written["tool"], written["by"]), ("tool", "Read", "session"))
+        self.assertEqual((loaded.source, loaded.tool, loaded.by), ("tool", "Read", "session"))
+        self.assertEqual(proposals.proposer_of(loaded), "handed in by a session")
+
+    def test_a_proposal_of_a_reading_is_written_without_a_tool_and_without_who_proposed(self) -> None:
+        """Covers: B179"""
+        self.kept(DANA, dataclasses.replace(LADDER, source="pasted"))
+
+        for written in self.written()["proposals"].values():
+            self.assertNotIn("tool", written)
+            self.assertNotIn("by", written)
+        self.assertEqual(list(map(proposals.proposer_of, proposals.load(self.store).entries.values())), [None, None])
+
+    def test_the_file_has_format_3_while_a_handed_in_proposal_or_one_on_a_result_or_an_answer_is_in_it(self) -> None:
+        """Covers: B179"""
+        typed_by_a_session = dataclasses.replace(DANA, source="typed")
+        for proposal, tool in ((self.READ, "Read"), (self.WRITTEN, None), (typed_by_a_session, None)):
+            with self.subTest(source=proposal.source):
+                (self.root / proposals.PROPOSALS_FILE).unlink(missing_ok=True)
+                self.handed_in(proposal, tool)
+
+                self.assertEqual(self.written()["format"], 3)
+
+    def test_an_m2b_that_knows_typed_and_pasted_words_only_refuses_such_a_file(self) -> None:
+        """Covers: B179"""
+        self.handed_in(self.READ, "Read")
+
+        with (
+            mock.patch.object(proposals, "FORMAT", proposals.FORMAT_OF_A_READING),
+            self.assertRaises(proposals.ProposalsError) as refused,
+        ):
+            proposals.load(self.store)
+
+        self.assertIn("update m2b on this machine", str(refused.exception))
+
+    def test_once_no_such_proposal_is_left_the_file_has_the_format_of_what_is(self) -> None:
+        """Covers: B179"""
+        self.handed_in(self.READ, "Read")
+        (key,) = self.written()["proposals"]
+        self.settle(key, proposals.DROPPED, NOW - datetime.timedelta(days=91))
+
+        self.kept(dataclasses.replace(LADDER, source="pasted"))
+        with_pasted = self.written()["format"]
+        (key,) = self.written()["proposals"]
+        self.settle(key, proposals.DROPPED, NOW - datetime.timedelta(days=91))
+        self.kept(dataclasses.replace(DANA, quote="Dana runs the IT at Northwind", text="Dana runs the IT there."))
+
+        self.assertEqual((with_pasted, self.written()["format"]), (2, 1))
+
+    def test_the_line_names_the_tool_of_a_result_and_claude_for_an_answer(self) -> None:
+        """Covers: B179"""
+        self.handed_in(self.READ, "mcp__mail__get_message")
+        self.handed_in(self.WRITTEN)
+        lines = {
+            entry.source: proposals.said_line(entry, entry.quote)
+            for entry in proposals.load(self.store).entries.values()
+        }
+
+        self.assertEqual(
+            lines["tool"], 'in a result of mcp__mail__get_message on 2026-03-04: "Dana runs IT at Northwind"'
+        )
+        self.assertEqual(lines["agent"], 'Claude wrote on 2026-03-04: "I still have to call Sam"')
+
+    def test_a_result_whose_tool_is_not_named_is_a_result_of_a_tool(self) -> None:
+        """Covers: B179"""
+        self.handed_in(self.READ)
+
+        (loaded,) = proposals.load(self.store).entries.values()
+
+        self.assertEqual(
+            proposals.said_line(loaded, loaded.quote),
+            'in a result of a tool on 2026-03-04: "Dana runs IT at Northwind"',
+        )
+
+    def test_an_entry_whose_tool_is_no_tools_name_or_whose_proposer_is_no_word_is_left_out(self) -> None:
+        """Covers: B179"""
+        self.handed_in(self.READ, "Read")
+        (key,) = self.written()["proposals"]
+        for field, value in (
+            ("tool", "Read me"),
+            ("tool", "Read\u202e"),
+            ("tool", 7),
+            ("tool", ""),
+            ("tool", "x" * 129),
+            ("by", "A Session"),
+            ("by", 7),
+        ):
+            with self.subTest(field=field, value=value):
+                raw = self.written()
+                raw["proposals"][key][field] = value
+                self.write(raw)
+
+                self.assertEqual(dict(proposals.load(self.store).entries), {})
+                raw["proposals"][key][field] = {"tool": "Read", "by": "session"}[field]
+                self.write(raw)
+
+    def test_what_a_session_handed_in_and_the_person_answered_is_no_example_for_a_reading(self) -> None:
+        """Covers: B179"""
+        self.handed_in(self.READ, "Read")
+        self.kept(LADDER)
+        read, handed = sorted(self.written()["proposals"], key=lambda key: self.written()["proposals"][key]["kind"])
+        self.settle(read, proposals.KEPT)
+        self.settle(handed, proposals.DROPPED)
+
+        examples = proposals.examples(proposals.load(self.store), NOW)
+
+        self.assertEqual([example.text for example in examples.kept], ["Call Sam about the ladder."])
+        self.assertEqual(examples.dropped, ())
+
+    def test_a_proposer_this_m2b_does_not_know_is_named_and_is_no_reading_either(self) -> None:
+        """Covers: B179"""
+        found = [Said(self.READ, DAY, None, "mail")]
+        proposals.save(self.store, proposals.add(proposals.load(self.store), found, NOW).proposals)
+        (key,) = self.written()["proposals"]
+        self.settle(key, proposals.KEPT)
+
+        (loaded,) = proposals.load(self.store).entries.values()
+
+        self.assertEqual(proposals.proposer_of(loaded), "proposed by mail")
+        self.assertEqual(self.written()["format"], 3)
+        self.assertEqual(proposals.examples(proposals.load(self.store), NOW), Examples())
+
+    def test_what_waits_and_how_the_last_days_ended_is_counted_per_way_and_source(self) -> None:
+        """Covers: B181"""
+        self.handed_in(self.READ, "Read")
+        self.handed_in(self.WRITTEN)
+        self.kept(dataclasses.replace(DANA, quote="Riley signs the orders", text="Riley signs the orders."))
+        self.kept(dataclasses.replace(LADDER, quote="Morgan gets the draft", text="Morgan gets it.", source="pasted"))
+        keys = {entry["text"]: key for key, entry in self.written()["proposals"].items()}
+        self.settle(keys["Dana runs IT at Northwind."], proposals.KEPT)
+        self.settle(keys["Morgan gets it."], proposals.DROPPED, NOW - datetime.timedelta(days=40))
+
+        counted = proposals.by_way_and_source(proposals.load(self.store), NOW - proposals.KEEP_RATE_PERIOD)
+
+        self.assertEqual(
+            counted,
+            {
+                "session": {"tool": proposals.WayCounts(kept=1), "agent": proposals.WayCounts(waiting=1)},
+                "reading": {"typed": proposals.WayCounts(waiting=1)},
+            },
+        )
 
 
 class RefusingTest(ProposalsFixture):
@@ -648,9 +810,9 @@ class UnreadableFileTest(ProposalsFixture):
         self.assertEqual(loaded.entries["aaaaaaaaaaaa"].since, datetime.datetime(2026, 3, 4, 3, tzinfo=UTC))
 
     def test_a_file_a_newer_m2b_wrote_is_not_read_so_it_is_not_written_over(self) -> None:
-        self.write({"format": 3, "proposals": {}})
+        self.write({"format": proposals.FORMAT + 1, "proposals": {}})
 
-        with self.assertRaisesRegex(proposals.ProposalsError, "format 3.*update m2b"):
+        with self.assertRaisesRegex(proposals.ProposalsError, f"format {proposals.FORMAT + 1}.*update m2b"):
             proposals.load(self.store)
 
     def test_a_file_that_is_not_json_is_an_error_not_a_store_without_proposals(self) -> None:

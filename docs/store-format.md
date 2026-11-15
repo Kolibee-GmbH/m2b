@@ -217,6 +217,32 @@ Your answer is an empty file a client adds: `state/core/proposal-answers/<id>.ke
 harvest writes the capture of a kept proposal, sets the state in `proposals.json` and removes the
 answer file.
 
+A proposal a session hands in by itself ([Curation](curation.md#what-a-session-hands-in)) is one
+file a client adds, `state/core/handed-in/<session id>.<proposal id>.json`:
+
+```json
+{
+ "format": 1,
+ "kind": "person",
+ "text": "Dana Whitfield runs purchasing at Acme.",
+ "quote": "Dana Whitfield runs purchasing at Acme",
+ "due": null,
+ "session": "0a1b2c3d-1111-4222-8333-444455556666",
+ "day": "2026-11-15",
+ "source": "tool",
+ "tool": "Read",
+ "at": "2026-11-15T09:44:12.665303+01:00"
+}
+```
+
+`source` is where the quote stands in the session: `typed`, `pasted`, `tool` or `agent`, an
+answer of Claude; `tool` names the tool for a tool's result where its name has the form of one,
+and is null otherwise; `at` is the time of the call. The file holds no folder. The next curation run takes it in and removes it. In
+`proposals.json` such a proposal has two more fields, `"by": "session"` and, for a tool's result,
+`"tool"`, and its `source` can be `tool` or `agent`. While the file holds such an entry its
+`format` is 3, and an m2b that knows format 2 answers "update m2b on this machine" where it would
+show the proposal as said or under a source it does not know and write it back without the fields.
+
 ## Who writes what
 
 | What | Created by | Changed by | Removed by |
@@ -224,7 +250,7 @@ answer file.
 | `inbox/` | clients, integrations, harvest (a ticked candidate, a kept proposal), the worklog | the curating machine (name, frontmatter, trailer; never the text) | ingest moves files into the archive; normalize removes conflict copies identical to their original |
 | `corpus/` | ingest, the journal | the journal (appends to the month's file) | lint, only conflict copies identical to their original |
 | `memory/` | ingest | ingest, refresh, the sorting step, a migration after an update, harvest (only `## Current`, from "Still current?" answers), lint (a broken link it repairs) | nobody |
-| `state/core/` | the curation run; any client adds an answer to a proposal under `proposal-answers/` | the curating machine | harvest prunes settled candidates and removes the answers it settled; every curation run removes the proposals kept, dropped or expired 90 days ago or longer |
+| `state/core/` | the curation run; any client adds an answer to a proposal under `proposal-answers/` and a proposal a session hands in under `handed-in/` | the curating machine | harvest prunes settled candidates and removes the answers it settled; the run removes the handed-in proposals it took in; every curation run removes the proposals kept, dropped or expired 90 days ago or longer |
 | tasks (`tasks/` with the `markdown` backend, or the Reminders list) | you, integrations, capture (a follow-up), ingest, `m2b tasks add --candidate` (a memory candidate), the curation run (review, "Still current?" questions, the task for waiting proposals) | you, also through the todos skill, which ticks a task you say is done; the band ticks or drops a curator task; the curation run completes its review task when nothing needs you, and the task for waiting proposals when none waits | harvest and the refresh step, once a curator task is settled or its item is gone; lint, with the `markdown` backend, only conflict copies of task files identical to their original; you |
 | `state/addons/<a>/`, `state/integrations/<i>/` | that add-on or integration | the same | the same |
 

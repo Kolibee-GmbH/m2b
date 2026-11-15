@@ -14,7 +14,7 @@ from unittest import mock
 
 import test_commands
 import test_ingest
-from m2b import addons, candidates, expiry, launcher
+from m2b import addons, candidates, expiry, glean, handed_in, launcher, proposals
 from m2b.atomic_file import HIDDEN_TEMP_PREFIX
 from m2b.config import machine
 from m2b.config.profile import save_profile
@@ -1026,6 +1026,126 @@ class HarvestStepTest(RunnerTest):
         self.assertEqual(list((self.store_root / "inbox").iterdir()), [])
         corpus = list((self.store_root / "corpus").rglob("*-candidate-*.md"))
         self.assertEqual(len(corpus), 1)
+
+
+class HandedInStepTest(RunnerTest):
+    """What a session handed in, taken in by the run's harvest step."""
+
+    SESSION = "0a1b2c3d-1111-4222-8333-444455556666"
+
+    def handed_in(self) -> Path:
+        proposal = handed_in.HandedIn(
+            "person",
+            "Dana Whitfield runs purchasing at Acme.",
+            "Dana Whitfield runs purchasing at Acme",
+            self.SESSION,
+            START.date(),
+            "tool",
+            START - datetime.timedelta(hours=1),
+            "Read",
+        )
+        found = glean.Proposal(proposal.kind, proposal.text, proposal.quote, proposal.session)
+        relative = handed_in.file_name(self.SESSION, proposals.proposal_id(found))
+        self.write(relative, json.dumps(handed_in.as_json(proposal)))
+        return self.store_root / relative
+
+    def test_a_run_that_reads_no_sessions_takes_in_what_a_session_handed_in(self) -> None:
+        """Covers: B180"""
+        self.curating()
+        file = self.handed_in()
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        (entry,) = proposals.load(self.store).entries.values()
+        self.assertEqual(
+            (entry.text, entry.source, entry.tool, entry.by),
+            ("Dana Whitfield runs purchasing at Acme.", "tool", "Read", "session"),
+        )
+        self.assertFalse(file.exists())
+        record = load_run_record(self.store)
+        assert record is not None
+        told = [finding.text for finding in record.findings if finding.step == "proposals"]
+        self.assertEqual(len(told), 1)
+        self.assertIn("took in what sessions handed in: 1 proposal added", told[0])
+        self.assertEqual(self.calls(), [], "taking in asks no model")
+
+    def test_a_handed_in_file_that_stays_evicted_waits_and_stops_no_run(self) -> None:
+        """Covers: B182"""
+        self.curating()
+        file = self.handed_in()
+        self.eviction.evicted.add(file)
+
+        outcome = self.run_curate(fetch_timeout=0.3)
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        self.assertTrue(file.exists())
+        self.assertEqual(dict(proposals.load(self.store).entries), {})
+        record = load_run_record(self.store)
+        assert record is not None
+        told = [finding.text for finding in record.findings if finding.step == "proposals"]
+        self.assertEqual(told, ["1 handed-in proposal not downloaded, left for the next run"])
+
+    def test_it_is_taken_in_also_when_settling_the_candidates_and_answers_fails(self) -> None:
+        """Covers: B180"""
+        self.curating()
+        file = self.handed_in()
+
+        with mock.patch.object(runner, "harvest", side_effect=TasksUnreachableError("the task list does not answer")):
+            self.run_curate()
+
+        (entry,) = proposals.load(self.store).entries.values()
+        self.assertEqual(entry.by, "session")
+        self.assertFalse(file.exists())
+
+    def test_it_is_taken_in_after_the_reading_of_the_sessions(self) -> None:
+        """Covers: B180"""
+        self.curating(curation={"read_sessions": True})
+        order: list[str] = []
+
+        def reading(*_: Any, **__: Any) -> Any:
+            order.append("reading")
+            return runner.glean_step.Reading("nothing was typed", ())
+
+        def intake(*_: Any, **__: Any) -> Any:
+            order.append("intake")
+            return runner.handed_in_intake.Intake()
+
+        with (
+            mock.patch.object(runner.glean_step, "propose", side_effect=reading),
+            mock.patch.object(runner.handed_in_intake, "take_in", side_effect=intake),
+        ):
+            self.run_curate()
+
+        self.assertEqual(order, ["reading", "intake"])
+
+    def test_a_run_that_only_removed_a_file_out_of_the_form_did_not_skip_its_step(self) -> None:
+        """Covers: B180"""
+        self.curating()
+        self.write(f"{handed_in.FOLDER}/notes.txt", "not a proposal")
+
+        self.run_curate()
+
+        record = load_run_record(self.store)
+        assert record is not None
+        self.assertEqual({step.name: step.result for step in record.steps}["proposals"], "succeeded")
+        self.assertFalse((self.store_root / handed_in.FOLDER / "notes.txt").exists())
+
+    def test_what_stops_the_taking_in_is_told_and_fails_no_run(self) -> None:
+        """Covers: B180"""
+        self.curating()
+        self.handed_in()
+
+        with mock.patch.object(runner.handed_in_intake, "take_in", side_effect=OSError("the disk is full")):
+            outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        record = load_run_record(self.store)
+        assert record is not None
+        told = [finding.text for finding in record.findings if finding.step == "proposals"]
+        self.assertEqual(
+            told, ["what sessions handed in was not taken in (the disk is full); the next run takes it in"]
+        )
 
 
 class RunSummaryTest(RunnerTest):

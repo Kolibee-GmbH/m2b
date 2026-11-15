@@ -98,6 +98,11 @@ and `m2b proposals drop <id>`. Only the prompts you typed are read, with what yo
 and with credentials redacted: no answer of Claude, no tool result, nothing a plugin or another
 agent sent, and no session you left out by its folder or its git remote ([Reading your sessions](curation.md#reading-your-sessions)).
 
+A session can also hand in a proposal by itself, with words from what its agent read for you, a
+mail or a document. That is off until you turn `sessions.propose` on, and such a proposal says in
+the list that a session handed it in and where its words stand
+([What a session hands in](curation.md#what-a-session-hands-in)).
+
 **Memory candidates.** `m2b tasks add --candidate "<a fact>"` proposes one fact as a task
 "Remember? ...", for a script or an integration of yours: tick it and the next run files it; drop
 it in the band, or delete the task, and it does not come back for 90 days.
@@ -152,9 +157,9 @@ What m2b has that Claude Code's memory does not:
 | fact file | one file in `memory/` for one subject, such as `dana.md`: its facts, and under "Evidence" links to the captures they came from |
 | topic | a heading in the distillate for one subject, such as a customer or a club, whose facts come in only when a session is about it |
 | review task | the one task m2b keeps in your task list for what a run needs you to look at: a step that failed, a finding, a facts line it removed or rewrote. Ticking it, or `ok` in the band, closes it |
-| proposal | a fact a curation run suggests from what you typed and pasted in your sessions, with the words it stands on beside it. Off until you say yes in setup, and nothing is filed before you keep it |
+| proposal | a fact a curation run suggests from what you typed and pasted in your sessions, or a session hands in by itself where you turned that on, with the words it stands on beside it. Off until you say yes in setup, and nothing is filed before you keep it |
 | memory candidate | a task "Remember? ..." that proposes one fact, put into your list by a script or an integration of yours: tick it and the next run files it |
 | band | the rows above the prompt where you keep or drop what curation proposes, and the status line below it |
-| mod | a module Claude Code loads with a plugin. m2b's mod is the band, with its `/m2b-...` commands and the two tools the model notes and searches with |
+| mod | a module Claude Code loads with a plugin. m2b's mod is the band, with its `/m2b-...` commands and the tools the model notes and searches with |
 | add-on | an optional piece of m2b, off until its own setup: `worklog` |
 | herdr | an [agent runtime](https://herdr.dev), a product of its own. Only the worklog add-on needs it; the rest of m2b runs without it |

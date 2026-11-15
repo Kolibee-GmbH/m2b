@@ -28,6 +28,11 @@ that was not filed for one, cannot be told from it and is left out with it; harv
 worklog know their own captures again, so nothing is written twice. Either waits where it is, a
 file git does not know, and the next run commits it before its first step.
 
+A proposal a session handed in (``handed_in``) is a file of the same sort: it waits in a folder of
+its own until a run takes it into the proposals file and removes it. It is committed with the
+captures before the first step, so a revert puts it back where the next run takes it in again,
+and one that came in during the run and still lies there stays out of the run's commit.
+
 A new file of the inbox that belongs to a capture from before the run is no such capture, and it
 goes in: left out, a revert would put ``memory/`` back and leave that capture as the run changed
 it. Normalize makes such files in two ways. It puts a sidecar and a reading copy beside a file,
@@ -92,12 +97,15 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from m2b import git_program
-from m2b.notes.layout import INBOX, bundle_stem
+from m2b.notes.layout import HANDED_IN, INBOX, bundle_stem
 from m2b.notes.names import NoteName
 from m2b.run_record import FAILED, SKIPPED, SUCCEEDED, StepResult
 from m2b.store.base import Store, fetch_command
 
 GIT_FOLDER = ".git"
+# Where something waits for a run as a file of its own: a capture, and a proposal a session handed
+# in. What waits there when a run starts is committed before its first step.
+WAITING_FOLDERS = (INBOX, HANDED_IN)
 IDENTITY_NAME = "m2b"
 IDENTITY_EMAIL = "m2b@localhost"
 GIT_TIMEOUT_SECONDS = 60.0
@@ -427,7 +435,8 @@ def _came_in_and_wait(before: StoreListing, after: StoreListing, carried_on: Map
     came_in = {path for path in after.files if _in_inbox(path) and path not in before.files}
     beside = {path for path in came_in if _has_schema_name(path) and bundle_stem(path) in bundles}
     taken_out = [path for path in was_there if path not in after.files]
-    return came_in - beside - _renamed(came_in, taken_out, carried_on)
+    handed_in = {path for path in after.files if _waits_handed_in(path) and path not in before.files}
+    return (came_in - beside - _renamed(came_in, taken_out, carried_on)) | handed_in
 
 
 def _renamed(came_in: Collection[str], taken_out: Sequence[str], carried_on: Mapping[str, str]) -> set[str]:
@@ -451,6 +460,11 @@ def _in_inbox(path: str) -> bool:
     return path.startswith(f"{INBOX}/")
 
 
+def _waits_handed_in(path: str) -> bool:
+    """A proposal a session handed in, where it waits for a run; it has no file beside it and no other name."""
+    return path.startswith(f"{HANDED_IN}/")
+
+
 def _has_schema_name(path: str) -> bool:
     return NoteName.parse(PurePosixPath(path).name) is not None
 
@@ -463,6 +477,21 @@ def message(started: datetime.datetime, steps: Sequence[StepResult]) -> Message:
         if names:
             lines.append(f"{result}: {', '.join(names)}")
     return Message(f"m2b: curation run {_minute(started)}", "\n".join(lines))
+
+
+def handed_in_in_head(repository: Repository) -> frozenset[str]:
+    """The handed-in proposals HEAD holds: those a run can take in and a revert of the run puts back.
+
+    A file the commit before the run did not take, because it was not downloaded then, the owner
+    had staged it, or that commit failed, is not among them, whatever the run's listing says: taken
+    in, it would leave only its entry in the proposals file, which a revert removes. git reads its
+    own objects for this and no file of the work tree.
+    """
+    code, _ = repository.call(["rev-parse", "--verify", "--quiet", "HEAD^{commit}"], allowed=(0, 1))
+    if code != 0:
+        return frozenset()
+    printed = repository.call(["ls-tree", "-r", "-z", "--name-only", "HEAD", "--", HANDED_IN])[1]
+    return frozenset(path for path in printed.split("\0") if path)
 
 
 def captures_message(started: datetime.datetime) -> Message:
@@ -519,9 +548,10 @@ def commit(
 
 
 def commit_waiting_captures(repository: Repository, before: StoreListing, text: Message, temp_dir: Path) -> str | None:
-    """Commits the captures in the inbox that git does not know; the commit's id, or None without one.
+    """Commits the captures in the inbox that git does not know, and the proposals sessions handed
+    in with them; the commit's id, or None without one.
 
-    Those are the files below ``inbox/`` that ``before``, the run's listing, holds and that are on
+    Those are the files below ``WAITING_FOLDERS`` that ``before``, the run's listing, holds and that are on
     this machine, not hidden, not ignored, and neither in the owner's index nor in HEAD. A file in
     one of the two is the owner's to commit: staged, changed since its commit, or taken out of the
     index, it stays as it is. Without such a capture nothing is committed, and an unfinished merge
@@ -529,7 +559,7 @@ def commit_waiting_captures(repository: Repository, before: StoreListing, text: 
     so an inbox that is such a link has no capture to commit here.
     """
     store = repository.store
-    waiting = [path for path in store.scan(INBOX).files if path in before.files]
+    waiting = [path for folder in WAITING_FOLDERS for path in store.scan(folder).files if path in before.files]
     if not waiting:
         return None
     directory = git_directory(repository)
@@ -659,7 +689,7 @@ def _unknown_to(repository: Repository, index: Path | None, paths: Sequence[str]
     the index holds a folder, or below a file the index holds. Taking one name too many for known
     only leaves a capture out.
     """
-    printed = repository.call(["ls-files", "-z", "--cached", "--", INBOX], index)[1]
+    printed = repository.call(["ls-files", "-z", "--cached", "--", *WAITING_FOLDERS], index)[1]
     known = {_compared(path) for path in printed.split("\0") if path}
     known_folders = {folder for path in known for folder in _folders_above(path)}
     return [

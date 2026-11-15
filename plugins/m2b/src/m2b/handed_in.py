@@ -34,9 +34,10 @@ call.
   credential's value, by what stood before it, gives no quote at all: under a key that names a
   credential the whole value is one. A name further off, or only in the input of the call, is
   not seen; the redaction is a net with holes, here as everywhere.
-- No more than ``WAITING_PER_SESSION`` proposals of one session wait in the store. The number is
+- No more than ``WAITING_PER_SESSION`` proposals of one session wait for a run. The number is
   chosen: a document planted to make an agent propose a hundred things, each with a real quote,
-  fills the store no further. Calls at the same moment can pass it.
+  fills the list no further between two runs. Once a run took them in, the session can hand in
+  as many again. Calls at the same moment can pass the limit.
 
 What the check shows is that the words stand in the session and where. It does not show that
 they carry the text: a document can lead an agent to a proposal that quotes three words the
@@ -47,6 +48,9 @@ exclusively: a client only adds to the store, and ``proposals.json`` is the cura
 id is the one a reading gives the same quote of the same session (``proposals.proposal_id``), so
 the same call twice finds its file there, and what a reading and a session both propose has one
 id. The file holds no folder: a folder's name can be a customer's.
+
+The next curation run takes the file in (``curate.handed_in_intake``) and removes it. It has no
+transcript, so it reads the file again with every check that needs none (``read``).
 """
 
 from __future__ import annotations
@@ -68,14 +72,14 @@ from m2b.config.machine import MachineConfig
 from m2b.config.store_settings import require_store_writable
 from m2b.glean import AGENT, PASTED, TOOL, TYPED
 from m2b.notes.characters import can_be_written, unsafe_characters, without_hidden
-from m2b.notes.layout import STATE
+from m2b.notes.layout import HANDED_IN
 from m2b.paths import MachinePaths
 from m2b.prompt_hook import CURATION_RUN_VARIABLE
 from m2b.redaction import is_removed_behind, redact
 from m2b.session_places import Place
 from m2b.store.base import Store, StoreError
 
-FOLDER = f"{STATE}/core/handed-in"
+FOLDER = HANDED_IN
 FORMAT = 1
 WAITING_PER_SESSION = 10
 # A quote is the words a proposal stands on, a sentence or two, not the passage they are from.
@@ -100,12 +104,22 @@ _JOINERS = "\u200c\u200d"
 _SOURCES = (TYPED, PASTED, TOOL, AGENT)
 SWITCH = "sessions.propose"
 _DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
+# The time of a call as ``as_json`` writes it: with its seconds and its offset.
+_MOMENT = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?[+-]\d{2}:\d{2}")
 # What steers a terminal or is drawn as nothing; white space is gone by then, the text is one line.
 _CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 
 class RefusedError(Exception):
     """The proposal was not handed in; the text is the one line that says why."""
+
+
+class NotInFormError(Exception):
+    """A file in the folder is no proposal this m2b wrote; the text names what is not in the form."""
+
+
+class NewerFormatError(Exception):
+    """A file in the folder was written by a newer m2b; this one does not judge it."""
 
 
 @dataclass(frozen=True)
@@ -212,10 +226,73 @@ def hand_in(
         place.time.astimezone(now.tzinfo or datetime.timezone.utc).date(),
         source,
         now,
-        place.tool if source == TOOL else None,
+        # A name that is not in the form of a tool's name is not shown as one.
+        place.tool if source == TOOL and place.tool and proposals.is_tool_name(place.tool) else None,
         given.due,
     )
     return _add(store, proposal)
+
+
+def read(name: str, text: str) -> HandedIn:
+    """A file of the folder as the curation run takes it in: ``name`` is its file name.
+
+    The run has no transcript, the session may have run on another machine. It checks again what
+    needs none, because the file came through the store like any other: the form of the text and
+    the quote, with no character that hides and nothing the redaction removes; that the name is
+    the session's id and the id of that quote; a source this m2b writes; a tool's name only with
+    a tool's result and only in the form of one. What does not hold is a ``NotInFormError``; a
+    file of a newer format is a ``NewerFormatError`` and is left for the m2b that knows it.
+    """
+    stem, dot, extension = name.rpartition(".")
+    session, _, proposal_id = stem.rpartition(".")
+    if dot != "." or extension != "json" or not session_places.is_session_id(session):
+        raise NotInFormError("its name")
+    if not proposals.is_id(proposal_id):
+        raise NotInFormError("its name")
+    try:
+        raw = json.loads(text)
+    except (ValueError, RecursionError):
+        raise NotInFormError("its content") from None
+    if not isinstance(raw, dict):
+        raise NotInFormError("its content")
+    written_as = raw.get("format")
+    if not isinstance(written_as, int) or isinstance(written_as, bool) or written_as < 1:
+        raise NotInFormError("its format")
+    if written_as > FORMAT:
+        raise NewerFormatError(f"format {written_as}")
+    try:
+        given = parse(raw)
+    except RefusedError:
+        raise NotInFormError("its kind, text, quote, session or due") from None
+    # A call writes text and quote as one line; a file that holds them otherwise is not a call's.
+    if raw.get("text") != given.text or raw.get("quote") != given.quote:
+        raise NotInFormError("its text")
+    named = proposals.proposal_id(glean.Proposal(given.kind, given.text, given.quote, given.session))
+    if given.session != session or named != proposal_id:
+        raise NotInFormError("its name")
+    source, tool = raw.get("source"), raw.get("tool")
+    if source not in _SOURCES:
+        raise NotInFormError("its source")
+    if tool is not None and not (source == TOOL and isinstance(tool, str) and proposals.is_tool_name(tool)):
+        raise NotInFormError("its tool")
+    # A call never takes a result of one of m2b's own tools for a place: it gives the memory back.
+    if isinstance(tool, str) and tool.startswith(OWN_TOOLS):
+        raise NotInFormError("its tool")
+    written_day, written_at = raw.get("day"), raw.get("at")
+    # As a call writes them, whatever else the running Python would read as a day or a time.
+    if not (isinstance(written_day, str) and _DAY.fullmatch(written_day)):
+        raise NotInFormError("its day")
+    if not (isinstance(written_at, str) and _MOMENT.fullmatch(written_at)):
+        raise NotInFormError("its time")
+    try:
+        day = datetime.date.fromisoformat(written_day)
+        at = datetime.datetime.fromisoformat(written_at)
+    except ValueError:
+        raise NotInFormError("its day") from None
+    # The words were written before the call, a day's difference between two zones aside.
+    if day > at.date() + datetime.timedelta(days=1):
+        raise NotInFormError("its day")
+    return HandedIn(given.kind, given.text, given.quote, given.session, day, source, at, tool, given.due)
 
 
 def file_name(session: str, proposal_id: str) -> str:

@@ -317,6 +317,17 @@ def _bare(text: str) -> str:
     return _collapsed(text).casefold().strip(_ENDS)
 
 
+def captured_already(statements: Sequence[str], captures: Sequence[str]) -> bool:
+    """Whether one of the captures says what one of the statements says, by the second check.
+
+    For a proposal that comes without the prompt its quote stands in: each statement, the quote
+    and the text, is compared with each capture as a quote is, and taken as the text a capture of
+    it was worded from.
+    """
+    captured = [(_bare(capture), _words(_ADDITION.sub(" ", capture))) for capture in captures]
+    return any(_is_captured(_collapsed(statement), (statement,), captured) for statement in statements)
+
+
 def _is_captured(quote: str, quoted_from: Sequence[str], captured: Sequence[tuple[str, frozenset[str]]]) -> bool:
     """Whether one of the captures, each as its bare text and its words, says what the quote says."""
     bare = _bare(quote)

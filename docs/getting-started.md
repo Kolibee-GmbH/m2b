@@ -123,7 +123,8 @@ on in Claude Code: `m2b doctor` says in its line `band` whether it ran, and
 `/m2b-note <text>`, which notes a text at once without a model turn, `/m2b-review`,
 `/m2b-proposals` and `/m2b-search <text>`, which show the last curation run, the proposals from
 your sessions and search hits in a pane, and two tools through which the model notes and searches
-without a shell call. The worklog add-on is off until its own setup skill turns it on;
+without a shell call; a third, with which a session hands in proposals by itself, is off until you
+turn it on ([The band](band.md#handing-in-a-proposal-a-tool-you-turn-on)). The worklog add-on is off until its own setup skill turns it on;
 [Add-ons](addons.md) describes it.
 
 Setup asked, on the machine that curates, whether curation runs may read your sessions. It is off

@@ -38,6 +38,16 @@ answers, commits and session folders, the inbox and memory (below). In every ses
 the distillate, the routing rule and the notices at session start; before a prompt that names a
 topic, that topic's facts.
 
+**What a session writes into the store when it hands in.** Off until you turn `sessions.propose`
+on. Then the agent of a session can hand in a proposal with words from what it read for you: a
+quote of up to 500 characters from a mail, a document, a page or a command's output lies in the
+store's state and syncs with it, with the session's id, the tool's name and the time, until you
+answer the proposal and for 90 days after. No model is called for it: the check at the call and
+the run that takes the proposal in are code. The tool's description, about 3,200 characters, is
+part of every session that has the tool. A session in a folder or repository you leave out hands
+nothing in; what a session read through a connector or the web is not covered by that rule
+([Security](../SECURITY.md#what-a-session-hands-in)).
+
 **What the worklog reads** (only while on, only on the curating machine): the herdr events its
 recorder writes to `~/.local/state/m2b/worklog/`, the prompts and the end of each session's last
 answer from your Claude Code transcripts for the period (with credentials and long tokens

@@ -71,7 +71,16 @@ from m2b.config.store_settings import (
     load_store_settings,
     write_store_format,
 )
-from m2b.curate import glean_step, machine_state, memory_guard, migrations, model, report, run_commit
+from m2b.curate import (
+    glean_step,
+    handed_in_intake,
+    machine_state,
+    memory_guard,
+    migrations,
+    model,
+    report,
+    run_commit,
+)
 from m2b.curate.due import PAUSED_MESSAGE, check_due
 from m2b.harvest import HarvestReport, harvest
 from m2b.journal import write_journal
@@ -79,6 +88,7 @@ from m2b.locale import Locale, load_locale
 from m2b.notes.characters import with_hidden_written_out, without_hidden
 from m2b.notes.layout import (
     CORPUS,
+    HANDED_IN,
     INBOX,
     MEMORY,
     MEMORY_INDEX,
@@ -385,8 +395,8 @@ class _Run:
         except (run_commit.CommitError, OSError, StoreError) as error:
             reason = str(error) or type(error).__name__
             problem = (
-                "the captures in the inbox were not committed before the run, so reverting the run's commit "
-                f"removes those it filed instead of putting them back: {reason}"
+                "the captures in the inbox and what sessions handed in were not committed before the run, so "
+                f"reverting the run's commit removes what it filed or took in instead of putting it back: {reason}"
             )
         self.forgiven_steps.add(COMMIT)
         self.steps.append(StepResult(COMMIT, FAILED, problem))
@@ -441,8 +451,10 @@ class _Run:
             self.store.fetch(paths, self.fetch_timeout_seconds)
         except FetchError:
             # A capture that will not download waits in the inbox: ingest leaves it for the next run
-            # and names it. Anything else the run reads or writes must be here.
-            if self.store.check_local([path for path in paths if path != INBOX]):
+            # and names it. A proposal a session handed in waits in its folder the same way.
+            # Anything else the run reads or writes must be here.
+            missing = self.store.check_local([path for path in paths if path != INBOX])
+            if any(not _waits_where_it_is(path) for path in missing):
                 raise
         if self.last_success is None:
             self.last_success = self._previous_success()
@@ -639,6 +651,37 @@ class _Run:
             self.findings += [report.Finding(HARVEST, report.ACTION, problem) for problem in result.problems]
         current_check.settle(self.store, tasks, self.clock().date(), task_list=self._task_list())
 
+    def _take_in_handed_in(self) -> bool:
+        """What sessions handed in becomes proposals that wait; whether there was anything to say of it.
+
+        After the reading of the sessions: where a session handed in what a reading of the same
+        run proposes too, the reading's proposal is the one that waits, worded from what the
+        person typed and pasted alone. What stops the taking in stops no run: the files wait
+        where they are, and the review says so.
+        """
+        try:
+            intake = handed_in_intake.take_in(self.store, self.clock(), self._handed_in_a_revert_puts_back())
+        except Exception as error:
+            text = str(error) or type(error).__name__
+            problem = f"what sessions handed in was not taken in ({text}); the next run takes it in"
+            self.findings.append(report.Finding(PROPOSALS, report.ACTION, problem))
+            return True
+        self.findings += [report.Finding(PROPOSALS, report.INFO, note) for note in intake.notes]
+        self.findings += [report.Finding(PROPOSALS, report.ACTION, problem) for problem in intake.problems]
+        return bool(intake.notes or intake.problems)
+
+    def _handed_in_a_revert_puts_back(self) -> frozenset[str] | None:
+        """The handed-in files a run that commits may take in, or None for a run that makes no commit.
+
+        Where git cannot say, none: the files wait for a run in which it can.
+        """
+        if self.repository is None or self.listed_before is None:
+            return None
+        try:
+            return run_commit.handed_in_in_head(self.repository) & self.listed_before.files.keys()
+        except (run_commit.CommitError, OSError, StoreError):
+            return frozenset()
+
     def _glean(self) -> Skipped | None:
         """What the person typed since the last reading; the model only when a session has a prompt."""
         started = self.started or self.clock()
@@ -656,15 +699,17 @@ class _Run:
         return Skipped(reading.skipped) if reading.skipped is not None else None
 
     def _proposals_task(self, tasks: Tasks, locale: Locale) -> Skipped | None:
-        """What time makes of the proposals, then the one task for those that wait.
+        """What sessions handed in, what time makes of the proposals, then the one task for those that wait.
 
-        In every run, whether or not it reads the sessions: harvest settles answers in every run, and
-        a proposal expires or is forgotten by the calendar, not by a reading.
+        In every run, whether or not it reads the sessions: harvest settles answers in every run,
+        a session hands in without a reading, and a proposal expires or is forgotten by the
+        calendar, not by a reading.
 
         Only a task list that did not answer clears by itself, so only then the review says the next
         run does it; any other cause says itself what it takes.
         """
         not_done = "the task for the proposals that wait was not brought up to date"
+        took_in = self._take_in_handed_in()
         try:
             aged = proposal_answers.expire(self.store, self.clock())
             if aged.expired:
@@ -675,8 +720,8 @@ class _Run:
             if isinstance(error, TasksError):
                 raise StepError(f"{not_done} ({cause}); the next run does it") from error
             raise StepError(f"{not_done}: {cause}") from error
-        # A step that let a proposal expire or forgot one did run, also when no task changed for it.
-        if outcome.had_nothing_to_do and not (aged.expired or aged.forgotten):
+        # A step that took something in, let a proposal expire or forgot one did run, also when no task changed for it.
+        if outcome.had_nothing_to_do and not (took_in or aged.expired or aged.forgotten):
             return Skipped("no proposal waits for an answer")
         return None
 
@@ -1161,6 +1206,11 @@ def _shown_change(change: memory_guard.FactChange) -> dict[str, object]:
         if isinstance(value, str):
             data[side] = without_hidden(value)
     return data
+
+
+def _waits_where_it_is(path: str) -> bool:
+    """A file that is not downloaded and that a run can do without: one a session handed in."""
+    return path == HANDED_IN or path.startswith(f"{HANDED_IN}/")
 
 
 def _preflight_paths(started: datetime.datetime) -> list[str]:

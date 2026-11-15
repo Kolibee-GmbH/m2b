@@ -45,6 +45,8 @@ export type FakeProposal = {
   topic: string | null
   due: string | null
   source?: string
+  tool?: string | null
+  by?: string | null
   answer?: 'keep' | 'drop'
 }
 

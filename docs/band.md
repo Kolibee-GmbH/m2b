@@ -172,7 +172,8 @@ As text, other proposals, one of them within its undo:
 
 Keep and drop work as on a candidate: a click writes nothing for 5 seconds and offers `undo`, then
 the band runs `m2b proposals keep <id>` or `m2b proposals drop <id>`, which adds your answer to
-the store. `keep all` keeps the proposals the pane showed when you clicked it, without those you
+the store. `keep all` keeps the proposals the pane showed when you clicked it, without those a
+session handed in, which you keep or drop on their own, and without those you
 clicked on their own; one a curation run added a moment before is not kept unseen. Nothing is
 filed by the click: the next curation run writes a capture for each proposal you kept and files
 it, and the last line says how many answers wait for it. The row in the band and the pane follow
@@ -273,7 +274,9 @@ you committed to, something about your own life. The words may be yours or stand
 model read for you, a mail or a document. The mod adds which session hands in, the id Claude Code
 gives the session; the model cannot name another one. Everything else is decided by
 [`m2b proposals add`](commands.md), which looks for the quote in that session's transcript and
-writes one file under `state/core/handed-in/` in the store, or refuses with one line. The tool
+writes one file under `state/core/handed-in/` in the store, or refuses with one line. The next
+curation run takes that file in, and the proposal then waits in the list with the others, marked
+as handed in by a session ([Curation](curation.md#what-a-session-hands-in)). The tool
 answers with that line. A refusal never repeats the text or the quote. When the command could not
 take the call or reach the store, the tool says that nothing was handed in and why. After any
 other end, a command that was stopped before it answered among them, it says that it is unknown
@@ -394,7 +397,7 @@ kept for five minutes, so at most every five minutes the answer waits for the ca
 for at most 10 seconds whatever `calendar.timeout_seconds` says; a calendar that does not answer
 by then is reported as not reachable. `--tasks-only` leaves `proposals` and `status` out.
 
-`proposals` lists what a reading of your sessions proposed and still waits for your answer (one
+`proposals` lists what a reading of your sessions proposed or a session handed in and still waits for your answer (one
 without an answer for 14 days no longer does), the earliest said first, and in `answered` how many answers wait for the next curation run. When
 that cannot be looked at (the proposals file or the answers folder is not downloaded, a newer m2b
 wrote the proposals file, the store is out of reach), `proposals` is `{"error": "<why>"}` and the

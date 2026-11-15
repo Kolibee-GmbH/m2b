@@ -22,6 +22,27 @@ All notable changes to this project are documented here. The format follows
   session to `m2b proposals add` and answers with its line. It runs without a permission
   question; a rule of yours for `Bash(m2b proposals:*)` or for the tool's name comes first. Its
   description, about 3,200 characters, is in the prompt of every session that has the tool.
+- Every curation run takes in what sessions handed in, whether or not it reads your sessions:
+  each proposal then waits in the list with the others. It says that a session handed it in, also
+  where its words were typed, and its line reads `in a result of <tool> on <day>` or
+  `Claude wrote on <day>` for words a tool returned or Claude answered. The run reads no
+  transcript; it checks the form again, takes ten of one session, and leaves out what you
+  captured yourself since that day and what is like a proposal that waits, was answered or
+  expired, so the same fact from several sessions waits once.
+- `m2b status` counts the proposals per way they came, a reading or a session, and per source of
+  their words: how many wait and how many were kept, dropped and expired in the last 30 days.
+
+### Changed
+
+- `m2b proposals keep --all` leaves the proposals a session handed in and says how many: an agent
+  worded them from what it read, so each is kept or dropped by its id, or in the pane.
+- `proposals.json` has format 3 while it holds a proposal a session handed in. An m2b before this
+  release on another machine then says "update m2b on this machine", where it would show that
+  proposal as said and write it back without who proposed it. Without such a proposal the file
+  keeps the format it had.
+- Where the store is a git repository, a handed-in proposal is committed with the waiting
+  captures before a run's first step, so taking a run back puts it where the next run takes it in
+  again.
 
 ## [0.4.5] - 2026-11-15
 

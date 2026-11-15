@@ -33,7 +33,7 @@ from m2b.config.machine import MachineConfig, load_machine_config
 from m2b.config.store_settings import describe_format, format_state, load_store_settings
 from m2b.curate import machine_state
 from m2b.curate.due import PAUSED_NOTE, check_due
-from m2b.glean import KINDS
+from m2b.glean import AGENT, KINDS, PASTED, TOOL, TYPED
 from m2b.notes.layout import INBOX
 from m2b.paths import MachinePaths
 from m2b.run_record import RUNNING, RunRecordError, is_interrupted, load_run_record
@@ -142,17 +142,21 @@ def _run(store: Store, machine: MachinePaths, this_machine: str, now: datetime.d
 def _proposal_answers(store: Store, config: MachineConfig, now: datetime.datetime) -> dict[str, Any] | None:
     """How the proposals from the sessions ended lately, and the counts per kind since the first one.
 
-    None, so the part is left out, on a machine that reads no sessions in a store that never held a
-    proposal: there the part would say nothing to anyone. ``keep_rate`` is null without an answer
-    in the period, which is not a rate of 0.
+    None, so the part is left out, on a machine that neither reads sessions nor lets them hand in,
+    in a store that never held a proposal: there the part would say nothing to anyone.
+    ``keep_rate`` is null without an answer in the period, which is not a rate of 0. ``ways`` says
+    the same per way a proposal came, a reading or a session that handed it in, and per source of
+    its words, with how many wait: whether sessions hand in, and whether what they hand in is kept.
     """
     try:
         current = proposals.load(store)
     except (ConfigError, proposals.ProposalsError, StoreError) as error:
         return {"error": str(error)}
-    if not (config.curation.read_sessions or current.entries or current.counts):
+    if not (config.curation.read_sessions or config.sessions.propose or current.entries or current.counts):
         return None
-    outcomes = proposals.outcomes_since(current, now - proposals.KEEP_RATE_PERIOD)
+    start = now - proposals.KEEP_RATE_PERIOD
+    outcomes = proposals.outcomes_since(current, start)
+    ways = proposals.by_way_and_source(current, start)
     rate = outcomes.keep_rate
     return {
         "days": proposals.KEEP_RATE_PERIOD.days,
@@ -161,6 +165,10 @@ def _proposal_answers(store: Store, config: MachineConfig, now: datetime.datetim
         "expired": outcomes.expired,
         "keep_rate": None if rate is None else round(rate, 2),
         "counts": {kind: dataclasses.asdict(current.tally(kind)) for kind in KINDS},
+        "ways": {
+            way: {source: dataclasses.asdict(counts) for source, counts in sorted(sources.items())}
+            for way, sources in sorted(ways.items())
+        },
     }
 
 
@@ -230,6 +238,8 @@ def _print_text(answer: dict[str, Any]) -> None:
     answers = answer.get("proposal_answers")
     if answers is not None:
         print(f"proposals: {_proposal_answers_text(answers)}")
+        for line in _proposal_ways_lines(answers):
+            print(line)
     on = [name for name, is_addon_on in answer["addons"].items() if is_addon_on]
     print(f"add-ons on: {', '.join(on) if on else 'none'}")
 
@@ -246,6 +256,24 @@ def _proposal_answers_text(answers: dict[str, Any]) -> str:
     else:
         text = f"no answer in the last {answers['days']} days"
     return text + (f", {answers['expired']} expired without an answer" if answers["expired"] else "")
+
+
+# How a line names the way a proposal came and where its words stand; another word is shown as it is.
+_WAYS = {proposals.READING: "a reading found in", proposals.SESSION: "sessions handed in from"}
+_SOURCES = {TYPED: "typed words", PASTED: "pasted text", TOOL: "a tool's result", AGENT: "an answer of Claude"}
+
+
+def _proposal_ways_lines(answers: dict[str, Any]) -> list[str]:
+    """One line per way and source with something: what waits, and how the period's answers ended."""
+    lines = []
+    for way, sources in answers.get("ways", {}).items():
+        for source, counts in sources.items():
+            lines.append(
+                f"proposals {_WAYS.get(way, f'{way} from')} {_SOURCES.get(source, source)}: "
+                f"{counts['waiting']} waiting, {counts['kept']} kept, {counts['dropped']} dropped, "
+                f"{counts['expired']} expired in the last {answers['days']} days"
+            )
+    return lines
 
 
 def _iso(moment: datetime.datetime) -> str:

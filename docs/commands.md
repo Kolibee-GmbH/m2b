@@ -103,10 +103,10 @@ Reminders the Reminders app does the same. In a session, saying that a task is d
 |---|---|
 | `m2b curate [--force] [--detach]` | the curation run: without `--force` only when one is due, as a schedule calls it; `--detach` starts it in the background. `--refresh-all` and `--sort-facts` run now and do one more step, once ([Curation](curation.md#moving-over-an-older-distillate)) |
 | `m2b curate take-over` | makes this machine the curating machine ([Several machines](several-machines.md)) |
-| `m2b proposals [--json]` | what the reading of your sessions proposed and what waits for your answer |
-| `m2b proposals keep [--all] <ids>` | files these proposals with the next curation run |
+| `m2b proposals [--json]` | what the reading of your sessions proposed and what sessions handed in, as far as it waits for your answer |
+| `m2b proposals keep [--all] <ids>` | files these proposals with the next curation run; `--all` leaves those a session handed in, which you keep by id |
 | `m2b proposals drop <ids>` | forgets these proposals |
-| `m2b proposals add` | hands in a proposal of a session, read as one JSON object from standard input: `kind`, `text`, `quote`, `session`, optionally `due`. Off until `sessions.propose` is `true`. Refuses with one line when the quote does not stand in that session's transcript or the session worked where m2b does not read |
+| `m2b proposals add` | hands in a proposal of a session, read as one JSON object from standard input: `kind`, `text`, `quote`, `session`, optionally `due`. Off until `sessions.propose` is `true`. Refuses with one line when the quote does not stand in that session's transcript or the session worked where m2b does not read. The next curation run takes the proposal in |
 | `m2b lint scan [--json]` | findings about the store: broken links, misnamed notes, conflict copies |
 
 To pause the runs on a machine: `m2b config set curation.paused true`

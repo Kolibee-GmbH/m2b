@@ -49,7 +49,10 @@ export type BandPress = {
   ids?: string[]
 }
 
-/** What a reading of the sessions proposed for the memory, with the words it stands on and the day they were sent. */
+/**
+ * What a reading of the sessions proposed for the memory, or a session handed in by itself, with
+ * the words it stands on and the day they were written.
+ */
 export type BandProposal = {
   id: string
   kind: string
@@ -60,6 +63,10 @@ export type BandProposal = {
   due: string | null
   /** Where the quote stands in the session: `typed` when absent, or something else, such as `pasted`. */
   source?: string
+  /** The tool whose result holds the quote, where the source is `tool`. */
+  tool?: string | null
+  /** Who proposed where it was no reading: `session` for a proposal a session handed in. */
+  by?: string | null
 }
 
 /**

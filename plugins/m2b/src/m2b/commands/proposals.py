@@ -108,23 +108,36 @@ def _answer(store: Store, answer: str, named: list[str], every: bool, as_json: b
     if every == bool(named):
         raise UsageError(f"m2b proposals {answer} takes the ids of proposals" + (" or --all" if answer == KEEP else ""))
     require_store_writable(store)
-    entries = dict(proposal_answers.waiting(store).proposals) if every else proposals.load(store).entries
+    waiting = dict(proposal_answers.waiting(store).proposals) if every else {}
+    # What a session handed in is kept one by one: an agent worded it from what it read, and
+    # `--all` answers without a look at each.
+    left = [key for key, entry in waiting.items() if proposals.proposer_of(entry) is not None]
+    entries = (
+        {key: entry for key, entry in waiting.items() if key not in left} if every else proposals.load(store).entries
+    )
     given = proposal_answers.give(store, list(entries) if every else named, answer)
     other = {key: stands for key, stands in given.already.items() if stands != answer}
     if as_json:
-        print_json({"given": list(given.given), "already": dict(given.already)})
+        answered = {"given": list(given.given), "already": dict(given.already)}
+        print_json({**answered, "left": left} if every else answered)
     else:
-        _say(answer, given, entries, every)
+        _say(answer, given, entries, every, len(left))
     return 1 if other else 0
 
 
-def _say(answer: str, given: Given, entries: Mapping[str, Entry], every: bool) -> None:
+def _say(answer: str, given: Given, entries: Mapping[str, Entry], every: bool, left: int = 0) -> None:
     for key in given.given:
         print(f"{answer} {key}: {_shown(entries[key].text)}")
     if given.given and answer == KEEP:
         print("the next curation run files what is kept")
-    if every and not given.given:
+    if every and not given.given and not left:
         print(NONE_WAITS)
+    if left:
+        one = left == 1
+        print(
+            f"{left} {'proposal' if one else 'proposals'} a session handed in "
+            f"{'waits' if one else 'wait'}: --all leaves {'it' if one else 'them'}, keep or drop by id"
+        )
     for key, stands in given.already.items():
         if stands == answer:
             print(f"{key} is answered with {stands} already")
@@ -147,6 +160,10 @@ def _heading(entry: Entry) -> str:
         parts.append(f"due {entry.due.isoformat()}")
     if entry.topic:
         parts.append(f"topic {_shown(entry.topic)}")
+    proposer = proposals.proposer_of(entry)
+    if proposer is not None:
+        # Also where its words were typed: an agent worded its text, having read more than those words.
+        parts.append(_shown(proposer))
     return ", ".join(parts)
 
 
@@ -160,4 +177,6 @@ def _as_json(key: str, entry: Entry) -> dict[str, Any]:
         "topic": entry.topic,
         "due": entry.due.isoformat() if entry.due else None,
         "source": entry.source,
+        "tool": entry.tool,
+        "by": entry.by,
     }

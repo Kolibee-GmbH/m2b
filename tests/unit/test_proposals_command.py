@@ -96,6 +96,33 @@ class ListTest(ProposalsCommandTest):
         self.assertIn('  said on 2026-03-04: "Dana runs IT at Northwind"\n', out)
         self.assertEqual(listed, {DANA_ID: "typed", LADDER_ID: "pasted"})
 
+    def test_a_proposal_a_session_handed_in_says_so_and_names_the_tool_or_claude(self) -> None:
+        """Covers: B179"""
+        read = dataclasses.replace(DANA, source="tool")
+        written = dataclasses.replace(LADDER, source="agent")
+        found = [Said(read, DAY, "mcp__mail__get_message", proposals.SESSION), Said(written, DAY, None, "session")]
+        proposals.save(self.store, proposals.add(proposals.load(self.store), found, NOW).proposals)
+
+        _, out, _ = self.run_command("proposals")
+        listed = {entry["id"]: entry for entry in self.run_json("proposals")["proposals"]}
+
+        self.assertIn(
+            f"{DANA_ID}  person, topic Northwind, handed in by a session\n"
+            "  Dana runs IT at Northwind.\n"
+            '  in a result of mcp__mail__get_message on 2026-03-04: "Dana runs IT at Northwind"\n',
+            out,
+        )
+        self.assertIn(
+            f"{LADDER_ID}  commitment, due 2026-03-06, handed in by a session\n"
+            "  Call Sam about the ladder.\n"
+            '  Claude wrote on 2026-03-04: "I still have to call Sam"\n',
+            out,
+        )
+        self.assertEqual(
+            [(listed[key]["source"], listed[key]["tool"], listed[key]["by"]) for key in (DANA_ID, LADDER_ID)],
+            [("tool", "mcp__mail__get_message", "session"), ("agent", None, "session")],
+        )
+
     def test_json_gives_the_same_for_a_client(self) -> None:
         """Covers: B122"""
         self.proposed(DANA, LADDER)
@@ -116,6 +143,8 @@ class ListTest(ProposalsCommandTest):
                         "topic": "Northwind",
                         "due": None,
                         "source": "typed",
+                        "tool": None,
+                        "by": None,
                     }
                 ],
                 "answered": 1,
@@ -166,7 +195,7 @@ class ListTest(ProposalsCommandTest):
     def test_a_proposals_file_a_newer_m2b_wrote_is_a_problem_the_person_can_act_on(self) -> None:
         target = self.store_root / proposals.PROPOSALS_FILE
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps({"format": 3, "proposals": {}}), encoding="utf-8")
+        target.write_text(json.dumps({"format": 4, "proposals": {}}), encoding="utf-8")
 
         code, out, err = self.run_command("proposals")
 
@@ -201,9 +230,30 @@ class AnswerTest(ProposalsCommandTest):
         answered = self.run_json("proposals", "keep", "--all")
         again = self.run_command("proposals", "keep", "--all")
 
-        self.assertEqual(answered, {"given": [DANA_ID], "already": {}})
+        self.assertEqual(answered, {"given": [DANA_ID], "already": {}, "left": []})
         self.assertEqual(self.answer_files(), sorted([f"{DANA_ID}.keep", f"{LADDER_ID}.drop"]))
         self.assertEqual(again, (cli.EXIT_OK, "no proposal waits for an answer\n", ""))
+
+    def test_keep_all_leaves_what_a_session_handed_in_and_says_how_many(self) -> None:
+        """Covers: B179"""
+        self.proposed(DANA)
+        found = [Said(dataclasses.replace(LADDER, source="tool"), DAY, "Read", proposals.SESSION)]
+        proposals.save(self.store, proposals.add(proposals.load(self.store), found, NOW).proposals)
+
+        code, out, err = self.run_command("proposals", "keep", "--all")
+        again = self.run_json("proposals", "keep", "--all")
+        by_id = self.run_json("proposals", "keep", LADDER_ID)
+
+        self.assertEqual((code, err), (cli.EXIT_OK, ""))
+        self.assertEqual(
+            out,
+            f"keep {DANA_ID}: Dana runs IT at Northwind.\n"
+            "the next curation run files what is kept\n"
+            "1 proposal a session handed in waits: --all leaves it, keep or drop by id\n",
+        )
+        self.assertEqual(again, {"given": [], "already": {}, "left": [LADDER_ID]})
+        self.assertEqual(by_id, {"given": [LADDER_ID], "already": {}})
+        self.assertEqual(self.answer_files(), sorted([f"{DANA_ID}.keep", f"{LADDER_ID}.keep"]))
 
     def test_the_same_answer_twice_is_said_and_no_problem(self) -> None:
         """Covers: B122"""
