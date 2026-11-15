@@ -54,6 +54,8 @@ class Setting:
     default: Any = None
     # A switch's values, the ones ``m2b settings set`` takes.
     choices: tuple[Any, ...] = ()
+    # Whether its file takes values beyond the choices, written by the command of the file.
+    file_takes_more: bool = False
 
     @property
     def file(self) -> str:
@@ -74,9 +76,17 @@ class Shown:
     shows: str
 
 
-def _switch(scope: str, key: str, title: str, does: str, default: Any, choices: tuple[Any, ...] = ON_OFF) -> Setting:
+def _switch(
+    scope: str,
+    key: str,
+    title: str,
+    does: str,
+    default: Any,
+    choices: tuple[Any, ...] = ON_OFF,
+    file_takes_more: bool = False,
+) -> Setting:
     change = f"m2b settings set {key} {'|'.join(as_argument(choice) for choice in choices)}"
-    return Setting(key, scope, SWITCH, title, does, COMMAND, change, default, tuple(choices))
+    return Setting(key, scope, SWITCH, title, does, COMMAND, change, default, tuple(choices), file_takes_more)
 
 
 def _by_command(scope: str, key: str, title: str, does: str, change: str, default: Any = None) -> Setting:
@@ -164,6 +174,7 @@ def _of_this_machine() -> tuple[Setting, ...]:
             "claude --model takes.",
             machine.DEFAULT_CURATION_MODEL,
             machine.CURATION_MODELS,
+            file_takes_more=True,
         ),
         _by_command(
             MACHINE,
@@ -226,9 +237,18 @@ def _of_this_machine() -> tuple[Setting, ...]:
         _switch(
             MACHINE,
             "band.due_tasks",
-            "Due tasks in the band",
-            "The band shows your tasks due today or overdue below the candidates.",
-            True,
+            "Tasks in the band",
+            "Your tasks due today or overdue in the band above the prompt: off shows none there, count says how "
+            "many, list names the first three.",
+            machine.DEFAULT_DUE_TASKS,
+            machine.DUE_TASKS_CHOICES,
+        ),
+        _switch(
+            MACHINE,
+            "band.topics",
+            "Topics in the band",
+            "The band says how many topics m2b gave the session.",
+            False,
         ),
         _switch(
             MACHINE,
@@ -388,6 +408,7 @@ def _machine_values(config: MachineConfig) -> dict[str, Shown]:
         "curation.paused": _plain(curation.paused),
         "distillate.skip_under": _counted(len(config.distillate.skip_under), "no folders", "{} folder", "{} folders"),
         "band.due_tasks": _plain(config.band.due_tasks),
+        "band.topics": _plain(config.band.topics),
         "sessions.propose": _plain(config.sessions.propose),
         **{
             f"{machine.ADDONS_KEY}.{name}": Shown(None, "on" if addons.is_on(config.addons, name) else "off")

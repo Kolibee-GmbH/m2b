@@ -296,8 +296,7 @@ def _not_a_value_of(switch: catalog.Setting, given: str) -> str:
     if switch.choices == catalog.ON_OFF:
         return f"{switch.key} is true or false, not {given}"
     values = " or ".join(catalog.as_argument(choice) for choice in switch.choices)
-    if switch.scope == catalog.MACHINE:
-        # The config itself takes more than the few values a switch offers.
+    if switch.file_takes_more:
         return f"{switch.key} is {values} here, not {given}; any other value: m2b config set {switch.key} <value>"
     return f"{switch.key} is {values}, not {given}"
 

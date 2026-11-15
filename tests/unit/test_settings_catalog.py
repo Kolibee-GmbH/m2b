@@ -196,6 +196,7 @@ class CatalogTest(unittest.TestCase):
             sorted(switches),
             [
                 "band.due_tasks",
+                "band.topics",
                 "curation.git_commit",
                 "curation.model",
                 "curation.paused",
@@ -212,6 +213,9 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual(switches["curation.paused"].choices, (True, False))
         self.assertEqual(switches["curation.paused"].change, "m2b settings set curation.paused true|false")
         self.assertEqual(switches["curation.model"].choices, machine.CURATION_MODELS)
+        self.assertEqual(switches["band.due_tasks"].choices, ("off", "count", "list"))
+        self.assertEqual(switches["band.due_tasks"].change, "m2b settings set band.due_tasks off|count|list")
+        self.assertEqual([key for key, setting in switches.items() if setting.file_takes_more], ["curation.model"])
         self.assertEqual(switches["language"].choices, locale.available_languages())
         for setting in catalog.settings():
             if setting.kind != catalog.SWITCH:

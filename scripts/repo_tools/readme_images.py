@@ -453,6 +453,8 @@ def set_up_machine(environ: Mapping[str, str]) -> Path:
         "machine_id": MACHINE_ID,
     }
     _m2b(environ, "setup", "apply", "--answers", json.dumps(answers))
+    # The pictures show the tasks due by name; a machine without the entry shows how many.
+    _m2b(environ, "settings", "set", "band.due_tasks", "list")
     return store
 
 

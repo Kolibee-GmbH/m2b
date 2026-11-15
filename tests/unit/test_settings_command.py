@@ -102,7 +102,7 @@ class SettingsListTest(SettingsFixture):
         scopes = [entry["scope"] for entry in answer["settings"]]
         self.assertEqual(sorted(scopes, key=["machine", "store", "owner"].index), scopes)
         self.assertEqual(answer["settings"][0]["key"], "version")
-        self.assertEqual(len(scopes), 31)
+        self.assertEqual(len(scopes), 32)
 
     def test_a_switch_comes_with_its_value_its_default_and_its_few_values(self) -> None:
         """Covers: B194"""
@@ -346,7 +346,7 @@ class SettingsSetTest(SettingsFixture):
             ("curation.paused", True),
             ("curation.read_sessions", True),
             ("curation.git_commit", False),
-            ("band.due_tasks", False),
+            ("band.topics", True),
         ):
             with self.subTest(key=key):
                 section, _, name = key.partition(".")
@@ -369,6 +369,12 @@ class SettingsSetTest(SettingsFixture):
         self.assertEqual(self.run_command("settings", "set", "curation.model", "sonnet")[0], cli.EXIT_OK)
         self.assertEqual(load_machine_config(self.machine).curation.model, "sonnet")
 
+        for way in ("list", "off", "count"):
+            with self.subTest(way=way):
+                self.assertEqual(self.run_command("settings", "set", "band.due_tasks", way)[0], cli.EXIT_OK)
+                self.assertEqual(load_machine_config(self.machine).band.due_tasks, way)
+                self.assertEqual(self.entry("band.due_tasks")["value"], way)
+
         self.assertEqual(self.run_command("settings", "set", "language", "de")[0], cli.EXIT_OK)
         loaded = load_profile(self.store)
         assert loaded is not None
@@ -380,7 +386,9 @@ class SettingsSetTest(SettingsFixture):
             ("curation.paused", "1", "curation.paused is true or false, not 1"),
             ("curation.paused", "yes", "curation.paused is true or false, not yes"),
             ("curation.paused", '"true"', 'curation.paused is true or false, not "true"'),
-            ("band.due_tasks", "0", "band.due_tasks is true or false, not 0"),
+            ("band.topics", "0", "band.topics is true or false, not 0"),
+            ("band.due_tasks", "true", "band.due_tasks is off or count or list, not true"),
+            ("band.due_tasks", "all", "band.due_tasks is off or count or list, not all"),
             ("curation.model", "opus", "curation.model is haiku or sonnet here, not opus"),
             ("curation.model", "true", "curation.model is haiku or sonnet here, not true"),
             ("language", "fr", "language is de or en, not fr"),
@@ -388,6 +396,7 @@ class SettingsSetTest(SettingsFixture):
             with self.subTest(key=key, value=value):
                 self.assertIn(expected, self.refused(key, value))
         self.assertIn("m2b config set curation.model", self.refused("curation.model", "opus"))
+        self.assertNotIn("m2b config set", self.refused("band.due_tasks", "all"))
 
     def test_a_refusal_stays_one_line_whatever_was_typed(self) -> None:
         """Covers: B195"""
@@ -507,7 +516,7 @@ class RulesOfAChangeTest(SettingsFixture):
 class WhatAnotherDeviceWroteTest(SettingsFixture):
     """The store's files can be written from other devices; nothing in them forges a line or leaks a name."""
 
-    LINES = 31 * 3 + 3 + 2
+    LINES = 32 * 3 + 3 + 2
 
     def write_raw(self, name: str, raw: dict[str, Any]) -> None:
         (self.store_root / name).write_text(json.dumps(raw), encoding="utf-8")

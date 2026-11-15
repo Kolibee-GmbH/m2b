@@ -58,7 +58,11 @@ CURATION_KEYS = (
     "paused",
 )
 DISTILLATE_KEYS = ("skip_under",)
-BAND_KEYS = ("due_tasks",)
+BAND_KEYS = ("due_tasks", "topics")
+# How the band shows the owner's tasks due today or overdue: not at all, how many, or the first by name.
+DUE_TASKS_OFF, DUE_TASKS_COUNT, DUE_TASKS_LIST = "off", "count", "list"
+DUE_TASKS_CHOICES = (DUE_TASKS_OFF, DUE_TASKS_COUNT, DUE_TASKS_LIST)
+DEFAULT_DUE_TASKS = DUE_TASKS_COUNT
 SESSIONS_KEYS = ("propose",)
 # The sections whose keys are each a setting of its own. ``executables`` is one setting, the
 # programs it names, and ``addons`` holds one per add-on.
@@ -141,8 +145,10 @@ class DistillateSettings:
 
 @dataclass(frozen=True)
 class BandSettings:
-    # Whether the band shows the tasks due today or overdue below the candidates.
-    due_tasks: bool = True
+    # One of DUE_TASKS_CHOICES. The pane lists the tasks whatever this says.
+    due_tasks: str = DEFAULT_DUE_TASKS
+    # Whether the band names how many topics m2b gave the session.
+    topics: bool = False
 
 
 @dataclass(frozen=True)
@@ -257,7 +263,18 @@ def _distillate(fields: Fields, home: Path) -> DistillateSettings:
 
 def _band(fields: Fields) -> BandSettings:
     fields.reject_unknown(SECTION_KEYS["band"])
-    return BandSettings(due_tasks=fields.boolean("due_tasks", default=True))
+    return BandSettings(due_tasks=_due_tasks(fields), topics=fields.boolean("topics", default=False))
+
+
+def _due_tasks(fields: Fields) -> str:
+    """How the band shows the tasks due. A config written while this was on or off holds true or
+    false: on drew the tasks by name, so it reads as the list."""
+    if not fields.has("due_tasks"):
+        return DEFAULT_DUE_TASKS
+    written = fields.raw("due_tasks")
+    if isinstance(written, bool):
+        return DUE_TASKS_LIST if written else DUE_TASKS_OFF
+    return fields.choice("due_tasks", DUE_TASKS_CHOICES)
 
 
 def _sessions(fields: Fields) -> SessionsSettings:

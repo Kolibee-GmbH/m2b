@@ -33,8 +33,9 @@ machine.
   the m2b pane, where you keep or drop each ([below](#the-proposals-from-your-sessions-in-the-pane)).
 - **Tasks due today or overdue**: your own tasks, not the curator's, in at most three quiet rows
   below the candidates (`due today: Call Dana`, `overdue: Return the drill`), without buttons;
-  today's first, then the overdue ones, the most recent first. `m2b config set band.due_tasks
-  false` turns them off on this machine; `true` brings them back.
+  today's first, then the overdue ones, the most recent first. They stand there while
+  `band.due_tasks` is `list` on this machine: `m2b settings set band.due_tasks list` turns them
+  on, `count` and `off` leave these rows out.
 
 Candidates and questions share at most three rows, the due tasks have three, and the review shows
 at most three findings, each followed by "and N more" when there are more; the proposals are one
@@ -145,8 +146,8 @@ As text, another session:
   proposals turns the pane to [them](#the-proposals-from-your-sessions-in-the-pane), `show` under
   the review to [the whole review](#the-whole-review-and-search-in-a-pane); `back` above that view,
   Escape or `/m2b-pane` turn it [back](#back-to-the-start-view).
-- **Today** lists your own tasks due today, then the overdue ones, the most recent first. With
-  `band.due_tasks` off it says that tasks due are not shown.
+- **Today** lists your own tasks due today, then the overdue ones, the most recent first, while
+  `band.due_tasks` is `list`; otherwise it says that tasks due are not shown.
 
 The first part is asked for each session by itself, with
 `m2b band --json --session <id> --session-only`, which reads one small file on this machine and
@@ -244,8 +245,8 @@ is on `undo`, and after `undo`, or once the five seconds are over, on the button
 
 <sub>One real Claude Code session on a demo machine with invented notes, recorded by `scripts/readme-demo --only settings-walk`. Only keys are typed and no model is asked; the five seconds a press waits run as recorded.</sub>
 
-Seven settings are switches: `curation.read_sessions`, `curation.paused`, `curation.git_commit`,
-`band.due_tasks`, `sessions.propose`, `curation.model` and your `language`. Their cards offer the
+Eight settings are switches: `curation.read_sessions`, `curation.paused`, `curation.git_commit`,
+`band.due_tasks`, `band.topics`, `sessions.propose`, `curation.model` and your `language`. Their cards offer the
 other values to press (`turn on`, `turn off`, `set to sonnet`). A press writes nothing for five
 seconds and offers `undo`, as keep and drop do; then the band runs `m2b settings set` and reads
 the list again, so the card shows what is true now. What the command refuses stands on the card

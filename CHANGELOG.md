@@ -7,6 +7,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `band.due_tasks` takes three values in place of on and off: `off`, `count` and `list`, and is
+  `count` where the config names none. A config that holds `true` reads as `list`, `false` as
+  `off`. `m2b band --json` names the tasks due in `tasks.due_by_today` whatever the band shows
+  of them, and the machine's `band` settings in `band`.
+
 ## [0.5.0] - 2026-11-15
 
 A session can hand in a proposal for your memory by itself. That is off until you turn it on.

@@ -161,12 +161,31 @@ class ParseTest(unittest.TestCase):
         with self.assertRaises(InvalidConfigError):
             machine.parse_machine_config(_config(distillate={"skip_under": ["code/acme"]}), HOME)
 
-    def test_the_band_shows_due_tasks_unless_band_due_tasks_is_false(self) -> None:
+    def test_the_band_shows_the_tasks_due_as_a_count_unless_the_config_names_another_way(self) -> None:
         """Covers: B102"""
-        self.assertTrue(machine.parse_machine_config(_config(), HOME).band.due_tasks)
-        self.assertFalse(machine.parse_machine_config(_config(band={"due_tasks": False}), HOME).band.due_tasks)
-        with self.assertRaisesRegex(InvalidConfigError, "due_tasks"):
-            machine.parse_machine_config(_config(band={"due_tasks": "no"}), HOME)
+
+        def due_tasks(**band: object) -> str:
+            return machine.parse_machine_config(_config(band=band), HOME).band.due_tasks
+
+        self.assertEqual(machine.parse_machine_config(_config(), HOME).band.due_tasks, "count")
+        for written in ("off", "count", "list"):
+            with self.subTest(written=written):
+                self.assertEqual(due_tasks(due_tasks=written), written)
+        for written in ("no", "List", "", 1, None, ["list"]):
+            with self.subTest(written=written), self.assertRaisesRegex(InvalidConfigError, "due_tasks"):
+                due_tasks(due_tasks=written)
+
+    def test_a_config_from_when_due_tasks_was_on_or_off_reads_as_the_list_or_as_off(self) -> None:
+        """Covers: B102"""
+        self.assertEqual(machine.parse_machine_config(_config(band={"due_tasks": True}), HOME).band.due_tasks, "list")
+        self.assertEqual(machine.parse_machine_config(_config(band={"due_tasks": False}), HOME).band.due_tasks, "off")
+
+    def test_band_topics_is_off_until_the_config_turns_it_on(self) -> None:
+        """Covers: B202"""
+        self.assertFalse(machine.parse_machine_config(_config(), HOME).band.topics)
+        self.assertTrue(machine.parse_machine_config(_config(band={"topics": True}), HOME).band.topics)
+        with self.assertRaisesRegex(InvalidConfigError, "topics"):
+            machine.parse_machine_config(_config(band={"topics": "on"}), HOME)
 
     def test_a_session_hands_in_proposals_only_when_sessions_propose_is_true(self) -> None:
         """Covers: B173"""
