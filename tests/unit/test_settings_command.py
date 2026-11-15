@@ -357,6 +357,13 @@ class SettingsSetTest(SettingsFixture):
                 self.assertEqual(self.run_command("settings", "set", key, json.dumps(not on))[0], cli.EXIT_OK)
                 self.assertIs(getattr(getattr(load_machine_config(self.machine), section), name), not on)
 
+    def test_the_key_and_the_value_may_follow_two_dashes_as_the_band_hands_them_on(self) -> None:
+        """Covers: B195"""
+        code, out, err = self.run_command("settings", "set", "--", "curation.paused", "true")
+
+        self.assertEqual((code, out, err), (cli.EXIT_OK, "", ""))
+        self.assertTrue(load_machine_config(self.machine).curation.paused)
+
     def test_a_switch_of_a_few_names_takes_one_of_them(self) -> None:
         """Covers: B195"""
         self.assertEqual(self.run_command("settings", "set", "curation.model", "sonnet")[0], cli.EXIT_OK)

@@ -77,6 +77,28 @@ import type { RowActions } from './rows'
 import { shared } from './shared-cache'
 import { COULD_NOT_LOOK, statusLine } from './status-line'
 import { parseBandTasks } from './tasks'
+import {
+  SETTINGS_COMMAND,
+  SETTINGS_IN_A_TERMINAL,
+  SETTINGS_PLACED,
+  afterBack,
+  askSettings,
+  beginChange,
+  beginSettings,
+  dropWaitingChange,
+  endChange,
+  fillSettings,
+  forgetSettingsUnless,
+  heldSettings,
+  listOf,
+  openSettings,
+  readSettings,
+  settingsPane,
+  showsCard,
+  startWriting,
+  undoChange,
+} from './settings'
+import type { SettingsActions } from './settings'
 import { beginTopic, fillTopic, forgetTopicUnless, heldTopic, readTopic, topicPane } from './topic'
 import {
   NOTE_COMMAND_LINE,
@@ -515,10 +537,12 @@ async function asDialog($: EngineInterface, view: PaneView): Promise<void> {
 
 /**
  * The one way the pane's view changes, null for the view it starts in: whatever turns the pane
- * away from a topic drops that topic's lines with it, so no way out of the view can keep them.
+ * away from a topic drops that topic's lines with it, and away from the settings their values, so
+ * no way out of either view can keep them.
  */
 async function turnTo($: EngineInterface, view: PaneView | null): Promise<void> {
   forgetTopicUnless(view)
+  forgetSettingsUnless(view)
   await update($, paneViewAtom, () => view)
 }
 
@@ -535,6 +559,114 @@ async function showTopic($: EngineInterface, name: string): Promise<void> {
   if (fillTopic(press, await readTopic($, name))) {
     // The lines are the module's; this write is what draws the pane again.
     await update($, paneViewAtom, view => (view !== null && view.kind === 'topic' && view.press === press ? { ...view, isRead: true } : view))
+  }
+}
+
+type SettingsView = Extract<PaneView, { kind: 'settings' }>
+
+/** Changes the settings view of the opening `press` names, which draws the pane again; any other view stays. */
+async function turnSettings($: EngineInterface, press: string, change: (view: SettingsView) => SettingsView): Promise<void> {
+  await update($, paneViewAtom, view => (view !== null && view.kind === 'settings' && view.press === press ? change(view) : view))
+}
+
+/** Draws the settings again after what their module holds changed. */
+function drawSettings($: EngineInterface, press: string): Promise<void> {
+  return turnSettings($, press, view => ({ ...view, drawn: view.drawn + 1 }))
+}
+
+/** Reads the list of the settings for an opening of the view; an answer for a view that was left is dropped. */
+async function loadSettings($: EngineInterface, press: string): Promise<void> {
+  const asked = askSettings(press)
+  if (asked !== null && fillSettings(press, await readSettings($), asked)) {
+    await drawSettings($, press)
+  }
+}
+
+/**
+ * Turns the pane to the list of the settings and reads it. The values are kept by the module that
+ * draws them, never in the session's state, and only for this opening of the view.
+ */
+async function showSettings($: EngineInterface): Promise<void> {
+  const press = await newPressToken($)
+  beginSettings(press)
+  await asDialog($, { kind: 'settings', press, at: null, drawn: 0 })
+  await loadSettings($, press)
+}
+
+// What the core is told of where a change comes from: it refuses to turn handing in on wherever
+// Claude Code started the command, and it knows that by this variable. The mod names it itself,
+// so that refusal does not rest on what the child happens to inherit.
+const FROM_A_SESSION = { CLAUDECODE: '1' } as const
+
+/**
+ * Writes a press on a switch once its undo window is over, with the core's own command, which
+ * refuses whatever is no switch. Then the list is read again for the view that is open now, so it
+ * shows what is true, whatever the command said. The band is not waited for; after a change that
+ * was written it is read behind the list, because a switch can be about what the band shows.
+ */
+async function settleSetting($: EngineInterface, token: string): Promise<void> {
+  const write = startWriting(token)
+  if (write === null) {
+    // Taken back, or dropped because the list no longer offers the value: the card says what is true.
+    await drawOpenSettings($)
+    return
+  }
+  let refused: string | null = 'the change could not be started'
+  try {
+    await drawOpenSettings($)
+    // `--`: a key and a value are handed on as the core named them, whatever they begin with.
+    const outcome = await runM2b($, ['settings', 'set', '--', write.key, write.argument], WRITE_TIMEOUT_MS, undefined, FROM_A_SESSION)
+    refused = outcome.ok ? null : outcome.error
+  } catch (error) {
+    refused = plainLine(String(error))
+  } finally {
+    // Whatever went wrong, the change ends: one left as being written would lock every switch.
+    endChange(token, refused)
+  }
+  // The change is over at once in the view; the list follows when it is read.
+  await drawOpenSettings($)
+  const open = openSettings()
+  if (open !== null) {
+    await loadSettings($, open)
+  }
+  if (refused === null) {
+    $.clock.after(0, inBackground($, () => refresh($, true)))
+  }
+}
+
+/** Draws the settings again for the opening the pane shows now, if it shows them. */
+async function drawOpenSettings($: EngineInterface): Promise<void> {
+  const open = openSettings()
+  if (open !== null) {
+    await drawSettings($, open)
+  }
+}
+
+function settingsActions($: EngineInterface, press: string): SettingsActions {
+  // Leaving a card takes back a press that still waits on it: from anywhere else nobody could.
+  const leaveFor = (at: number | null): Promise<void> => {
+    undoChange(press)
+    return turnSettings($, press, view => ({ ...view, at, drawn: view.drawn + 1 }))
+  }
+  return {
+    open: at => leaveFor(at),
+    toList: () => leaveFor(null),
+    choose: async (at, place) => {
+      const token = await newPressToken($)
+      if (beginChange(press, at, place, token)) {
+        // A press taken back, or a view that was left, finds nothing to write when this fires.
+        $.clock.after(
+          UNDO_WINDOW_MS,
+          inBackground($, () => settleSetting($, token)),
+        )
+        await drawSettings($, press)
+      }
+    },
+    undo: async () => {
+      if (undoChange(press)) {
+        await drawSettings($, press)
+      }
+    },
   }
 }
 
@@ -731,6 +863,7 @@ function sessionActions($: EngineInterface): SessionActions {
     showProposals: () => turnPane($, { kind: 'proposals' }),
     showReview: () => turnPane($, { kind: 'review' }),
     showTopic: name => showTopic($, name),
+    showSettings: () => showSettings($),
     switchFolder: async (change, folder) => {
       // What the last press could not write is no longer what the button is about.
       await update($, sessionNoticeAtom, () => null)
@@ -1135,13 +1268,14 @@ export const register: Register = on => {
       }
     }
     await carryPressesOver($)
-    // A reload of the mod took the lines of a topic with the old module: the pane starts over.
-    if ((await read($, paneViewAtom))?.kind === 'topic') {
+    // A reload of the mod took the lines of a topic, and the values of the settings, with the old
+    // module: the pane starts over.
+    if (['topic', 'settings'].includes((await read($, paneViewAtom))?.kind ?? '')) {
       await turnTo($, null)
     }
     loadedVersion = await readLoadedVersion($)
     askCoreAgain()
-    for (const command of [SESSION_COMMAND, NOTE_COMMAND, REVIEW_COMMAND, SEARCH_COMMAND, PROPOSALS_COMMAND]) {
+    for (const command of [SESSION_COMMAND, NOTE_COMMAND, REVIEW_COMMAND, SEARCH_COMMAND, PROPOSALS_COMMAND, SETTINGS_COMMAND]) {
       try {
         await $.command.register(command)
       } catch {
@@ -1261,6 +1395,28 @@ export const register: Register = on => {
     return { text: notReady ?? (await showProposals($)) }
   })
 
+  // The command opens the view and no more: it takes no value, whoever ran it and whatever
+  // follows its name. Its answer is one line without a value, because an answer reaches the model.
+  on('command.run', { command: SETTINGS_COMMAND.name }, async ($, e, next) => {
+    if (await isCurationRun($)) {
+      return next(e)
+    }
+    const notReady = await notSetUpLine($, 'not shown')
+    if (notReady !== null) {
+      return { text: notReady }
+    }
+    const press = await newPressToken($)
+    beginSettings(press)
+    await turnTo($, { kind: 'settings', press, at: null, drawn: 0 })
+    const [answer] = (await showInPane($, SETTINGS_PLACED, () => [])).split('\n')
+    if (answer !== SETTINGS_PLACED) {
+      // No pane: nothing is read, and the list is where a terminal shows it.
+      return { text: `${answer}; ${SETTINGS_IN_A_TERMINAL}` }
+    }
+    $.clock.after(0, inBackground($, () => loadSettings($, press)))
+    return { text: SETTINGS_PLACED }
+  })
+
   on('command.run', { command: SEARCH_COMMAND.name }, async ($, e, next) => {
     if (await isCurationRun($)) {
       return next(e)
@@ -1342,12 +1498,31 @@ export const register: Register = on => {
   // leaves a plugin's hooks out of a close its own code made, and `showInPane` sees to it.
   on('ui.close', { id: PANE_ID }, async ($, e, next) => {
     if (e.origin.kind === 'plugin') {
+      // Another plugin's close: the pane starts in its start view when it opens next, a topic's
+      // lines and the settings' values go, and a press that still waits is taken back, since
+      // nobody could do that any more.
+      dropWaitingChange()
+      await turnTo($, null)
       return next(e)
     }
     const nowMs = await $.clock.now()
-    const isOnStartView = (await read($, paneViewAtom)) === null
+    const view = await read($, paneViewAtom)
+    const isOnStartView = view === null
     const isRightAfterBack = wentBackAtMs !== null && nowMs - wentBackAtMs < SAME_KEY_TWICE_MS
     const answer = closeAnswer(e.origin.kind, isOnStartView, staysBesideChat(paneSeats.values()), isRightAfterBack)
+    const isCardShown = view !== null && view.kind === 'settings' && showsCard(view, heldSettings(view.press))
+    const turn = answer === 'back' ? afterBack(view, isCardShown, isRightAfterBack) : 'start'
+    if (turn === 'stay') {
+      return { value: undefined }
+    }
+    if (turn === 'list') {
+      // A setting's card is one step below the list: the close leads there, and the next one on.
+      // A press that waits on the card is taken back: from the list nobody could.
+      wentBackAtMs = nowMs
+      dropWaitingChange()
+      await turnTo($, listOf(view))
+      return { value: undefined }
+    }
     if (answer === 'back') {
       if (!isOnStartView) {
         wentBackAtMs = nowMs
@@ -1376,9 +1551,10 @@ export const register: Register = on => {
     })
     return result
   }).catch(async ($, e, next) => {
-    // The pane closes without its view being turned: a topic's lines go all the same, and so do
-    // the seats, which the pane's next drawing notes anew.
+    // The pane closes without its view being turned: a topic's lines and the settings' values go
+    // all the same, and so do the seats, which the pane's next drawing notes anew.
     forgetTopicUnless(null)
+    forgetSettingsUnless(null)
     await forgetSeats($).catch(() => undefined)
     return next(e)
   })
@@ -1397,6 +1573,17 @@ export const register: Register = on => {
     const { Box } = $.ui.resolve(e)
     const snapshot = await read($, snapshotAtom)
     const run = await read($, runAtom)
+    if (view.kind === 'settings') {
+      // A card has its own way on, to its neighbours and to the list; whatever else the view
+      // draws, the list or that m2b could not read it, leads back like every view.
+      const kept = heldSettings(view.press)
+      return (
+        <Box flexDirection="column">
+          {!showsCard(view, kept) && backRow($, e, () => backToStart($))}
+          {settingsPane($, e, view, kept, settingsActions($, view.press), e.props.bodyColumns)}
+        </Box>
+      )
+    }
     return (
       <Box flexDirection="column">
         {backRow($, e, () => backToStart($))}

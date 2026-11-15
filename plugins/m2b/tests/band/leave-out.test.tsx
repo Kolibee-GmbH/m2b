@@ -142,7 +142,7 @@ test('a look that failed offers no button: m2b does not know which folder it wou
 
   const ui = await startView($)
 
-  expect(await buttons(ui)).toEqual([])
+  expect(await buttons(ui)).toEqual(['show:settings'])
   await ui.unmount()
 })
 
@@ -212,7 +212,7 @@ test('while the write is under way the row offers nothing, and a second press ca
   await ui.press({ key: 'folder:off' })
   await clock.advance(UNDO_MS + 1)
 
-  expect(await buttons(ui)).toEqual(['topic:0'])
+  expect(await buttons(ui)).toEqual(['topic:0', 'show:settings'])
   expect(await texts(ui)).toContain(`leaving m2b out of ${ACME}`)
   await clock.advance(2_000)
   expect(await buttons(ui)).toContain('folder:on')

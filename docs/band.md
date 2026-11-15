@@ -118,6 +118,7 @@ the tool below, or the skill `/m2b:capture` where the mod does not run.
 │ Today                                                        │
 │ due today: Buy screws                                        │
 │ overdue: Return the ladder                                   │
+│ [ settings ]                                                 │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -192,6 +193,61 @@ lie above the session's; it runs `m2b distillate on` for that folder, with the s
 m2b could not write, the part says why until your next press or prompt. With an installed m2b
 that does not name the session's folder there is no button to leave m2b out: the band never
 guesses which folder a press would turn off.
+
+### Every setting, in the pane
+
+`settings` at the end of the start view, or `/m2b-settings`, turns the pane to the settings of
+m2b: every setting of this machine, of the store and of the owner, as `m2b settings` lists them
+([Configuration](configuration.md#every-setting-in-one-list)), each a row with its title and its
+value. `open` on a row turns the pane to the setting's card:
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│ Settings · 15 of 31                                          │
+│ [ previous ] [ next ] [ list ]                               │
+│ Curation paused                                              │
+│ this machine · curation.paused                               │
+│ now: off                                                     │
+│ This machine starts no curation run by itself, none at a     │
+│ session start and none from a schedule. m2b curate --force   │
+│ still runs one, and captures keep reaching the inbox.        │
+│ [ turn on ]                                                  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+`previous` and `next` walk through every setting in the order of the list, so starting at the
+first card takes you through all of them once; `list` returns to the list, and Escape does the
+same from a card and leads on to the start view from the list. Escape pressed twice within half a
+second on a card stops at the list. A card says what the setting does and its default where the
+value differs from it. In a pane narrower than 41 columns a row of the list is the title with the
+value below it, and `list` stands below `previous` and `next`.
+
+Seven settings are switches: `curation.read_sessions`, `curation.paused`, `curation.git_commit`,
+`band.due_tasks`, `sessions.propose`, `curation.model` and your `language`. Their cards offer the
+other values to press (`turn on`, `turn off`, `set to sonnet`). A press writes nothing for five
+seconds and offers `undo`, as keep and drop do; then the band runs `m2b settings set` and reads
+the list again, so the card shows what is true now. What the command refuses stands on the card
+in its own words. One change at a time: while one waits or is written, no other card offers a
+switch. Leaving the card within the five seconds, with `previous`, `next`, `list` or Escape,
+takes the press back, as leaving the settings does. A change that is already being written goes
+on; the list says which one is under way, and reads again when it has ended. Every other setting
+is shown with the command or the skill that changes it; the pane has no field to type into and
+changes no path, no program and no time limit.
+
+`sessions.propose` is not turned on from the pane: inside a Claude Code session the command
+refuses, so its card names the command for a terminal of your own. Where it is on, the card
+offers `turn off`.
+
+A setting of a file that could not be read (a store out of reach, no profile yet) is listed as
+`not read` with the reason. On a machine that does not curate, the settings of the curation run
+are dimmed and say that they do nothing here. When the list cannot be read again after a change,
+the pane keeps the list it had and says so above it.
+
+The values hold folders, your name and what your store is called. The band keeps them for the
+pane's drawing alone: they are not in the session's state, which other plugins can read, and
+`/m2b-settings` answers one line without a value. It takes no value either, whatever follows its
+name: a value changes by a press and in no other way. Where Claude Code cannot show a pane, the
+command reads nothing and names `m2b settings`, which lists the settings in a terminal.
 
 ### It opens by itself beside the chat
 
@@ -272,9 +328,10 @@ one can go by the pane of the other.
 
 ### Back to the start view
 
-`/m2b-review`, `/m2b-search`, `/m2b-proposals` and `show` in the start view turn the pane to
-their view and give it the keyboard. Escape there, the pane's close mark or the `back` button
-above the view lead back to the start view; the pane stays open. Beside the chat it then stays
+`/m2b-review`, `/m2b-search`, `/m2b-proposals`, `/m2b-settings` and `show` or `settings` in the
+start view turn the pane to their view and give it the keyboard. Escape there, the pane's close
+mark or the `back` button above the view lead back to the start view; the pane stays open. From
+the card of a setting they lead to the list of the settings first. Beside the chat it then stays
 without closing on Escape, so an Escape at the empty prompt does not take it away, and an Escape
 pressed twice within half a second leads back once and closes nothing. Above the prompt the pane
 stays a dialog, and a later Escape closes the block.

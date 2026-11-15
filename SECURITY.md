@@ -214,7 +214,10 @@ The step that reads your sessions has no tool at all ([Reading your sessions](#r
 
 ## Reading your sessions
 
-Off until you say yes in setup ([docs/curation.md](docs/curation.md#reading-your-sessions)). A
+Off until you say yes in setup or turn `curation.read_sessions` on yourself, with
+`m2b settings set` or with its switch in the m2b pane
+([docs/curation.md](docs/curation.md#reading-your-sessions)). Unlike handing in, this setting is
+not refused inside a Claude Code session: a session that may run `m2b` can turn it on. A
 curation run then gives a model what you typed in Claude Code since the last reading, with the
 folder and the day of each session: the prompts Claude Code marks as typed by you, with what you
 pasted into them kept apart from what you typed, without Claude's answers, tool results and what a

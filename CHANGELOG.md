@@ -9,6 +9,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `/m2b-settings`, or `settings` at the end of the pane's start view, shows every setting of
+  m2b in the pane: a list under this machine, the store and the owner, and a card per setting
+  with what it does and what changes it. `previous` and `next` walk through all of them. A switch
+  is pressed on its card, waits five seconds with `undo` and is then written by
+  `m2b settings set`; what the command refuses stands on the card. `sessions.propose` is not
+  turned on from the pane ([The band](docs/band.md#every-setting-in-the-pane)).
 - `m2b settings` lists every setting of the three files, this machine's, the store's and the
   owner's: its value, its default, what it does and what changes it, a command, a setup skill or
   nothing by hand. A list, the paths of programs and an add-on come as a count or as on and off,

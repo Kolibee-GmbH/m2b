@@ -68,6 +68,7 @@ export type SessionModel = {
  * pane, also to the lines of one topic; and the distillate off or on for a folder, with its undo.
  */
 export type SessionActions = RowActions & {
+  showSettings: () => Promise<void>
   showProposals: () => Promise<void>
   showReview: () => Promise<void>
   showTopic: (name: string) => Promise<void>
@@ -381,6 +382,7 @@ export function sessionPane($: EngineInterface, e: ResolveInput, model: SessionM
       {nothingDue === null
         ? dueFirst(snapshot?.due ?? []).map(task => <Text wrap="wrap">{dueLine(task)}</Text>)
         : quiet(nothingDue)}
+      <Button key="show:settings" label="settings" onPress={actions.showSettings} />
     </Box>
   )
 }

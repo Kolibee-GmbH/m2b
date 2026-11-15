@@ -525,7 +525,7 @@ test('keep and drop in the start view wait for undo and write like the band', as
   const { clock } = await start($, on, fake)
   const ui = await startView($)
   const keys = (await ui.findAll({ type: 'Button' })).map(button => button.key)
-  expect(keys).toEqual(['topic:0', 'topic:1', 'show:proposals', 'keep:c1', 'drop:c1', 'keep:q1', 'drop:q1', 'ok:r1', 'show:review'])
+  expect(keys).toEqual(['topic:0', 'topic:1', 'show:proposals', 'keep:c1', 'drop:c1', 'keep:q1', 'drop:q1', 'ok:r1', 'show:review', 'show:settings'])
 
   await ui.press({ key: 'drop:c1' })
   expect(await texts(ui)).toContain('dropping: Remember? Dana prefers tea')

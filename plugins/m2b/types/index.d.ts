@@ -107,13 +107,17 @@ export type PaneSearch = {
  * curation run, a search, the proposals from the sessions, or one topic. A topic's lines are not
  * part of this value: the session's state is one every plugin can read, so the module that draws
  * the lines holds them. `press` tells this opening of the topic from an earlier one, and `isRead`
- * turns true when m2b has answered, which draws the pane again.
+ * turns true when m2b has answered, which draws the pane again. The settings are held the same
+ * way: this value says where the view is, `at` a place in the list for a setting's card and null
+ * for the list, and never what a setting holds; `drawn` counts up when what the module holds
+ * changed, which draws the pane again.
  */
 export type PaneView =
   | { kind: 'review' }
   | { kind: 'search'; search: PaneSearch }
   | { kind: 'proposals' }
   | { kind: 'topic'; name: string; press: string; isRead: boolean }
+  | { kind: 'settings'; press: string; at: number | null; drawn: number }
 
 /**
  * A topic whose facts m2b gave this session, with the facts lines and current items its block held

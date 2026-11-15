@@ -61,6 +61,7 @@ do not do their work there. The first three start a curation run in the backgrou
 | `/m2b-search [--word] <text>` | shows the hits of `m2b search` in the m2b pane; `--word` matches whole words only |
 | `/m2b-review` | shows the last curation run in the m2b pane: every finding, candidate and question |
 | `/m2b-proposals` | shows what your sessions proposed for your memory, each to keep or drop |
+| `/m2b-settings` | shows every setting of m2b in the m2b pane, a card per setting with what it does, and the switches to press; it takes no value and answers none ([The band](band.md#every-setting-in-the-pane)) |
 
 ## The `m2b` command
 

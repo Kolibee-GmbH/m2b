@@ -177,6 +177,12 @@ export class FakeM2b {
   readonly handedIn: string[] = []
   /** How `m2b proposals add` ends. */
   handInAnswer: ProcessRunResult = ok('handed in; go on with the task\n')
+  /**
+   * How `m2b settings` and `m2b settings set` end, by the words after `settings` and the variables
+   * the call was handed. Unset, the
+   * installed core is one from before the command: it refuses it as an unknown choice.
+   */
+  onSettings: ((args: readonly string[], env?: Record<string, string>) => ProcessRunResult) | null = null
   /** The installed core's version, as `m2b band --json` answers it. */
   version = '0.3.0'
   /** The version in the manifest of the plugin the band was loaded from; null when it cannot be read. */
@@ -288,6 +294,10 @@ export class FakeM2b {
     if (args[0] === 'distillate' && args[1] === 'topic') {
       return this.topicAnswer(args.at(-1) ?? '')
     }
+    if (args[0] === 'settings') {
+      const stderr = "usage: m2b [-h] [--version]\nm2b: error: argument command: invalid choice: 'settings'\n"
+      return this.onSettings === null ? { ...fail(''), exitCode: 2, stderr } : this.onSettings(args.slice(1), env)
+    }
     if (args[0] === 'distillate') {
       if (this.distillateFails !== null) {
         return fail(this.distillateFails)
@@ -397,6 +407,11 @@ export class FakeM2b {
       proposals: waiting.map(({ answer: _, ...fields }) => fields),
       answered: this.proposals.length - waiting.length,
     }
+  }
+
+  /** The calls that listed the settings or changed one. */
+  settingCalls(): string[][] {
+    return this.calls.filter(call => call[0] === 'settings')
   }
 
   /** The calls that answered proposals. */
