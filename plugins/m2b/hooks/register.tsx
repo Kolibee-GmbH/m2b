@@ -15,6 +15,8 @@ import type {
   FolderSwitch,
   PaneView,
 } from '../types'
+import { bandRows, lineBesidePane, lineRow, topicsGiven } from './band'
+import type { BandActions, BandModel } from './band'
 import { launcherPath, m2bHome, machineConfigPath, runM2b } from './m2b'
 import { NOTE_COMMAND, note } from './note'
 import { isInOwnWords, isOwnPrompt, withPrompt } from './own-words'
@@ -35,7 +37,8 @@ import {
   searchSummary,
   showPane,
 } from './pane'
-import { CLOSED_BY_HAND, closeAnswer, docksFor, staysBesideChat } from './pane-seat'
+import { CLOSED_BY_HAND, closeAnswer, docksFor, paneSight, staysBesideChat } from './pane-seat'
+import type { PaneSight } from './pane-seat'
 import { plainLine, wholePath } from './plain-text'
 import {
   askCoreAgain,
@@ -53,8 +56,7 @@ import {
   SESSION_COMMAND,
   SESSION_PLACED,
   backRow,
-  dueFirst,
-  dueLine,
+  glancePane,
   sessionLines,
   sessionPane,
 } from './session-view'
@@ -63,22 +65,18 @@ import {
   KEEP_ALL,
   PROPOSALS_COMMAND,
   PROPOSALS_PLACED,
-  couldNotLookLine,
-  errorBesideTasks,
   isProposals,
   refusedLine,
   parseProposals,
   pressKey,
   proposalLines,
   proposalsPane,
-  proposalsRow,
 } from './proposals'
 import type { ProposalActions } from './proposals'
-import { candidateRow, reviewRow } from './rows'
 import type { RowActions } from './rows'
 import { shared } from './shared-cache'
 import { COULD_NOT_LOOK, statusLine } from './status-line'
-import { parseBandTasks, untoldFindings } from './tasks'
+import { parseBandTasks } from './tasks'
 import { beginTopic, fillTopic, forgetTopicUnless, heldTopic, readTopic, topicPane } from './topic'
 import {
   NOTE_COMMAND_LINE,
@@ -109,6 +107,7 @@ const proposalsAtom = atom({ plugin: 'm2b', key: 'bandProposals' } as const, nul
 // Apart from the band's notice, which is about tasks: the proposals pane draws this one alone.
 const proposalsNoticeAtom = atom({ plugin: 'm2b', key: 'bandProposalsNotice' } as const, null)
 const paneViewAtom = atom({ plugin: 'm2b', key: 'paneView' } as const, null)
+const paneSeatsAtom = atom({ plugin: 'm2b', key: 'paneSeats' } as const, {})
 const toastedRunAtom = atom({ plugin: 'm2b', key: 'bandToastedRun' } as const, null)
 const ownPromptsAtom = atom({ plugin: 'm2b', key: 'ownPrompts' } as const, [])
 // `session.ts` names the same two values and writes them too: a module's reads and writes are
@@ -140,9 +139,6 @@ const COMMAND_WAITS_MS = 2_000
 // Read by `m2b doctor`: the core cannot see whether Claude Code loaded this module.
 const SEEN_FILE = '.local/state/m2b/band-seen.json'
 const MANIFEST = '.claude-plugin/plugin.json'
-const CANDIDATES_SHOWN = 3
-const FINDINGS_SHOWN = 3
-const DUE_SHOWN = 3
 
 const BAND_ANSWER = ['band', '--json'] as const
 // The second look before a keep or drop needs the tasks alone, not the status and its probes.
@@ -543,8 +539,123 @@ async function showTopic($: EngineInterface, name: string): Promise<void> {
 }
 
 // Where the pane's last drawing sat on each surface, as that surface said. The module's own: after
-// a reload of the mod the pane is drawn anew before the person can act on it.
+// a reload of the mod the pane is drawn anew before the person can act on it. The band draws by
+// the copy in the session's state, which draws it again when a seat changes.
 const paneSeats = new Map<string, string>()
+// How often the map changed, and the change the session's state is known to hold. They differ
+// while a write is under way or after one failed; of two writes that overlap, the later may fail
+// while the earlier lands, so each write counts for the change it started from.
+let seatsNoted = 0
+let seatsShared = 0
+
+/**
+ * Keeps where the pane was just drawn on a surface, and hands a new seat to the band a moment
+ * later: no state is written while a drawing is made. A write that failed is made again with the
+ * pane's next drawing, so the band does not keep a seat the pane has left.
+ */
+function noteSeat($: EngineInterface, surface: string, placement: string): void {
+  if (paneSeats.get(surface) !== placement) {
+    paneSeats.set(surface, placement)
+    seatsNoted += 1
+  } else if (seatsShared === seatsNoted) {
+    return
+  }
+  try {
+    $.clock.after(0, () => {
+      shareSeats($).catch(() => undefined)
+    })
+  } catch {
+    // The pane's next drawing tries again.
+  }
+}
+
+async function shareSeats($: EngineInterface): Promise<void> {
+  const noted = seatsNoted
+  await update($, paneSeatsAtom, () => Object.fromEntries(paneSeats))
+  seatsShared = Math.max(seatsShared, noted)
+}
+
+/** The pane is gone: the seat of an earlier drawing no longer says where it sits. */
+async function forgetSeats($: EngineInterface): Promise<void> {
+  paneSeats.clear()
+  seatsNoted += 1
+  await shareSeats($)
+}
+
+/**
+ * After a close of the pane has settled. Gone, it sits nowhere. A hook beneath may have kept it
+ * open: then its seats stand. Either way the state is written, which draws the band again, and the
+ * band asks Claude Code itself what is open. Where Claude Code cannot say, the seats go: the band
+ * then draws all it has.
+ */
+async function seatsAfterClose($: EngineInterface): Promise<void> {
+  let isStillOpen = false
+  try {
+    isStillOpen = (await $.ui.panes()).some(pane => pane.id === PANE_ID)
+  } catch {
+    // Counted as closed.
+  }
+  await (isStillOpen ? shareSeats($) : forgetSeats($))
+}
+
+/**
+ * Shows the pane as `showPane` does, and sees to a pane it could not show. `showPane` closes that
+ * pane itself, and Claude Code leaves a plugin's hooks out of a close the plugin's own code made:
+ * what the close hook does for the person's close is done here for the mod's own. The pane starts
+ * in its start view when it opens next, and its seats go.
+ */
+async function showInPane(
+  $: EngineInterface,
+  placedLine: string,
+  lines: () => string[],
+  staysOpen = false,
+): Promise<string> {
+  const answer = await showPane($, placedLine, lines, staysOpen)
+  if (answer !== placedLine) {
+    await turnTo($, null)
+    await seatsAfterClose($)
+  }
+  return answer
+}
+
+/**
+ * Where the pane stands for the band of `surface`. Claude Code is asked only where the pane was
+ * drawn on that surface and has not closed since, which is where the band may step back: the seat
+ * says where the pane sat, Claude Code whether it is drawn and shown now, and the pane's view
+ * whether it holds the band's rows. A call that fails counts as not in view.
+ */
+async function sightOn($: EngineInterface, surface: string): Promise<PaneSight> {
+  const seat = (await read($, paneSeatsAtom))[surface]
+  if (seat === undefined) {
+    return 'away'
+  }
+  const isOnStartView = (await read($, paneViewAtom)) === null
+  try {
+    return paneSight(
+      seat,
+      (await $.ui.panes()).find(pane => pane.id === PANE_ID),
+      isOnStartView,
+    )
+  } catch {
+    return 'away'
+  }
+}
+
+/**
+ * What the band draws from. How many topics the session was given is looked up only where the
+ * pane is not in view, which is where the band has a row for it.
+ */
+async function bandModel($: EngineInterface, sight: PaneSight): Promise<BandModel> {
+  return {
+    snapshot: await read($, snapshotAtom),
+    proposals: await read($, proposalsAtom),
+    notice: await read($, noticeAtom),
+    proposalsNotice: await read($, proposalsNoticeAtom),
+    versionLine: await read($, versionNoticeAtom),
+    presses: await read($, pressesAtom),
+    topics: sight === 'away' ? topicsGiven(givenTo(await read($, sessionAtom), await sessionIdOf($))) : 0,
+  }
+}
 
 // When the person's close last led back to the start view. A second close this soon after it is
 // the same key pressed twice.
@@ -944,7 +1055,7 @@ async function showProposals($: EngineInterface): Promise<string> {
   // Opens with what the band holds and reads the proposals again behind it.
   $.clock.after(0, inBackground($, () => refresh($, true)))
   const proposals = await read($, proposalsAtom)
-  return showPane($, PROPOSALS_PLACED, () => proposalLines(proposals))
+  return showInPane($, PROPOSALS_PLACED, () => proposalLines(proposals))
 }
 
 /** `show` in the band: a button has no answer to put the proposals in, so the band says where they are listed. */
@@ -955,16 +1066,47 @@ async function showFromBand($: EngineInterface): Promise<void> {
   }
 }
 
+/**
+ * `show` on the band's row for this session: the pane opens in the view it starts in, as the
+ * person's own open, so it is placed at any width, and asks again what the session was given.
+ * `staysOpen` where the band is drawn under the fullscreen layout at a width that docks a pane.
+ * A button has no answer to put the lines in, so where no pane can be shown the band names the
+ * command that answers with them.
+ */
+async function showSessionFromBand($: EngineInterface, staysOpen: boolean): Promise<void> {
+  await turnTo($, null)
+  $.clock.after(0, inBackground($, () => refresh($, true)))
+  lookLater($, 0)
+  const answer = await placedOrWhyNot($, staysOpen)
+  if (answer !== SESSION_PLACED) {
+    await update($, noticeAtom, () => `${answer}; /${SESSION_COMMAND.name} answers with the lines`)
+  }
+}
+
+/** Opens the pane for the band's row; an open Claude Code refuses is said like a pane that cannot be shown. */
+async function placedOrWhyNot($: EngineInterface, staysOpen: boolean): Promise<string> {
+  try {
+    const [answer] = (await showInPane($, SESSION_PLACED, () => [], staysOpen)).split('\n')
+    return answer ?? SESSION_PLACED
+  } catch (error) {
+    return `the m2b pane could not be opened: ${plainLine(String(error))}`
+  }
+}
+
+function bandActions($: EngineInterface, staysOpen: boolean): BandActions {
+  return {
+    ...rowActions($),
+    showProposals: () => showFromBand($),
+    showSession: () => showSessionFromBand($, staysOpen),
+  }
+}
+
 function verbOf(action: BandSettle): string {
   return action === 'complete' ? 'keep' : 'drop'
 }
 
 function failed(error: string): BandSnapshot {
   return { candidates: [], review: null, error }
-}
-
-function andMore(hidden: number, what: string): string | null {
-  return hidden > 0 ? `and ${hidden} more ${what}` : null
 }
 
 export const register: Register = on => {
@@ -982,6 +1124,16 @@ export const register: Register = on => {
     lockTimers.clear()
     lookTimers.clear()
     isOpeningDue = true
+    // A reload starts this module over while the pane stays up: the seats in the session's state
+    // stand until the pane is drawn again, and the band asks Claude Code before it goes by one.
+    // Seats this module holds, of drawings before this start, are handed over once more.
+    if (paneSeats.size > 0) {
+      try {
+        await shareSeats($)
+      } catch {
+        // The session starts all the same, and the pane's next drawing tries again.
+      }
+    }
     await carryPressesOver($)
     // A reload of the mod took the lines of a topic with the old module: the pane starts over.
     if ((await read($, paneViewAtom))?.kind === 'topic') {
@@ -1068,7 +1220,7 @@ export const register: Register = on => {
     // it says that m2b has not looked, never what an earlier look said.
     const lines = (): string[] => sessionLines(isFresh ? model : { ...model, given: null })
     // Beside the chat the start view stays; above the prompt it is a dialog that Escape closes.
-    return { text: await showPane($, SESSION_PLACED, lines, docksFor(e.presentation)) }
+    return { text: await showInPane($, SESSION_PLACED, lines, docksFor(e.presentation)) }
   })
 
   on('command.run', { command: NOTE_COMMAND.name }, async ($, e, next) => {
@@ -1097,7 +1249,7 @@ export const register: Register = on => {
     // Opens with what the band holds and reads the run again behind it.
     $.clock.after(0, inBackground($, () => refresh($, true)))
     const [snapshot, run] = [await read($, snapshotAtom), await read($, runAtom)]
-    const text = await showPane($, 'the last curation run is in the m2b pane', () => reviewLines(snapshot, run))
+    const text = await showInPane($, 'the last curation run is in the m2b pane', () => reviewLines(snapshot, run))
     return { text }
   })
 
@@ -1131,7 +1283,7 @@ export const register: Register = on => {
       return { text: summary }
     }
     await turnTo($, { kind: 'search', search })
-    return { text: await showPane($, `${summary} in the m2b pane`, () => [summary, ...searchLines(search)]) }
+    return { text: await showInPane($, `${summary} in the m2b pane`, () => [summary, ...searchLines(search)]) }
   })
 
   // Registered only outside a curation run; a call there is not this mod's to answer.
@@ -1186,8 +1338,12 @@ export const register: Register = on => {
   // starts in: answered here without `next`, the pane stays open. On the start view it closes, and
   // beside the chat that is kept, so the pane does not open by itself until they open it again.
   // When this throws, the pane closes as it was asked to: a pane that cannot be closed is worse
-  // than one that closes a view too early.
+  // than one that closes a view too early. The mod's own close is not this hook's: Claude Code
+  // leaves a plugin's hooks out of a close its own code made, and `showInPane` sees to it.
   on('ui.close', { id: PANE_ID }, async ($, e, next) => {
+    if (e.origin.kind === 'plugin') {
+      return next(e)
+    }
     const nowMs = await $.clock.now()
     const isOnStartView = (await read($, paneViewAtom)) === null
     const isRightAfterBack = wentBackAtMs !== null && nowMs - wentBackAtMs < SAME_KEY_TWICE_MS
@@ -1212,15 +1368,27 @@ export const register: Register = on => {
     }
     // Whoever closes it, the pane starts in its start view when it opens next.
     await turnTo($, null)
-    return next(e)
-  }).catch(($, e, next) => {
-    // The pane closes without its view being turned: a topic's lines go all the same.
+    const result = await next(e)
+    // Once the close has settled, the seats go and the band draws its rows again. Not awaited:
+    // asked from inside the pane's own close, Claude Code may still list the pane.
+    $.clock.after(0, () => {
+      seatsAfterClose($).catch(() => undefined)
+    })
+    return result
+  }).catch(async ($, e, next) => {
+    // The pane closes without its view being turned: a topic's lines go all the same, and so do
+    // the seats, which the pane's next drawing notes anew.
     forgetTopicUnless(null)
+    await forgetSeats($).catch(() => undefined)
     return next(e)
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
-    paneSeats.set(e.surface, e.props.placement)
+    noteSeat($, e.surface, e.props.placement)
+    // The small form of the desktop app is read at a glance, whatever view the pane was turned to.
+    if (e.props.placement === 'widget') {
+      return glancePane($, e, await sessionModel($))
+    }
     const view = await read($, paneViewAtom)
     const presses = await read($, pressesAtom)
     if (view === null) {
@@ -1270,81 +1438,15 @@ export const register: Register = on => {
     if (e.props.hasSurvey) {
       return next(e)
     }
-    const snapshot = await read($, snapshotAtom)
-    const notice = await read($, noticeAtom)
-    const versionLine = await read($, versionNoticeAtom)
-    const proposalsNotice = await read($, proposalsNoticeAtom)
-    const presses = await read($, pressesAtom)
-    const candidates = snapshot?.candidates ?? []
-    const review = snapshot?.review ?? null
-    const error = snapshot?.error ?? null
-    const due = snapshot?.due ?? []
-    const proposals = await read($, proposalsAtom)
-    const waiting = proposals?.waiting.length ?? 0
-    const proposalsError = errorBesideTasks(error, proposals)
-    const isEmpty =
-      candidates.length === 0 && due.length === 0 && review === null && error === null && waiting === 0 && proposalsError === null
-    if (isEmpty && notice === null && proposalsNotice === null && versionLine === null) {
-      return next(e)
+    // Beside the pane, which holds every row with its buttons, the band is one line at most. Where
+    // the pane is not in view, it draws all it has and a row for what this session was given.
+    const sight = await sightOn($, e.surface)
+    const model = await bandModel($, sight)
+    if (sight === 'beside') {
+      const line = lineBesidePane(model)
+      return line === null ? next(e) : lineRow($, e, line)
     }
-
-    const { Box, Text } = $.ui.resolve(e)
-    const moreCandidates = andMore(candidates.length - CANDIDATES_SHOWN, 'candidates')
-    const moreDue = andMore(due.length - DUE_SHOWN, 'due')
-    const findings = review === null ? [] : untoldFindings(review)
-    const moreFindings = andMore(findings.length - FINDINGS_SHOWN, 'findings')
-    const isWriting = Object.values(presses).some(pressed => pressed.phase === 'writing')
-
-    const actions = rowActions($)
-    const row = (candidate: BandCandidate) => candidateRow($, e, candidate, presses[candidate.id], actions)
-
-    return (
-      <Box flexDirection="column">
-        {error !== null && (
-          <Text color="error" wrap="truncate-end">
-            {plainLine(error)}
-          </Text>
-        )}
-        {candidates.slice(0, CANDIDATES_SHOWN).map(row)}
-        {moreCandidates !== null && <Text dimColor>{moreCandidates}</Text>}
-        {waiting > 0 && proposalsRow($, e, waiting, () => showFromBand($))}
-        {proposalsError !== null && (
-          <Text color="error" wrap="truncate-end">
-            {couldNotLookLine(proposalsError)}
-          </Text>
-        )}
-        {dueFirst(due).slice(0, DUE_SHOWN).map(task => (
-          <Text dimColor wrap="truncate-end">
-            {dueLine(task)}
-          </Text>
-        ))}
-        {moreDue !== null && <Text dimColor>{moreDue}</Text>}
-        {review !== null && reviewRow($, e, review, presses[review.id], actions)}
-        {findings.slice(0, FINDINGS_SHOWN).map(finding => (
-          <Text wrap="truncate-end">
-            {'  '}
-            {plainLine(finding)}
-          </Text>
-        ))}
-        {moreFindings !== null && <Text dimColor>{`  ${moreFindings}`}</Text>}
-        {(review?.changes?.length ?? 0) > 0 && <Text dimColor>  the whole review: /m2b-review</Text>}
-        {isWriting && <Text dimColor>working…</Text>}
-        {notice !== null && (
-          <Text color="warning" wrap="truncate-end">
-            {plainLine(notice)}
-          </Text>
-        )}
-        {proposalsNotice !== null && (
-          <Text color="warning" wrap="truncate-end">
-            {plainLine(proposalsNotice)}
-          </Text>
-        )}
-        {versionLine !== null && (
-          <Text color="warning" wrap="truncate-end">
-            {plainLine(versionLine)}
-          </Text>
-        )}
-      </Box>
-    )
+    const staysOpen = docksFor({ isFullscreen: e.viewport?.isFullscreen === true, columns: e.viewport?.columns ?? 0 })
+    return bandRows($, e, model, bandActions($, staysOpen)) ?? next(e)
   })
 }

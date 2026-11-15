@@ -42,6 +42,10 @@ row, between the candidates and the due tasks: what asks for keep or drop stands
 what only tells. The band is empty, and
 takes no room, while there is nothing to show.
 
+While the m2b pane sits beside the chat, which holds the same rows, the band steps back to one
+line, and where the pane is not in view it has one row more, for what this session was given:
+[the band beside the pane](#the-band-beside-the-pane).
+
 **Keep and drop are buttons: click them with the mouse.** Keep completes the task; drop marks it
 dropped and completes it; nothing else changes, and the next curation run reads which one you
 chose.
@@ -195,8 +199,8 @@ Under the fullscreen layout Claude Code seats a pane beside the conversation. Th
 the m2b pane by itself, with its first drawing on the terminal in a session: in the start view,
 without taking the keyboard, and Escape does not close it. After `/clear` it does so once more. Claude Code draws a pane nobody asked for only on a
 terminal wide enough for it (from 144 columns, from 110 once you have opened the pane yourself);
-below that the pane stays open undrawn and appears when you widen the terminal, and `/m2b` shows
-it at once.
+below that the pane stays open undrawn and appears when you widen the terminal, and `/m2b` or
+`show` on the band's row for this session shows it at once.
 
 On the main screen, where a pane is a block above the prompt that takes rows from the
 conversation, nothing opens by itself: `/m2b` opens the pane there, as a dialog that Escape
@@ -206,6 +210,65 @@ opens the pane: in the desktop app and the other surfaces, `/m2b` does.
 Closing the pane beside the chat on its start view is kept on this machine: from then on it does
 not open by itself, in this session or a later one, until you open it again with `/m2b`, one of
 the band's other commands or `show` in the band. Closing the block above the prompt keeps nothing.
+
+### The band beside the pane
+
+The pane's start view holds every row of the band with its buttons. So while the pane sits beside
+the chat in that view and is the pane shown there, the band above the prompt draws one line at
+most:
+
+```text
+ Waits for you: 2 to keep or drop, 1 proposal from your sessions, the review
+```
+
+The line is the first there is of: why a press wrote nothing, which the start view does not show;
+that this session runs an older band than the installed m2b; an error reading the tasks or the
+proposals; and else the counts of what needs an answer, candidates and questions together, then
+the proposals, then the open review. The tasks due need no answer and stand in the pane. With
+none of these the band draws nothing.
+
+The pane's other views hold only some of the rows. While it is turned to the review, a search,
+the proposals or a topic, the band draws its rows as on its own, until `back` or Escape lead to
+the start view again.
+
+Where the pane is not in view, the band draws what it draws on its own, and one row more while
+this session was given at least one topic:
+
+```text
+ [ keep ] [ drop ] Remember? Dana prefers tea
+ [ show ] 2 topics given to this session
+```
+
+`show` opens the pane in its start view. That is your own open, so Claude Code places the pane at
+any width: under the fullscreen layout from 110 columns beside the chat, where it stays, and
+elsewhere as a dialog that Escape closes, on a terminal the block above the prompt. A session
+that was given no topic, that m2b holds no note of or has not looked at yet has no such row;
+`/m2b` says which it is. Where no pane can be shown, or Claude Code refuses to open one, the band
+says so and names `/m2b`, which answers with the lines.
+
+What each way of running Claude Code gets:
+
+| Layout | The pane | The band |
+|---|---|---|
+| fullscreen, wide (from 144 columns, from 110 once you opened the pane) | beside the chat, opened by itself | one line at most; every row while the pane is turned to another view |
+| fullscreen, narrower | open and undrawn until the terminal is wider; `show` in the band or `/m2b` shows it now | every row, and the row for this session |
+| the main screen, any width | only when asked, as a block above the prompt | every row, and the row for this session; while the block shows, without that row |
+| beside the chat but narrow (a body of 24 to 40 columns) | every line wraps; topics by name and count, a topic's lines after `show` | one line at most |
+| the desktop app | as the app seats it; minimized to its small form, three counts and no button | one line at most beside the docked pane, every row beside the small form |
+| `claude -p`, no surface | none | none; `/m2b` answers as text |
+
+The small form says how many topics this session was given, how many things wait for you and how
+many tasks are due today and overdue, or what m2b could not look at in place of a count. A click
+may not reach it, so keep, drop and `ok` stay in the band there.
+
+The band knows where the pane sits from the pane's own last drawing on the same surface, and asks
+Claude Code whether the pane is still open, drawn and the one shown. Whenever that is not certain
+(the pane closed, Claude Code says it is not drawn, another plugin's pane is the tab in front),
+the band draws every row. It is drawn again at once when the pane is first drawn in a seat, moves
+to another, turns to another view or closes; what else changes, such as another plugin's pane
+coming in front, it sees with its own next drawing. Claude Code says whether the pane is drawn and
+shown for the session as a whole: with a terminal and the desktop app on one session, the band of
+one can go by the pane of the other.
 
 ### Back to the start view
 

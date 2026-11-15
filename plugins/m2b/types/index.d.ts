@@ -172,6 +172,8 @@ declare module 'claude-code' {
       bandProposalsNotice: string | null
       /** What the m2b pane shows; null for the view it starts in. */
       paneView: PaneView | null
+      /** Where the pane's last drawing sat on each surface, by the surface's name; empty once the pane closed. */
+      paneSeats: Record<string, string>
       /** What m2b gave this session, from this session's own question; null until it is answered. */
       bandSession: BandSession | null
       /** The notes this session wrote through the mod; null before the first. */

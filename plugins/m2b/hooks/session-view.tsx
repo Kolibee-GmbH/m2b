@@ -22,7 +22,7 @@ export const SESSION_COMMAND: CommandSpec = {
 export const SESSION_PLACED = 'this session and what waits for you are in the m2b pane'
 
 const IN_THIS_SESSION = 'In this session'
-const WAITS_FOR_YOU = 'Waits for you'
+export const WAITS_FOR_YOU = 'Waits for you'
 const TODAY = 'Today'
 const NOT_LOOKED = 'm2b has not looked yet.'
 // Not known is a session this machine holds no note of: started under an earlier m2b, or without m2b's hooks.
@@ -36,6 +36,9 @@ const TASKS_NOT_READ = 'The task list could not be read.'
 // With `band.due_tasks` off, and in an answer a session with an earlier band shared.
 const DUE_NOT_SHOWN = 'Tasks due are not shown.'
 const WHOLE_REVIEW = 'the whole review'
+// The short forms of the small pane, where the long ones would be most of what it draws.
+const NO_NOTE = 'm2b holds no note of this session.'
+const SESSION_NOT_READ = 'm2b could not look at this session.'
 
 // How the session's start printed the distillate, as the core names it.
 const PRINTED = new Map([
@@ -193,6 +196,66 @@ export function sessionLines(model: SessionModel): string[] {
     TODAY,
     ...indented(due),
   ]
+}
+
+function sessionGlance(given: BandSession | null): string {
+  if (given === null) {
+    return NOT_LOOKED
+  }
+  if (given.error !== null) {
+    return SESSION_NOT_READ
+  }
+  if (!given.known) {
+    return NO_NOTE
+  }
+  return given.topics.length === 0 ? NO_TOPIC : `${count(given.topics.length, 'topic', 'topics')} in this session`
+}
+
+function waitsGlance(model: SessionModel): string | null {
+  const { snapshot, proposals } = model
+  if (snapshot === null) {
+    return null
+  }
+  if (snapshot.error !== null) {
+    return TASKS_NOT_READ
+  }
+  const storeError = proposalsError(model)
+  if (storeError !== null) {
+    return couldNotLookLine(storeError)
+  }
+  const waits = snapshot.candidates.length + (proposals?.waiting.length ?? 0) + (snapshot.review === null ? 0 : 1)
+  return waits === 0 ? NOTHING_WAITS : `${waits} ${waits === 1 ? 'waits' : 'wait'} for you`
+}
+
+function dueGlance(snapshot: BandSnapshot | null): string | null {
+  const due = snapshot?.due ?? []
+  const overdue = due.filter(task => task.overdue).length
+  const today = due.length - overdue
+  const parts = [...(today > 0 ? [`${today} due today`] : []), ...(overdue > 0 ? [`${overdue} overdue`] : [])]
+  return parts.length === 0 ? null : parts.join(', ')
+}
+
+/**
+ * The pane as counts, for the small form the desktop app gives a minimized pane: how many topics
+ * this session was given, how many things wait, how many tasks are due. What could not be looked
+ * at is said in place of its count.
+ */
+export function glanceLines(model: SessionModel): string[] {
+  return [sessionGlance(model.given), waitsGlance(model), dueGlance(model.snapshot)].filter(
+    (line): line is string => line !== null,
+  )
+}
+
+/** The small form's drawing: lines to read at a glance and no button, since a click may not reach it. */
+export function glancePane($: EngineInterface, e: ResolveInput, model: SessionModel) {
+  const { Box, Text } = $.ui.resolve(e)
+  return (
+    <Box flexDirection="column">
+      {glanceLines(model).map(line => (
+        <Text wrap="wrap">{line}</Text>
+      ))}
+    </Box>
+  )
 }
 
 /**

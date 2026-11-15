@@ -141,6 +141,14 @@ export class FakeM2b {
   searchUnreadable: { path: string; reason: string }[] = []
   /** When set, the surface leaves a pane undrawn, with this as the reason. */
   paneWaits: string | null = null
+  /** Set, another plugin's pane is the one the surface shows, and m2b's is a tab behind it. */
+  isPaneBehind = false
+  /** When set, Claude Code cannot list the open panes, with this as the reason. */
+  panesFail: string | null = null
+  /** When set, Claude Code refuses to open a pane, with this as the reason. */
+  openFails: string | null = null
+  /** Set, a hook beneath the mod keeps the pane open when it is asked to close. */
+  isCloseHeld = false
   /** Set, `m2b search`'s answer is cut as `$.process.run` cuts one past 4 MiB. */
   searchCut = false
   /** When set, `m2b search` fails with this as its message. */
@@ -432,7 +440,7 @@ export type World = {
 }
 
 /** The pane as Claude Code hands it to the render hook, at a width and in a seat the test chooses. */
-export function pane(id: string, bodyColumns = 80, placement: 'dock' | 'inline' = 'dock') {
+export function pane(id: string, bodyColumns = 80, placement: 'dock' | 'inline' | 'widget' = 'dock') {
   return {
     plugin: 'm2b',
     component: 'Pane',
@@ -500,12 +508,25 @@ export async function start(
   const openPanes = new Set<string>()
   // Reached only by a close no hook of the mod answered for: the pane is gone then.
   on('ui.close', (_, e) => {
-    openPanes.delete(e.id)
+    if (!fake.isCloseHeld) {
+      openPanes.delete(e.id)
+    }
     return { value: undefined }
   })
-  on('ui.panes', () => ({
-    value: [...openPanes].map(id => ({ id, title: id, isShown: true, isFocused: false, isPlaced: fake.paneWaits === null })),
-  }))
+  on('ui.panes', () => {
+    if (fake.panesFail !== null) {
+      return { deny: fake.panesFail }
+    }
+    return {
+      value: [...openPanes].map(id => ({
+        id,
+        title: id,
+        isShown: !fake.isPaneBehind,
+        isFocused: false,
+        isPlaced: fake.paneWaits === null,
+      })),
+    }
+  })
   const toasts: string[] = []
   on('ui.toast', (_, e) => {
     if (fake.toastFails) {
@@ -515,6 +536,9 @@ export async function start(
     return { value: undefined }
   })
   on('ui.open', (_, e) => {
+    if (fake.openFails !== null) {
+      return { deny: fake.openFails }
+    }
     opened.push(e)
     openPanes.add(e.id)
     return fake.paneWaits === null

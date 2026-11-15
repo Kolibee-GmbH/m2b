@@ -39,6 +39,16 @@ All notable changes to this project are documented here. The format follows
   distillate holds them now. The band keeps them only while the pane shows them: they are in no
   text its commands answer, not in the session's state and in nothing handed to the model
   ([The band](docs/band.md#a-topics-lines)).
+- While the m2b pane sits beside the conversation in its start view, the band above the prompt
+  steps back to one line, so nothing stands twice: why a press wrote nothing, the hint of an older
+  band or an error where there is one, and else the counts of what needs an answer (`Waits for
+  you: 2 to keep or drop, 1 proposal from your sessions, the review`). Where the pane is not in
+  view (the main screen, a terminal too narrow for it, after you closed it, behind another
+  plugin's pane) the band keeps every row and gets one more, `2 topics given to this session`,
+  whose `show` opens the pane ([The band](docs/band.md#the-band-beside-the-pane)).
+- Minimized to its small form in the desktop app, the m2b pane draws three counts and no button:
+  the topics this session was given, what waits for you and the tasks due
+  ([The band](docs/band.md#the-band-beside-the-pane)).
 - `m2b distillate topic <name>` prints one topic's facts and current items from the distillate;
   `m2b band --json --session <id>` names the session's folder under `distillate.folder`
   ([Commands](docs/commands.md)).

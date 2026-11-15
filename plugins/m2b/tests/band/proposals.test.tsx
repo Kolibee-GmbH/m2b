@@ -280,7 +280,8 @@ test('keep is written once the undo window is over, and the pane and the band fo
   const fake = proposedFake()
   const { clock } = await start($, on, fake)
   await typed($, 'm2b-proposals')
-  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  // Above the prompt, where the band below it keeps its rows.
+  const ui = await $.ui.mount({ ...pane(PANE, 80, 'inline'), surface: 'terminal' })
 
   await ui.press({ key: `keep:${DANA}` })
   expect(await texts(ui)).toContain('keeping: Dana is head of IT at Northwind.')
@@ -390,7 +391,8 @@ test('an answer m2b refuses stands in the pane and in the band until the next pr
   const fake = proposedFake()
   const { clock } = await start($, on, fake)
   await typed($, 'm2b-proposals')
-  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  // Above the prompt, where the band below it keeps its rows.
+  const ui = await $.ui.mount({ ...pane(PANE, 80, 'inline'), surface: 'terminal' })
 
   await ui.press({ key: `keep:${DANA}` })
   // Another machine drops it while the press waits.
