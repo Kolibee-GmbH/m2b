@@ -169,6 +169,7 @@ class ParseTest(unittest.TestCase):
             machine.parse_machine_config(_config(band={"due_tasks": "no"}), HOME)
 
     def test_a_session_hands_in_proposals_only_when_sessions_propose_is_true(self) -> None:
+        """Covers: B173"""
         self.assertFalse(machine.parse_machine_config(_config(), HOME).sessions.propose)
         self.assertFalse(machine.parse_machine_config(_config(sessions={}), HOME).sessions.propose)
         self.assertTrue(machine.parse_machine_config(_config(sessions={"propose": True}), HOME).sessions.propose)

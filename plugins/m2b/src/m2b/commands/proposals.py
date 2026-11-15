@@ -1,24 +1,32 @@
-"""``proposals``, ``proposals keep`` and ``proposals drop``: what a reading of the sessions proposed, answered.
+"""``proposals``, ``proposals keep``, ``proposals drop`` and ``proposals add``: the proposals, answered and handed in.
 
 The listing shows what still waits for an answer; keep and drop add the answer as a file and
 leave the filing to the next curation run, like every client. A proposals file or an answers
 folder that is not downloaded ends the command with the line that names what to fetch: could not
 look is never an empty list.
+
+``add`` is how a session hands in a proposal of its own (``handed_in``): it reads one JSON object
+from standard input, so no word of it passes a shell, and answers with one line. A proposal that
+is not taken ends the command with the line that says why, which never repeats its words. The
+answer says nothing of where the quote was found: a caller that could ask would try wordings
+until one reads as the person's own.
 """
 
 from __future__ import annotations
 
 import argparse
+import datetime
+import json
 import re
 import sys
 from collections.abc import Mapping
 from typing import Any
 
-from m2b import proposal_answers, proposals
+from m2b import handed_in, proposal_answers, proposals
 from m2b.commands import Context, ProblemError, UsageError
 from m2b.commands.backends import configured_store
 from m2b.commands.output import print_json
-from m2b.config.machine import load_machine_config
+from m2b.config.machine import MachineConfig, load_machine_config
 from m2b.config.store_settings import require_store_writable
 from m2b.proposal_answers import KEEP, Given, Waiting
 from m2b.proposals import Entry
@@ -27,15 +35,23 @@ from m2b.store.base import Store
 _CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 NONE_WAITS = "no proposal waits for an answer"
 HOW_TO_ANSWER = "keep with: m2b proposals keep <id>... (or keep --all); drop with: m2b proposals drop <id>..."
+ADD = "add"
+HANDED_IN = "handed in; go on with the task"
+HANDED_IN_BEFORE = "handed in before: this proposal of the session is there already; go on with the task"
+# A proposal is a few hundred characters; more bytes than this are no proposal and are not read.
+INPUT_LENGTH = 64 * 1024
 
 
 def proposals_command(arguments: argparse.Namespace, context: Context) -> int:
-    store = configured_store(load_machine_config(context.machine), context.machine)
+    config = load_machine_config(context.machine)
+    store = configured_store(config, context.machine)
     try:
         if arguments.action is None:
             return _list(store, arguments.json)
+        if arguments.action == ADD:
+            return _add(store, config, context)
         return _answer(store, arguments.action, arguments.ids, arguments.all, arguments.json)
-    except (proposals.ProposalsError, proposal_answers.UnknownProposalError) as error:
+    except (proposals.ProposalsError, proposal_answers.UnknownProposalError, handed_in.RefusedError) as error:
         raise ProblemError(str(error)) from error
 
 
@@ -69,6 +85,23 @@ def _waiting_json(waiting: Waiting) -> dict[str, Any]:
         "proposals": [_as_json(key, entry) for key, entry in waiting.proposals],
         "answered": waiting.answered,
     }
+
+
+def _add(store: Store, config: MachineConfig, context: Context) -> int:
+    # Before anything is read: a caller hears that handing in is off, not what is wrong with its input.
+    handed_in.require_on(config, context.environ)
+    written = sys.stdin.buffer.read(INPUT_LENGTH + 1)
+    try:
+        if len(written) > INPUT_LENGTH:
+            raise ValueError("longer than a proposal")
+        given = json.loads(written.decode("utf-8"))
+    # Bytes that are no text, and a text nested deeper than this Python reads, are no proposal either.
+    except (ValueError, RecursionError) as error:
+        raise UsageError("m2b proposals add reads one JSON object from standard input") from error
+    now = datetime.datetime.now().astimezone()
+    outcome = handed_in.hand_in(store, config, context.machine, context.environ, handed_in.parse(given), now)
+    print(HANDED_IN if outcome.is_new else HANDED_IN_BEFORE)
+    return 0
 
 
 def _answer(store: Store, answer: str, named: list[str], every: bool, as_json: bool) -> int:

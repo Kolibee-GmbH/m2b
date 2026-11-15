@@ -53,6 +53,19 @@ _UNSEEN_IN_A_NAME = re.compile(f"[{_HIDDEN_CLASS}\u200c\u200d]")
 _UNSAFE = re.compile("[\u180e\u200b\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff\U000e0000-\U000e007f]")
 
 
+def can_be_written(text: str) -> bool:
+    """False for half a character (a lone surrogate), which an escape in JSON can leave in a text.
+
+    No listing could print it and no file could hold it: one such text would otherwise end every
+    command that reads it.
+    """
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
 def unsafe_characters(text: str) -> list[str]:
     """The unsafe characters in ``text`` as ``U+XXXX``, each once, in the order they first come."""
     names: dict[str, None] = {}

@@ -51,6 +51,7 @@ from m2b.candidates import REMEMBER_DROPPED as REMEMBER_SETTLED
 from m2b.candidates import same_text
 from m2b.config.json_file import read_store_json_object, write_store_json_object
 from m2b.glean import KINDS, PASTED, TYPED, Example, Examples, Proposal
+from m2b.notes.characters import can_be_written
 from m2b.notes.layout import STATE
 from m2b.store.base import Store
 
@@ -373,24 +374,11 @@ def _entry(value: object) -> Entry | None:
         return None
     if not isinstance(text, str) or not isinstance(quote, str) or not (topic is None or isinstance(topic, str)):
         return None
-    if not all(_can_be_written(part) for part in (text, quote, topic or "")):
+    if not all(can_be_written(part) for part in (text, quote, topic or "")):
         return None
     if not isinstance(source, str) or not _SOURCE.fullmatch(source):
         return None
     return Entry(kind, text, quote, day, state, since, topic, due, source)
-
-
-def _can_be_written(text: str) -> bool:
-    """False for half a character (a lone surrogate), which an escape in the file can hold.
-
-    No listing and no answer for the band could print it, and no capture could carry it: one such
-    entry would otherwise end every command that reads the proposals.
-    """
-    try:
-        text.encode("utf-8")
-    except UnicodeEncodeError:
-        return False
-    return True
 
 
 def _as_json(entry: Entry) -> dict[str, Any]:

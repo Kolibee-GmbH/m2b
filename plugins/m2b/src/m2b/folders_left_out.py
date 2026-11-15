@@ -137,23 +137,30 @@ def _on_disk(path: Path) -> tuple[int, int] | None:
 
 
 def rule(
-    store: Store, config: MachineConfig, machine: MachinePaths, environ: Mapping[str, str], now: datetime.datetime
+    store: Store,
+    config: MachineConfig,
+    machine: MachinePaths,
+    environ: Mapping[str, str],
+    now: datetime.datetime,
+    git_seconds: float | None = None,
 ) -> LeftOutRule:
     """The rule as the store's profile and this machine's config state it at ``now``.
 
-    Reads the profile, so a store that cannot be read raises as ``require_profile`` does.
+    Reads the profile, so a store that cannot be read raises as ``require_profile`` does. With
+    ``git_seconds`` git gets that long for each answer in place of its usual time: a caller in
+    the middle of a session cannot wait as a curation run can.
     """
     left_out = require_profile(store).worklog_leave_out
     by_remote = session_remotes.RemoteRule(
         left_out.git_remote_contains,
         machine.state_dir / session_remotes.NOTES_FOLDER,
         now,
-        _asking_git(environ),
+        _asking_git(environ, git_seconds),
     )
     return LeftOutRule(tuple(left_out.folders(machine.home)), config.distillate, by_remote, machine.home)
 
 
-def _asking_git(environ: Mapping[str, str]) -> Callable[[Path], frozenset[str] | None]:
+def _asking_git(environ: Mapping[str, str], seconds: float | None) -> Callable[[Path], frozenset[str] | None]:
     """What git names as a folder's remotes now; nothing on a machine without a git to start.
 
     Which git that is, is looked up at the first folder asked about, so a caller that needs no
@@ -163,8 +170,12 @@ def _asking_git(environ: Mapping[str, str]) -> Callable[[Path], frozenset[str] |
 
     def ask(folder: Path) -> frozenset[str] | None:
         if not found:
-            found.append(usable_git(environ))
+            found.append(usable_git(environ) if seconds is None else usable_git(environ, timeout=seconds))
         git = found[0]
-        return session_remotes.remotes_in(folder, git, environ=environ) if git is not None else None
+        if git is None:
+            return None
+        if seconds is None:
+            return session_remotes.remotes_in(folder, git, environ=environ)
+        return session_remotes.remotes_in(folder, git, timeout=seconds, environ=environ)
 
     return ask

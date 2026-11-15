@@ -53,7 +53,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from m2b.notes.characters import unsafe_characters
+from m2b.notes.characters import can_be_written, unsafe_characters
 from m2b.notes.memory_index import MAX_TOPIC_NAME
 from m2b.sessions import Prompt, Session
 
@@ -279,7 +279,7 @@ def _proposal(entry: object, sessions: Sequence[Session]) -> Proposal | None:
         return None
     if number is None or not 1 <= number <= len(sessions):
         return None
-    if unsafe_characters(text + quote + topic) or not _can_be_written(text + quote + topic):
+    if unsafe_characters(text + quote + topic) or not can_be_written(text + quote + topic):
         return None
     return Proposal(kind, text, quote, sessions[number - 1].session_id, topic or None, due)
 
@@ -306,15 +306,6 @@ def _due(value: object) -> datetime.date | None:
     if not isinstance(value, str) or not _DAY.fullmatch(value):
         raise ValueError(value)
     return datetime.date.fromisoformat(value)
-
-
-def _can_be_written(text: str) -> bool:
-    """False for half a character (a lone surrogate), which a model's escape can leave in its answer."""
-    try:
-        text.encode("utf-8")
-    except UnicodeEncodeError:
-        return False
-    return True
 
 
 def _collapsed(text: str) -> str:

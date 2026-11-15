@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `m2b proposals add` takes a proposal a session hands in by itself, with the words it stands on,
+  and checks them against that session's transcript before anything is written: the quote must
+  stand in one text of the session, and the proposal says whether the person typed it, pasted it,
+  a tool returned it or Claude wrote it. A session that worked in a folder or repository you
+  leave out hands nothing in. It is off until you run `m2b config set sessions.propose true` in a
+  terminal of your own; inside a Claude Code session that command refuses.
+
 ## [0.4.5] - 2026-11-15
 
 ### Changed

@@ -78,6 +78,7 @@ class LeftOutRuleTest(unittest.TestCase):
         self.assertIsNone(rule.reason_for_a_path(str(self.folder("projects/shed") / "notes.md")))
 
     def test_a_path_is_read_as_the_disk_has_it(self) -> None:
+        """Covers: B176"""
         customers, shed = self.folder("customers"), self.folder("projects/shed")
         (customers / "acme").mkdir()
         (shed / "link").symlink_to(customers / "acme")
@@ -95,6 +96,7 @@ class LeftOutRuleTest(unittest.TestCase):
                 self.assertEqual(rule.reason_for_a_path(path), folders_left_out.IN_A_FOLDER_LEFT_OUT)
 
     def test_a_folder_named_in_other_case_is_the_folder_where_the_disk_takes_both_as_one(self) -> None:
+        """Covers: B176"""
         customers = self.folder("customers")
         (customers / "acme").mkdir()
         if not (self.home / "CUSTOMERS").exists():
@@ -123,6 +125,7 @@ class LeftOutRuleTest(unittest.TestCase):
         self.assertEqual(self.asked, [portal, shed])
 
     def test_a_path_in_no_repository_is_taken_and_one_git_cannot_say_anything_of_is_not(self) -> None:
+        """Covers: B176"""
         downloads = self.folder("downloads")
         unknown = self.folder("unknown", in_a_repository=False)
         rule = self.rule(parts=("globex-ag/",))
@@ -135,6 +138,7 @@ class LeftOutRuleTest(unittest.TestCase):
         self.assertIsNone(rule.reason_for_a_path("~"))
 
     def test_a_path_that_cannot_be_looked_at_is_left_out_and_nothing_raises(self) -> None:
+        """Covers: B176"""
         loop = self.home / "loop"
         loop.symlink_to(loop)
         rule = self.rule(self.home / "customers")

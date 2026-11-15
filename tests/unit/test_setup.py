@@ -203,6 +203,7 @@ class NewStoreTest(SetupTest):
         self.assertFalse(self.machine.config_file.exists())
 
     def test_no_answer_of_setup_lets_sessions_hand_in_proposals(self) -> None:
+        """Covers: B173"""
         answers = self.answers(propose=True, sessions={"propose": True}, read_sessions=True)
         code, _, err = self.apply(answers)
         self.assertEqual(code, 0, err)
@@ -210,6 +211,7 @@ class NewStoreTest(SetupTest):
         self.assertFalse(load_machine_config(self.machine).sessions.propose)
 
     def test_setup_keeps_the_switch_for_handing_in_as_the_owner_set_it(self) -> None:
+        """Covers: B173"""
         self.apply(self.answers())
         set_machine_config_value(self.machine, "sessions.propose", True)
         code, _, err = self.apply(self.answers())

@@ -41,7 +41,10 @@ tool: a model worded it. Unlike the reading of a period, a headless transcript i
 whole: the caller asks about the one session it was called from.
 
 A tool's place carries the tool's name and the texts of the call's input, so a caller can tell a
-result that only gives back what the agent wrote (``echo``, a file written and read).
+result that only gives back what the agent wrote into that call (``echo``). A place also carries
+the end of the text that stood right before it in its record, where a mark, a block or the
+syntax of JSON parted the two, and for a JSON value the key it stands under: a credential is
+known by the name before it.
 
 Where the session worked is told apart from its places, for a caller that must leave some work
 out: every working folder a record names, the session's subagents' among them, and every path a
@@ -56,6 +59,7 @@ Nothing here is redacted; a caller that keeps a quote redacts it.
 
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import json
 import os.path
@@ -78,8 +82,8 @@ LOOKED_AT = 64 * 1024
 READ_TOOL = "Read"
 # The tools through which Claude answers itself: what comes back was worded by a model.
 SUBAGENT_TOOLS = ("Agent", "Task")
-# How much of what was typed right before a prompt's first pasted text is kept with that place,
-# for a caller's redaction: the name of a credential typed before a paste that begins with its value.
+# How much of the text right before a place is kept with it, for a caller's redaction: the name
+# of a credential typed before a paste that begins with its value, or written before a block.
 BEFORE_LENGTH = 200
 # No session of a person names more paths.
 PATHS_KEPT = 5000
@@ -129,8 +133,17 @@ class Place:
     # For a tool's result: the tool, and every text of the input of the call it answers.
     tool: str | None = None
     call_input: tuple[str, ...] = ()
-    # For the first pasted text of a prompt: the end of what was typed before it.
+    # The end of the text that stood right before this one in its record, where something parted
+    # the two; for a value of JSON, the key it stands under.
     before: str = ""
+
+
+@dataclass(frozen=True)
+class CallInput:
+    """The texts of the input of one call, and how many places stood before it in the session."""
+
+    places_before: int
+    texts: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -144,8 +157,12 @@ class SessionPlaces:
     # appear. A path that is not absolute stands behind the working folder of its record.
     paths: tuple[str, ...]
     # Whether ``paths`` is not all of them: the session named more than are kept, one longer than a
-    # file system opens, or a command longer than is looked at.
+    # file system opens, a command longer than is looked at, or a subagent's transcript could not
+    # be read.
     paths_incomplete: bool = False
+    # What Claude wrote into its calls, in their order, a subagent's task among them: a caller can
+    # tell a result that only gives back what was written before it.
+    inputs: tuple[CallInput, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -170,11 +187,14 @@ def read(transcript: Path) -> SessionPlaces:
     """The places of the session ``transcript`` holds; an ``OSError`` when the file cannot be read.
 
     The transcripts of the session's subagents, which Claude Code keeps in a folder beside it,
-    are read for where they worked; one of them that cannot be read is passed over.
+    are read for where they worked; one of them that cannot be read leaves the paths incomplete.
     """
     places: list[Place] = []
+    inputs: list[CallInput] = []
     worked = _Worked()
     calls: dict[str, _Call] = {}
+    # The end of the answer block before, while answer follows answer: Claude Code writes a block a record.
+    answered = ""
     with transcript.open(encoding="utf-8", errors="replace") as handle:
         for line in handle:
             record = worked.note(line)
@@ -184,10 +204,15 @@ def read(transcript: Path) -> SessionPlaces:
             if moment is None or any(record.get(flag) for flag in NOT_THE_MAIN_CONVERSATION):
                 continue
             if record.get("type") == "assistant" and not record.get("isApiErrorMessage"):
-                places.extend(_of_claude(record, moment, calls))
+                known = len(calls)
+                for place in _of_claude(record, moment, calls):
+                    places.append(dataclasses.replace(place, before=answered))
+                    answered = place.text[-BEFORE_LENGTH:]
+                inputs.extend(CallInput(len(places), call.input_texts) for call in list(calls.values())[known:])
             elif record.get("type") == "user":
-                places.extend(_of_the_person(record, moment))
-                places.extend(_of_tools(record, moment, calls))
+                said = [*_of_the_person(record, moment), *_of_tools(record, moment, calls)]
+                places.extend(said)
+                answered = "" if said else answered
     # Claude Code keeps some of them in folders of their own below this one.
     for subagent in sorted((transcript.parent / transcript.stem / _SUBAGENTS).rglob("*.jsonl")):
         try:
@@ -195,8 +220,10 @@ def read(transcript: Path) -> SessionPlaces:
                 for line in handle:
                     worked.note(line)
         except OSError:
-            continue
-    return SessionPlaces(tuple(places), tuple(worked.folders), tuple(worked.paths), worked.paths_incomplete)
+            worked.paths_incomplete = True
+    return SessionPlaces(
+        tuple(places), tuple(worked.folders), tuple(worked.paths), worked.paths_incomplete, tuple(inputs)
+    )
 
 
 class _Worked:
@@ -276,7 +303,7 @@ def _of_the_person(record: Mapping[str, Any], moment: datetime.datetime) -> Iter
             for stretch in map(_one_text, _PASTE_TAG.split(piece)):
                 if stretch:
                     yield Place(PASTED, stretch, moment, before=before)
-                    before = ""
+                    before = stretch[-BEFORE_LENGTH:]
 
 
 def _of_claude(record: Mapping[str, Any], moment: datetime.datetime, calls: dict[str, _Call]) -> Iterator[Place]:
@@ -306,12 +333,14 @@ def _of_tools(record: Mapping[str, Any], moment: datetime.datetime, calls: Mappi
         call = calls.get(answered) if isinstance(answered, str) else None
         if call is None:
             continue
+        before = ""
         for returned in _text_parts(part.get("content")):
-            for text in _texts_of_a_result(returned, call.tool):
+            texts, before = _texts_of_a_result(returned, call.tool, before)
+            for text, stood_before in texts:
                 if call.tool in SUBAGENT_TOOLS:
-                    yield Place(AGENT, text, moment)
+                    yield Place(AGENT, text, moment, before=stood_before)
                 else:
-                    yield Place(TOOL, text, moment, call.tool, call.input_texts)
+                    yield Place(TOOL, text, moment, call.tool, call.input_texts, stood_before)
 
 
 def _content_of(record: Mapping[str, Any]) -> object:
@@ -328,15 +357,23 @@ def _text_parts(content: object) -> list[str]:
     return [text for text in texts if isinstance(text, str)]
 
 
-def _texts_of_a_result(returned: str, tool: str) -> list[str]:
+def _texts_of_a_result(returned: str, tool: str, before: str) -> tuple[list[tuple[str, str]], str]:
+    """The texts of one text part of a result, each with what stood right before it, and the part's end.
+
+    ``before`` is the end of the text part before this one.
+    """
     returned = _first_part_of_moved_out(returned[:LOOKED_AT])
     if tool == READ_TOOL:
         returned = _NUMBERED_LINE.sub("", returned)
-    texts: list[str] = []
+    texts: list[tuple[str, str]] = []
     for piece in _apart_from_blocks(returned):
         strings = _strings_of_json(piece)
-        texts.extend([piece] if strings is None else strings)
-    return [text for text in map(_one_text, texts) if text]
+        if strings is None:
+            texts.append((_one_text(piece), before))
+        else:
+            texts.extend((_one_text(string), _one_text(name)[-BEFORE_LENGTH:]) for name, string in strings)
+        before = _one_text(piece)[-BEFORE_LENGTH:]
+    return [(text, stood_before) for text, stood_before in texts if text], before
 
 
 def _first_part_of_moved_out(returned: str) -> str:
@@ -377,20 +414,24 @@ def _apart_from_blocks(text: str) -> list[str]:
     return pieces
 
 
-def _strings_of_json(text: str) -> list[str] | None:
-    """Every string in a text that is a JSON object or list, decoded; None for any other text.
+def _strings_of_json(text: str) -> list[tuple[str, str]] | None:
+    """Every string in a text that is a JSON object or list, decoded, with what names it.
 
-    JSON that does not read whole, cut by a length or by a note's first part, gives the strings
-    that are whole in it, a key among them.
+    None for any other text. What names a string is written as the text before it: the keys on
+    the way to it and the string before it in the same object or list, then a colon. JSON that
+    does not read whole, cut by a length or by a note's first part, gives the strings that are
+    whole in it, a key among them, each named by the string before it.
     """
     if _LOOKS_LIKE_JSON.match(text) is None:
         return None
     try:
         value, end = json.JSONDecoder().raw_decode(text.lstrip())
     except (ValueError, RecursionError):
-        return list(_whole_strings_in(text))
-    # What stands behind the JSON is a text of its own.
-    return [*_strings_in(value), text.lstrip()[end:]]
+        whole = list(_whole_strings_in(text))
+        return [(f"{name}: " if name else "", string) for name, string in zip(["", *whole], whole)]
+    named = list(_named_strings_in(value))
+    # What stands behind the JSON is a text of its own, behind the last string.
+    return [*named, (named[-1][1] if named else "", text.lstrip()[end:])]
 
 
 def _whole_strings_in(text: str) -> Iterator[str]:
@@ -401,6 +442,29 @@ def _whole_strings_in(text: str) -> Iterator[str]:
             continue
         if isinstance(string, str):
             yield string
+
+
+def _named_strings_in(value: object) -> Iterator[tuple[str, str]]:
+    """The strings a JSON value holds as values, each with the text that names it; a key is no value.
+
+    A credential is named by a key above it (``{"password": {"value": ...}}``) or by the string
+    beside it (``{"name": "DB_PASSWORD", "value": ...}``), so both stand in the name.
+    """
+    waiting: list[tuple[str, object]] = [("", value)]
+    while waiting:
+        name, inner = waiting.pop()
+        if isinstance(inner, str):
+            yield f"{name}: " if name else "", inner
+            continue
+        below: list[tuple[str, object]] = []
+        beside = ""
+        items = inner.items() if isinstance(inner, dict) else enumerate(inner) if isinstance(inner, list) else ()
+        for key, child in items:
+            key_name = key if isinstance(key, str) else ""
+            below.append((" ".join(part for part in (name, beside, key_name) if part)[-BEFORE_LENGTH:], child))
+            if isinstance(child, str):
+                beside = child[:BEFORE_LENGTH]
+        waiting.extend(reversed(below))
 
 
 def _strings_in(value: object) -> Iterator[str]:

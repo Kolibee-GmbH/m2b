@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 
+from m2b import handed_in
 from m2b.addons import REMOVED_ADDONS, RemovedAddonError
 from m2b.commands import Context, UsageError
 from m2b.commands.backends import configured_store
@@ -20,6 +21,8 @@ from m2b.paths import expand
 from m2b.store.base import StoreError
 from m2b.store.factory import open_store
 
+# Set in every command Claude Code starts, the shell line a person types into a session among them.
+CLAUDE_CODE_VARIABLE = "CLAUDECODE"
 STORE_KEY = "store"
 STORE_PATH_KEY = "store.path"
 
@@ -41,8 +44,21 @@ def config_set(arguments: argparse.Namespace, context: Context) -> int:
         unusable = store_path.problem(path)
         if unusable is not None and _curates_at(context, path, value):
             raise UsageError(unusable)
+    if _lets_sessions_hand_in(arguments.key, value) and context.environ.get(CLAUDE_CODE_VARIABLE):
+        raise UsageError(
+            f"{handed_in.SWITCH} is turned on in a terminal of your own, outside Claude Code: with it a session "
+            "hands in proposals with words from what its agent read, and no session turns that on"
+        )
     set_machine_config_value(context.machine, arguments.key, value)
     return 0
+
+
+def _lets_sessions_hand_in(key: str, value: object) -> bool:
+    """Whether this call turns handing in on, under the key itself or with the whole section."""
+    section, _, setting = handed_in.SWITCH.partition(".")
+    if key == handed_in.SWITCH:
+        return value is True
+    return key == section and isinstance(value, dict) and value.get(setting) is True
 
 
 def _removed_addon_written(key: str) -> str | None:

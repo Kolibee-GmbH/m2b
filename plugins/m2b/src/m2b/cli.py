@@ -301,6 +301,8 @@ def _parser() -> argparse.ArgumentParser:
         given.set_defaults(all=False)
         if answer == "keep":
             given.add_argument("--all", action="store_true", help="every proposal that waits for an answer")
+    add = answers.add_parser(proposals_commands.ADD, help="hand in a proposal of a session, as JSON on standard input")
+    add.add_argument("input", nargs="?", choices=("-",), default="-", help="-: read standard input")
 
     refresh_group = _group(commands, "refresh", "memory lines past their day or gone quiet")
     refresh_due = _command(refresh_group, "due", refresh_commands.refresh_due, "what is due, for the refresh", True)

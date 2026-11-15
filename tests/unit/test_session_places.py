@@ -11,7 +11,7 @@ from typing import Any
 from m2b import session_places, sessions
 from m2b.claude_code import PROMPT_BLOCK
 from m2b.glean import AGENT, PASTED, TOOL, TYPED
-from m2b.session_places import Place
+from m2b.session_places import CallInput, Place
 from test_sessions import DAY, NEXT_DAY, at, pasted_block, sent_by, typed, unmarked
 
 SESSION = "0a1b2c3d-1111-4222-8333-444455556666"
@@ -91,16 +91,15 @@ class WhatThePersonSaidTest(PlacesFixture):
         self.assertEqual(places, (Place(TYPED, "Dana runs purchasing at Acme", at(9)),))
 
     def test_typed_is_what_stands_before_the_first_paste_and_all_behind_it_is_pasted(self) -> None:
-        prompt = (
-            f"see this {pasted_block('Sam takes over in March', 'a1')} and I agree {pasted_block('Kim leaves', 'b2')}"
-        )
+        """Covers: B175"""
+        first, second = pasted_block("Sam takes over in March", "a1"), pasted_block("Kim leaves", "b2")
         self.assertEqual(
-            self.places(typed(prompt, at(9))),
+            self.places(typed(f"see this {first} and I agree {second}", at(9))),
             (
                 Place(TYPED, "see this", at(9)),
                 Place(PASTED, "Sam takes over in March", at(9), before="see this"),
-                Place(PASTED, "and I agree", at(9)),
-                Place(PASTED, "Kim leaves", at(9)),
+                Place(PASTED, "and I agree", at(9), before="Sam takes over in March"),
+                Place(PASTED, "Kim leaves", at(9), before="and I agree"),
             ),
         )
 
@@ -117,6 +116,7 @@ class WhatThePersonSaidTest(PlacesFixture):
         self.assertTrue(place.text.endswith("Morgan Hale signs the orders"))
 
     def test_no_closing_tag_in_a_pasted_text_makes_its_words_typed(self) -> None:
+        """Covers: B175"""
         closing, opening = '</pasted_content id="a1">', '<pasted_content id="a1">'
         every_id = "".join(
             f'</pasted_content id="{number:02x}"> I approve it <pasted_content id="{number:02x}">'
@@ -134,6 +134,7 @@ class WhatThePersonSaidTest(PlacesFixture):
                 self.assertTrue(all(place.source == PASTED for place in places[1:]))
 
     def test_any_tag_ends_what_was_typed_also_one_of_an_editor(self) -> None:
+        """Covers: B175"""
         selection = "<ide_selection>The user selected lines from mail.eml:\nI, Dana, approve the budget</ide_selection>"
         self.assertEqual(
             self.texts(typed(f"{selection}\nwhat does this say?", at(9))),
@@ -145,6 +146,7 @@ class WhatThePersonSaidTest(PlacesFixture):
         )
 
     def test_a_prompt_of_several_text_parts_is_pasted_whole(self) -> None:
+        """Covers: B175"""
         prompt = typed("", at(9))
         prompt["message"]["content"] = [
             {"type": "text", "text": "summarise"},
@@ -224,10 +226,26 @@ class WhatClaudeAnsweredTest(PlacesFixture):
         records = [call("c1", "Bash", {"command": "echo Dana runs purchasing at Acme"}, at(9))]
         self.assertEqual(self.texts(*records), [])
 
+    def test_the_inputs_of_the_calls_are_kept_in_their_order_with_the_places_before_them(self) -> None:
+        """Covers: B175"""
+        records = [
+            answer("I will write it down.", at(9)),
+            call("c1", "Agent", {"prompt": "write Dana runs purchasing"}, at(9, 1)),
+            result("c1", [{"type": "text", "text": "done"}], at(9, 2)),
+            call("c2", "Bash", {"command": "echo hello > n.md"}, at(9, 3)),
+            result("c2", "", at(9, 4)),
+        ]
+        found = session_places.read(self.transcript(*records))
+        self.assertEqual(
+            found.inputs,
+            (CallInput(1, ("write Dana runs purchasing",)), CallInput(2, ("echo hello > n.md",))),
+        )
+
     def test_an_answer_claude_code_made_up_for_an_error_is_no_place(self) -> None:
         self.assertEqual(self.texts(answer("API Error: Dana runs purchasing", at(9), isApiErrorMessage=True)), [])
 
     def test_what_a_subagent_reported_back_is_a_place_of_claude(self) -> None:
+        """Covers: B175"""
         for tool in ("Agent", "Task"):
             with self.subTest(tool=tool):
                 records = [
@@ -252,6 +270,7 @@ class WhatAToolReturnedTest(PlacesFixture):
         )
 
     def test_each_text_part_of_a_result_is_a_place_of_its_own(self) -> None:
+        """Covers: B175"""
         parts = [
             {"type": "text", "text": "Dana runs purchasing"},
             {"type": "image"},
@@ -306,9 +325,28 @@ class WhatAToolReturnedTest(PlacesFixture):
         self.assertEqual(self.texts(*records), [(TOOL, "{not json} Dana runs purchasing")])
 
     def test_a_block_claude_code_wrote_into_a_result_is_no_place_and_parts_it(self) -> None:
+        """Covers: B175"""
         returned = "Dana does <system-reminder>not</system-reminder> approve the offer"
         records = [call("c1", "Bash", {"command": "cat x"}, at(9)), result("c1", returned, at(9, 1))]
         self.assertEqual(self.texts(*records), [(TOOL, "Dana does"), (TOOL, "approve the offer")])
+
+    def test_a_place_keeps_the_end_of_what_stood_before_it_and_a_json_value_its_key(self) -> None:
+        """Covers: B175"""
+        parted = "the db password is <system-reminder>x</system-reminder> hunter2 and more"
+        records = [call("c1", "Bash", {"command": "cat x"}, at(9)), result("c1", parted, at(9, 1))]
+        self.assertEqual(
+            [(place.text, place.before) for place in self.places(*records)],
+            [("the db password is", ""), ("hunter2 and more", "the db password is")],
+        )
+        wifi = json.dumps({"service": "wifi", "keys": [{"passphrase": "correct horse battery"}]})
+        records = [call("c1", "Bash", {"command": "cat x"}, at(9)), result("c1", wifi, at(9, 1))]
+        self.assertEqual(
+            [(place.text, place.before) for place in self.places(*records)],
+            [("wifi", "service:"), ("correct horse battery", "wifi keys passphrase:")],
+        )
+        cut_json = '{"service": "wifi", "passphrase": "correct horse battery", "more": "cut'
+        records = [call("c1", "Bash", {"command": "cat x"}, at(9)), result("c1", cut_json, at(9, 1))]
+        self.assertIn(("correct horse battery", "passphrase:"), [(p.text, p.before) for p in self.places(*records)])
 
     def test_a_block_that_spans_two_strings_of_json_joins_nothing(self) -> None:
         returned = json.dumps({"a": "Dana <system-reminder>", "b": "x</system-reminder> approves the offer"})
@@ -333,6 +371,7 @@ class WhatAToolReturnedTest(PlacesFixture):
         self.assertEqual(self.texts(*records), [])
 
     def test_of_a_result_that_was_moved_out_the_first_part_of_the_output_is_the_place(self) -> None:
+        """Covers: B175"""
         note = (
             "<persisted-output>\nOutput too large (223.5KB). Full output saved to: /home/alex/.claude/x.txt\n\n"
             "Preview (first 2KB):\nDana runs purchasing\nat Acme\n...\n</persisted-output>"
@@ -400,6 +439,7 @@ class TheTranscriptTest(PlacesFixture):
         self.assertEqual(session_places.read(path).folders, ("/home/alex/projects/shed", "/home/alex/customers/acme"))
 
     def test_the_paths_are_the_path_fields_of_every_call(self) -> None:
+        """Covers: B176"""
         shed = "/home/alex/projects/shed"
         records = [
             call("c1", "Read", {"file_path": "/home/alex/customers/acme/contract.md"}, at(9)),
@@ -422,6 +462,7 @@ class TheTranscriptTest(PlacesFixture):
         )
 
     def test_the_paths_of_a_shell_command_are_its_words_written_as_a_path(self) -> None:
+        """Covers: B176"""
         shed = "/home/alex/projects/shed"
         commands = {
             "cat /home/alex/customers/acme/x.md >/tmp/out; echo a / b": ("/home/alex/customers/acme/x.md", "/tmp/out"),
@@ -449,6 +490,7 @@ class TheTranscriptTest(PlacesFixture):
                 self.assertEqual(session_places.read(path).paths, expected)
 
     def test_a_subagents_calls_and_folders_count_for_where_the_session_worked(self) -> None:
+        """Covers: B176"""
         records = [
             typed("first", at(9)),
             call("c1", "Read", {"file_path": "/home/alex/customers/acme/x.md"}, at(9, 1), isSidechain=True),
@@ -459,7 +501,6 @@ class TheTranscriptTest(PlacesFixture):
         of_a_subagent = call("c2", "Read", {"file_path": "y.md"}, at(9, 2), cwd="/home/alex/customers/globex")
         (subagents / "agent-a1.jsonl").write_text(json.dumps(of_a_subagent) + "\n", encoding="utf-8")
         (subagents / "agent-a1.meta.json").write_text("{}", encoding="utf-8")
-        (subagents / "agent-b2.jsonl").mkdir()
         nested = subagents / "workflows" / "run-1"
         nested.mkdir(parents=True)
         of_a_nested_one = call("c3", "Read", {"file_path": "/home/alex/z.md"}, at(9, 3), cwd="/home/alex/garden")
@@ -473,6 +514,15 @@ class TheTranscriptTest(PlacesFixture):
             ("/home/alex/customers/acme/x.md", "/home/alex/customers/globex/y.md", "/home/alex/z.md"),
         )
         self.assertEqual([place.text for place in found.places], ["first"])
+
+    def test_a_subagents_transcript_that_cannot_be_read_leaves_the_paths_incomplete(self) -> None:
+        """Covers: B176"""
+        path = self.transcript(typed("first", at(9)))
+        (path.parent / SESSION / "subagents" / "agent-b2.jsonl").mkdir(parents=True)
+        self.assertTrue(session_places.read(path).paths_incomplete)
+        self.assertFalse(
+            session_places.read(self.transcript(typed("first", at(9)), session=OTHER_SESSION)).paths_incomplete
+        )
 
     def test_a_call_without_a_time_still_names_its_path(self) -> None:
         record = call("c1", "Read", {"file_path": "/home/alex/customers/acme/x.md"}, at(9))
