@@ -420,13 +420,68 @@ export function parseSettings(text: string): SettingsLook {
   }
 }
 
+/** How a card is reached: `back` by `previous`, `forward` by `next` and by its row of the list. */
+export type Reached = 'forward' | 'back'
+
+// The keys of `previous` and `next` name their card. Claude Code looks a key up in what is drawn
+// when the focus is asked for, and waits only for a key that is not drawn yet: a key the card
+// before had too would be found there, at a place the next card has another button at.
+function previousKey(at: number): string {
+  return `settings:previous:${at}`
+}
+
+function nextKey(at: number): string {
+  return `settings:next:${at}`
+}
+
+const LIST = 'settings:list'
+/** The key of the button that takes a waiting press back. */
+export const SETTINGS_UNDO = 'settings:undo'
+
+/** The key of the button that opens the card at `at` from the list. */
+export function rowKey(at: number): string {
+  return `setting:${at}`
+}
+
 /**
- * What the view's buttons do. `open` turns the pane to the card at a place of the list; `choose`
- * is a press on a switch, with the surface the press named.
+ * The key of the button the focus is asked for when the card at `at`, of `count`, is drawn: the
+ * one that leads the way the card was reached, so the same key pressed again goes one card
+ * further, and at either end of the list the one that leads back from there. Never a switch: the
+ * mod asks for the focus on none.
+ */
+export function focusKeyOfCard(at: number, count: number, reached: Reached): string {
+  const hasPrevious = at > 0
+  const hasNext = at < count - 1
+  if (reached === 'back' ? hasPrevious : hasNext) {
+    return reached === 'back' ? previousKey(at) : nextKey(at)
+  }
+  if (hasPrevious) {
+    return previousKey(at)
+  }
+  return hasNext ? nextKey(at) : LIST
+}
+
+/** `focusKeyOfCard` for the card at `at` of the list held for `press`; null where no such card is held. */
+export function focusKeyOfHeldCard(press: string, at: number, reached: Reached): string | null {
+  if (held === null || held.press !== press || held.look.state !== 'read' || held.look.catalog.settings[at] === undefined) {
+    return null
+  }
+  return focusKeyOfCard(at, held.look.catalog.settings.length, reached)
+}
+
+/** Whether the press `token` names still waits for undo: neither taken back nor being written. */
+export function waits(token: string): boolean {
+  return change !== null && change.token === token && change.phase === 'waiting'
+}
+
+/**
+ * What the view's buttons do. `open` turns the pane to the card at a place of the list, and says
+ * how the card is reached; `toList` leaves the card at `from` for the list; `choose` is a press
+ * on a switch, with the surface the press named.
  */
 export type SettingsActions = {
-  open: (at: number) => Promise<void>
-  toList: () => Promise<void>
+  open: (at: number, reached: Reached) => Promise<void>
+  toList: (from: number) => Promise<void>
   choose: (at: number, place: number, surface: string) => Promise<void>
   undo: () => Promise<void>
 }
@@ -542,7 +597,7 @@ export function settingsPane(
       isNarrow ? (
         <Box key={`row:setting:${at}`} flexDirection="column">
           <Box flexDirection="row">
-            <Button key={`setting:${at}`} label="open" onPress={() => actions.open(at)} />
+            <Button key={rowKey(at)} label="open" onPress={() => actions.open(at, 'forward')} />
             <Text dimColor={idles(listed)} wrap="wrap">
               {` ${plainLine(listed.title)}`}
             </Text>
@@ -553,7 +608,7 @@ export function settingsPane(
         </Box>
       ) : (
         <Box key={`row:setting:${at}`} flexDirection="row">
-          <Button key={`setting:${at}`} label="open" onPress={() => actions.open(at)} />
+          <Button key={rowKey(at)} label="open" onPress={() => actions.open(at, 'forward')} />
           <Text dimColor={idles(listed)} wrap="wrap">
             {` ${plainLine(listed.title)}: ${shown(listed)}`}
           </Text>
@@ -592,9 +647,9 @@ export function settingsPane(
   const isHandingIn = isHandingInOfThisMachine(setting) && setting.kind === 'switch' && setting.isRead
   const isHandingInOn = isHandingIn && turnsHandingInOn(setting.key, setting.value)
   const turnsOnHere = setting.choices.some(choice => pressTurnsHandingInOn(setting, choice, e.surface))
-  const previous = at > 0 ? <Button key="settings:previous" label="previous" onPress={() => actions.open(at - 1)} /> : null
-  const next = at < settings.length - 1 ? <Button key="settings:next" label="next" onPress={() => actions.open(at + 1)} /> : null
-  const list = <Button key="settings:list" label="list" onPress={actions.toList} />
+  const previous = at > 0 ? <Button key={previousKey(at)} label="previous" onPress={() => actions.open(at - 1, 'back')} /> : null
+  const next = at < settings.length - 1 ? <Button key={nextKey(at)} label="next" onPress={() => actions.open(at + 1, 'forward')} /> : null
+  const list = <Button key={LIST} label="list" onPress={() => actions.toList(at)} />
   return (
     <Box flexDirection="column">
       {heading(`${HEADING} · ${at + 1} of ${settings.length}`)}
@@ -633,7 +688,7 @@ export function settingsPane(
       {isHandingIn && !isHandingInOn && <Text wrap="wrap">{turnsOnHere ? BY_YOUR_PRESS : IN_YOUR_OWN_TERMINAL}</Text>}
       {isPressed && change.phase === 'waiting' && (
         <Box key="row:change" flexDirection="row">
-          <Button key="settings:undo" label="undo" onPress={actions.undo} />
+          <Button key={SETTINGS_UNDO} label="undo" onPress={actions.undo} />
           <Text dimColor wrap="wrap">
             {` ${changeLine(change.key, change.choice)}`}
           </Text>
@@ -644,8 +699,8 @@ export function settingsPane(
       {change === null &&
         offered(setting, e.surface).map(place => {
           const choice = setting.choices[place]
-          // The key names the card: a key that follows the keyboard from card to card must not land on another switch.
-          // No button here has a hotkey or takes the focus by itself, so no single key presses a switch.
+          // The key names the card and the place of the value among the switch's values.
+          // No button here has a hotkey, and the mod never asks for the focus on one.
           // The press names its surface, which is not always the one this drawing is for.
           return choice === undefined ? null : (
             <Button key={`set:${at}:${place}`} label={choiceLabel(choice)} onPress={pressed => actions.choose(at, place, pressed.surface)} />

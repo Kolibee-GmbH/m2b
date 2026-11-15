@@ -11,10 +11,11 @@ All notable changes to this project are documented here. The format follows
 
 - `/m2b-settings`, or `settings` at the end of the pane's start view, shows every setting of
   m2b in the pane: a list under this machine, the store and the owner, and a card per setting
-  with what it does and what changes it. `previous` and `next` walk through all of them. A switch
-  is pressed on its card, waits five seconds with `undo` and is then written by
-  `m2b settings set`; what the command refuses stands on the card
-  ([The band](docs/band.md#every-setting-in-the-pane)).
+  with what it does and what changes it. `previous` and `next` walk through all of them, and with
+  the keyboard in the pane Enter on `next` goes from card to card: the band puts the focus on the
+  button that leads on, never on a switch. A switch is pressed on its card, waits five seconds
+  with `undo` and is then written by `m2b settings set`; what the command refuses stands on the
+  card ([The band](docs/band.md#every-setting-in-the-pane)).
 - The card of `sessions.propose` turns handing in on by a press, where the pane is drawn in a
   terminal, the desktop app or VS Code: the one setting a session's shell does not turn on no
   longer needs a terminal outside Claude Code. In the mobile app the card names the command for

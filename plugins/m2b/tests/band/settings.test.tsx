@@ -3,6 +3,7 @@ import type { CommandRunResult, ProcessRunResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
 import {
+  SETTINGS_UNDO,
   afterBack,
   askSettings,
   beginChange,
@@ -10,6 +11,8 @@ import {
   dropWaitingChange,
   endChange,
   fillSettings,
+  focusKeyOfCard,
+  focusKeyOfHeldCard,
   forgetSettingsUnless,
   heldSettings,
   holdsSettings,
@@ -18,11 +21,14 @@ import {
   openSettings,
   parseSettings,
   pressTurnsHandingInOn,
+  rowKey,
+  settingsPane,
   showsCard,
   startWriting,
   undoChange,
+  waits,
 } from '../../hooks/settings'
-import type { Setting } from '../../hooks/settings'
+import type { Reached, Setting, SettingsActions } from '../../hooks/settings'
 import type { PaneView } from '../../types'
 import { FakeM2b, fail, ok, pane, start, texts } from './harness'
 
@@ -98,6 +104,11 @@ const ofOwner: Partial<Entry> = { file: 'profile.json', scope: 'owner' }
 const [MACHINE_ID, PATH, MODEL, PAUSED, PROPOSE, EXECUTABLES, BACKEND, TIMEOUT, LANGUAGE, CUSTOMERS] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 /** The button that turns handing in on: the first of its switch's two values, on its card. */
 const TURN_ON = `set:${PROPOSE}:0`
+/** The keys of a card's `previous` and `next`, which name the card they are drawn on. */
+const previousOf = (at: number): string => `settings:previous:${at}`
+const nextOf = (at: number): string => `settings:next:${at}`
+/** The buttons that lead on from a card that is neither the first nor the last. */
+const walk = (at: number): string[] => [previousOf(at), nextOf(at), 'settings:list']
 
 /** Ten settings as `m2b settings --json` lists them: each kind, each file, each way a setting changes. */
 function catalog(): Entry[] {
@@ -296,7 +307,7 @@ test('a row opens the card of its setting: what it is, where it lives, its value
     'now: off',
     'What curation.paused does.',
   ])
-  expect(await buttons(ui)).toEqual(['settings:previous', 'settings:next', 'settings:list', `set:${PAUSED}:0`])
+  expect(await buttons(ui)).toEqual([...walk(PAUSED), `set:${PAUSED}:0`])
   expect(await labels(ui)).toEqual(['previous', 'next', 'list', 'turn on'])
   // Read once: a card is drawn from what the list read.
   expect(fake.settingCalls()).toEqual([LIST])
@@ -310,11 +321,11 @@ test('next and previous walk through every setting, the shown and the counted on
   const ui = await openCard($, clock, MACHINE_ID)
   const walked: string[] = []
 
-  expect(await buttons(ui)).toEqual(['settings:next', 'settings:list'])
+  expect(await buttons(ui)).toEqual([nextOf(MACHINE_ID), 'settings:list'])
   for (let at = 0; at < catalog().length; at += 1) {
     walked.push((await texts(ui))[2] ?? '')
     if (at < catalog().length - 1) {
-      await ui.press({ key: 'settings:next' })
+      await ui.press({ key: nextOf(at) })
     }
   }
 
@@ -330,8 +341,8 @@ test('next and previous walk through every setting, the shown and the counted on
     'the owner, for every machine · language',
     'the owner, for every machine · customers',
   ])
-  expect(await buttons(ui)).toEqual(['settings:previous', 'settings:list'])
-  await ui.press({ key: 'settings:previous' })
+  expect(await buttons(ui)).toEqual([previousOf(CUSTOMERS), 'settings:list'])
+  await ui.press({ key: previousOf(CUSTOMERS) })
   expect((await texts(ui))[0]).toBe('Settings · 9 of 10')
   await ui.press({ key: 'settings:list' })
   expect((await texts(ui)).slice(0, 2)).toEqual(['Settings', 'This machine'])
@@ -373,7 +384,7 @@ test('a press on a switch writes nothing for five seconds and offers undo, then 
   await ui.press({ key: `set:${PAUSED}:0` })
 
   expect(await texts(ui)).toContain('turning curation.paused on')
-  expect(await buttons(ui)).toEqual(['settings:previous', 'settings:next', 'settings:list', 'settings:undo'])
+  expect(await buttons(ui)).toEqual([...walk(PAUSED), 'settings:undo'])
   await clock.advance(4_999)
   expect(fake.calls.slice(callsBefore).filter(call => call[0] === 'settings')).toEqual([])
 
@@ -461,9 +472,9 @@ test('what the command refuses stands on the card in its own words, and the valu
   // Nothing was written, so the band holds nothing new and is not read.
   expect(fake.calls.filter(call => call[0] === 'band').length).toBe(bandReads)
   // It stands on the card of the setting it was about, and on no other.
-  await ui.press({ key: 'settings:previous' })
+  await ui.press({ key: previousOf(LANGUAGE) })
   expect((await texts(ui)).some(text => text.startsWith('not changed'))).toBe(false)
-  await ui.press({ key: 'settings:next' })
+  await ui.press({ key: nextOf(TIMEOUT) })
   expect(await texts(ui)).toContain(`not changed: ${settings.refuses}`)
   // The next press on the card is another try; what the last one met is gone.
   settings.refuses = null
@@ -484,7 +495,7 @@ test('in a terminal, the desktop app and VS Code the card of handing in offers t
     expect((await buttons(ui)).every(key => key === 'back' || key.startsWith('setting:'))).toBe(true)
     await ui.press({ key: `setting:${PROPOSE}` })
 
-    expect(await buttons(ui)).toEqual(['settings:previous', 'settings:next', 'settings:list', TURN_ON])
+    expect(await buttons(ui)).toEqual([...walk(PROPOSE), TURN_ON])
     expect(await labels(ui)).toEqual(['previous', 'next', 'list', 'turn on'])
     const turnOn = await ui.find({ key: TURN_ON })
     for (const reach of ['hotkey', 'action', 'autoFocus', 'variant', 'role']) {
@@ -512,7 +523,7 @@ test('the press on turn on waits five seconds with undo, is then the one call ha
     await ui.press({ key: TURN_ON })
 
     expect(await texts(ui)).toContain('turning sessions.propose on')
-    expect(await buttons(ui)).toEqual(['settings:previous', 'settings:next', 'settings:list', 'settings:undo'])
+    expect(await buttons(ui)).toEqual([...walk(PROPOSE), 'settings:undo'])
     await clock.advance(4_999)
     expect(settings.changedWith).toHaveLength(turn)
     await clock.advance(1)
@@ -545,7 +556,7 @@ test('undo, and leaving the card, take the press on turn on back: nothing is han
   expect(await labels(ui)).toEqual(['previous', 'next', 'list', 'turn on'])
 
   await ui.press({ key: TURN_ON })
-  await ui.press({ key: 'settings:next' })
+  await ui.press({ key: nextOf(PROPOSE) })
   await clock.advance(10_000)
 
   expect(settings.changedWith).toEqual([])
@@ -562,7 +573,7 @@ test('in the mobile app the card of handing in names the command for a terminal 
   expect(await texts(ui)).toContain(IN_YOUR_OWN_TERMINAL)
   expect(await texts(ui)).not.toContain(BY_YOUR_PRESS)
   expect(await texts(ui)).toContain(EVERY_MACHINE)
-  expect(await buttons(ui)).toEqual(['settings:previous', 'settings:next', 'settings:list'])
+  expect(await buttons(ui)).toEqual([...walk(PROPOSE)])
   await ui.unmount()
 
   // Turned on already, it is turned off from anywhere, as a change made inside a session: that way no session gains anything.
@@ -608,12 +619,12 @@ test('while another change is being written, the card of handing in still says h
 
   await ui.press({ key: `set:${PAUSED}:0` })
   await clock.advance(5_000)
-  await ui.press({ key: 'settings:next' })
+  await ui.press({ key: nextOf(PAUSED) })
 
   expect(await texts(ui)).toContain('Sessions hand in proposals')
   expect(await texts(ui)).toContain(BY_YOUR_PRESS)
   expect(await texts(ui)).toContain('A change of curation.paused is under way.')
-  expect(await buttons(ui)).toEqual(['settings:previous', 'settings:next', 'settings:list'])
+  expect(await buttons(ui)).toEqual([...walk(PROPOSE)])
   await clock.advance(3_001)
   await clock.advance(1)
   expect(await buttons(ui)).toContain(TURN_ON)
@@ -751,7 +762,7 @@ test('the settings of a file that could not be read are listed as not read, with
   await ui.press({ key: `setting:${LANGUAGE}` })
   expect(await texts(ui)).toContain('now: not read')
   expect(await texts(ui)).toContain('not read: no profile.json in the store yet')
-  expect(await buttons(ui)).toEqual(['settings:previous', 'settings:next', 'settings:list'])
+  expect(await buttons(ui)).toEqual([...walk(LANGUAGE)])
   await ui.unmount()
 })
 
@@ -768,7 +779,7 @@ test('on a machine that does not curate, the list and the cards of the curation 
   expect((await ui.findAll({ type: 'Text', text: 'Sessions hand in proposals: off' }))[0]?.props['dimColor']).not.toBe(true)
   await ui.press({ key: `setting:${PAUSED}` })
   expect(await texts(ui)).toContain('This machine does not curate.')
-  await ui.press({ key: 'settings:next' })
+  await ui.press({ key: nextOf(PAUSED) })
   expect(await texts(ui)).not.toContain('This machine does not curate.')
   await ui.unmount()
 })
@@ -784,11 +795,11 @@ test('while one change is written, no card offers a switch, and the list says wh
   await clock.advance(5_000)
 
   // Being written: undo is gone, and the card says what is under way.
-  expect(await buttons(ui)).toEqual(['settings:previous', 'settings:next', 'settings:list'])
+  expect(await buttons(ui)).toEqual([...walk(MODEL)])
   expect(await texts(ui)).toContain('setting curation.model to sonnet…')
-  await ui.press({ key: 'settings:next' })
+  await ui.press({ key: nextOf(MODEL) })
   expect(await texts(ui)).toContain('A change of curation.model is under way.')
-  expect(await buttons(ui)).toEqual(['settings:previous', 'settings:next', 'settings:list'])
+  expect(await buttons(ui)).toEqual([...walk(PAUSED)])
   await ui.press({ key: 'settings:list' })
   expect((await texts(ui)).slice(0, 2)).toEqual(['Settings', 'A change of curation.model is under way.'])
 
@@ -807,14 +818,20 @@ test('leaving the card within the five seconds takes the press back, whichever w
   const { clock } = await start($, on, fake)
   const ui = await openCard($, clock, PAUSED)
 
-  for (const leave of ['settings:next', 'settings:previous', 'settings:list']) {
+  // Each way out of the card, with the button that leads back to it.
+  const ways: [string, string][] = [
+    [nextOf(PAUSED), previousOf(PROPOSE)],
+    [previousOf(PAUSED), nextOf(MODEL)],
+    ['settings:list', `setting:${PAUSED}`],
+  ]
+  for (const [leave, back] of ways) {
     await ui.press({ key: `set:${PAUSED}:0` })
     expect(await buttons(ui)).toContain('settings:undo')
     await ui.press({ key: leave })
     // Nothing waits where nobody could take it back: no card and no list says a change is under way.
     expect((await texts(ui)).some(text => text.includes('under way') || text.includes('turning'))).toBe(false)
     await clock.advance(10_000)
-    await ui.press({ key: leave === 'settings:list' ? `setting:${PAUSED}` : leave === 'settings:next' ? 'settings:previous' : 'settings:next' })
+    await ui.press({ key: back })
     expect(await labels(ui)).toEqual(['previous', 'next', 'list', 'turn on'])
   }
 
@@ -839,7 +856,7 @@ test('a change being written goes on when the settings are left, and a view open
   // The list of the new opening was read while the write was under way: it says so, and offers no switch.
   expect(await texts(ui)).toContain('A change of curation.model is under way.')
   await ui.press({ key: `setting:${PAUSED}` })
-  expect(await buttons(ui)).toEqual(['settings:previous', 'settings:next', 'settings:list'])
+  expect(await buttons(ui)).toEqual([...walk(PAUSED)])
 
   settings.refuses = null
   await clock.advance(3_000)
@@ -848,7 +865,7 @@ test('a change being written goes on when the settings are left, and a view open
   // The write ended: the view that is open now reads again and offers its switches.
   expect(fake.settingCalls().filter(call => call[1] === 'set')).toEqual([['settings', 'set', '--', 'curation.model', 'sonnet']])
   expect(await labels(ui)).toEqual(['previous', 'next', 'list', 'turn on'])
-  await ui.press({ key: 'settings:previous' })
+  await ui.press({ key: previousOf(PAUSED) })
   expect(await texts(ui)).toContain('now: sonnet')
   await ui.unmount()
 })
@@ -885,7 +902,7 @@ test('a list that cannot be read again after a change stays as it was read, with
   // The card keeps its way on, and says that what it shows is from before.
   expect(await texts(ui)).toContain('m2b could not read its settings again: the store cannot be reached')
   expect(await texts(ui)).toContain('now: off')
-  expect(await buttons(ui)).toEqual(['settings:previous', 'settings:next', 'settings:list', `set:${PAUSED}:0`])
+  expect(await buttons(ui)).toEqual([...walk(PAUSED), `set:${PAUSED}:0`])
   await ui.press({ key: 'settings:list' })
   expect((await texts(ui)).slice(0, 2)).toEqual(['Settings', 'm2b could not read its settings again: the store cannot be reached'])
   expect((await buttons(ui))[0]).toBe('back')
@@ -925,7 +942,7 @@ test('a press the list no longer offers when its five seconds are over is droppe
   // The change is over in the view at once, before the list has answered.
   expect((await texts(ui)).some(shown => shown.includes('setting curation.model'))).toBe(false)
   // The card still shows the list from before, and takes the press.
-  await ui.press({ key: 'settings:next' })
+  await ui.press({ key: nextOf(MODEL) })
   expect(await texts(ui)).toContain('now: off')
   await ui.press({ key: `set:${PAUSED}:0` })
   expect(await buttons(ui)).toContain('settings:undo')
@@ -998,7 +1015,7 @@ test("no value reaches the session's state, which every plugin can read, or the 
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
   await ui.press({ key: `setting:${PATH}` })
   expect(await texts(ui)).toContain(`now: ${NOTES}`)
-  await ui.press({ key: 'settings:next' })
+  await ui.press({ key: nextOf(PATH) })
   await ui.press({ key: `set:${MODEL}:1` })
   await clock.advance(5_000)
   await clock.advance(1)
@@ -1136,7 +1153,7 @@ test('in a pane as narrow as a dock gets, a row is the title and below it the va
   for (const text of ['Store folder', `now: ${NOTES}`, 'What store.path does.', 'change: m2b config set store.path <folder>']) {
     expect((await ui.findAll({ type: 'Text', text }))[0]?.props['wrap']).toBe('wrap')
   }
-  expect(await buttons(ui)).toEqual(['settings:previous', 'settings:next', 'settings:list'])
+  expect(await buttons(ui)).toEqual([...walk(PATH)])
   // Three buttons side by side are wider than 24 columns: `list` stands below the other two.
   const boxes = async (): Promise<string[]> => (await ui.findAll({ type: 'Box' })).map(box => String(box.key))
   expect(await boxes()).toContain('row:walk')
@@ -1383,5 +1400,162 @@ test('a press is not written when the list no longer offers its value, or the vi
   expect(beginChange('later', PAUSED + 1, 0, 't-4', 'terminal')).toBe(true)
   expect(startWriting('t-4')).toEqual({ key: 'curation.paused', argument: 'true', isTurningHandingInOn: false })
   endChange('t-4', null)
+  forgetSettingsUnless(null)
+})
+
+// What the kit shows of the focus: which button the mod asks it for, and that the button is drawn.
+// A move the mod asks for is not handed to a test's hook, and fails in the kit: every test of this
+// file that presses a button of the settings runs with a move that failed, as where the pane does
+// not hold the keyboard.
+
+test('the focus goes to the button that leads the way the card was reached, at either end of the list to the one that leads back, and never to a switch', () => {
+  // Covers: B200
+  const count = catalog().length
+  const last = count - 1
+
+  // Reached by `next`, or opened from its row of the list.
+  expect(focusKeyOfCard(0, count, 'forward')).toBe(nextOf(0))
+  expect(focusKeyOfCard(PAUSED, count, 'forward')).toBe(nextOf(PAUSED))
+  expect(focusKeyOfCard(last - 1, count, 'forward')).toBe(nextOf(last - 1))
+  expect(focusKeyOfCard(last, count, 'forward')).toBe(previousOf(last))
+  // Reached by `previous`.
+  expect(focusKeyOfCard(last, count, 'back')).toBe(previousOf(last))
+  expect(focusKeyOfCard(PAUSED, count, 'back')).toBe(previousOf(PAUSED))
+  expect(focusKeyOfCard(1, count, 'back')).toBe(previousOf(1))
+  expect(focusKeyOfCard(0, count, 'back')).toBe(nextOf(0))
+  // A list of two settings, and one of a single setting, whose card leads nowhere but to the list.
+  expect([focusKeyOfCard(0, 2, 'forward'), focusKeyOfCard(1, 2, 'forward'), focusKeyOfCard(0, 2, 'back'), focusKeyOfCard(1, 2, 'back')]).toEqual([
+    nextOf(0),
+    previousOf(1),
+    nextOf(0),
+    previousOf(1),
+  ])
+  expect([focusKeyOfCard(0, 1, 'forward'), focusKeyOfCard(0, 1, 'back')]).toEqual(['settings:list', 'settings:list'])
+  for (let at = 0; at < count; at += 1) {
+    for (const reached of ['forward', 'back'] as const) {
+      expect(focusKeyOfCard(at, count, reached).startsWith('set:')).toBe(false)
+    }
+  }
+})
+
+test('the focus is asked for a card of the list held for the opening, as that list is now, and for no other', () => {
+  // Covers: B200
+  beginSettings('open')
+  // Nothing is read yet: no card is drawn that could take it.
+  expect(focusKeyOfHeldCard('open', PAUSED, 'forward')).toBeNull()
+  fill('open', readLook())
+
+  expect(focusKeyOfHeldCard('open', PAUSED, 'forward')).toBe(nextOf(PAUSED))
+  expect(focusKeyOfHeldCard('open', PAUSED, 'back')).toBe(previousOf(PAUSED))
+  expect(focusKeyOfHeldCard('open', CUSTOMERS, 'forward')).toBe(previousOf(CUSTOMERS))
+  expect(focusKeyOfHeldCard('open', MACHINE_ID, 'back')).toBe(nextOf(MACHINE_ID))
+  expect(focusKeyOfHeldCard('open', catalog().length, 'forward')).toBeNull()
+  expect(focusKeyOfHeldCard('other', PAUSED, 'forward')).toBeNull()
+  // Read again, the list ends at this card: it is the last one now.
+  fill('open', readLook(catalog().slice(0, PAUSED + 1)))
+  expect(focusKeyOfHeldCard('open', PAUSED, 'forward')).toBe(previousOf(PAUSED))
+  forgetSettingsUnless(null)
+  expect(focusKeyOfHeldCard('open', PAUSED, 'forward')).toBeNull()
+})
+
+test('the button the focus is asked for is drawn: on every card whichever way it was reached, the row of every card on the list, and undo after a press', async ($, on) => {
+  // Covers: B200
+  const { fake } = world()
+  const { clock } = await start($, on, fake)
+  const count = catalog().length
+
+  for (const columns of [80, 24]) {
+    const ui = await openList($, clock, columns)
+    const rows = await buttons(ui)
+    const walked: string[] = []
+    for (let at = 0; at < count; at += 1) {
+      expect(rows).toContain(rowKey(at))
+      if (at === 0) {
+        await ui.press({ key: rowKey(0) })
+      }
+      const drawn = await buttons(ui)
+      expect(drawn).toContain(focusKeyOfCard(at, count, 'forward'))
+      expect(drawn).toContain(focusKeyOfCard(at, count, 'back'))
+      walked.push(...drawn.filter(key => key.startsWith('settings:previous') || key.startsWith('settings:next')))
+      if (at < count - 1) {
+        await ui.press({ key: nextOf(at) })
+      }
+    }
+    // A key of `previous` or `next` is drawn on one card alone: asked for from the card before, it is one not drawn yet.
+    expect(new Set(walked).size).toBe(walked.length)
+    expect(walked.length).toBe(2 * (count - 1))
+    await ui.press({ key: 'settings:list' })
+    await ui.press({ key: rowKey(PAUSED) })
+    expect(await buttons(ui)).not.toContain(SETTINGS_UNDO)
+    await ui.press({ key: `set:${PAUSED}:0` })
+    expect(await buttons(ui)).toContain(SETTINGS_UNDO)
+    await ui.press({ key: SETTINGS_UNDO })
+    expect(await buttons(ui)).toContain(focusKeyOfCard(PAUSED, count, 'forward'))
+    await ui.unmount()
+  }
+})
+
+test('a press waits until it is taken back or its writing starts, and no other press is said to wait', () => {
+  // Covers: B200
+  beginSettings('open')
+  fill('open', readLook())
+  expect(waits('t-1')).toBe(false)
+
+  expect(beginChange('open', PAUSED, 0, 't-1', 'terminal')).toBe(true)
+  expect([waits('t-1'), waits('t-2')]).toEqual([true, false])
+  expect(undoChange('open')).toBe(true)
+  expect(waits('t-1')).toBe(false)
+
+  expect(beginChange('open', PAUSED, 0, 't-3', 'terminal')).toBe(true)
+  expect(waits('t-3')).toBe(true)
+  expect(startWriting('t-3')).not.toBeNull()
+  expect(waits('t-3')).toBe(false)
+  endChange('t-3', null)
+  forgetSettingsUnless(null)
+})
+
+const PROBE = 'settings-alone'
+
+test('each button that leads on says where it leads and how the card is reached: a row and next forward, previous back, list from the card it stands on', async ($, on) => {
+  // Covers: B200
+  // The view drawn by a hook of the test's own, with actions that only note what they are handed.
+  const handed: string[] = []
+  const noting: SettingsActions = {
+    open: async (at: number, reached: Reached) => void handed.push(`open ${at} ${reached}`),
+    toList: async (from: number) => void handed.push(`list from ${from}`),
+    choose: async () => undefined,
+    undo: async () => undefined,
+  }
+  let at: number | null = null
+  on('ui.render', { component: 'Pane', requestId: PROBE }, ($, e) => {
+    const view = { kind: 'settings', press: 'open', at, drawn: 0 } as const
+    return settingsPane($, e, view, heldSettings('open'), noting, e.props.bodyColumns)
+  })
+  beginSettings('open')
+  fill('open', readLook())
+  const last = catalog().length - 1
+
+  for (const columns of [80, 24]) {
+    handed.length = 0
+    at = null
+    const list = await $.ui.mount({ ...pane(PROBE, columns), plugin: 'test', surface: 'terminal' })
+    await list.press({ key: rowKey(PAUSED) })
+    await list.press({ key: rowKey(last) })
+    await list.unmount()
+    at = PAUSED
+    const card = await $.ui.mount({ ...pane(PROBE, columns), plugin: 'test', surface: 'terminal' })
+    await card.press({ key: previousOf(PAUSED) })
+    await card.press({ key: nextOf(PAUSED) })
+    await card.press({ key: 'settings:list' })
+    await card.unmount()
+
+    expect(handed).toEqual([
+      `open ${PAUSED} forward`,
+      `open ${last} forward`,
+      `open ${PAUSED - 1} back`,
+      `open ${PAUSED + 1} forward`,
+      `list from ${PAUSED}`,
+    ])
+  }
   forgetSettingsUnless(null)
 })

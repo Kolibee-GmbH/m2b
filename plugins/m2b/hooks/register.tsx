@@ -81,6 +81,7 @@ import {
   SETTINGS_COMMAND,
   SETTINGS_IN_A_TERMINAL,
   SETTINGS_PLACED,
+  SETTINGS_UNDO,
   afterBack,
   askSettings,
   beginChange,
@@ -88,15 +89,18 @@ import {
   dropWaitingChange,
   endChange,
   fillSettings,
+  focusKeyOfHeldCard,
   forgetSettingsUnless,
   heldSettings,
   listOf,
   openSettings,
   readSettings,
+  rowKey,
   settingsPane,
   showsCard,
   startWriting,
   undoChange,
+  waits,
 } from './settings'
 import type { SettingsActions } from './settings'
 import { beginTopic, fillTopic, forgetTopicUnless, heldTopic, readTopic, topicPane } from './topic'
@@ -609,15 +613,24 @@ const BY_THE_PERSONS_PRESS = { CLAUDECODE: '' } as const
  * was written it is read behind the list, because a switch can be about what the band shows.
  */
 async function settleSetting($: EngineInterface, token: string): Promise<void> {
+  const stillWaited = waits(token)
   const write = startWriting(token)
   if (write === null) {
     // Taken back, or dropped because the list no longer offers the value: the card says what is true.
     await drawOpenSettings($)
+    if (stillWaited) {
+      // Dropped: `undo` is gone from under the focus, and the switches stand again where it stood.
+      await focusOnOpenCard($)
+    }
     return
   }
   let refused: string | null = 'the change could not be started'
+  let focusMoved: Promise<void> = Promise.resolve()
   try {
     await drawOpenSettings($)
+    // `undo` is gone from under the focus: it goes to the button that leads on, never to the
+    // switch that comes back. The write does not wait for it.
+    focusMoved = focusOnOpenCard($)
     // `--`: a key and a value are handed on as the core named them, whatever they begin with.
     const from = write.isTurningHandingInOn ? BY_THE_PERSONS_PRESS : FROM_A_SESSION
     const outcome = await runM2b($, ['settings', 'set', '--', write.key, write.argument], WRITE_TIMEOUT_MS, undefined, from)
@@ -628,6 +641,7 @@ async function settleSetting($: EngineInterface, token: string): Promise<void> {
     // Whatever went wrong, the change ends: one left as being written would lock every switch.
     endChange(token, refused)
   }
+  await focusMoved
   // The change is over at once in the view; the list follows when it is read.
   await drawOpenSettings($)
   const open = openSettings()
@@ -647,6 +661,40 @@ async function drawOpenSettings($: EngineInterface): Promise<void> {
   }
 }
 
+/**
+ * Asks Claude Code for the focus of the pane on the button drawn under `key`. Claude Code keeps
+ * the focus at its place in the row of buttons when a view is drawn anew, not on its button: left
+ * alone, Enter on `next` would land on whatever stands at that place of the next card. So after a
+ * press that leads to a card or to the list, and around a press on a switch, the mod says where
+ * the focus goes. Where the pane does not hold the keyboard, as after Escape, Claude Code
+ * refuses, and the view is as drawn. Never throws.
+ */
+async function focusInPane($: EngineInterface, key: string | null): Promise<void> {
+  if (key === null) {
+    return
+  }
+  try {
+    await $.ui.focus({ requestId: PANE_ID, key })
+  } catch {
+    // The view is drawn all the same.
+  }
+}
+
+/**
+ * Asks for the focus on the button that leads on from the card the pane shows; nothing where it
+ * shows no card. Never throws: a press is written whatever becomes of the focus.
+ */
+async function focusOnOpenCard($: EngineInterface): Promise<void> {
+  try {
+    const view = await read($, paneViewAtom)
+    if (view !== null && view.kind === 'settings' && view.at !== null) {
+      await focusInPane($, focusKeyOfHeldCard(view.press, view.at, 'forward'))
+    }
+  } catch {
+    // The card is drawn all the same.
+  }
+}
+
 function settingsActions($: EngineInterface, press: string): SettingsActions {
   // Leaving a card takes back a press that still waits on it: from anywhere else nobody could.
   const leaveFor = (at: number | null): Promise<void> => {
@@ -654,8 +702,14 @@ function settingsActions($: EngineInterface, press: string): SettingsActions {
     return turnSettings($, press, view => ({ ...view, at, drawn: view.drawn + 1 }))
   }
   return {
-    open: at => leaveFor(at),
-    toList: () => leaveFor(null),
+    open: async (at, reached) => {
+      await leaveFor(at)
+      await focusInPane($, focusKeyOfHeldCard(press, at, reached))
+    },
+    toList: async from => {
+      await leaveFor(null)
+      await focusInPane($, rowKey(from))
+    },
     choose: async (at, place, surface) => {
       const token = await newPressToken($)
       if (beginChange(press, at, place, token, surface)) {
@@ -665,11 +719,14 @@ function settingsActions($: EngineInterface, press: string): SettingsActions {
           inBackground($, () => settleSetting($, token)),
         )
         await drawSettings($, press)
+        // The one button that takes the press back: Enter once more is undo, whatever else the card offers.
+        await focusInPane($, SETTINGS_UNDO)
       }
     },
     undo: async () => {
       if (undoChange(press)) {
         await drawSettings($, press)
+        await focusOnOpenCard($)
       }
     },
   }

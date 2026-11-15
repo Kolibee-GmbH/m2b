@@ -222,6 +222,15 @@ second on a card stops at the list. A card says what the setting does and its de
 value differs from it. In a pane narrower than 41 columns a row of the list is the title with the
 value below it, and `list` stands below `previous` and `next`.
 
+With the keyboard in the pane, Tab moves the focus from button to button and Enter presses the
+one that has it. The band asks Claude Code to put the focus where the walk goes on: on `next`
+when a card is opened from the list or reached with `next` (on the last card on `previous`), on
+`previous` when you walk back (on the first card on `next`), and on the row of the card you left
+when `list` returns to the list. So Enter on `next`, pressed again and again, takes you through
+every setting. The band never puts the focus on a switch: Tab to it. After the press the focus
+is on `undo`, and after `undo`, or once the five seconds are over, on the button that leads on
+(`next`, on the last card `previous`). Escape hands the keyboard back to the prompt.
+
 Seven settings are switches: `curation.read_sessions`, `curation.paused`, `curation.git_commit`,
 `band.due_tasks`, `sessions.propose`, `curation.model` and your `language`. Their cards offer the
 other values to press (`turn on`, `turn off`, `set to sonnet`). A press writes nothing for five
