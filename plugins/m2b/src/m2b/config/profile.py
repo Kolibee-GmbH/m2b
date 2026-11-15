@@ -27,6 +27,12 @@ KNOWN_PROFILE_VERSION = 2
 # reading, and would stop curating; a version 2 profile it reads without the key and does not write.
 PLAIN_PROFILE_VERSION = 1
 ADDED_IN_VERSION_TWO = "worklog_leave_out"
+# The keys of the file, each list the one its parser refuses any other key with. Those of the top
+# level are the settings the catalog (``config.catalog``) lists, and it is held to them.
+KEYS = ("version", "owner", "language", "spheres", "customers", ADDED_IN_VERSION_TWO)
+SPHERE_KEYS = ("id", "label", "billable", "default", "match")
+MATCH_KEYS = ("git_remote_contains", "path_under")
+LEAVE_OUT_KEYS = ("path_under", "git_remote_contains")
 
 _SPHERE_ID = re.compile(r"[a-z][a-z0-9-]*\Z")
 
@@ -105,7 +111,7 @@ def parse_profile(raw: object, for_writing: bool = True) -> Profile:
 
 def _profile(fields: Fields, version: int, strict_keys: bool, strict_language: bool) -> Profile:
     if strict_keys:
-        fields.reject_unknown(("version", "owner", "language", "spheres", "customers", ADDED_IN_VERSION_TWO))
+        fields.reject_unknown(KEYS)
     spheres = tuple(_sphere(sphere, strict_keys) for sphere in fields.items("spheres"))
     _check_spheres(spheres)
     return Profile(
@@ -120,7 +126,7 @@ def _profile(fields: Fields, version: int, strict_keys: bool, strict_language: b
 
 def _left_out(left_out: Fields, strict_keys: bool) -> WorklogLeaveOut:
     if strict_keys:
-        left_out.reject_unknown(("path_under", "git_remote_contains"))
+        left_out.reject_unknown(LEAVE_OUT_KEYS)
     # An empty part would name every remote; ``strings`` refuses one.
     return WorklogLeaveOut(_paths_under(left_out), left_out.strings("git_remote_contains"))
 
@@ -135,7 +141,7 @@ def _language(fields: Fields, strict: bool) -> str:
 
 def _sphere(fields: Fields, strict_keys: bool) -> Sphere:
     if strict_keys:
-        fields.reject_unknown(("id", "label", "billable", "default", "match"))
+        fields.reject_unknown(SPHERE_KEYS)
     sphere_id = fields.string("id")
     if not _SPHERE_ID.match(sphere_id):
         raise fields.error("id", f"is {sphere_id!r}; use lowercase letters, digits and dashes, like acme-ltd")
@@ -150,7 +156,7 @@ def _sphere(fields: Fields, strict_keys: bool) -> Sphere:
 
 def _match(match: Fields, strict_keys: bool) -> SphereMatch:
     if strict_keys:
-        match.reject_unknown(("git_remote_contains", "path_under"))
+        match.reject_unknown(MATCH_KEYS)
     return SphereMatch(git_remote_contains=match.strings("git_remote_contains"), path_under=_paths_under(match))
 
 
@@ -170,6 +176,11 @@ def _check_spheres(spheres: tuple[Sphere, ...]) -> None:
         raise InvalidConfigError(f"{PROFILE_FILE_NAME}: spheres has the id {', '.join(duplicates)} more than once")
     if sum(sphere.default for sphere in spheres) > 1:
         raise InvalidConfigError(f"{PROFILE_FILE_NAME}: spheres has more than one default sphere")
+
+
+def setting_keys() -> tuple[str, ...]:
+    """Every setting of the file by its key; a list such as ``spheres`` is one setting."""
+    return KEYS
 
 
 def language_for_clients(profile: Profile | None) -> str:

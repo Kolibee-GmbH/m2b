@@ -50,6 +50,10 @@ _HIDDEN_CLASS = "".join(f"{chr(first)}-{chr(last)}" for first, last in HIDDEN_RA
 _HIDDEN = re.compile(f"[{_HIDDEN_CLASS}]")
 # In a name the joiners mislead like the rest: two names that look the same are two files.
 _UNSEEN_IN_A_NAME = re.compile(f"[{_HIDDEN_CLASS}\u200c\u200d]")
+# What steers a terminal or breaks a line: the C0 and C1 controls, the escape character among them.
+CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+# Where a reader that knows Unicode ends a line, though no control character stands there.
+_LINE_ENDS = re.compile("[\u2028\u2029]")
 _UNSAFE = re.compile("[\u180e\u200b\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff\U000e0000-\U000e007f]")
 
 
@@ -84,7 +88,21 @@ def with_hidden_written_out(text: str) -> str:
 
     For a name the owner has to find: without its hidden characters it could be another file's.
     """
-    return _UNSEEN_IN_A_NAME.sub(lambda match: f"<U+{ord(match.group()):04X}>", text)
+    return _UNSEEN_IN_A_NAME.sub(_written_out, text)
+
+
+def with_unseen_written_out(text: str) -> str:
+    """The text for one line of a terminal: each character that draws nothing, the joiners too, each
+    control character and the two separators that end a line as ``<U+XXXX>``.
+
+    For a value from a file another device can write: a line break in it would read as a line of
+    its own, and an escape sequence would steer the terminal that prints it.
+    """
+    return _LINE_ENDS.sub(_written_out, CONTROL.sub(_written_out, with_hidden_written_out(text)))
+
+
+def _written_out(match: re.Match[str]) -> str:
+    return f"<U+{ord(match.group()):04X}>"
 
 
 def as_utf8(text: str) -> bytes:

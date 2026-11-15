@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 from m2b.addons import ON, REMOVED_ADDONS, addon_names
@@ -28,6 +29,63 @@ DEFAULT_CURATION_MODEL = "haiku"
 # What setup offers: the default, and a larger model for better filing at a higher cost.
 CURATION_MODELS = (DEFAULT_CURATION_MODEL, "sonnet")
 DEFAULT_MAX_TURNS = 100
+
+# The keys of the file, each list the one its parser refuses any other key with. The catalog of the
+# settings (``config.catalog``) is held to them, so a key added here without an entry there fails
+# the tests.
+KEYS = (
+    "version",
+    "machine_id",
+    "store",
+    "calendar",
+    "executables",
+    "curation",
+    "distillate",
+    "band",
+    "sessions",
+    "addons",
+)
+STORE_KEYS = ("backend", "path")
+CALENDAR_KEYS = ("backend", "timeout_seconds")
+CURATION_KEYS = (
+    "model_timeout_minutes",
+    "model",
+    "max_turns",
+    "max_budget_usd",
+    "read_sessions",
+    "git_commit",
+    "git_directory",
+    "paused",
+)
+DISTILLATE_KEYS = ("skip_under",)
+BAND_KEYS = ("due_tasks",)
+SESSIONS_KEYS = ("propose",)
+# The sections whose keys are each a setting of its own. ``executables`` is one setting, the
+# programs it names, and ``addons`` holds one per add-on.
+SECTION_KEYS: Mapping[str, tuple[str, ...]] = MappingProxyType(
+    {
+        "store": STORE_KEYS,
+        "calendar": CALENDAR_KEYS,
+        "curation": CURATION_KEYS,
+        "distillate": DISTILLATE_KEYS,
+        "band": BAND_KEYS,
+        "sessions": SESSIONS_KEYS,
+    }
+)
+ADDONS_KEY = "addons"
+
+
+def setting_keys() -> tuple[str, ...]:
+    """Every setting of the file by its dotted key: ``machine_id``, ``curation.paused``, ``addons.worklog``."""
+    keys: list[str] = []
+    for key in KEYS:
+        if key in SECTION_KEYS:
+            keys.extend(f"{key}.{name}" for name in SECTION_KEYS[key])
+        elif key == ADDONS_KEY:
+            keys.extend(f"{key}.{name}" for name in addon_names())
+        else:
+            keys.append(key)
+    return tuple(keys)
 
 
 @dataclass(frozen=True)
@@ -116,20 +174,7 @@ def parse_machine_config(raw: object, home: Path) -> MachineConfig:
     version = fields.integer("version")
     if version > KNOWN_CONFIG_VERSION:
         raise FormatTooNewError(CONFIG_FILE_NAME, version, KNOWN_CONFIG_VERSION)
-    fields.reject_unknown(
-        (
-            "version",
-            "machine_id",
-            "store",
-            "calendar",
-            "executables",
-            "curation",
-            "distillate",
-            "band",
-            "sessions",
-            "addons",
-        )
-    )
+    fields.reject_unknown(KEYS)
     return MachineConfig(
         version=version,
         machine_id=fields.string("machine_id"),
@@ -145,7 +190,7 @@ def parse_machine_config(raw: object, home: Path) -> MachineConfig:
 
 
 def _store_location(fields: Fields, home: Path) -> StoreLocation:
-    fields.reject_unknown(("backend", "path"))
+    fields.reject_unknown(SECTION_KEYS["store"])
     written = fields.string("path")
     path = expand(written, home)
     if not path.is_absolute():
@@ -154,7 +199,7 @@ def _store_location(fields: Fields, home: Path) -> StoreLocation:
 
 
 def _calendar(fields: Fields) -> CalendarSettings:
-    fields.reject_unknown(("backend", "timeout_seconds"))
+    fields.reject_unknown(SECTION_KEYS["calendar"])
     return CalendarSettings(
         backend=fields.choice("backend", CALENDAR_BACKENDS, default="none"),
         timeout_seconds=fields.integer("timeout_seconds", default=DEFAULT_BACKEND_TIMEOUT_SECONDS),
@@ -167,18 +212,7 @@ def _executables(fields: Fields) -> Mapping[str, str]:
 
 
 def _curation(fields: Fields, home: Path) -> CurationSettings:
-    fields.reject_unknown(
-        (
-            "model_timeout_minutes",
-            "model",
-            "max_turns",
-            "max_budget_usd",
-            "read_sessions",
-            "git_commit",
-            "git_directory",
-            "paused",
-        )
-    )
+    fields.reject_unknown(SECTION_KEYS["curation"])
     return CurationSettings(
         model_timeout_minutes=fields.integer("model_timeout_minutes", default=DEFAULT_MODEL_TIMEOUT_MINUTES),
         model=fields.string("model", default=DEFAULT_CURATION_MODEL),
@@ -211,7 +245,7 @@ def _budget(fields: Fields) -> float | None:
 
 
 def _distillate(fields: Fields, home: Path) -> DistillateSettings:
-    fields.reject_unknown(("skip_under",))
+    fields.reject_unknown(SECTION_KEYS["distillate"])
     folders = []
     for written in fields.strings("skip_under"):
         folder = expand(written, home)
@@ -222,12 +256,12 @@ def _distillate(fields: Fields, home: Path) -> DistillateSettings:
 
 
 def _band(fields: Fields) -> BandSettings:
-    fields.reject_unknown(("due_tasks",))
+    fields.reject_unknown(SECTION_KEYS["band"])
     return BandSettings(due_tasks=fields.boolean("due_tasks", default=True))
 
 
 def _sessions(fields: Fields) -> SessionsSettings:
-    fields.reject_unknown(("propose",))
+    fields.reject_unknown(SECTION_KEYS["sessions"])
     return SessionsSettings(propose=fields.boolean("propose", default=False))
 
 

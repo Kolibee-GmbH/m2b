@@ -28,6 +28,15 @@ KEYS_BY_FORMAT: dict[int, tuple[frozenset[str], frozenset[str]]] = {
     3: (_FORMAT_ONE_KEYS, _FORMAT_ONE_TASKS_KEYS),
 }
 
+TASKS_KEY = "tasks"
+
+
+def setting_keys() -> tuple[str, ...]:
+    """Every setting of the format this m2b writes by its dotted key: ``format``, ``tasks.list``."""
+    keys, tasks_keys = KEYS_BY_FORMAT[KNOWN_STORE_FORMAT]
+    return (*sorted(keys - {TASKS_KEY}), *(f"{TASKS_KEY}.{key}" for key in sorted(tasks_keys)))
+
+
 TASKS_BACKENDS = ("apple-reminders", "markdown")
 DEFAULT_TASKS_TIMEOUT_SECONDS = 20
 

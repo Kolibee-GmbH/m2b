@@ -17,7 +17,6 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
-import re
 import sys
 from collections.abc import Mapping
 from typing import Any
@@ -28,11 +27,11 @@ from m2b.commands.backends import configured_store
 from m2b.commands.output import print_json
 from m2b.config.machine import MachineConfig, load_machine_config
 from m2b.config.store_settings import require_store_writable
+from m2b.notes.characters import CONTROL
 from m2b.proposal_answers import KEEP, Given, Waiting
 from m2b.proposals import Entry
 from m2b.store.base import Store
 
-_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 NONE_WAITS = "no proposal waits for an answer"
 HOW_TO_ANSWER = "keep with: m2b proposals keep <id>... (or keep --all); drop with: m2b proposals drop <id>..."
 ADD = "add"
@@ -151,7 +150,7 @@ def _shown(text: str) -> str:
     What the person keeps is what the listing showed them: a text that hid part of itself from
     the terminal would be kept unseen.
     """
-    return _CONTROL.sub(lambda found: f"\\x{ord(found.group()):02x}", " ".join(text.split()))
+    return CONTROL.sub(lambda found: f"\\x{ord(found.group()):02x}", " ".join(text.split()))
 
 
 def _heading(entry: Entry) -> str:

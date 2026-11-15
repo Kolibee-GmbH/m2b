@@ -240,6 +240,18 @@ def _parser() -> argparse.ArgumentParser:
     config_set.add_argument("key")
     config_set.add_argument("value", help="JSON, or plain text for a string")
 
+    every_setting = _command(
+        commands, "settings", settings.settings_command, "every setting of this machine, the store and the owner", True
+    )
+    switch = _command(
+        every_setting.add_subparsers(dest="action"),
+        "set",
+        settings.settings_set,
+        "change a switch to one of its values",
+    )
+    switch.add_argument("key", help="a switch, as m2b settings names it, such as curation.paused")
+    switch.add_argument("value", help="one of the switch's values, such as true")
+
     distillate_group = _group(commands, "distillate", "the distillate at session start, per project")
     for name, handler, help_text in (
         ("off", distillate_commands.distillate_off, "no distillate in sessions in this folder and below"),

@@ -9,6 +9,17 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `m2b settings` lists every setting of the three files, this machine's, the store's and the
+  owner's: its value, its default, what it does and what changes it, a command, a setup skill or
+  nothing by hand. A list, the paths of programs and an add-on come as a count or as on and off,
+  never with what they hold, and a text from a file your other devices can write comes on one
+  line, with a line break or an escape sequence written out. `--json` gives the same for a program
+  ([Configuration](docs/configuration.md#every-setting-in-one-list)).
+- `m2b settings set <key> <value>` changes a switch to one of its values: `curation.read_sessions`,
+  `curation.paused`, `curation.git_commit`, `band.due_tasks`, `sessions.propose`, `curation.model`
+  and the profile's `language`. Every other key is refused with one line that names what changes
+  it. It refuses what `m2b config set` refuses, in the same words: inside a Claude Code session
+  neither turns `sessions.propose` on.
 - `m2b band --json --session <id>` says what m2b gave a session since its last start: the topics
   whose facts it got, each with the facts lines and current items it held when the session got
   it, and whether that start printed the distillate whole, cut or not at all, or the distillate

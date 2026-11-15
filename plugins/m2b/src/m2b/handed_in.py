@@ -71,7 +71,7 @@ from m2b.config.errors import ConfigError
 from m2b.config.machine import MachineConfig
 from m2b.config.store_settings import require_store_writable
 from m2b.glean import AGENT, PASTED, TOOL, TYPED
-from m2b.notes.characters import can_be_written, unsafe_characters, without_hidden
+from m2b.notes.characters import CONTROL, can_be_written, unsafe_characters, without_hidden
 from m2b.notes.layout import HANDED_IN
 from m2b.paths import MachinePaths
 from m2b.prompt_hook import CURATION_RUN_VARIABLE
@@ -106,8 +106,6 @@ SWITCH = "sessions.propose"
 _DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
 # The time of a call as ``as_json`` writes it: with its seconds and its offset.
 _MOMENT = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?[+-]\d{2}:\d{2}")
-# What steers a terminal or is drawn as nothing; white space is gone by then, the text is one line.
-_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 
 class RefusedError(Exception):
@@ -358,7 +356,7 @@ def _hides_something(text: str) -> bool:
     """Whether the text holds what hides or reorders text, steers a terminal or cannot be written."""
     plain = text.replace(_EMOJI_SELECTOR, "")
     return bool(
-        unsafe_characters(text) or _CONTROL.search(text) or without_hidden(plain) != plain or not can_be_written(text)
+        unsafe_characters(text) or CONTROL.search(text) or without_hidden(plain) != plain or not can_be_written(text)
     )
 
 

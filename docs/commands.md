@@ -119,6 +119,8 @@ To pause the runs on a machine: `m2b config set curation.paused true`
 |---|---|
 | `m2b setup inspect [--store-backend <backend>] [--store-path <folder>] [--json]` | what a store folder holds, before anything is written |
 | `m2b setup apply --answers <json> [--json]` | writes the setup from a JSON object of answers ([Getting started](getting-started.md)) |
+| `m2b settings [--json]` | every setting of this machine, the store and the owner: its value, its default, what it does and what changes it; a list, the paths of programs and an add-on come as a count, never with what they hold ([Configuration](configuration.md#every-setting-in-one-list)) |
+| `m2b settings set <key> <value>` | changes a switch to one of its values, such as `curation.paused true`; every other key is refused with a line that names what changes it |
 | `m2b config get [--json] [<key>]` | the machine config, or one key such as `store.path` |
 | `m2b config set <key> <value>` | sets one key of the machine config, validated first ([Configuration](configuration.md)) |
 | `m2b profile get [--json] [<key>]` | the owner's profile, or one key of it |
