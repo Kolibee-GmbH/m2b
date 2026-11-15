@@ -419,7 +419,7 @@ The screenshots in `docs/images/` come from real Claude Code sessions against a 
 invented data. After a change the README pictures show, record them again:
 
 ```bash
-scripts/readme-images                # all five
+scripts/readme-images                # all seven
 scripts/readme-images --only todos   # one, with the one its store depends on
 ```
 
@@ -430,19 +430,30 @@ Code runs with `--setting-sources project`, m2b from this checkout and its own `
 Three pictures ask the model something and cost one model turn each (`session-start`, `capture`,
 `todos`); their answers are the model's, so look at each before you commit it. The dates in them
 follow the day of the recording: one task is due that day, one is overdue, and the reminder is
-asked for a weekday three days ahead. The other two, `review` and `proposals`, type a command of
-the band, which opens its pane without a model. Their store is the first after a curation run
-that changed a fact and proposed three things from the sessions; a scripted model plays that run,
-the stub the scenarios use, over an invented session in a Claude Code folder of the demo's own.
-Your sessions are never read, and the two pictures differ between recordings only in their dates
-and times.
+asked for a weekday three days ahead. The other four type a command of the band, which opens its
+pane without a model: `review` and `proposals` on the main screen, where the pane is a block above
+the prompt, `pane` and `settings` under Claude Code's fullscreen layout in a terminal of 130
+columns, where the pane sits beside the chat. The recording turns that layout on for its own
+session with `CLAUDE_CODE_NO_FLICKER=1` in the session's environment; no setting of yours is read
+or written for it. Their store is the first after a curation run that changed a fact and proposed
+three things from the sessions; a scripted model plays that run, the stub the scenarios use, over
+an invented session in a Claude Code folder of the demo's own. Its memory holds one topic, a
+customer the demo project's folder names, so the pane's start view lists a topic the session was
+given. Your sessions are never read, and the four pictures differ between recordings only in
+their dates and times. `pane` and `settings` each build that store themselves, so `--only` records
+one of them alone.
 
-The moving picture at the top of the README, `docs/images/demo.gif`, follows one sentence from a
-prompt into a later session. Record it again after a change it shows:
+Three pictures move. `scripts/readme-demo` records all of them, `--only <name>` one:
 
 ```bash
-scripts/readme-demo
+scripts/readme-demo                        # all three
+scripts/readme-demo --only demo            # the README's, two model turns and a curation run
+scripts/readme-demo --only pane-answers    # no model
+scripts/readme-demo --only settings-walk   # no model
 ```
+
+The one at the top of the README, `docs/images/demo.gif`, follows one sentence from a prompt into
+a later session. Record it again after a change it shows.
 
 It needs `claude` logged in, [`agg`](https://docs.asciinema.org/manual/agg/) and `git`. It builds
 the same demo machine with an empty store and records three acts in a hidden terminal: a Claude
@@ -455,9 +466,19 @@ a minute. What the picture changes against the recording: a session's start is c
 answer and the wait for the run are shortened to a few seconds, and a line of words stands before
 each act.
 
-The script stops without a picture when the run left the note in the inbox, or when the terminal
-drew your home folder, your user name or your host name. That check reads plain text only, so
-watch the picture through as well, for example frame by frame with
-`ffmpeg -i docs/images/demo.gif -vf fps=2 /tmp/demo-%03d.png`, and keep the file under about 2 MB;
-the script prints its size. `--cast <file>` also keeps the recording the picture is rendered from,
-in asciinema's format.
+The other two, `pane-answers.gif` and `settings-walk.gif` in [The band](docs/band.md), show the
+pane driven with the keyboard and ask no model: one session each, under the fullscreen layout on
+the store after a curation run, that types a command of the band and then only Tab, Shift+Tab and
+Enter. One keeps a proposal, takes that back, keeps it again and lets it be written; the other
+walks through the settings with Enter on `next` and presses the switch of `curation.model` the
+same way. The five seconds a press waits with its `undo` pass as recorded. Record them again
+after a change to a view they pass through: a button added before another moves what Tab reaches.
+
+The script writes no picture when the demo machine does not hold what the picture shows: the run
+left the note in the inbox, the first proposal was not the one kept, or `curation.model` was not
+set. Nor does it write one when the terminal drew your home folder, your user name or your host
+name; the pictures after that one are still recorded. That check reads
+plain text only, so watch each picture through as well, for example frame by frame with
+`ffmpeg -i docs/images/demo.gif -vf fps=2 /tmp/demo-%03d.png`, and keep each file under about
+2 MB; the script prints its size. With `--only`, `--cast <file>` also keeps the recording the
+picture is rendered from, in asciinema's format.

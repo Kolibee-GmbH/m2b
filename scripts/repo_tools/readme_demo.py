@@ -1,15 +1,23 @@
-"""Records the README's moving picture: one sentence followed from a prompt into a later session.
+"""Records the moving pictures of the README and the docs, each drawn by the real programs in a hidden terminal.
 
-Three acts, each drawn by the real programs in a hidden terminal: a Claude Code session in one demo
-project is told to remember a sentence, the start of the next session begins the curation run that
-files it with a real model, in the background and without a key typed, and a session in another
-project is asked for it. The demo machine, its environment and the way a session is started are the
-screenshots' (``readme_images``); the store starts empty, so the fact the last act answers with can
-only come from the run in the second. It costs two model turns and one curation run on the user's
-Claude login.
+The README's follows one sentence from a prompt into a later session, in three acts: a Claude Code
+session in one demo project is told to remember a sentence, the start of the next session begins the
+curation run that files it with a real model, in the background and without a key typed, and a
+session in another project is asked for it. The store starts empty, so the fact the last act
+answers with can only come from the run in the second. It costs two model turns and one curation
+run on the user's Claude login.
 
-What the terminals drew is kept with its times. The picture shortens the waits (a session's start, the
-model's answer, the run), puts a line of words before each act and is rendered by ``agg``.
+The two of the pane ask no model: one session each, in Claude Code's fullscreen layout, where the
+pane sits beside the chat, on the store after a curation run. Keys alone drive them, a command of
+the band, then Tab, Shift+Tab and Enter: one answers a proposal in the pane, the other walks
+through the settings and presses a switch. The five seconds a press waits with its undo pass as
+recorded.
+
+The demo machine, its environment and the way a session is started are the screenshots'
+(``readme_images``). What the terminals drew is kept with its times. A picture cuts a session's
+start, the README's also shortens the model's answer and the run; a line of words stands before
+each act, and ``agg`` renders it. After a recording the demo machine is asked whether what the
+picture shows was written; if not, no picture is.
 """
 
 from __future__ import annotations
@@ -20,7 +28,9 @@ import getpass
 import json
 import os
 import re
+import shutil
 import socket
+import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
@@ -30,7 +40,6 @@ from pathlib import Path
 from repo_tools import readme_images
 from repo_tools.readme_images import DOWN, ENTER, ESCAPES, IMAGES, REPO_ROOT, ImagesError, Recording, Wait
 
-GIF = IMAGES / "demo.gif"
 PROJECTS = {
     "invoice-tool": {"README.md": "# invoice-tool\n\nTurns time entries into PDF invoices.\n"},
     "garden-site": {"README.md": "# garden-site\n\nThe website of the allotment club.\n"},
@@ -41,6 +50,17 @@ TOOLS = ("claude", "agg", "git")
 COLUMNS = 90
 ROWS = 22
 FONT_SIZE = 16
+# The pane's pictures are wider than the README's, so their letters are smaller: the file stays small.
+PANE_ROWS = 26
+SETTINGS_ROWS = 30
+PANE_FONT_SIZE = 14
+TAB = "\t"
+SHIFT_TAB = "\x1b[Z"
+# A press in the pane writes after five seconds, in which it can be taken back.
+PRESS_SECONDS = 6.5
+KEPT_MODEL = "sonnet"
+# The proposal the pane lists first, the one with a due day.
+KEPT_PROPOSAL = "Send Dana the photos of the shed."
 FRAMES_PER_SECOND = 12
 # agg's own list of text fonts. Named for the emoji too, it draws Claude Code's dot and its pause sign
 # as a terminal does, where agg would otherwise take the pictures of the emoji font.
@@ -100,6 +120,21 @@ class Act:
     beats: tuple[Beat, ...]
 
 
+@dataclass(frozen=True)
+class Picture:
+    """One moving picture, ``<name>.gif``: the terminal it is recorded in, the demo machine it starts
+    on, its acts, and ``refused``, which looks at the demo machine after the recording and gives the
+    reason to write no picture, or None."""
+
+    name: str
+    columns: int
+    rows: int
+    font_size: int
+    build: Callable[[Mapping[str, str]], None]
+    acts: Callable[[Mapping[str, str]], list[Act]]
+    refused: Callable[[Mapping[str, str]], str | None]
+
+
 Events = list[tuple[float, bytes]]
 
 
@@ -156,6 +191,59 @@ def acts_for(environ: Mapping[str, str]) -> list[Act]:
     ]
 
 
+def pressed(keys: Sequence[str], look_seconds: float) -> list[Beat]:
+    """Look, then press the keys one after another."""
+    return [Beat(look_seconds if index == 0 else 0.4, key) for index, key in enumerate(keys)]
+
+
+def pane_beats(command: str, presses: Sequence[Beat]) -> tuple[Beat, ...]:
+    """Start a session, type a command of the band, which gives the pane the keys, then press."""
+    return (*SESSION_START, Beat(LOOK_SECONDS), *typed(command), Beat(0.5, ENTER), *presses)
+
+
+def answering_beats() -> tuple[Beat, ...]:
+    """To the proposals, keep the first and take that back, keep it again and let it be written,
+    back to the start view."""
+    return pane_beats(
+        "/m2b-pane",
+        (
+            *pressed([TAB, TAB, TAB, ENTER], 2.0),
+            *pressed([TAB, TAB, ENTER], 2.5),
+            Beat(1.5, ENTER),
+            Beat(1.5, ENTER),
+            *pressed([SHIFT_TAB, SHIFT_TAB, ENTER], PRESS_SECONDS + 1.5),
+            Beat(3.0),
+        ),
+    )
+
+
+def settings_beats() -> tuple[Beat, ...]:
+    """Open the first setting's card, walk with Enter on ``next`` to the model of curation, press its
+    switch and take that back, press it again and let it be written, back to the list."""
+    return pane_beats(
+        "/m2b-settings",
+        (
+            *pressed([TAB, TAB, ENTER], 2.0),
+            *(Beat(0.9, ENTER) for _ in range(8)),
+            *pressed([TAB, TAB, ENTER], 2.5),
+            Beat(1.5, ENTER),
+            *pressed([TAB, TAB, ENTER], 1.5),
+            *pressed([TAB, ENTER], PRESS_SECONDS + 1.5),
+            Beat(3.0),
+        ),
+    )
+
+
+def pane_acts(title: str, beats: tuple[Beat, ...]) -> Callable[[Mapping[str, str]], list[Act]]:
+    """One act in the demo project, in the fullscreen layout and with the stand-in for the model."""
+
+    def acts(environ: Mapping[str, str]) -> list[Act]:
+        session = {**environ, **readme_images.FULL_SCREEN}
+        return [Act(title, tuple(readme_images.claude_command()), readme_images.PROJECT, session, beats)]
+
+    return acts
+
+
 def build_first_note_demo(environ: Mapping[str, str]) -> None:
     """A fresh demo machine whose store holds nothing yet, and two unrelated projects."""
     readme_images.set_up_machine(environ)
@@ -166,6 +254,75 @@ def build_first_note_demo(environ: Mapping[str, str]) -> None:
 def waiting_captures() -> list[str]:
     """The notes the demo store's inbox still holds."""
     return sorted(path.name for path in (readme_images.DEMO / "notes" / "inbox").glob("*.md"))
+
+
+def note_left_in_the_inbox(environ: Mapping[str, str]) -> str | None:
+    waiting = waiting_captures()
+    if not waiting:
+        return None
+    left = " and ".join(waiting)
+    return f"the run of the second act left {left} in the inbox, so the last act did not start with the note"
+
+
+def kept_proposal_not_written(environ: Mapping[str, str]) -> str | None:
+    """The picture keeps the proposal the pane lists first: every other one still waits, and the
+    one answer the store holds is a keep. A count alone would pass a drop, which a button added
+    before ``keep`` would turn the press into."""
+    answer = subprocess.run(
+        [str(readme_images.PLUGIN / "bin" / "m2b"), "band", "--json"],
+        env=dict(environ),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    try:
+        waiting = sorted(proposal["text"] for proposal in json.loads(answer.stdout)["proposals"]["proposals"])
+    except (ValueError, KeyError, TypeError):
+        return "m2b band --json did not say which proposals wait on the demo machine"
+    others = sorted(text for _, text, _, _ in readme_images.PROPOSALS if text != KEPT_PROPOSAL)
+    if waiting != others:
+        return f"{len(waiting)} proposals wait on the demo machine, not all but {KEPT_PROPOSAL!r}: it was not answered"
+    answers = readme_images.DEMO / "notes" / "state" / "core" / "proposal-answers"
+    kinds = sorted(path.suffix for path in answers.glob("*"))
+    if kinds != [".keep"]:
+        return f"the demo machine holds {' and '.join(kinds) or 'no answer'}, not one keep: the press was no keep"
+    return None
+
+
+def model_not_written(environ: Mapping[str, str]) -> str | None:
+    """The picture sets the model of curation with a press."""
+    config = readme_images.DEMO / "home" / ".config" / "m2b" / "config.json"
+    try:
+        model = json.loads(config.read_text(encoding="utf-8"))["curation"].get("model")
+    except (OSError, ValueError, KeyError, AttributeError):
+        return "the demo machine's config could not be read"
+    if model == KEPT_MODEL:
+        return None
+    now = "not set" if model is None else repr(model)
+    return f"the demo machine's curation.model is {now}, not {KEPT_MODEL!r}: the press was not written"
+
+
+PICTURES = (
+    Picture("demo", COLUMNS, ROWS, FONT_SIZE, build_first_note_demo, acts_for, note_left_in_the_inbox),
+    Picture(
+        "pane-answers",
+        readme_images.WIDE,
+        PANE_ROWS,
+        PANE_FONT_SIZE,
+        readme_images.build_demo_after_a_run,
+        pane_acts("Answer what waits for you, in the pane beside the chat", answering_beats()),
+        kept_proposal_not_written,
+    ),
+    Picture(
+        "settings-walk",
+        readme_images.WIDE,
+        SETTINGS_ROWS,
+        PANE_FONT_SIZE,
+        readme_images.build_demo_after_a_run,
+        pane_acts("Walk through every setting with Enter, and press a switch", settings_beats()),
+        model_not_written,
+    ),
+)
 
 
 def retimed(recording: Recording, beats: Sequence[Beat]) -> Events:
@@ -202,12 +359,14 @@ def _busy_end(times: Sequence[float], end: float) -> float:
     return end
 
 
-def cast(acts: Sequence[tuple[str, Events]]) -> str:
-    """An asciicast (version 2) of the acts in a row, each after a card with its number and title."""
-    lines = [json.dumps({"version": 2, "width": COLUMNS, "height": ROWS, "theme": THEME})]
+def cast(acts: Sequence[tuple[str, Events]], columns: int, rows: int) -> str:
+    """An asciicast (version 2) of the acts in a row, each after a card with its title, and with its
+    number when there are several."""
+    lines = [json.dumps({"version": 2, "width": columns, "height": rows, "theme": THEME})]
     clock = 0.0
     for number, (title, events) in enumerate(acts, start=1):
-        card = f"{RESET}{HIDE_CURSOR}\r\n\r\n   \x1b[1m{number}\x1b[0m  {title}"
+        numbered = f"\x1b[1m{number}\x1b[0m  " if len(acts) > 1 else ""
+        card = f"{RESET}{HIDE_CURSOR}\r\n\r\n   {numbered}{title}"
         lines.append(json.dumps([round(clock, 3), "o", card]))
         clock += CARD_SECONDS
         lines.append(json.dumps([round(clock, 3), "o", RESET]))
@@ -243,18 +402,27 @@ def leaks(drawn: bytes, names: Mapping[str, str]) -> list[str]:
     ]
 
 
-def agg_command(recording: Path, gif: Path) -> list[str]:
+def longest_pause(acts: Sequence[Act]) -> float:
+    """The longest spell without anything drawn the picture may show: a hold, a card, or a wait an
+    act shows as recorded, such as the seconds a press can be taken back. agg cuts what is longer."""
+    as_recorded = [beat.seconds for act in acts for beat in act.beats if beat.shown is None]
+    return max([HOLD_SECONDS, CARD_SECONDS, *as_recorded])
+
+
+def agg_command(
+    recording: Path, gif: Path, font_size: int = FONT_SIZE, pause_seconds: float = max(HOLD_SECONDS, CARD_SECONDS)
+) -> list[str]:
     return [
         "agg",
         "--quiet",
         "--font-size",
-        str(FONT_SIZE),
+        str(font_size),
         "--emoji-font-family",
         FONTS,
         "--fps-cap",
         str(FRAMES_PER_SECOND),
         "--idle-time-limit",
-        str(max(HOLD_SECONDS, CARD_SECONDS) + 1),
+        str(pause_seconds + 1),
         "--last-frame-duration",
         str(LAST_HOLD_SECONDS),
         str(recording),
@@ -262,12 +430,14 @@ def agg_command(recording: Path, gif: Path) -> list[str]:
     ]
 
 
-def record_acts(acts: Sequence[Act], record: Callable[..., Recording] = readme_images.record_timed) -> list[Recording]:
-    """Each act's recording. An act whose command ended before its last wait fails with what it drew
-    last, which is where a command says why it ended."""
+def record_acts(
+    acts: Sequence[Act], columns: int, rows: int, record: Callable[..., Recording] = readme_images.record_timed
+) -> list[Recording]:
+    """Each act's recording in a terminal of ``columns`` x ``rows``. An act whose command ended before
+    its last wait fails with what it drew last, which is where a command says why it ended."""
     recordings = []
     for number, act in enumerate(acts, start=1):
-        recording = record(act.command, act.cwd, act.environ, ROWS, COLUMNS, [beat.wait for beat in act.beats])
+        recording = record(act.command, act.cwd, act.environ, rows, columns, [beat.wait for beat in act.beats])
         if len(recording.typed_at) < len(act.beats):
             drawn = ESCAPES.sub(b"", b"".join(chunk for _, chunk in recording.chunks)).decode("utf-8", errors="replace")
             last = " | ".join(line.strip() for line in drawn.splitlines() if line.strip())[-300:]
@@ -279,42 +449,68 @@ def record_acts(acts: Sequence[Act], record: Callable[..., Recording] = readme_i
     return recordings
 
 
+def record_picture(picture: Picture, environ: Mapping[str, str], kept_cast: Path | None) -> Path:
+    """Builds the picture's demo machine, records its acts and renders them; the picture's file.
+    Nothing is written when the demo machine does not hold what the picture shows, or when the
+    terminal drew a name of this machine."""
+    picture.build(environ)
+    acts = picture.acts(environ)
+    recordings = record_acts(acts, picture.columns, picture.rows)
+    reason = picture.refused(environ)
+    if reason:
+        raise ImagesError(f"{picture.name}: {reason}; no picture written")
+    named = leaks(b"".join(drawn for recording in recordings for _, drawn in recording.chunks), machine_names())
+    if named:
+        raise ImagesError(
+            f"{picture.name}: the terminal drew {' and '.join(named)} of this machine; no picture written"
+        )
+    text = cast(
+        [(act.title, retimed(recording, act.beats)) for act, recording in zip(acts, recordings)],
+        picture.columns,
+        picture.rows,
+    )
+    gif = IMAGES / f"{picture.name}.gif"
+    with tempfile.TemporaryDirectory(prefix="sb-test-readme-demo-") as work:
+        recording_file = kept_cast or Path(work) / f"{picture.name}.cast"
+        recording_file.write_text(text, encoding="utf-8")
+        # Rendered beside the recording first: a render that fails leaves the picture in the repository whole.
+        rendered = Path(work) / gif.name
+        readme_images.run(agg_command(recording_file, rendered, picture.font_size, longest_pause(acts)), os.environ)
+        IMAGES.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(rendered), gif)
+    return gif
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="readme-demo", description=(__doc__ or "").split("\n", 1)[0])
-    parser.add_argument("--cast", type=Path, help="also keep the asciicast the picture is rendered from")
+    parser.add_argument("--only", choices=[picture.name for picture in PICTURES], help="this picture alone")
+    parser.add_argument("--cast", type=Path, help="with --only: also keep the asciicast the picture is rendered from")
     arguments = parser.parse_args(argv)
-    try:
-        missing = readme_images.missing_tools(tools=TOOLS)
-        if missing:
-            raise ImagesError(f"not found on PATH: {', '.join(missing)}")
-        environ = readme_images.demo_environment(os.environ)
-        build_first_note_demo(environ)
-        acts = acts_for(environ)
-        recordings = record_acts(acts)
-        waiting = waiting_captures()
-        if waiting:
-            raise ImagesError(
-                f"the run of the second act left {' and '.join(waiting)} in the inbox, so the last act"
-                " did not start with the note; no picture written"
-            )
-        named = leaks(b"".join(drawn for recording in recordings for _, drawn in recording.chunks), machine_names())
-        if named:
-            raise ImagesError(f"the terminal drew {' and '.join(named)} of this machine; no picture written")
-        text = cast([(act.title, retimed(recording, act.beats)) for act, recording in zip(acts, recordings)])
-        with tempfile.TemporaryDirectory(prefix="sb-test-readme-demo-") as work:
-            recording_file = arguments.cast or Path(work) / "demo.cast"
-            recording_file.write_text(text, encoding="utf-8")
-            IMAGES.mkdir(parents=True, exist_ok=True)
-            readme_images.run(agg_command(recording_file, GIF), os.environ)
-    except ImagesError as error:
-        print(f"readme-demo: {error}", file=sys.stderr)
+    if arguments.cast and not arguments.only:
+        parser.error("--cast keeps one recording: name its picture with --only")
+    missing = readme_images.missing_tools(tools=TOOLS)
+    if missing:
+        print(f"readme-demo: not found on PATH: {', '.join(missing)}", file=sys.stderr)
         return 1
-    size = GIF.stat().st_size
-    print(f"readme-demo: {GIF.relative_to(REPO_ROOT)}, {size // 1000} kB")
-    if size > LARGE_BYTES:
-        print(f"readme-demo: over {LARGE_BYTES // 1_000_000} MB, which loads slowly in the README", file=sys.stderr)
-    print("readme-demo: watch it through before committing it; the answers are the model's")
-    return 0
+    environ = readme_images.demo_environment(os.environ)
+    failed = False
+    for picture in PICTURES:
+        if arguments.only not in (None, picture.name):
+            continue
+        # One picture that fails does not keep the others from being recorded: the README's needs a
+        # model and a curation run, the pane's need neither.
+        try:
+            gif = record_picture(picture, environ, arguments.cast)
+        except ImagesError as error:
+            print(f"readme-demo: {error}", file=sys.stderr)
+            failed = True
+            continue
+        size = gif.stat().st_size
+        print(f"readme-demo: {gif.relative_to(REPO_ROOT)}, {size // 1000} kB")
+        if size > LARGE_BYTES:
+            print(f"readme-demo: over {LARGE_BYTES // 1_000_000} MB, which loads slowly in a page", file=sys.stderr)
+    print("readme-demo: watch each picture through before committing it; where a model answers, the answer is its own")
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

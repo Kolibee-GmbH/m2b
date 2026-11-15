@@ -103,6 +103,10 @@ the tool below, or the skill `/m2b:capture` where the mod does not run.
 `/m2b-pane` opens the m2b pane in the view it starts in, with three parts. (`/m2b` alone is not
 this command: Claude Code runs the skill `/m2b:m2b` for it, which asks the model what m2b is.)
 
+![A Claude Code session in the fullscreen layout after /m2b-pane: the m2b pane sits beside the chat in its start view. In this session: the topic Northwind with 2 facts and 1 current item and "show", the distillate printed whole at the start, and "leave m2b out" of the project folder. Waits for you: 3 proposals from your sessions with "show", a "Still current?" question with keep and drop, the review row "1 fact changed: Sam" with ok, and "show" for the whole review. Today: one task due today and one overdue. Below them "settings". Left of the pane the band above the prompt is one line that counts what waits, and the status line stands below the prompt](images/pane.png)
+
+As text, another session:
+
 ```text
 ┌──────────────────────────────────────────────────────────────┐
 │ In this session                                              │
@@ -200,7 +204,11 @@ guesses which folder a press would turn off.
 `settings` at the end of the start view, or `/m2b-settings`, turns the pane to the settings of
 m2b: every setting of this machine, of the store and of the owner, as `m2b settings` lists them
 ([Configuration](configuration.md#every-setting-in-one-list)), each a row with its title and its
-value. `open` on a row turns the pane to the setting's card:
+value.
+
+![The pane beside the chat after /m2b-settings: "back", then every setting as a row with "open", its title and its value, 19 under "This machine", 6 under "The store, for every machine" and 6 under "The owner, for every machine", among them the machine's name, the store folder, the model of curation and whether sessions hand in proposals; left of the pane the band draws all its rows](images/settings.png)
+
+`open` on a row turns the pane to the setting's card:
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
@@ -231,6 +239,10 @@ when `list` returns to the list. So Enter on `next`, pressed again and again, ta
 every setting. The band never puts the focus on a switch: Tab to it. After the press the focus
 is on `undo`, and after `undo`, or once the five seconds are over, on the button that leads on
 (`next`, on the last card `previous`). Escape hands the keyboard back to the prompt.
+
+![The pane beside the chat, driven with the keyboard. After /m2b-settings, Tab twice puts the focus on the first row and Enter opens its card, "Settings · 1 of 31"; Enter on "next", eight times, walks card by card to "Model of curation", which reads "now: haiku". Tab twice reaches "set to sonnet"; Enter turns it into "undo setting curation.model to sonnet", and Enter on "undo" takes the press back. Reached with Tab twice again, pressed and left alone, it is written after five seconds: the card reads "now: sonnet", "default: haiku" and offers "set to haiku". Tab and Enter on "list" return to the list, whose row now reads "Model of curation: sonnet"](images/settings-walk.gif)
+
+<sub>One real Claude Code session on a demo machine with invented notes, recorded by `scripts/readme-demo --only settings-walk`. Only keys are typed and no model is asked; the five seconds a press waits run as recorded.</sub>
 
 Seven settings are switches: `curation.read_sessions`, `curation.paused`, `curation.git_commit`,
 `band.due_tasks`, `sessions.propose`, `curation.model` and your `language`. Their cards offer the
@@ -415,7 +427,7 @@ each proposal with its text, what kind of thing it is (with the due day of a com
 topic, where it has one), the words it was taken from and their day: `said on` before words you
 typed, `pasted on` before words from text you pasted into a prompt, which may be someone else's.
 
-![The pane after /m2b-proposals: three proposals from the sessions, each with keep and drop, its kind, a due day for the commitment, and the words it was taken from with the day they were said; above them "keep all"](images/proposals.png)
+![The pane after /m2b-proposals: three proposals from the sessions, each with keep and drop, its kind, a due day for the commitment, and the words it was taken from with the day they were said; above them "back" and "keep all"; below the pane the band with its rows and the status line](images/proposals.png)
 
 As text, other proposals, one of them within its undo:
 
@@ -445,6 +457,10 @@ clicked on their own; one a curation run added a moment before is not kept unsee
 filed by the click: the next curation run writes a capture for each proposal you kept and files
 it, and the last line says how many answers wait for it. The row in the band and the pane follow
 at once.
+
+![The pane beside the chat, driven with the keyboard. After /m2b-pane the start view counts 3 proposals from your sessions; Tab to their "show" and Enter turn the pane to them, with the focus on "back". Tab twice reaches "keep" of the first, "Send Dana the photos of the shed."; Enter turns the row into "undo keeping: Send Dana the photos of the shed.", and Enter on "undo" brings keep and drop back. Kept again and left alone, the proposal is written after five seconds: the pane counts 2 proposals and says that 1 answer waits for the next curation run, and the band left of it counts 2 as well. Shift+Tab twice and Enter on "back" return to the start view, which now counts 2 proposals](images/pane-answers.gif)
+
+<sub>One real Claude Code session on a demo machine with invented notes, recorded by `scripts/readme-demo --only pane-answers`. Only keys are typed and no model is asked; the five seconds a press waits run as recorded.</sub>
 
 When `m2b` refuses an answer, because another machine answered that proposal the other way first,
 or cannot write it, what it says stands in the pane and in the band until your next prompt. After

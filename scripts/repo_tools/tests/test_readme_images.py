@@ -128,6 +128,41 @@ class BuildDemoTest(unittest.TestCase):
         config = json.loads((self.demo / "home" / ".config" / "m2b" / "config.json").read_text(encoding="utf-8"))
         self.assertFalse(config["curation"].get("read_sessions", False))
 
+    def test_the_store_after_a_run_gives_a_session_in_the_demo_project_one_topic_and_no_other_session(self) -> None:
+        environ = readme_images.demo_environment({"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"})
+
+        readme_images.build_demo_after_a_run(environ)
+
+        store = self.demo / "notes"
+        index = (store / "memory" / "MEMORY.md").read_text(encoding="utf-8")
+        self.assertEqual(index.count(readme_images.TOPIC_HEADING), 2)
+        self.assertLess(index.index(readme_images.TOPIC_HEADING), index.index("## Current"))
+        self.assertTrue((store / "memory" / "northwind.md").is_file())
+        self.assertTrue(self.starts_with_the_topic("projects/invoice-tool", environ))
+        self.assertFalse(self.starts_with_the_topic("projects/garden-site", environ))
+        # The run's review names the one changed fact and nothing lint found in the topic.
+        self.assertEqual(len(self.band(environ)["tasks"]["review"]["changes"]), 1)
+
+    def starts_with_the_topic(self, folder: str, environ: dict[str, str]) -> bool:
+        project = self.demo / folder
+        project.mkdir(parents=True, exist_ok=True)
+        start = subprocess.run(
+            [str(readme_images.PLUGIN / "bin" / "m2b"), "hook", "distillate"],
+            env=environ,
+            input=json.dumps({"session_id": "a1b2c3d4-0000-4000-8000-000000000001", "cwd": str(project)}),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return "one invoice a month" in start.stdout
+
+    def test_the_everyday_store_has_no_topic(self) -> None:
+        environ = readme_images.demo_environment({"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"})
+
+        readme_images.build_demo(environ)
+
+        self.assertNotIn("###", (self.demo / "notes" / "memory" / "MEMORY.md").read_text(encoding="utf-8"))
+
     def test_each_proposal_stands_on_words_of_a_prompt_of_the_invented_session(self) -> None:
         for _, _, quote, _ in readme_images.PROPOSALS:
             with self.subTest(quote=quote):
@@ -173,6 +208,23 @@ class RecordTest(unittest.TestCase):
                 command, Path("/"), {"PATH": "/usr/bin:/bin"}, 10, 40, [readme_images.Wait(0.5, until=b"two")]
             )
 
+    def test_the_recording_is_as_wide_as_asked(self) -> None:
+        command = ["sh", "-c", "stty size; sleep 5"]
+
+        narrow = readme_images.record(command, Path("/"), {"PATH": "/usr/bin:/bin"}, 10, [(0.5, "")])
+        wide = readme_images.record(command, Path("/"), {"PATH": "/usr/bin:/bin"}, 10, [(0.5, "")], 130)
+
+        self.assertIn(f"10 {readme_images.COLUMNS}".encode(), narrow)
+        self.assertIn(b"10 130", wide)
+
+    def test_only_a_shot_in_the_full_screen_layout_gets_its_variable_and_the_demo_machine_stays(self) -> None:
+        demo = readme_images.demo_environment({"PATH": "/usr/bin"})
+        plain = readme_images.Shot("todos", 40, 40, "what's on my list?", False)
+        full = readme_images.Shot("pane", 40, 6, "/m2b-pane", True, full_screen=True)
+
+        self.assertEqual(readme_images.session_environment(demo, plain), demo)
+        self.assertEqual(readme_images.session_environment(demo, full), {**demo, "CLAUDE_CODE_NO_FLICKER": "1"})
+
     def test_a_shot_trusts_the_folder_then_asks_its_prompt(self) -> None:
         shot = readme_images.Shot("todos", 40, 40, "what's on my list?", False)
 
@@ -213,7 +265,23 @@ class ShotsTest(unittest.TestCase):
     def test_the_shots_of_the_pane_type_a_command_of_the_band(self) -> None:
         commands = {shot.name: shot.prompt for shot in readme_images.SHOTS if shot.store == readme_images.AFTER_A_RUN}
 
-        self.assertEqual(commands, {"review": "/m2b-review", "proposals": "/m2b-proposals"})
+        self.assertEqual(
+            commands,
+            {"review": "/m2b-review", "proposals": "/m2b-proposals", "pane": "/m2b-pane", "settings": "/m2b-settings"},
+        )
+
+    def test_the_pane_docks_beside_the_chat_only_in_the_full_screen_layout_and_wide_enough(self) -> None:
+        docked = {shot.name: shot.columns for shot in readme_images.SHOTS if shot.full_screen}
+
+        self.assertEqual(docked, {"pane": readme_images.WIDE, "settings": readme_images.WIDE})
+        self.assertGreaterEqual(readme_images.WIDE, 110)
+        self.assertEqual(
+            {shot.columns for shot in readme_images.SHOTS if not shot.full_screen}, {readme_images.COLUMNS}
+        )
+
+    def test_a_shot_beside_the_chat_is_recorded_alone(self) -> None:
+        self.assertEqual([shot.name for shot in readme_images.shots_for("pane")], ["pane"])
+        self.assertEqual([shot.name for shot in readme_images.shots_for("settings")], ["settings"])
 
 
 class ToolsTest(unittest.TestCase):

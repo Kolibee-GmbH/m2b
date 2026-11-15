@@ -12,8 +12,9 @@ Two demo stores stand behind the shots. The everyday one holds memory, tasks and
 The other is the first after a curation run that changed a fact and left proposals from the
 person's sessions waiting; a scripted model plays that run, the stub the end-to-end scenarios use,
 over invented sessions in a Claude Code folder of the demo's own, so the user's sessions are never
-read and the two pictures show the same fact and proposals on every recording, under the day's
-dates.
+read and its pictures show the same fact and proposals on every recording, under the day's
+dates. That store also holds one topic, a customer the demo project's folder names, so a session
+there is given its facts.
 
 The demo machine lives under ``/tmp/sb-test-m2b-demo``, its owner is the invented Alex, and its
 machine id is invented too. Claude Code itself still keeps its own records of these sessions in the
@@ -52,6 +53,11 @@ PROJECT = DEMO / "projects" / "invoice-tool"
 MACHINE_ID = "a1b2-alex-macbook"
 XTERM = "@xterm/xterm@6.0.0"
 COLUMNS = 100
+# Wide enough for Claude Code's fullscreen layout to seat a pane beside the chat that a command
+# opened: that takes 110 columns, a pane nobody asked for more.
+WIDE = 130
+# Turns that layout on for one session; nothing of the user's settings is read or written for it.
+FULL_SCREEN = {"CLAUDE_CODE_NO_FLICKER": "1"}
 BACKGROUND = "#1e1e2e"
 # Variables of the session that runs this script; inherited, they mark the recorded Claude Code as
 # a child session (no transcript, a warning line) and point m2b's worklog add-on at the real herdr.
@@ -74,9 +80,10 @@ REMINDER_DAYS_AHEAD = 3
 
 @dataclass(frozen=True)
 class Shot:
-    """One picture: a session in a terminal of ``rows`` rows that types ``prompt`` and is drawn
-    ``answer_seconds`` later. ``fresh_store`` builds the demo store named by ``store`` first;
-    without it the shot runs on the store the shot before it left."""
+    """One picture: a session in a terminal of ``columns`` x ``rows`` that types ``prompt`` and is
+    drawn ``answer_seconds`` later. ``fresh_store`` builds the demo store named by ``store`` first;
+    without it the shot runs on the store the shot before it left. ``full_screen`` is Claude Code's
+    fullscreen layout, where m2b's pane sits beside the chat."""
 
     name: str
     rows: int
@@ -84,6 +91,8 @@ class Shot:
     prompt: str
     fresh_store: bool
     store: str = EVERYDAY
+    columns: int = COLUMNS
+    full_screen: bool = False
 
 
 @dataclass(frozen=True)
@@ -106,7 +115,9 @@ class Recording:
 
 
 # In this order: todos runs on the store the capture left, so it lists the task just captured, and
-# both panes show the same run. The last two type a command of the band and wait for no model.
+# both panes show the same run. The shots after todos type a command of the band and wait for no
+# model: two on the main screen, and two with the pane beside the chat, each on a store of its own,
+# so recording one alone leaves the pictures before it as they are.
 SHOTS = (
     Shot("session-start", 30, 30, "When does Sam bring the plywood, and where is the spare key for the shed?", True),
     Shot(
@@ -118,7 +129,9 @@ SHOTS = (
     ),
     Shot("todos", 46, 40, "what's on my list?", False),
     Shot("review", 40, 6, "/m2b-review", True, AFTER_A_RUN),
-    Shot("proposals", 40, 6, "/m2b-proposals", False, AFTER_A_RUN),
+    Shot("proposals", 46, 6, "/m2b-proposals", False, AFTER_A_RUN),
+    Shot("pane", 25, 6, "/m2b-pane", True, AFTER_A_RUN, WIDE, True),
+    Shot("settings", 50, 6, "/m2b-settings", True, AFTER_A_RUN, WIDE, True),
 )
 
 CORPUS = {
@@ -229,6 +242,29 @@ PROPOSALS = (
         None,
     ),
 )
+# A topic of the store after a run: a customer whose facts reach only a session about it. The
+# second word is the demo project's folder, so a session there is given the topic without a prompt.
+TOPIC_HEADING = "### Northwind (Northwind, invoice-tool)\n"
+TOPIC_FACTS = (
+    "- Northwind gets one invoice a month, as a PDF, by the fifth working day (northwind.md)\n"
+    "- Northwind's time entries come as a CSV export from their ticket system (northwind.md)\n"
+)
+TOPIC_CURRENT = "- Building the renewals export for Northwind (since {recent})\n"
+TOPIC_NOTE = (
+    "2026/10/20261026T093000Z-claude-5a1f.md",
+    "---\ncreated: 2026-10-26T10:30:00+01:00\nsource: claude\n---\n"
+    "Northwind gets one invoice a month, as a PDF, by the fifth working day."
+    " Their time entries come as a CSV export from their ticket system.\n",
+)
+TOPIC_FILE = """# Northwind
+
+A customer. One invoice a month, as a PDF, by the fifth working day. Their time entries come as a
+CSV export from their ticket system.
+
+## Evidence
+
+- [[20261026T093000Z-claude-5a1f.md]]
+"""
 MODEL_STUB = REPO_ROOT / "tests" / "unit" / "fakes" / "fake_claude.py"
 
 
@@ -266,7 +302,8 @@ def build_demo(environ: Mapping[str, str]) -> None:
 
 def build_demo_after_a_run(environ: Mapping[str, str]) -> None:
     """A fresh demo machine whose last curation run changed a fact and proposed three things from
-    Alex's sessions: the review names the fact, and the proposals wait for keep or drop.
+    Alex's sessions: the review names the fact, and the proposals wait for keep or drop. Its memory
+    holds one topic, which the demo project's folder names.
 
     A scripted model plays the run. It reads the sessions from a Claude Code folder of the demo's
     own, which holds invented prompts only; reading them is on for this one run and off again
@@ -274,6 +311,7 @@ def build_demo_after_a_run(environ: Mapping[str, str]) -> None:
     today = datetime.date.today()
     store = set_up_machine(environ)
     _fill(store, environ, today)
+    _add_topic(store, today)
     _m2b(environ, "capture", CHANGED_PLAN)
     claude_code = DEMO / "claude-code"
     _write_sessions(claude_code, datetime.datetime.now(datetime.timezone.utc))
@@ -301,13 +339,30 @@ def _fill(store: Path, environ: Mapping[str, str], today: datetime.date) -> None
     """Filed notes, memory and tasks, the same in both demo stores."""
     for relative, (created, source, text) in CORPUS.items():
         _write(store / "corpus" / relative, f"---\ncreated: {created}\nsource: {source}\n---\n{text}\n")
-    # Recent on any day the pictures are taken, so only the Porto trip is quiet enough to be asked about.
-    recent = (today - datetime.timedelta(days=5)).isoformat()
     for name, text in MEMORY.items():
-        _write(store / "memory" / name, text.replace("{recent}", recent))
+        _write(store / "memory" / name, text.replace("{recent}", _recent(today)))
     for title, days in TASKS:
         due = [] if days is None else ["--due", (today + datetime.timedelta(days=days)).isoformat()]
         _m2b(environ, "tasks", "add", *due, title)
+
+
+def _recent(today: datetime.date) -> str:
+    """Recent on any day the pictures are taken, so only the Porto trip is quiet enough to be asked about."""
+    return (today - datetime.timedelta(days=5)).isoformat()
+
+
+def _add_topic(store: Path, today: datetime.date) -> None:
+    """The topic with its facts at the end of the facts, its current item at the end of the current
+    ones, its fact file and the note the facts stand on."""
+    index = store / "memory" / "MEMORY.md"
+    facts, current = index.read_text(encoding="utf-8").split("\n## Current\n")
+    _write(
+        index,
+        f"{facts}\n{TOPIC_HEADING}\n{TOPIC_FACTS}\n## Current\n{current}\n{TOPIC_HEADING}\n"
+        + TOPIC_CURRENT.replace("{recent}", _recent(today)),
+    )
+    _write(store / "memory" / "northwind.md", TOPIC_FILE)
+    _write(store / "corpus" / TOPIC_NOTE[0], TOPIC_NOTE[1])
 
 
 def _make_demo_project(environ: Mapping[str, str]) -> None:
@@ -432,12 +487,22 @@ def steps_for(shot: Shot, today: datetime.date | None = None) -> list[tuple[floa
     return [(8, DOWN), (1, ENTER), (14, prompt), (1, ENTER), (shot.answer_seconds, "")]
 
 
+def session_environment(environ: Mapping[str, str], shot: Shot) -> dict[str, str]:
+    """The demo machine's environment for the session of one shot."""
+    return {**environ, **FULL_SCREEN} if shot.full_screen else dict(environ)
+
+
 def record(
-    command: Sequence[str], cwd: Path, environ: Mapping[str, str], rows: int, steps: Sequence[tuple[float, str]]
+    command: Sequence[str],
+    cwd: Path,
+    environ: Mapping[str, str],
+    rows: int,
+    steps: Sequence[tuple[float, str]],
+    columns: int = COLUMNS,
 ) -> bytes:
-    """Every byte the command draws in a terminal of ``COLUMNS`` x ``rows`` while the keys are typed."""
+    """Every byte the command draws in a terminal of ``columns`` x ``rows`` while the keys are typed."""
     waits = [Wait(seconds, keys) for seconds, keys in [*steps, (1, "")]]
-    return b"".join(drawn for _, drawn in record_timed(command, cwd, environ, rows, COLUMNS, waits).chunks)
+    return b"".join(drawn for _, drawn in record_timed(command, cwd, environ, rows, columns, waits).chunks)
 
 
 def record_timed(
@@ -498,9 +563,9 @@ def _read_for(fd: int, wait: Wait, rows: int, start: float, chunks: list[tuple[f
     return True
 
 
-def render(recording: Path, image: Path, rows: int, xterm: Path) -> None:
+def render(recording: Path, image: Path, rows: int, xterm: Path, columns: int = COLUMNS) -> None:
     run(
-        ["node", str(RENDERER), str(recording), str(image), str(COLUMNS), str(rows), str(xterm), BACKGROUND], os.environ
+        ["node", str(RENDERER), str(recording), str(image), str(columns), str(rows), str(xterm), BACKGROUND], os.environ
     )
     run(["magick", str(image), "-trim", "+repage", "-bordercolor", BACKGROUND, "-border", "18", str(image)], os.environ)
 
@@ -526,9 +591,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 if shot.fresh_store:
                     STORES[shot.store](environ)
                 recording = Path(work) / f"{shot.name}.bin"
-                recording.write_bytes(record(claude_command(), PROJECT, environ, shot.rows, steps_for(shot)))
+                session = session_environment(environ, shot)
+                drawn = record(claude_command(), PROJECT, session, shot.rows, steps_for(shot), shot.columns)
+                recording.write_bytes(drawn)
                 IMAGES.mkdir(parents=True, exist_ok=True)
-                render(recording, IMAGES / f"{shot.name}.png", shot.rows, xterm)
+                render(recording, IMAGES / f"{shot.name}.png", shot.rows, xterm, shot.columns)
                 print(f"readme-images: {IMAGES.relative_to(REPO_ROOT) / shot.name}.png")
     except ImagesError as error:
         print(f"readme-images: {error}", file=sys.stderr)

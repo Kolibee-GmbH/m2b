@@ -164,6 +164,14 @@ text at once, without a model turn. The band is a mod, a module Claude Code load
 so it runs only while mods are on in Claude Code; `/m2b:m2b doctor` says whether the latest
 session ran it ([The band](docs/band.md)).
 
+`/m2b-pane` opens the pane in the view it starts in: what m2b gave this session, what waits for
+you and what is due today. Under Claude Code's fullscreen layout the pane sits beside the
+conversation, where it opens by itself in a wide terminal, and `/m2b-settings` turns it to every
+setting of m2b
+([This session, what waits and today, in the pane](docs/band.md#this-session-what-waits-and-today-in-the-pane)).
+
+![A Claude Code session in the fullscreen layout after /m2b-pane: the m2b pane sits beside the chat in its start view. In this session: the topic Northwind with 2 facts and 1 current item and "show", the distillate printed whole at the start, and "leave m2b out" of the project folder. Waits for you: 3 proposals from your sessions with "show", a "Still current?" question with keep and drop, the review row "1 fact changed: Sam" with ok, and "show" for the whole review. Today: one task due today and one overdue. Below them "settings". Left of the pane the band above the prompt is one line that counts what waits, and the status line stands below the prompt](docs/images/pane.png)
+
 **Proposals from your sessions.** A curation run can also read what you typed and pasted in Claude
 Code and propose what you said in passing, without "remember this", each proposal with the words
 it stands on beside it; nothing is filed before you keep it
