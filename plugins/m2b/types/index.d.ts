@@ -35,6 +35,9 @@ export type BandSnapshot = {
 /** What a press on keep or drop asks the task list for. */
 export type BandSettle = 'complete' | 'drop'
 
+/** What a press on the pane's button for the session's folder asks: the distillate off there, or on again. */
+export type FolderSwitch = 'off' | 'on'
+
 /**
  * A press on a row: `waiting` while undo can still take it back and nothing is written, `writing`
  * from the write until the reload after it has landed, at the latest until `deadlineMs`. The row
@@ -42,7 +45,7 @@ export type BandSettle = 'complete' | 'drop'
  * are the proposals a press on keep all stands for: those the pane showed when it was pressed.
  */
 export type BandPress = {
-  action: BandSettle
+  action: BandSettle | FolderSwitch
   phase: 'waiting' | 'writing'
   token: string
   deadlineMs?: number
@@ -101,9 +104,16 @@ export type PaneSearch = {
 
 /**
  * What the m2b pane shows beside the view it starts in, which is the one without a value: the last
- * curation run, a search, or the proposals from the sessions.
+ * curation run, a search, the proposals from the sessions, or one topic. A topic's lines are not
+ * part of this value: the session's state is one every plugin can read, so the module that draws
+ * the lines holds them. `press` tells this opening of the topic from an earlier one, and `isRead`
+ * turns true when m2b has answered, which draws the pane again.
  */
-export type PaneView = { kind: 'review' } | { kind: 'search'; search: PaneSearch } | { kind: 'proposals' }
+export type PaneView =
+  | { kind: 'review' }
+  | { kind: 'search'; search: PaneSearch }
+  | { kind: 'proposals' }
+  | { kind: 'topic'; name: string; press: string; isRead: boolean }
 
 /**
  * A topic whose facts m2b gave this session, with the facts lines and current items its block held
@@ -117,8 +127,9 @@ export type SessionTopic = { name: string; facts: number | null; current: number
  * `/clear` the session goes on under another id, and this is then no longer about it. `known` is
  * false for a session this machine holds no note of, which is not "given nothing".
  * `atStart` is how the start printed the distillate (`whole`, `cut`, `none`), `offUnder` the folder
- * the distillate is turned off under now. `error` is why m2b could not look; nothing else is said
- * then.
+ * the distillate is turned off under now, `folder` the session's own folder as m2b looked at it,
+ * null from a core that does not name it (absent in an answer kept before). `error` is why m2b
+ * could not look; nothing else is said then.
  */
 export type BandSession = {
   id: string | null
@@ -126,6 +137,7 @@ export type BandSession = {
   topics: SessionTopic[]
   atStart: string | null
   offUnder: string | null
+  folder?: string | null
   error: string | null
 }
 
@@ -164,6 +176,8 @@ declare module 'claude-code' {
       bandSession: BandSession | null
       /** The notes this session wrote through the mod; null before the first. */
       sessionNotes: SessionNotes | null
+      /** Why the last press on the folder's button wrote nothing; cleared by the next press on it and the next prompt. */
+      sessionNotice: string | null
       /** The start of the last failed run this session was shown, so it is shown once. */
       bandToastedRun: string | null
       /** The words of each prompt the person submitted in this session, the newest last. */

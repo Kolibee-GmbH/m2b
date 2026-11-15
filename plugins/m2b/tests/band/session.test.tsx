@@ -101,7 +101,9 @@ test('what the session was given is asked for this session alone, where the sess
   const { clock } = await start($, on, fake)
 
   expect(fake.looks).toEqual([LOOK])
-  // No folder of its own: the child runs in the session's, which is the one the answer is about.
+  // Asked about the session's project root, which a shell `cd` does not move, as m2b's hooks are:
+  // the child itself runs in the session's working directory and is handed no other.
+  expect(fake.lookProjects).toEqual(['/home/alex/code/lumen'])
   expect(fake.lookFolders).toEqual([undefined])
   // Known at its start, it is not looked at a second time.
   await clock.advance(30_000)
@@ -110,6 +112,19 @@ test('what the session was given is asked for this session alone, where the sess
   await typed($, 'm2b')
   expect(fake.looks).toEqual([LOOK, LOOK])
   expect(fake.calls.filter(call => call.includes('--session'))).toEqual([])
+})
+
+test('a session that cannot name its project root is asked about the folder the call runs in', async ($, on) => {
+  // Covers: B185
+  const fake = busyFake()
+  fake.root = null
+  await start($, on, fake)
+
+  expect(fake.looks).toEqual([LOOK])
+  expect(fake.lookProjects).toEqual([undefined])
+  const ui = await startView($)
+  expect(await texts(ui)).toContain('Northwind: 3 facts, 1 current')
+  await ui.unmount()
 })
 
 test('what one session was given never reaches the answer the sessions share', async ($, on) => {
@@ -510,7 +525,7 @@ test('keep and drop in the start view wait for undo and write like the band', as
   const { clock } = await start($, on, fake)
   const ui = await startView($)
   const keys = (await ui.findAll({ type: 'Button' })).map(button => button.key)
-  expect(keys).toEqual(['show:proposals', 'keep:c1', 'drop:c1', 'keep:q1', 'drop:q1', 'ok:r1', 'show:review'])
+  expect(keys).toEqual(['topic:0', 'topic:1', 'show:proposals', 'keep:c1', 'drop:c1', 'keep:q1', 'drop:q1', 'ok:r1', 'show:review'])
 
   await ui.press({ key: 'drop:c1' })
   expect(await texts(ui)).toContain('dropping: Remember? Dana prefers tea')

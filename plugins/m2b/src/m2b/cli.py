@@ -248,6 +248,13 @@ def _parser() -> argparse.ArgumentParser:
         _command(distillate_group, name, handler, help_text).add_argument(
             "folder", nargs="?", help="the project folder; the current folder without it"
         )
+    _command(
+        distillate_group,
+        "topic",
+        distillate_commands.distillate_topic,
+        "the facts and current items of one topic, as the distillate holds them now",
+        json_flag=True,
+    ).add_argument("name", help="the topic's name, as its heading in the distillate has it")
 
     addons_group = _group(commands, "addons", "the add-ons of m2b on this machine")
     _command(addons_group, "list", addons_commands.addons_list, "each add-on and whether it is on", json_flag=True)

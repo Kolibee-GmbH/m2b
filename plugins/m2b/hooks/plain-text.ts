@@ -73,6 +73,24 @@ export function writtenOut(text: string): string {
     .replace(NEVER_DRAWN, written)
 }
 
+// In a path, whatever draws as a gap or not at all, except the plain space.
+const NOT_READ_IN_A_PATH = /[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\p{Zl}\p{Zp}\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000]/gu
+
+/**
+ * A path a press acts on, drawn so that two paths read alike only when they are the same: every
+ * character is kept in its place, none merged or cut. A control or format character, a line break
+ * and a space other than the plain one are written out (`\x1b`, `\x0a`, `\xa0`), a plain space at
+ * either end as `\x20`, and a backslash doubled, so one that is written out is told from one that
+ * is in the name. `writtenOut` makes one line of a text and may merge its white space; a folder
+ * with a line break at its end is another folder.
+ */
+export function wholePath(path: string): string {
+  return path
+    .replace(/\\/g, '\\\\')
+    .replace(NOT_READ_IN_A_PATH, written)
+    .replace(/^ | $/g, '\\x20')
+}
+
 function written(character: string): string {
   const code = character.codePointAt(0) ?? 0
   const digits = code.toString(16)

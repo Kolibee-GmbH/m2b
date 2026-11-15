@@ -59,8 +59,15 @@ export const STATUS = {
 /** A topic whose facts the core gave a session, with what its block held then. */
 export type FakeTopic = { name: string; facts: number | null; current: number | null }
 
-/** What the core noted of a session: its topics, how its start printed the distillate, and where the distillate is off. */
-export type FakeGiven = { topics: FakeTopic[]; atStart: string | null; offUnder: string | null }
+/**
+ * What the core noted of a session: its topics, how its start printed the distillate, and where the
+ * distillate is off. `folder` is the session's folder as the core names it; a core from before the
+ * pane's button names none.
+ */
+export type FakeGiven = { topics: FakeTopic[]; atStart: string | null; offUnder: string | null; folder?: string }
+
+/** A topic's lines as `m2b distillate topic --json` answers them. */
+export type FakeTopicLines = { facts: string[]; current: string[] }
 
 /**
  * The `m2b` launcher, answered from memory; every call is recorded, the looks at what the session
@@ -72,6 +79,10 @@ export class FakeM2b {
   readonly looks: string[][] = []
   /** The folder each of those calls was started in, as the mod named it; undefined where it named none. */
   readonly lookFolders: (string | undefined)[] = []
+  /** The project folder each of those calls was handed in `CLAUDE_PROJECT_DIR`; undefined where it was handed none. */
+  readonly lookProjects: (string | undefined)[] = []
+  /** The session's project root, as the engine names it; null when it cannot say. */
+  root: string | null = '/home/alex/code/lumen'
   /** What the core noted of the session that asks; null as for a session it holds no note of. */
   given: FakeGiven | null = { topics: [], atStart: 'whole', offUnder: null }
   /** When set, the session part of the answer is this instead, whatever its shape. */
@@ -80,6 +91,14 @@ export class FakeM2b {
   lookFails: string | null = null
   /** Unset, the installed core is one from before sessions: it refuses the options as an unknown argument. */
   knowsSessions = true
+  /** When set, `m2b distillate off` and `on` fail with this as their message, and nothing is turned. */
+  distillateFails: string | null = null
+  /** The topics the distillate holds now, by name, as `m2b distillate topic` reads them. */
+  topicLines: Record<string, FakeTopicLines> = {}
+  /** When set, `m2b distillate topic` ends as for a store it cannot read, with this as its message. */
+  topicFails: string | null = null
+  /** Unset, the installed core is one from before `distillate topic`: it refuses the action. */
+  knowsTopics = true
   tasks: FakeTask[] = []
   status: unknown = STATUS
   failure: string | null = null
@@ -205,12 +224,13 @@ export class FakeM2b {
     return standing.length === 0 ? ok('') : { ...fail(''), stderr: `${standing.join('\n')}\n` }
   }
 
-  handle(argv: readonly string[], stdin?: string, cwd?: string): ProcessRunResult {
+  handle(argv: readonly string[], stdin?: string, cwd?: string, env?: Record<string, string>): ProcessRunResult {
     expect(argv[0]).toBe(this.launcher)
     const args = argv.slice(1)
     if (args[0] === 'band' && args.includes('--session-only')) {
       this.looks.push(args)
       this.lookFolders.push(cwd)
+      this.lookProjects.push(env?.['CLAUDE_PROJECT_DIR'])
       return this.isSetUp ? this.sessionAnswer(args) : fail(NOT_SET_UP)
     }
     this.calls.push(args)
@@ -257,6 +277,17 @@ export class FakeM2b {
     if (args[0] === 'proposals') {
       return this.answer(args[1], args.slice(2))
     }
+    if (args[0] === 'distillate' && args[1] === 'topic') {
+      return this.topicAnswer(args.at(-1) ?? '')
+    }
+    if (args[0] === 'distillate') {
+      if (this.distillateFails !== null) {
+        return fail(this.distillateFails)
+      }
+      // As the core: off under the folder it was handed, on again for that folder.
+      this.given = this.given === null ? null : { ...this.given, offUnder: args[1] === 'off' ? (args.at(-1) ?? null) : null }
+      return ok('')
+    }
     if (this.failure !== null) {
       return fail(this.failure)
     }
@@ -269,6 +300,29 @@ export class FakeM2b {
     task.completed = true
     task.dropped = verb === 'drop'
     return ok('')
+  }
+
+  /** As `m2b distillate topic --json -- <name>` answers: the topic's lines, or that the distillate holds none of the name. */
+  topicAnswer(name: string): ProcessRunResult {
+    if (!this.knowsTopics) {
+      const stderr = "usage: m2b distillate [-h] {off,on} ...\nm2b distillate: error: argument action: invalid choice: 'topic'\n"
+      return { ...fail(''), exitCode: 2, stderr }
+    }
+    if (this.topicFails !== null) {
+      return { ...fail(this.topicFails), exitCode: 3 }
+    }
+    const held = this.topicLines[name]
+    return ok(JSON.stringify({ name, found: held !== undefined, facts: held?.facts ?? [], current: held?.current ?? [] }))
+  }
+
+  /** The calls that turned the distillate off or on for a folder. */
+  folderCalls(): string[][] {
+    return this.calls.filter(call => call[0] === 'distillate' && call[1] !== 'topic')
+  }
+
+  /** The calls that read a topic's lines. */
+  topicCalls(): string[][] {
+    return this.calls.filter(call => call[0] === 'distillate' && call[1] === 'topic')
   }
 
   /** As `m2b band --json --session <id> --session-only` answers: the version and what the session was given. */
@@ -287,7 +341,11 @@ export class FakeM2b {
       id,
       known: noted !== null,
       topics: noted?.topics ?? [],
-      distillate: { at_start: noted?.atStart ?? null, off_under: noted?.offUnder ?? null },
+      distillate: {
+        at_start: noted?.atStart ?? null,
+        off_under: noted?.offUnder ?? null,
+        ...(noted?.folder === undefined ? {} : { folder: noted.folder }),
+      },
     }
     return ok(JSON.stringify({ version: this.version, session }))
   }
@@ -484,7 +542,7 @@ export async function start(
     if (fake.runFails !== null) {
       return { deny: fake.runFails }
     }
-    const value = fake.handle(e.argv, e.init?.stdin, e.init?.cwd)
+    const value = fake.handle(e.argv, e.init?.stdin, e.init?.cwd, e.init?.env)
     const delay = fake.delayMs(e.argv.slice(1))
     if (delay > 0) {
       await clock.sleep(delay)
@@ -497,6 +555,7 @@ export async function start(
   })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.id', () => (fake.sessionId === null ? { deny: 'the session has no id yet' } : { value: fake.sessionId }))
+  on('session.root', () => (fake.root === null ? { deny: 'the session has no root' } : { value: fake.root }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
   on('session.end', (_, e) => ({ sessionId: e.sessionId }))
   // A compaction asked to `skip` is one a hook blocked: the conversation stays as it is.

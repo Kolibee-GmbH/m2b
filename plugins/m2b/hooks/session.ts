@@ -20,7 +20,7 @@ const LOOK_TIMEOUT_MS = 20_000
 const EXIT_USAGE = 2
 const UNKNOWN_OPTION = /unrecognized arguments/
 const OTHER_SHAPE = 'm2b answered something other than what a session was given'
-const OLDER_CORE = 'the installed m2b is older than this band; update m2b, then run /reload-plugins'
+export const OLDER_CORE = 'the installed m2b is older than this band; update m2b, then run /reload-plugins'
 const NO_ID = 'this session cannot name itself'
 
 // A core from before the question refuses it on every call, so it is asked once per session start.
@@ -86,9 +86,20 @@ export function givenTo(given: BandSession | null, session: string | null): Band
 }
 
 /**
- * The child gets no folder of its own: `$.process.run` then runs it in the session's working
- * directory, and that is the folder the answer says the distillate is off under.
+ * The session's project root, as the variable m2b's hooks get it in: a child of the mod runs in
+ * the session's working directory, which a shell `cd` moves, and gets no such variable, so without
+ * it m2b would look at another folder than the one its hooks turn the distillate off for. Nothing
+ * where the session cannot name its root: m2b then looks at the folder the child runs in.
  */
+async function projectRoot($: EngineInterface): Promise<Record<string, string> | undefined> {
+  try {
+    const root: unknown = await $.session.root()
+    return typeof root === 'string' && root !== '' ? { CLAUDE_PROJECT_DIR: root } : undefined
+  } catch {
+    return undefined
+  }
+}
+
 async function askM2b($: EngineInterface): Promise<BandSession> {
   const id = await sessionIdOf($)
   if (!doesCoreAnswer) {
@@ -97,7 +108,8 @@ async function askM2b($: EngineInterface): Promise<BandSession> {
   if (id === null) {
     return couldNotLook(id, NO_ID)
   }
-  const outcome = await runM2b($, ['band', '--json', '--session', id, '--session-only'], LOOK_TIMEOUT_MS)
+  const look = ['band', '--json', '--session', id, '--session-only']
+  const outcome = await runM2b($, look, LOOK_TIMEOUT_MS, undefined, await projectRoot($))
   if (!outcome.ok) {
     if (outcome.exitCode === EXIT_USAGE && UNKNOWN_OPTION.test(outcome.stderr ?? '')) {
       doesCoreAnswer = false
@@ -114,7 +126,7 @@ async function askM2b($: EngineInterface): Promise<BandSession> {
 }
 
 function couldNotLook(id: string | null, error: string): BandSession {
-  return { id, known: false, topics: [], atStart: null, offUnder: null, error }
+  return { id, known: false, topics: [], atStart: null, offUnder: null, folder: null, error }
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -160,6 +172,8 @@ export function parseSession(part: unknown, id: string | null): BandSession {
     topics: part['topics'].map(({ name, facts, current }) => ({ name, facts, current })),
     atStart: distillate['at_start'],
     offUnder: distillate['off_under'],
+    // A core from before the pane's button names no folder; the pane then offers no button for it.
+    folder: typeof distillate['folder'] === 'string' ? distillate['folder'] : null,
     error: null,
   }
 }

@@ -1,7 +1,7 @@
 import type { CommandSpec, EngineInterface, ResolveInput } from 'claude-code'
 
-import type { BandDueTask, BandPress, BandProposals, BandSession, BandSnapshot, SessionTopic } from '../types'
-import { plainLine } from './plain-text'
+import type { BandDueTask, BandPress, BandProposals, BandSession, BandSnapshot, FolderSwitch, SessionTopic } from '../types'
+import { plainLine, wholePath } from './plain-text'
 import { couldNotLookLine, countLine, errorBesideTasks, proposalsRow } from './proposals'
 import { candidateRow, reviewRow } from './rows'
 import type { RowActions } from './rows'
@@ -28,6 +28,8 @@ const NOT_LOOKED = 'm2b has not looked yet.'
 // Not known is a session this machine holds no note of: started under an earlier m2b, or without m2b's hooks.
 const NOT_KNOWN = 'm2b holds no note of what it gave this session; that does not say it gave nothing.'
 const NO_TOPIC = 'No topic was given.'
+// `m2b distillate off` reaches this session too: the prompt hook adds no topic where the distillate is off.
+const KEEPS = 'This session keeps what it was given and gets no more topics.'
 const NOTHING_WAITS = 'Nothing waits for you.'
 const NOTHING_DUE = 'Nothing due today.'
 const TASKS_NOT_READ = 'The task list could not be read.'
@@ -42,19 +44,32 @@ const PRINTED = new Map([
   ['none', 'There was no distillate to print at the start.'],
 ])
 
-/** Everything the start view draws. `notes` are the notes this session wrote through the mod. */
+// The press on the button for the session's folder, among the presses on rows, which go by a task's or a proposal's id.
+export const FOLDER_PRESS = 'distillate:folder'
+
+/**
+ * Everything the start view draws. `notes` are the notes this session wrote through the mod,
+ * `notice` why the last press on the folder's button wrote nothing.
+ */
 export type SessionModel = {
   given: BandSession | null
   notes: number
+  notice: string | null
   snapshot: BandSnapshot | null
   proposals: BandProposals | null
   presses: Record<string, BandPress>
 }
 
-/** What the start view's buttons do: keep, drop and `ok` as in the band, and `show`, which turns the pane. */
+/**
+ * What the start view's buttons do: keep, drop and `ok` as in the band; `show`, which turns the
+ * pane, also to the lines of one topic; and the distillate off or on for a folder, with its undo.
+ */
 export type SessionActions = RowActions & {
   showProposals: () => Promise<void>
   showReview: () => Promise<void>
+  showTopic: (name: string) => Promise<void>
+  switchFolder: (change: FolderSwitch, folder: string) => Promise<void>
+  undoFolder: () => Promise<void>
 }
 
 function count(number: number, one: string, many: string): string {
@@ -71,31 +86,40 @@ function topicLine(topic: SessionTopic): string {
   return held.length === 0 ? name : `${name}: ${held.join(', ')}`
 }
 
-/** A line of the first part and how it is drawn: as it is, dim for what is not known, or as an error. */
-export type GivenLine = { text: string; tone: 'plain' | 'quiet' | 'error' }
+/**
+ * A line of the first part and how it is drawn: as it is, dim for what is not known, or as an
+ * error. `topic` on the line of a topic: its name as m2b gave it, and its place among the topics.
+ */
+export type GivenLine = { text: string; tone: 'plain' | 'quiet' | 'error'; topic?: { name: string; index: number } }
 
 function plain(text: string): GivenLine {
   return { text, tone: 'plain' }
 }
 
-/** What m2b gave this session, as lines: its topics, the distillate at its start and now, its notes. */
-export function givenLines(given: BandSession | null, notes: number): GivenLine[] {
-  const written = notes > 0 ? [plain(`${count(notes, 'note', 'notes')} written in this session`)] : []
+/** What m2b gave this session, as lines: its topics, and the distillate at its start and now. */
+export function givenLines(given: BandSession | null): GivenLine[] {
   if (given === null) {
-    return [{ text: NOT_LOOKED, tone: 'quiet' }, ...written]
+    return [{ text: NOT_LOOKED, tone: 'quiet' }]
   }
   if (given.error !== null) {
-    return [{ text: `m2b could not look up what it gave this session: ${plainLine(given.error)}`, tone: 'error' }, ...written]
+    return [{ text: `m2b could not look up what it gave this session: ${plainLine(given.error)}`, tone: 'error' }]
   }
   const printed = given.atStart === null ? undefined : (PRINTED.get(given.atStart) ?? `The distillate at the start: ${plainLine(given.atStart)}`)
   return [
     ...(given.known ? (given.topics.length === 0 ? [plain(NO_TOPIC)] : []) : [{ text: NOT_KNOWN, tone: 'quiet' } as const]),
-    ...given.topics.map(topic => plain(topicLine(topic))),
+    ...given.topics.map((topic, index) => ({ ...plain(topicLine(topic)), topic: { name: topic.name, index } })),
     ...(printed === undefined ? [] : [plain(printed)]),
     ...(given.offUnder === null
       ? []
-      : [plain(`The distillate is off under ${plainLine(given.offUnder)}: a session that starts there gets none.`)]),
-    ...written,
+      : [plain(`The distillate is off under ${wholePath(given.offUnder)}: a session that starts there gets none.`), plain(KEEPS)]),
+  ]
+}
+
+/** What the session did itself, below what it was given: why a press on the folder's button wrote nothing, and its notes. */
+export function ownLines(notes: number, notice: string | null): GivenLine[] {
+  return [
+    ...(notice === null ? [] : [{ text: plainLine(notice), tone: 'error' } as const]),
+    ...(notes > 0 ? [plain(`${count(notes, 'note', 'notes')} written in this session`)] : []),
   ]
 }
 
@@ -163,7 +187,7 @@ export function sessionLines(model: SessionModel): string[] {
   const indented = (lines: string[]): string[] => lines.map(line => `  ${line}`)
   return [
     IN_THIS_SESSION,
-    ...indented(givenLines(model.given, model.notes).map(line => line.text)),
+    ...indented([...givenLines(model.given), ...ownLines(model.notes, model.notice)].map(line => line.text)),
     WAITS_FOR_YOU,
     ...indented(waits),
     TODAY,
@@ -178,6 +202,56 @@ export function sessionLines(model: SessionModel): string[] {
 export function backRow($: EngineInterface, e: ResolveInput, back: () => Promise<void>) {
   const { Button } = $.ui.resolve(e)
   return <Button key="back" label="back" onPress={back} />
+}
+
+/**
+ * The button for the session's folder: where the distillate is on, it leaves m2b out of the folder
+ * m2b looked at for this session; where it is off, it turns the distillate on again for the folder
+ * it is off under, which may lie above the session's. Like keep and drop it waits for undo, and
+ * while it writes the row offers nothing. No row where m2b could not look, or named no folder.
+ */
+function folderRow(
+  $: EngineInterface,
+  e: ResolveInput,
+  given: BandSession | null,
+  pressed: BandPress | undefined,
+  actions: SessionActions,
+) {
+  // A look that failed names neither folder.
+  const folder = given === null ? null : (given.offUnder ?? given.folder ?? null)
+  if (given === null || folder === null) {
+    return null
+  }
+  const { Box, Button, Text } = $.ui.resolve(e)
+  // The press hands the folder on as m2b named it, so it is drawn whole: a character the drawing
+  // left out or merged would name another folder than the one that is read.
+  const shown = wholePath(folder)
+  if (pressed !== undefined) {
+    const line = pressed.action === 'on' ? ` turning the distillate on under ${shown}` : ` leaving m2b out of ${shown}`
+    return pressed.phase === 'waiting' ? (
+      <Box key="row:folder" flexDirection="row">
+        <Button key="undo:folder" label="undo" onPress={actions.undoFolder} />
+        <Text dimColor wrap="wrap">
+          {line}
+        </Text>
+      </Box>
+    ) : (
+      <Text key="row:folder" dimColor wrap="wrap">
+        {line}
+      </Text>
+    )
+  }
+  const change: FolderSwitch = given.offUnder === null ? 'off' : 'on'
+  return (
+    <Box key="row:folder" flexDirection="row">
+      <Button
+        key={`folder:${change}`}
+        label={change === 'off' ? 'leave m2b out' : 'turn on'}
+        onPress={() => actions.switchFolder(change, folder)}
+      />
+      <Text wrap="wrap">{change === 'off' ? ` of ${shown}` : ` the distillate under ${shown} again`}</Text>
+    </Box>
+  )
 }
 
 /** The start view's drawing. Every line wraps: docked beside the chat, the pane can be 24 columns wide. */
@@ -199,6 +273,20 @@ export function sessionPane($: EngineInterface, e: ResolveInput, model: SessionM
       {text}
     </Text>
   )
+  // A topic's line has `show` before it, which turns the pane to the topic's lines.
+  const row = ({ text, tone, topic }: GivenLine) =>
+    topic !== undefined ? (
+      <Box key={`row:topic:${topic.index}`} flexDirection="row">
+        <Button key={`topic:${topic.index}`} label="show" onPress={() => actions.showTopic(topic.name)} />
+        <Text wrap="wrap"> {text}</Text>
+      </Box>
+    ) : tone === 'error' ? (
+      failure(text)
+    ) : tone === 'quiet' ? (
+      quiet(text)
+    ) : (
+      <Text wrap="wrap">{text}</Text>
+    )
   const review = snapshot?.review ?? null
   const waiting = proposals?.waiting.length ?? 0
   const storeError = proposalsError(model)
@@ -206,9 +294,9 @@ export function sessionPane($: EngineInterface, e: ResolveInput, model: SessionM
   return (
     <Box flexDirection="column">
       {heading(IN_THIS_SESSION)}
-      {givenLines(given, model.notes).map(({ text, tone }) =>
-        tone === 'error' ? failure(text) : tone === 'quiet' ? quiet(text) : <Text wrap="wrap">{text}</Text>,
-      )}
+      {givenLines(given).map(row)}
+      {folderRow($, e, given, presses[FOLDER_PRESS], actions)}
+      {ownLines(model.notes, model.notice).map(row)}
       {heading(WAITS_FOR_YOU)}
       {snapshot === null && quiet(NOT_LOOKED)}
       {snapshot?.error ? failure(plainLine(snapshot.error)) : null}

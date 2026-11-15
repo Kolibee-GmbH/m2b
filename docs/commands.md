@@ -56,7 +56,7 @@ do not do their work there. The first three start a curation run in the backgrou
 
 | Command | What it does |
 |---|---|
-| `/m2b` | shows in the m2b pane what m2b gave this session, what waits for you and what is due today; under the fullscreen layout that pane opens by itself |
+| `/m2b` | shows in the m2b pane what m2b gave this session, what waits for you and what is due today; there a press shows a topic's lines or leaves m2b out of the session's folder; under the fullscreen layout that pane opens by itself |
 | `/m2b-note <text>` | writes the text into the inbox at once, through `m2b capture` |
 | `/m2b-search [--word] <text>` | shows the hits of `m2b search` in the m2b pane; `--word` matches whole words only |
 | `/m2b-review` | shows the last curation run in the m2b pane: every finding, candidate and question |
@@ -126,6 +126,7 @@ To pause the runs on a machine: `m2b config set curation.paused true`
 | `m2b profile merge <json>` | merges a JSON object into the profile |
 | `m2b distillate off [<folder>]` | no distillate in sessions in this folder and below, on this machine |
 | `m2b distillate on [<folder>]` | the distillate again in this folder |
+| `m2b distillate topic [--json] <name>` | the facts and current items of one topic, as the distillate holds them now; the m2b pane reads a topic's lines with it |
 | `m2b addons list [--json]` | each add-on and whether it is on |
 | `m2b addons on <addon>` | turns an add-on on; its setup skill does this once the add-on is set up |
 | `m2b addons off <addon>` | turns an add-on off; its settings stay |

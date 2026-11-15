@@ -30,6 +30,18 @@ All notable changes to this project are documented here. The format follows
 - The review, a search and the proposals are views of that pane now: Escape, the close mark or
   the new `back` button above them lead back to the start view instead of closing the pane
   ([The band](docs/band.md#back-to-the-start-view)).
+- In the pane's start view, `leave m2b out` turns the distillate off for the session's folder,
+  after five seconds in which `undo` takes the press back, and `turn on` brings it back. It is
+  `m2b distillate off` and `on` for the folder the pane names, one press away from where you see
+  a customer's facts in a session about something else
+  ([The band](docs/band.md#leaving-m2b-out-of-a-folder)).
+- `show` beside a topic in the start view shows the topic's facts and current items, as the
+  distillate holds them now. The band keeps them only while the pane shows them: they are in no
+  text its commands answer, not in the session's state and in nothing handed to the model
+  ([The band](docs/band.md#a-topics-lines)).
+- `m2b distillate topic <name>` prints one topic's facts and current items from the distillate;
+  `m2b band --json --session <id>` names the session's folder under `distillate.folder`
+  ([Commands](docs/commands.md)).
 
 ## [0.5.0] - 2026-11-15
 

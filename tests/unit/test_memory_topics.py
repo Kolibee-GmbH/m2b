@@ -13,6 +13,7 @@ from m2b.notes.memory_index import (
     item_counts,
     parse_topic_heading,
     split_topics,
+    topic_items,
 )
 
 DISTILLATE = """# Memory
@@ -237,6 +238,32 @@ class ItemCountsTest(unittest.TestCase):
         block = _block("Acme Ltd", ("Acme",), "### Acme Ltd (Acme)\n\nA line that is no item\n- One fact (acme.md)\n")
 
         self.assertEqual(item_counts(block), (1, 0))
+
+    def test_the_items_come_as_what_they_state_a_fact_without_its_fact_file(self) -> None:
+        block = _block(
+            "Acme Ltd",
+            ("Acme",),
+            "### Acme Ltd (Acme)\n- Kim Lee leads IT (kim-lee.md)\n- A line without a fact file\n"
+            "#### Current\n- Building the export (since 2026-11-02)\n",
+        )
+
+        self.assertEqual(
+            topic_items(block),
+            (["Kim Lee leads IT", "A line without a fact file"], ["Building the export (since 2026-11-02)"]),
+        )
+
+    def test_the_items_are_the_ones_the_counts_count(self) -> None:
+        block = _block(
+            "Acme Ltd",
+            ("Acme",),
+            "### Acme Ltd (Acme)\r\n- Kim leads IT\u2028- still that line (kim.md)\r\n"
+            "\nNo item\n#### Current\n- Audit\n",
+        )
+
+        facts, current = topic_items(block)
+
+        self.assertEqual((len(facts), len(current)), item_counts(block))
+        self.assertEqual(facts, ["Kim leads IT\u2028- still that line"])
 
 
 def _block(name: str, words: tuple[str, ...], text: str) -> TopicBlock:

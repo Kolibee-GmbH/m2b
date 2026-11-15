@@ -12,6 +12,7 @@ import type {
   BandSession,
   BandSettle,
   BandSnapshot,
+  FolderSwitch,
   PaneView,
 } from '../types'
 import { launcherPath, m2bHome, machineConfigPath, runM2b } from './m2b'
@@ -35,7 +36,7 @@ import {
   showPane,
 } from './pane'
 import { CLOSED_BY_HAND, closeAnswer, docksFor, staysBesideChat } from './pane-seat'
-import { plainLine } from './plain-text'
+import { plainLine, wholePath } from './plain-text'
 import {
   askCoreAgain,
   beginLook,
@@ -47,7 +48,16 @@ import {
   notesOf,
   sessionIdOf,
 } from './session'
-import { SESSION_COMMAND, SESSION_PLACED, backRow, dueFirst, dueLine, sessionLines, sessionPane } from './session-view'
+import {
+  FOLDER_PRESS,
+  SESSION_COMMAND,
+  SESSION_PLACED,
+  backRow,
+  dueFirst,
+  dueLine,
+  sessionLines,
+  sessionPane,
+} from './session-view'
 import type { SessionActions, SessionModel } from './session-view'
 import {
   KEEP_ALL,
@@ -69,6 +79,7 @@ import type { RowActions } from './rows'
 import { shared } from './shared-cache'
 import { COULD_NOT_LOOK, statusLine } from './status-line'
 import { parseBandTasks, untoldFindings } from './tasks'
+import { beginTopic, fillTopic, forgetTopicUnless, heldTopic, readTopic, topicPane } from './topic'
 import {
   NOTE_COMMAND_LINE,
   NOTE_TOOL,
@@ -104,6 +115,7 @@ const ownPromptsAtom = atom({ plugin: 'm2b', key: 'ownPrompts' } as const, [])
 // listed from its own source, so each module that touches a value names it itself.
 const sessionAtom = atom({ plugin: 'm2b', key: 'bandSession' } as const, null)
 const notesAtom = atom({ plugin: 'm2b', key: 'sessionNotes' } as const, null)
+const sessionNoticeAtom = atom({ plugin: 'm2b', key: 'sessionNotice' } as const, null)
 
 const REFRESH_EVERY_MS = 60_000
 // `m2b band` reaches and reads the task list (two Apple Reminders calls, 20 seconds each by
@@ -373,8 +385,9 @@ async function clearBand($: EngineInterface): Promise<void> {
   await update($, runAtom, () => null)
   await update($, proposalsAtom, () => null)
   await update($, proposalsNoticeAtom, () => null)
-  await update($, paneViewAtom, () => null)
+  await turnTo($, null)
   await update($, sessionAtom, () => null)
+  await update($, sessionNoticeAtom, () => null)
   $.ui.status(undefined)
 }
 
@@ -478,6 +491,7 @@ async function sessionModel($: EngineInterface): Promise<SessionModel> {
   return {
     given: givenTo(await read($, sessionAtom), session),
     notes: notesOf(await read($, notesAtom), session),
+    notice: await read($, sessionNoticeAtom),
     snapshot: await read($, snapshotAtom),
     proposals: await read($, proposalsAtom),
     presses: await read($, pressesAtom),
@@ -490,13 +504,42 @@ async function sessionModel($: EngineInterface): Promise<SessionModel> {
  * leads back to the one the pane starts in.
  */
 async function turnPane($: EngineInterface, view: PaneView): Promise<void> {
-  await update($, paneViewAtom, () => view)
+  await asDialog($, view)
+  $.clock.after(0, inBackground($, () => refresh($, true)))
+}
+
+async function asDialog($: EngineInterface, view: PaneView): Promise<void> {
+  await turnTo($, view)
   try {
     await $.ui.open(AS_A_DIALOG)
   } catch {
     // The view is turned all the same; the button above it leads back.
   }
-  $.clock.after(0, inBackground($, () => refresh($, true)))
+}
+
+/**
+ * The one way the pane's view changes, null for the view it starts in: whatever turns the pane
+ * away from a topic drops that topic's lines with it, so no way out of the view can keep them.
+ */
+async function turnTo($: EngineInterface, view: PaneView | null): Promise<void> {
+  forgetTopicUnless(view)
+  await update($, paneViewAtom, () => view)
+}
+
+/**
+ * Turns the pane to one topic and reads its lines from the distillate as it is now. The lines are
+ * kept by the module that draws them, never in the session's state, and only for the press that
+ * asked: after `back`, a close, another view or a press on another topic nothing is kept for this
+ * one, and an answer that arrives then is dropped.
+ */
+async function showTopic($: EngineInterface, name: string): Promise<void> {
+  const press = await newPressToken($)
+  beginTopic(press)
+  await asDialog($, { kind: 'topic', name, press, isRead: false })
+  if (fillTopic(press, await readTopic($, name))) {
+    // The lines are the module's; this write is what draws the pane again.
+    await update($, paneViewAtom, view => (view !== null && view.kind === 'topic' && view.press === press ? { ...view, isRead: true } : view))
+  }
 }
 
 // Where the pane's last drawing sat on each surface, as that surface said. The module's own: after
@@ -523,7 +566,7 @@ async function backToStart($: EngineInterface): Promise<void> {
       // The pane shows its start view all the same.
     }
   }
-  await update($, paneViewAtom, () => null)
+  await turnTo($, null)
   lookLater($, 0)
   $.clock.after(0, inBackground($, () => refresh($, true)))
 }
@@ -576,6 +619,37 @@ function sessionActions($: EngineInterface): SessionActions {
     ...rowActions($),
     showProposals: () => turnPane($, { kind: 'proposals' }),
     showReview: () => turnPane($, { kind: 'review' }),
+    showTopic: name => showTopic($, name),
+    switchFolder: async (change, folder) => {
+      // What the last press could not write is no longer what the button is about.
+      await update($, sessionNoticeAtom, () => null)
+      await press($, FOLDER_PRESS, change, folderWrite($, change, folder))
+    },
+    undoFolder: () => undo($, FOLDER_PRESS),
+  }
+}
+
+/**
+ * Turns the distillate off or on for `folder`, which is handed to m2b as m2b named it: the
+ * command's own default is the folder its process runs in, and that need not be the one the pane's
+ * answer was about. Whatever the command said, the session is asked again, so the view shows what
+ * is true now. The band holds nothing this changes and is not read again.
+ */
+function folderWrite($: EngineInterface, change: FolderSwitch, folder: string): PressWrite {
+  return async () => {
+    const failed = (reason: string): string =>
+      change === 'off'
+        ? `m2b could not leave itself out of ${wholePath(folder)}: ${reason}`
+        : `m2b could not turn the distillate on under ${wholePath(folder)}: ${reason}`
+    try {
+      // `--`: a folder is handed on as it is named, whatever it begins with.
+      const outcome = await runM2b($, ['distillate', change, '--', folder], WRITE_TIMEOUT_MS)
+      await update($, sessionNoticeAtom, () => (outcome.ok ? null : failed(outcome.error)))
+      await look($)
+    } catch (error) {
+      await update($, sessionNoticeAtom, () => failed(String(error)))
+    }
+    return false
   }
 }
 
@@ -705,7 +779,7 @@ type PressWrite = () => Promise<boolean>
 async function press(
   $: EngineInterface,
   id: string,
-  action: BandSettle,
+  action: BandPress['action'],
   write: PressWrite,
   ids?: string[],
 ): Promise<void> {
@@ -866,7 +940,7 @@ function proposalActions($: EngineInterface): ProposalActions {
 
 /** Turns the pane to the proposals and opens it; where it cannot be shown, the answer holds them as text. */
 async function showProposals($: EngineInterface): Promise<string> {
-  await update($, paneViewAtom, (): PaneView => ({ kind: 'proposals' }))
+  await turnTo($, { kind: 'proposals' })
   // Opens with what the band holds and reads the proposals again behind it.
   $.clock.after(0, inBackground($, () => refresh($, true)))
   const proposals = await read($, proposalsAtom)
@@ -909,6 +983,10 @@ export const register: Register = on => {
     lookTimers.clear()
     isOpeningDue = true
     await carryPressesOver($)
+    // A reload of the mod took the lines of a topic with the old module: the pane starts over.
+    if ((await read($, paneViewAtom))?.kind === 'topic') {
+      await turnTo($, null)
+    }
     loadedVersion = await readLoadedVersion($)
     askCoreAgain()
     for (const command of [SESSION_COMMAND, NOTE_COMMAND, REVIEW_COMMAND, SEARCH_COMMAND, PROPOSALS_COMMAND]) {
@@ -953,6 +1031,10 @@ export const register: Register = on => {
         openSoon($)
       }
       await forgetSession($)
+      // A topic's lines were opened from the list of the conversation that ended.
+      if ((await read($, paneViewAtom))?.kind === 'topic') {
+        await turnTo($, null)
+      }
       lookUnderNewId($, e.sessionId, NEW_ID_TRIES)
     }
     return result
@@ -976,7 +1058,7 @@ export const register: Register = on => {
     if (notReady !== null) {
       return { text: notReady }
     }
-    await update($, paneViewAtom, () => null)
+    await turnTo($, null)
     // Opens with what the band holds and reads it again behind the pane. What the session was
     // given is asked first: where no pane can be shown, the lines go into the conversation.
     $.clock.after(0, inBackground($, () => refresh($, true)))
@@ -1011,7 +1093,7 @@ export const register: Register = on => {
     if (notReady !== null) {
       return { text: notReady }
     }
-    await update($, paneViewAtom, (): PaneView => ({ kind: 'review' }))
+    await turnTo($, { kind: 'review' })
     // Opens with what the band holds and reads the run again behind it.
     $.clock.after(0, inBackground($, () => refresh($, true)))
     const [snapshot, run] = [await read($, snapshotAtom), await read($, runAtom)]
@@ -1048,7 +1130,7 @@ export const register: Register = on => {
     if (search.total === 0) {
       return { text: summary }
     }
-    await update($, paneViewAtom, (): PaneView => ({ kind: 'search', search }))
+    await turnTo($, { kind: 'search', search })
     return { text: await showPane($, `${summary} in the m2b pane`, () => [summary, ...searchLines(search)]) }
   })
 
@@ -1129,9 +1211,13 @@ export const register: Register = on => {
       }
     }
     // Whoever closes it, the pane starts in its start view when it opens next.
-    await update($, paneViewAtom, () => null)
+    await turnTo($, null)
     return next(e)
-  }).catch(($, e, next) => next(e))
+  }).catch(($, e, next) => {
+    // The pane closes without its view being turned: a topic's lines go all the same.
+    forgetTopicUnless(null)
+    return next(e)
+  })
 
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
     paneSeats.set(e.surface, e.props.placement)
@@ -1148,7 +1234,9 @@ export const register: Register = on => {
         {backRow($, e, () => backToStart($))}
         {view.kind === 'proposals'
           ? proposalsPane($, e, await read($, proposalsAtom), presses, await read($, proposalsNoticeAtom), proposalActions($))
-          : paneTree($, e, view, snapshot, run, presses, rowActions($))}
+          : view.kind === 'topic'
+            ? topicPane($, e, view.name, heldTopic(view.press))
+            : paneTree($, e, view, snapshot, run, presses, rowActions($))}
       </Box>
     )
   })
@@ -1159,6 +1247,7 @@ export const register: Register = on => {
   on('prompt.submit', async ($, e, next) => {
     await update($, noticeAtom, () => null)
     await update($, proposalsNoticeAtom, () => null)
+    await update($, sessionNoticeAtom, () => null)
     if (isOwnPrompt(e)) {
       await update($, ownPromptsAtom, prompts => withPrompt(prompts ?? [], e.text))
     }

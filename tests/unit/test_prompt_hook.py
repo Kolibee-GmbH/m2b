@@ -14,13 +14,14 @@ from typing import Any
 from unittest import mock
 
 from locations import PLUGIN_ROOT
-from m2b import paths, prompt_hook, topic_state
+from m2b import cli, paths, prompt_hook, topic_state
 from m2b.config import machine
 from m2b.hooks import DISTILLATE_HEADER
 from m2b.store.guard import DatalessGuard
 from store_contract import FakeEviction
 
 SESSION = "ea4af7eb-7f1d-4eab-aac2-987397455c4b"
+OTHER_SESSION = "0d1c2b3a-4f5e-4a6b-8c7d-9e0f1a2b3c4d"
 ACME = "### Acme Ltd (Acme, Kim Lee)\n- Kim Lee leads Acme's IT (kim-lee.md)\n"
 CHOIR = "### Riverside Choir (Riverside Choir)\n- The choir meets on Wednesdays (choir.md)\n"
 MEMORY = f"# Memory\n\n## Facts\n\n- Dana likes old maps (dana.md)\n\n{ACME}\n{CHOIR}\n## Current\n\n- Shed\n"
@@ -69,6 +70,24 @@ class PromptHookFixture(unittest.TestCase):
 
 
 class PromptHookTest(PromptHookFixture):
+    def test_the_folder_the_band_is_told_for_a_session_is_the_one_whose_prompts_get_no_more_topics(self) -> None:
+        """Covers: B183"""
+        environ = {**self.environ, "CLAUDE_PROJECT_DIR": self.project}
+        choir = "When does the Riverside Choir meet?"
+        self.assertIsNotNone(self.prompt(choir, session_id=OTHER_SESSION, CLAUDE_PROJECT_DIR=self.project))
+        answered = io.StringIO()
+        with contextlib.redirect_stdout(answered):
+            cli.main(["band", "--json", "--session", SESSION, "--session-only"], environ)
+        folder = json.loads(answered.getvalue())["session"]["distillate"]["folder"]
+        # The project itself, not a folder above it, which would turn more off than the session's.
+        self.assertEqual(folder, str(Path(self.project).resolve()))
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(cli.main(["distillate", "off", "--", folder], environ), cli.EXIT_OK)
+
+        # This session was not given the choir yet: only the folder keeps it out now.
+        self.assertIsNone(self.prompt(choir, CLAUDE_PROJECT_DIR=self.project))
+
     def test_a_topic_the_prompt_names_comes_in_under_the_distillates_header(self) -> None:
         """Covers: B49"""
         added = self.added("Mail an Kim Lee wegen Export")

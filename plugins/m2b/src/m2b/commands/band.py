@@ -27,7 +27,9 @@ band it loaded, so the band compares the two and asks for a reload when they dif
 when it gave it: the topics by name, each with the facts lines and current items its block held
 then, and how the session's start printed the distillate. Whether the distillate is off for the
 folder is said as it is now, for the folder Claude Code names as the project or else the one the
-command runs in. A value that is no session id is answered in ``session.error`` and never looked
+command runs in; ``distillate.folder`` names that folder as it resolves, so ``distillate off`` can
+be handed the very folder the answer is about. A value that is no session id is answered in
+``session.error`` and never looked
 up, and so is a folder that cannot be looked at: the other parts still answer.
 With ``--session-only`` the answer is that part and the version alone: every session asks it for
 itself, where the rest is one answer the open sessions share, so it reaches no task list, no
@@ -102,7 +104,8 @@ def _session_part(config: MachineConfig, context: Context, session_id: str) -> d
         return {"error": "not a session id"}
     noted = topic_state.session(context.machine, session_id)
     try:
-        off_under = config.distillate.covering(project_folder(context.environ))
+        folder = project_folder(context.environ).resolve()
+        off_under = config.distillate.covering(folder)
     # A working directory that was removed, or a folder whose path does not resolve.
     except (OSError, RuntimeError) as error:
         return {"error": f"the session's folder cannot be looked at: {one_line(str(error))}"}
@@ -116,6 +119,7 @@ def _session_part(config: MachineConfig, context: Context, session_id: str) -> d
         "distillate": {
             "at_start": noted.distillate if noted is not None else None,
             "off_under": str(off_under) if off_under is not None else None,
+            "folder": str(folder),
         },
     }
 

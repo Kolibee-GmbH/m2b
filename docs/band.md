@@ -101,9 +101,10 @@ the tool below, or the skill `/m2b:capture` where the mod does not run.
 ```text
 ┌──────────────────────────────────────────────────────────────┐
 │ In this session                                              │
-│ Northwind: 3 facts, 1 current                                │
-│ Acme Ltd: 1 fact                                             │
+│ [ show ] Northwind: 3 facts, 1 current                       │
+│ [ show ] Acme Ltd: 1 fact                                    │
 │ The distillate was printed whole at the start.               │
+│ [ leave m2b out ] of /home/alex/code/lumen                   │
 │ 1 note written in this session                               │
 │ Waits for you                                                │
 │ [ show ] 1 proposal from your sessions                       │
@@ -118,9 +119,12 @@ the tool below, or the skill `/m2b:capture` where the mod does not run.
 
 - **In this session** says what m2b put into this session: each topic whose facts it got, at its
   start because the project path names it or before a prompt that named it, with the facts lines
-  and current items the topic held at that moment; how the start printed the distillate (whole,
+  and current items the topic held at that moment, and `show` for
+  [its lines](#a-topics-lines); how the start printed the distillate (whole,
   cut to fit, or none because there was none to read); the folder the distillate is turned off
-  under, where it is (`m2b distillate off`); and how many notes the session wrote through
+  under, where it is, and the button that
+  [leaves m2b out of the session's folder](#leaving-m2b-out-of-a-folder) or turns it on again; and
+  how many notes the session wrote through
   `/m2b-note` and the note tool. A note written with `m2b capture` in a shell is not counted.
   `/clear` and a compaction begin the list of topics again, as the context no longer holds what
   came before. A session this machine holds no note of, one that started under an earlier m2b or
@@ -136,7 +140,7 @@ the tool below, or the skill `/m2b:capture` where the mod does not run.
 
 The first part is asked for each session by itself, with
 `m2b band --json --session <id> --session-only`, which reads one small file on this machine and
-no task list: when the session starts, and once more five seconds later if m2b did not know the
+no task list, and is told the session's project root: when the session starts, and once more five seconds later if m2b did not know the
 session yet; three seconds after you send a prompt, so a topic that came in with it shows while
 the turn still works; after a compaction; when a turn ends and when you type `/m2b`. It is kept
 in the session's own state and is not part of the answer the open sessions share. After `/clear`
@@ -149,6 +153,41 @@ Where Claude Code cannot show a pane, `/m2b` answers with the same lines as text
 them and without any character that draws nothing, and names `/m2b-proposals` and `/m2b-review`
 where the pane has `show`. It waits up to two seconds for a fresh answer about the session, and
 without one the text says that m2b has not looked yet.
+
+### A topic's lines
+
+`show` beside a topic turns the pane to that topic: its facts and its current items, read with
+`m2b distillate topic` at the press. m2b keeps the names and counts of what it gave a session and
+not the lines, so these are the lines the distillate holds now; a curation run since the session
+got the topic may have changed them, and the view says so. `back`, Escape or `/m2b` lead
+[back](#back-to-the-start-view).
+
+The lines are your facts, often about a customer. The band keeps them while the pane shows them
+and drops them when you go back, close the pane, turn it to another view or type `/clear`. They
+are not in the session's state, which other plugins can read; no command of the band answers with
+them as text, they are written to no file, and nothing of them is handed to the model: where
+Claude Code cannot show a pane, `/m2b` lists the topics with their counts, as before. In a shell,
+`m2b distillate topic <name>` prints them, as `m2b search` prints what it finds.
+A topic the distillate no longer holds is said, and so is a distillate m2b could not read, with
+the reason.
+
+### Leaving m2b out of a folder
+
+Below what the session was given stands `leave m2b out` with the session's folder: its project
+root as Claude Code names it to the band, which a `cd` in a shell command does not move. m2b's
+hooks decide by the project folder Claude Code names to them, which is this folder where a session
+starts. The folder is shown whole: a character that would not draw, a line break or a space at its
+end is written out (`\x0a`, `\x20`), so the folder you read is the folder the press turns off. It is the answer to seeing one
+customer's facts in a session that is about something else. A press waits five seconds with
+`undo`, as keep and drop do, and then runs `m2b distillate off` for that folder: on this machine,
+sessions that start there or below get no distillate, no routing rule and no topic facts. This
+session keeps what its context already holds and gets no more topics, and the part says so.
+
+Where the distillate is off, the button is `turn on` beside the folder it is off under, which may
+lie above the session's; it runs `m2b distillate on` for that folder, with the same undo. When
+m2b could not write, the part says why until your next press or prompt. With an installed m2b
+that does not name the session's folder there is no button to leave m2b out: the band never
+guesses which folder a press would turn off.
 
 ### It opens by itself beside the chat
 
@@ -441,7 +480,9 @@ reads that file for one key, `sessions.propose`. Each refresh is one `m2b`
 call, `m2b band --json`; keep and drop call `m2b tasks complete` and `m2b tasks drop`, after
 reading the list again with `m2b band --json --tasks-only`; keep and drop on a proposal call
 `m2b proposals keep` and `m2b proposals drop`, which refuse an answer themselves where another
-one stands. Every open session asks about once a
+one stands. `leave m2b out` and `turn on` in the pane call `m2b distillate off` and
+`m2b distillate on` with the folder, which change `distillate.skip_under` in the machine config;
+`show` beside a topic calls `m2b distillate topic --json`, which reads `memory/MEMORY.md`. Every open session asks about once a
 minute and after each of your turns, so the answer is shared between sessions for 55 seconds in
 `~/.local/state/m2b/band-view.json`; an answer of a shape the band does not know, or stamped later
 than now, is not used. However many turns end while `m2b` is slow, at most one more refresh waits.
@@ -500,7 +541,7 @@ id, as this machine noted it when it gave it.
   "id": "0a1b2c3d-1111-4222-8333-444455556666",
   "known": true,
   "topics": [{"name": "Northwind", "facts": 3, "current": 1}],
-  "distillate": {"at_start": "whole", "off_under": null}
+  "distillate": {"at_start": "whole", "off_under": null, "folder": "/home/alex/code/lumen"}
 }
 ```
 
@@ -513,7 +554,9 @@ came before, so the list begins again, as it does for the topics that come in on
 start, `none` where there was none to read, and `null` where the start noted nothing of it.
 `distillate.off_under` is the folder the distillate is turned off under (`m2b distillate off`),
 as it is now, for the folder Claude Code names as the project or else the one the command runs
-in; a session that got topics before it was turned off still holds them. A session this machine
+in; a session that got topics before it was turned off still holds them. `distillate.folder` is
+that folder, with its links followed: the band hands it to `m2b distillate off`, so the button in
+the pane turns off the folder this answer is about. A session this machine
 holds no note of (the note is removed once it was not written for seven days, an m2b before these
 notes wrote none, and neither does a session without m2b's hooks) is `"known": false` with no
 topics, which does not say it was given nothing; a topic noted by an earlier m2b comes with

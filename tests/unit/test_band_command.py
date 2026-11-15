@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import json
+from pathlib import Path
 from typing import Any
 from unittest import mock
 
@@ -134,6 +135,8 @@ class BandCommandTest(test_runner.RunnerTest):
 
 SESSION = "ea4af7eb-7f1d-4eab-aac2-987397455c4b"
 STARTED = datetime.datetime(2026, 11, 8, 9, 0).astimezone()
+# The folder the tests run in: what the command looks at where Claude Code names no project.
+HERE = str(Path.cwd().resolve())
 
 
 class BandSessionTest(test_runner.RunnerTest):
@@ -161,7 +164,7 @@ class BandSessionTest(test_runner.RunnerTest):
                     {"name": "Acme Ltd", "facts": 3, "current": 1},
                     {"name": "Globex", "facts": 2, "current": 0},
                 ],
-                "distillate": {"at_start": "whole", "off_under": None},
+                "distillate": {"at_start": "whole", "off_under": None, "folder": HERE},
             },
         )
 
@@ -179,7 +182,12 @@ class BandSessionTest(test_runner.RunnerTest):
 
         self.assertEqual(
             self.session_part(),
-            {"id": SESSION, "known": False, "topics": [], "distillate": {"at_start": None, "off_under": None}},
+            {
+                "id": SESSION,
+                "known": False,
+                "topics": [],
+                "distillate": {"at_start": None, "off_under": None, "folder": HERE},
+            },
         )
 
     def test_a_folder_the_distillate_is_off_for_is_named_as_it_is_now(self) -> None:
@@ -193,7 +201,10 @@ class BandSessionTest(test_runner.RunnerTest):
 
         part = self.session_part()
 
-        self.assertEqual(part["distillate"], {"at_start": "whole", "off_under": str(customer.resolve())})
+        self.assertEqual(
+            part["distillate"],
+            {"at_start": "whole", "off_under": str(customer.resolve()), "folder": str((customer / "api").resolve())},
+        )
         self.assertEqual([topic["name"] for topic in part["topics"]], ["Acme Ltd"])
 
     def test_without_a_project_named_the_folder_is_the_one_the_command_runs_in(self) -> None:
@@ -207,6 +218,23 @@ class BandSessionTest(test_runner.RunnerTest):
             part = self.session_part()
 
         self.assertEqual(part["distillate"]["off_under"], str(customer.resolve()))
+
+    def test_the_folder_the_answer_names_is_the_one_distillate_off_and_on_take(self) -> None:
+        """Covers: B183"""
+        self.curating()
+        project = self.home / "code" / "acme"
+        project.mkdir(parents=True)
+        (self.home / "code" / "link").symlink_to(project)
+        self.environ["CLAUDE_PROJECT_DIR"] = str(self.home / "code" / "link")
+
+        folder = self.session_part()["distillate"]["folder"]
+        self.assertEqual(folder, str(project.resolve()))
+
+        self.run_command("distillate", "off", "--", folder)
+        self.assertEqual(self.session_part()["distillate"]["off_under"], folder)
+
+        self.run_command("distillate", "on", "--", self.session_part()["distillate"]["off_under"])
+        self.assertIsNone(self.session_part()["distillate"]["off_under"])
 
     def test_a_folder_that_cannot_be_looked_at_costs_only_this_part(self) -> None:
         """Covers: B183"""
