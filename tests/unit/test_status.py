@@ -238,9 +238,74 @@ class StatusTest(test_runner.RunnerTest):
                     "commitment": nothing,
                     "personal": nothing,
                 },
+                "ways": {"reading": {"typed": {"waiting": 1, "kept": 2, "dropped": 1, "expired": 1}}},
             },
         )
         self.assertIn("\nproposals: kept 2 of 3 answered in the last 30 days (67%), 1 expired without an answer\n", out)
+        self.assertIn(
+            "\nproposals a reading found in typed words: 1 waiting, 2 kept, 1 dropped, 1 expired in the last 30 days\n",
+            out,
+        )
+
+    def test_it_counts_per_way_and_source_what_waits_and_how_the_thirty_days_ended(self) -> None:
+        """Covers: B181"""
+        self.curating()
+        now = datetime.datetime.now().astimezone()
+
+        def entry(number: int, state: str, days: float, source: str, by: str | None, tool: str | None = None) -> Any:
+            since = now - datetime.timedelta(days=days)
+            return proposals.Entry(
+                "person",
+                f"Fact {number}.",
+                f"the words of fact {number}",
+                now.date(),
+                state,
+                since,
+                None,
+                None,
+                source,
+                tool,
+                by,
+            )
+
+        entries = {
+            "000000000001": entry(1, "open", 1, "tool", "session", "Read"),
+            "000000000002": entry(2, "kept", 2, "tool", "session", "Read"),
+            "000000000003": entry(3, "dropped", 31, "tool", "session", "Read"),
+            "000000000004": entry(4, "open", 1, "agent", "session"),
+            "000000000005": entry(5, "expired", 5, "pasted", None),
+        }
+        proposals.save(self.store, proposals.Proposals(entries))
+
+        status = self.status()
+        _, out, _ = self.run_command("status")
+
+        self.assertEqual(
+            status["proposal_answers"]["ways"],
+            {
+                "reading": {"pasted": {"waiting": 0, "kept": 0, "dropped": 0, "expired": 1}},
+                "session": {
+                    "agent": {"waiting": 1, "kept": 0, "dropped": 0, "expired": 0},
+                    "tool": {"waiting": 1, "kept": 1, "dropped": 0, "expired": 0},
+                },
+            },
+        )
+        for line in (
+            "proposals a reading found in pasted text: 0 waiting, 0 kept, 0 dropped, 1 expired in the last 30 days",
+            "proposals sessions handed in from an answer of Claude: 1 waiting, 0 kept, 0 dropped, 0 expired "
+            "in the last 30 days",
+            "proposals sessions handed in from a tool's result: 1 waiting, 1 kept, 0 dropped, 0 expired "
+            "in the last 30 days",
+        ):
+            self.assertIn(f"\n{line}\n", out)
+
+    def test_a_machine_that_only_lets_sessions_hand_in_has_the_part_too(self) -> None:
+        """Covers: B181"""
+        self.set_up(calendar="none", sessions={"propose": True})
+
+        answers = self.status()["proposal_answers"]
+
+        self.assertEqual((answers["kept"], answers["ways"]), (0, {}))
 
     def test_without_an_answer_in_the_thirty_days_it_shows_no_rate_instead_of_none_kept(self) -> None:
         """Covers: B133"""
@@ -297,11 +362,11 @@ class StatusTest(test_runner.RunnerTest):
     def test_a_proposals_file_that_cannot_be_used_says_so_instead_of_nothing(self) -> None:
         """Covers: B133"""
         self.curating()
-        self.write(proposals.PROPOSALS_FILE, json.dumps({"format": 3, "proposals": {}}))
+        self.write(proposals.PROPOSALS_FILE, json.dumps({"format": 4, "proposals": {}}))
 
         _, out, _ = self.run_command("status")
 
-        self.assertIn("format 3", self.status()["proposal_answers"]["error"])
+        self.assertIn("format 4", self.status()["proposal_answers"]["error"])
         self.assertIn("\nproposals: could not look: ", out)
 
     def set_curating(self, machine_id: str) -> None:

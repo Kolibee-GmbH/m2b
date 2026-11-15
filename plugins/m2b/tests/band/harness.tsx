@@ -5,6 +5,9 @@ import type { EngineResultOf, On, ProcessRunResult } from 'claude-code'
 
 export const HOME = '/home/alex'
 export const NOW = Date.parse('2026-03-14T17:30:00Z')
+export const SESSION_ID = '0f6a3c1e-5b7d-4e2a-9c48-1d2e3f4a5b6c'
+/** A machine config in which the owner turned handing in on. */
+export const HANDING_IN_ON = JSON.stringify({ version: 1, sessions: { propose: true } })
 
 export const ENGINES_OWN_DRAWING = 'engine'
 
@@ -42,6 +45,8 @@ export type FakeProposal = {
   topic: string | null
   due: string | null
   source?: string
+  tool?: string | null
+  by?: string | null
   answer?: 'keep' | 'drop'
 }
 
@@ -51,9 +56,49 @@ export const STATUS = {
   backends: { tasks: { state: 'reachable', detail: '' } },
 }
 
-/** The `m2b` launcher, answered from memory; every call is recorded. */
+/** A topic whose facts the core gave a session, with what its block held then. */
+export type FakeTopic = { name: string; facts: number | null; current: number | null }
+
+/**
+ * What the core noted of a session: its topics, how its start printed the distillate, and where the
+ * distillate is off. `folder` is the session's folder as the core names it; a core from before the
+ * pane's button names none.
+ */
+export type FakeGiven = { topics: FakeTopic[]; atStart: string | null; offUnder: string | null; folder?: string }
+
+/** A topic's lines as `m2b distillate topic --json` answers them. */
+export type FakeTopicLines = { facts: string[]; current: string[] }
+
+/**
+ * The `m2b` launcher, answered from memory; every call is recorded, the looks at what the session
+ * was given apart from the rest, in `looks`.
+ */
 export class FakeM2b {
   readonly calls: string[][] = []
+  /** The calls that asked what the session was given, which every session makes for itself. */
+  readonly looks: string[][] = []
+  /** The folder each of those calls was started in, as the mod named it; undefined where it named none. */
+  readonly lookFolders: (string | undefined)[] = []
+  /** The project folder each of those calls was handed in `CLAUDE_PROJECT_DIR`; undefined where it was handed none. */
+  readonly lookProjects: (string | undefined)[] = []
+  /** The session's project root, as the engine names it; null when it cannot say. */
+  root: string | null = '/home/alex/code/lumen'
+  /** What the core noted of the session that asks; null as for a session it holds no note of. */
+  given: FakeGiven | null = { topics: [], atStart: 'whole', offUnder: null }
+  /** When set, the session part of the answer is this instead, whatever its shape. */
+  sessionPart: unknown = undefined
+  /** When set, the look at what the session was given fails with this as its message. */
+  lookFails: string | null = null
+  /** Unset, the installed core is one from before sessions: it refuses the options as an unknown argument. */
+  knowsSessions = true
+  /** When set, `m2b distillate off` and `on` fail with this as their message, and nothing is turned. */
+  distillateFails: string | null = null
+  /** The topics the distillate holds now, by name, as `m2b distillate topic` reads them. */
+  topicLines: Record<string, FakeTopicLines> = {}
+  /** When set, `m2b distillate topic` ends as for a store it cannot read, with this as its message. */
+  topicFails: string | null = null
+  /** Unset, the installed core is one from before `distillate topic`: it refuses the action. */
+  knowsTopics = true
   tasks: FakeTask[] = []
   status: unknown = STATUS
   failure: string | null = null
@@ -96,6 +141,14 @@ export class FakeM2b {
   searchUnreadable: { path: string; reason: string }[] = []
   /** When set, the surface leaves a pane undrawn, with this as the reason. */
   paneWaits: string | null = null
+  /** Set, another plugin's pane is the one the surface shows, and m2b's is a tab behind it. */
+  isPaneBehind = false
+  /** When set, Claude Code cannot list the open panes, with this as the reason. */
+  panesFail: string | null = null
+  /** When set, Claude Code refuses to open a pane, with this as the reason. */
+  openFails: string | null = null
+  /** Set, a hook beneath the mod keeps the pane open when it is asked to close. */
+  isCloseHeld = false
   /** Set, `m2b search`'s answer is cut as `$.process.run` cuts one past 4 MiB. */
   searchCut = false
   /** When set, `m2b search` fails with this as its message. */
@@ -114,6 +167,22 @@ export class FakeM2b {
   proposalsPart: unknown = undefined
   /** When set, starting `m2b proposals keep` or `drop` fails with this, before anything is answered. */
   answerFails: string | null = null
+  /** What the machine config holds, as `$.fs.read` gives it; null as a file that cannot be read. */
+  machineConfigText: string | null = null
+  /** The id of this session, as the engine names it; null when it cannot say. */
+  sessionId: string | null = SESSION_ID
+  /** The mod's own store, which outlives a session: what an earlier one kept, and what this one keeps. */
+  stored: Record<string, unknown> = {}
+  /** What `m2b proposals add` was handed on standard input, one entry per call. */
+  readonly handedIn: string[] = []
+  /** How `m2b proposals add` ends. */
+  handInAnswer: ProcessRunResult = ok('handed in; go on with the task\n')
+  /**
+   * How `m2b settings` and `m2b settings set` end, by the words after `settings` and the variables
+   * the call was handed. Unset, the
+   * installed core is one from before the command: it refuses it as an unknown choice.
+   */
+  onSettings: ((args: readonly string[], env?: Record<string, string>) => ProcessRunResult) | null = null
   /** The installed core's version, as `m2b band --json` answers it. */
   version = '0.3.0'
   /** The version in the manifest of the plugin the band was loaded from; null when it cannot be read. */
@@ -169,12 +238,18 @@ export class FakeM2b {
     return standing.length === 0 ? ok('') : { ...fail(''), stderr: `${standing.join('\n')}\n` }
   }
 
-  handle(argv: readonly string[], stdin?: string): ProcessRunResult {
+  handle(argv: readonly string[], stdin?: string, cwd?: string, env?: Record<string, string>): ProcessRunResult {
     expect(argv[0]).toBe(this.launcher)
     const args = argv.slice(1)
+    if (args[0] === 'band' && args.includes('--session-only')) {
+      this.looks.push(args)
+      this.lookFolders.push(cwd)
+      this.lookProjects.push(env?.['CLAUDE_PROJECT_DIR'])
+      return this.isSetUp ? this.sessionAnswer(args) : fail(NOT_SET_UP)
+    }
     this.calls.push(args)
     if (!this.isSetUp) {
-      return fail('not set up: no machine config at /home/alex/.config/m2b/config.json')
+      return fail(NOT_SET_UP)
     }
     if (args[0] === 'band') {
       return this.bandAnswer()
@@ -209,8 +284,27 @@ export class FakeM2b {
       const result = ok(`${stdout}\n`)
       return this.captureNotice === null ? result : { ...result, stderr: `m2b: ${this.captureNotice}\n` }
     }
+    if (args[0] === 'proposals' && args[1] === 'add') {
+      this.handedIn.push(stdin ?? '')
+      return this.handInAnswer
+    }
     if (args[0] === 'proposals') {
       return this.answer(args[1], args.slice(2))
+    }
+    if (args[0] === 'distillate' && args[1] === 'topic') {
+      return this.topicAnswer(args.at(-1) ?? '')
+    }
+    if (args[0] === 'settings') {
+      const stderr = "usage: m2b [-h] [--version]\nm2b: error: argument command: invalid choice: 'settings'\n"
+      return this.onSettings === null ? { ...fail(''), exitCode: 2, stderr } : this.onSettings(args.slice(1), env)
+    }
+    if (args[0] === 'distillate') {
+      if (this.distillateFails !== null) {
+        return fail(this.distillateFails)
+      }
+      // As the core: off under the folder it was handed, on again for that folder.
+      this.given = this.given === null ? null : { ...this.given, offUnder: args[1] === 'off' ? (args.at(-1) ?? null) : null }
+      return ok('')
     }
     if (this.failure !== null) {
       return fail(this.failure)
@@ -224,6 +318,54 @@ export class FakeM2b {
     task.completed = true
     task.dropped = verb === 'drop'
     return ok('')
+  }
+
+  /** As `m2b distillate topic --json -- <name>` answers: the topic's lines, or that the distillate holds none of the name. */
+  topicAnswer(name: string): ProcessRunResult {
+    if (!this.knowsTopics) {
+      const stderr = "usage: m2b distillate [-h] {off,on} ...\nm2b distillate: error: argument action: invalid choice: 'topic'\n"
+      return { ...fail(''), exitCode: 2, stderr }
+    }
+    if (this.topicFails !== null) {
+      return { ...fail(this.topicFails), exitCode: 3 }
+    }
+    const held = this.topicLines[name]
+    return ok(JSON.stringify({ name, found: held !== undefined, facts: held?.facts ?? [], current: held?.current ?? [] }))
+  }
+
+  /** The calls that turned the distillate off or on for a folder. */
+  folderCalls(): string[][] {
+    return this.calls.filter(call => call[0] === 'distillate' && call[1] !== 'topic')
+  }
+
+  /** The calls that read a topic's lines. */
+  topicCalls(): string[][] {
+    return this.calls.filter(call => call[0] === 'distillate' && call[1] === 'topic')
+  }
+
+  /** As `m2b band --json --session <id> --session-only` answers: the version and what the session was given. */
+  sessionAnswer(args: readonly string[]): ProcessRunResult {
+    if (!this.knowsSessions) {
+      // As argparse refuses: its usage first, the reason on the line below.
+      const stderr = 'usage: m2b [-h] [--version]\nm2b: error: unrecognized arguments: --session-only\n'
+      return { ...fail(''), exitCode: 2, stderr }
+    }
+    if (this.lookFails !== null) {
+      return fail(this.lookFails)
+    }
+    const id = args[args.indexOf('--session') + 1]
+    const noted = this.given
+    const session = this.sessionPart ?? {
+      id,
+      known: noted !== null,
+      topics: noted?.topics ?? [],
+      distillate: {
+        at_start: noted?.atStart ?? null,
+        off_under: noted?.offUnder ?? null,
+        ...(noted?.folder === undefined ? {} : { folder: noted.folder }),
+      },
+    }
+    return ok(JSON.stringify({ version: this.version, session }))
   }
 
   /** As `m2b band --json` answers: the open curator tasks by marker, or the error, and the status. */
@@ -267,15 +409,22 @@ export class FakeM2b {
     }
   }
 
+  /** The calls that listed the settings or changed one. */
+  settingCalls(): string[][] {
+    return this.calls.filter(call => call[0] === 'settings')
+  }
+
   /** The calls that answered proposals. */
   answers(): string[][] {
-    return this.calls.filter(call => call[0] === 'proposals')
+    return this.calls.filter(call => call[0] === 'proposals' && call[1] !== 'add')
   }
 
   writes(): string[][] {
     return this.calls.filter(call => call[0] === 'tasks')
   }
 }
+
+const NOT_SET_UP = 'not set up: no machine config at /home/alex/.config/m2b/config.json'
 
 export function ok(stdout: string): ProcessRunResult {
   return { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
@@ -291,8 +440,8 @@ export type Registered = { name: string; immediate?: true }
 /** A tool the mod registered for the model, as `$.tool.register` was handed it. */
 export type RegisteredTool = { name: string; description: string; inputSchema: Record<string, unknown>; isDeferred?: boolean }
 
-/** A pane the mod asked to open, and whether the surface placed it. */
-export type Opened = { id: string; title?: string }
+/** A pane the mod asked to open, with the manners it asked for. */
+export type Opened = { id: string; title?: string; focus?: true; closeOnEscape?: true }
 
 export type World = {
   toasts: string[]
@@ -301,10 +450,12 @@ export type World = {
   commands: Registered[]
   tools: RegisteredTool[]
   opened: Opened[]
+  /** The ids of the panes that are open now: opened, and not closed since. */
+  openPanes: Set<string>
 }
 
-/** The pane as Claude Code hands it to the render hook, at a width the test chooses. */
-export function pane(id: string, bodyColumns = 80) {
+/** The pane as Claude Code hands it to the render hook, at a width and in a seat the test chooses. */
+export function pane(id: string, bodyColumns = 80, placement: 'dock' | 'inline' | 'widget' = 'dock') {
   return {
     plugin: 'm2b',
     component: 'Pane',
@@ -313,7 +464,7 @@ export function pane(id: string, bodyColumns = 80) {
       title: id,
       isFocused: false,
       bodyColumns,
-      placement: 'dock',
+      placement,
       scroll: { offset: 0, bodyRows: 40 },
       view: {},
     },
@@ -332,6 +483,15 @@ export async function start(
 ): Promise<World> {
   const clock = mock.clock(on, { now: NOW })
   mock.env(on, { HOME, ...env })
+  on('store.get', (_, e) => ({ value: fake.stored[e.key] }))
+  on('store.set', (_, e) => {
+    fake.stored[e.key] = e.value
+    return { value: undefined }
+  })
+  on('store.delete', (_, e) => {
+    delete fake.stored[e.key]
+    return { value: undefined }
+  })
   on('fs.exists', (_, e) => {
     if (fake.existsFails) {
       return { deny: `ETIMEDOUT: ${e.path}` }
@@ -341,6 +501,9 @@ export async function start(
   on('fs.read', (_, e) => {
     if (e.path.endsWith('/.claude-plugin/plugin.json') && fake.bandVersion !== null) {
       return { value: JSON.stringify({ name: 'm2b', version: fake.bandVersion }) }
+    }
+    if (e.path === fake.machineConfig && fake.machineConfigText !== null) {
+      return { value: fake.machineConfigText }
     }
     const text = files?.get(e.path)
     if (text === undefined) {
@@ -357,7 +520,28 @@ export async function start(
   const statuses: (string | undefined)[] = []
   const commands: Registered[] = []
   const opened: Opened[] = []
-  on('ui.close', () => ({ value: undefined }))
+  const openPanes = new Set<string>()
+  // Reached only by a close no hook of the mod answered for: the pane is gone then.
+  on('ui.close', (_, e) => {
+    if (!fake.isCloseHeld) {
+      openPanes.delete(e.id)
+    }
+    return { value: undefined }
+  })
+  on('ui.panes', () => {
+    if (fake.panesFail !== null) {
+      return { deny: fake.panesFail }
+    }
+    return {
+      value: [...openPanes].map(id => ({
+        id,
+        title: id,
+        isShown: !fake.isPaneBehind,
+        isFocused: false,
+        isPlaced: fake.paneWaits === null,
+      })),
+    }
+  })
   const toasts: string[] = []
   on('ui.toast', (_, e) => {
     if (fake.toastFails) {
@@ -367,7 +551,11 @@ export async function start(
     return { value: undefined }
   })
   on('ui.open', (_, e) => {
+    if (fake.openFails !== null) {
+      return { deny: fake.openFails }
+    }
     opened.push(e)
+    openPanes.add(e.id)
     return fake.paneWaits === null
       ? { value: { isPlaced: true } }
       : { value: { isPlaced: false, reason: fake.paneWaits } }
@@ -393,7 +581,7 @@ export async function start(
     if (fake.runFails !== null) {
       return { deny: fake.runFails }
     }
-    const value = fake.handle(e.argv, e.init?.stdin)
+    const value = fake.handle(e.argv, e.init?.stdin, e.init?.cwd, e.init?.env)
     const delay = fake.delayMs(e.argv.slice(1))
     if (delay > 0) {
       await clock.sleep(delay)
@@ -405,7 +593,12 @@ export async function start(
     return { value: undefined }
   })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('session.id', () => (fake.sessionId === null ? { deny: 'the session has no id yet' } : { value: fake.sessionId }))
+  on('session.root', () => (fake.root === null ? { deny: 'the session has no root' } : { value: fake.root }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
+  on('session.end', (_, e) => ({ sessionId: e.sessionId }))
+  // A compaction asked to `skip` is one a hook blocked: the conversation stays as it is.
+  on('session.compact', (_, e) => (e.instructions === 'skip' ? { skip: 'a hook blocked it' } : { messages: e.messages }))
   // Stands for the engine's own drawing, which is what the band leaves to when it has nothing to show.
   on('ui.render', ($, e) => {
     const { Text } = $.ui.resolve(e)
@@ -413,7 +606,7 @@ export async function start(
   })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await clock.advance(1)
-  return { clock, statuses, commands, tools, opened, toasts }
+  return { clock, statuses, commands, tools, opened, toasts, openPanes }
 }
 
 type Mounted = { findAll: (q: { type: string }) => Promise<{ text: string }[]> }

@@ -222,6 +222,30 @@ def split_topics(text: str) -> TopicSplit:
     return TopicSplit("".join(general), [_topic_block(same_name) for same_name in by_name.values()])
 
 
+def item_counts(block: TopicBlock) -> tuple[int, int]:
+    """How many list items a topic's block holds, as a session gets it: those above its line for
+    the current items, and those below. A line ends where ``split_topics`` ends one."""
+    facts, current = topic_items(block)
+    return len(facts), len(current)
+
+
+def topic_items(block: TopicBlock) -> tuple[list[str], list[str]]:
+    """The list items of a topic's block, its facts and then its current items, each as what it
+    states: a fact without its dash and its fact file, a current item without its dash."""
+    facts: list[str] = []
+    current: list[str] = []
+    under_current = False
+    for line in (line.rstrip("\r") for line in block.text.split("\n")):
+        if line == CURRENT_IN_TOPIC:
+            under_current = True
+        elif line.startswith("- ") and under_current:
+            current.append(line[2:].strip())
+        elif line.startswith("- "):
+            parsed = parse_fact_line(line)
+            facts.append(parsed.statement if parsed is not None else line[2:].strip())
+    return facts, current
+
+
 def _topic_block(parts: list[_TopicPart]) -> TopicBlock:
     words = tuple(dict.fromkeys(word for part in parts for word in part.topic.words))
     facts = [line for part in parts if not part.is_current for line in _body(part)]

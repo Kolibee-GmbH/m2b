@@ -10,6 +10,8 @@ CORPUS = "corpus"
 MEMORY = "memory"
 TASKS = "tasks"
 STATE = "state"
+# Where a proposal a session handed in waits for a curation run, one file each (``handed_in``).
+HANDED_IN = f"{STATE}/core/handed-in"
 
 MEMORY_INDEX = "MEMORY.md"
 STORE_CONTRACT = "STORE.md"

@@ -67,7 +67,10 @@ function isProposal(value: unknown): value is BandProposal {
     isTextOrNull(value['topic']) &&
     isTextOrNull(value['due']) &&
     // An m2b before the field names no source: the words were typed.
-    (value['source'] === undefined || typeof value['source'] === 'string')
+    (value['source'] === undefined || typeof value['source'] === 'string') &&
+    // Nor does one before a session could hand in name a tool or who proposed.
+    (value['tool'] === undefined || isTextOrNull(value['tool'])) &&
+    (value['by'] === undefined || isTextOrNull(value['by']))
   )
 }
 
@@ -100,7 +103,7 @@ export function parseProposals(part: unknown): BandProposals {
   if (!isObject(part) || !Array.isArray(part['proposals']) || !part['proposals'].every(isProposal) || !isCount(part['answered'])) {
     return { ...NO_PROPOSALS, error: OTHER_SHAPE }
   }
-  const waiting = part['proposals'].map(({ id, kind, text, quote, day, topic, due, source }) => ({
+  const waiting = part['proposals'].map(({ id, kind, text, quote, day, topic, due, source, tool, by }) => ({
     id,
     kind,
     text,
@@ -109,6 +112,8 @@ export function parseProposals(part: unknown): BandProposals {
     topic,
     due,
     source,
+    tool,
+    by,
   }))
   return { waiting, answered: part['answered'], error: null }
 }
@@ -121,6 +126,14 @@ export function couldNotLookLine(error: string): string {
   return `m2b could not look for proposals: ${plainLine(error)}`
 }
 
+/**
+ * Why the proposals could not be looked at, where that is worth a line of its own: beside a task
+ * list that could not be read, the store is most often the same reason, so one line says it.
+ */
+export function errorBesideTasks(tasksError: string | null, proposals: BandProposals | null): string | null {
+  return tasksError === null ? (proposals?.error ?? null) : null
+}
+
 /** `commitment, due 2026-03-06, topic Northwind`: what kind of thing is proposed, as `m2b proposals` heads it. */
 function heading(proposal: BandProposal): string {
   const parts = [writtenOut(proposal.kind)]
@@ -130,20 +143,34 @@ function heading(proposal: BandProposal): string {
   if (proposal.topic) {
     parts.push(`topic ${writtenOut(proposal.topic)}`)
   }
+  if (proposal.by) {
+    // Also where its words were typed: an agent worded its text, having read more than those words.
+    parts.push(proposal.by === HANDED_IN_BY ? 'handed in by a session' : `proposed by ${writtenOut(proposal.by)}`)
+  }
   return parts.join(', ')
 }
+
+// Who proposed, where it was no reading of the sessions: a session, by itself.
+const HANDED_IN_BY = 'session'
 
 // How the line under a proposal begins for the sources the band knows, as `m2b proposals` begins it.
 const LEADS = new Map([
   [TYPED, 'said on'],
   ['pasted', 'pasted on'],
+  ['agent', 'Claude wrote on'],
 ])
 
-/** Where the words a proposal stands on were found: typed words were said, pasted ones are named so. */
+/**
+ * Where the words a proposal stands on were found: typed words were said, pasted ones are named
+ * so, words a tool returned with the tool, and words of an answer as Claude's.
+ */
 function saidLine(proposal: BandProposal): string {
   // An answer of an m2b before the field, or one a band before it kept, names no source.
   const source = proposal.source ?? TYPED
-  const lead = LEADS.get(source) ?? `from ${writtenOut(source)} on`
+  const lead =
+    source === 'tool'
+      ? `in a result of ${proposal.tool ? writtenOut(proposal.tool) : 'a tool'} on`
+      : (LEADS.get(source) ?? `from ${writtenOut(source)} on`)
   return `${lead} ${writtenOut(proposal.day)}: "${writtenOut(proposal.quote)}"`
 }
 
@@ -195,13 +222,22 @@ export function proposalLines(proposals: BandProposals | null): string[] {
   ]
 }
 
-/** The band's one row for all of them: the number, and `show`, which opens the pane. */
-export function proposalsRow($: EngineInterface, e: ResolveInput, count: number, onShow: () => Promise<void>) {
+/** The key of `show` in the row for all of them. */
+export const SHOW_PROPOSALS = 'show:proposals'
+
+/** One row for all of them: the number, and `show`, which opens them in the pane. Cut in the band, wrapped in the pane. */
+export function proposalsRow(
+  $: EngineInterface,
+  e: ResolveInput,
+  count: number,
+  onShow: () => Promise<void>,
+  wrap: 'truncate-end' | 'wrap' = 'truncate-end',
+) {
   const { Box, Button, Text } = $.ui.resolve(e)
   return (
     <Box key="row:proposals" flexDirection="row">
-      <Button key="show:proposals" label="show" onPress={onShow} />
-      <Text wrap="truncate-end"> {countLine(count)}</Text>
+      <Button key={SHOW_PROPOSALS} label="show" onPress={onShow} />
+      <Text wrap={wrap}> {countLine(count)}</Text>
     </Box>
   )
 }
@@ -229,7 +265,8 @@ export function proposalsPane(
   const inAll = new Set(all?.ids ?? [])
   const pressOf = (proposal: BandProposal): BandPress | undefined =>
     presses[pressKey(proposal.id)] ?? (all !== undefined && inAll.has(proposal.id) ? { ...all, phase: 'writing' } : undefined)
-  const unpressed = waiting.filter(proposal => pressOf(proposal) === undefined)
+  // What no reading proposed is answered one by one: keep all leaves it, as `m2b proposals keep --all` does.
+  const unpressed = waiting.filter(proposal => pressOf(proposal) === undefined && !proposal.by)
   return (
     <Box flexDirection="column">
       {error === null ? (

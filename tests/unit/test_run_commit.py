@@ -1005,6 +1005,89 @@ class WaitingCapturesTest(RunCommitTest):
         self.assertEqual(len(self.log()), 2)
 
 
+class HandedInFilesTest(RunCommitTest):
+    """A proposal a session handed in waits as a file of its own, like a capture in the inbox."""
+
+    HANDED_IN = "state/core/handed-in/0a1b2c3d-1111-4222-8333-444455556666.38d8f71e327f.json"
+    LATE = "state/core/handed-in/0a1b2c3d-1111-4222-8333-444455556666.aaaaaaaaaaaa.json"
+
+    def commit_what_waits(self) -> str | None:
+        text = run_commit.captures_message(START)
+        return run_commit.commit_waiting_captures(
+            self.repository(), run_commit.listing(self.store), text, self.temp_dir
+        )
+
+    def a_run_that_takes_it_in(self) -> run_commit.StoreListing:
+        before = run_commit.listing(self.store)
+        (self.root / self.HANDED_IN).unlink()
+        self.write("state/core/proposals.json", '{"format": 3, "proposals": {"38d8f71e327f": {}}}\n')
+        return before
+
+    def test_a_handed_in_file_git_does_not_know_is_committed_where_it_waits(self) -> None:
+        """Covers: B182"""
+        self.repository_with_a_commit()
+        self.write(self.HANDED_IN, '{"format": 1}\n')
+
+        self.commit_what_waits()
+
+        self.assertEqual(self.committed_paths(), [f"A\t{self.HANDED_IN}"])
+        self.assertEqual(self.git("status", "--porcelain"), "")
+
+    def test_what_head_holds_of_the_folder_is_what_a_run_may_take_in(self) -> None:
+        """Covers: B182"""
+        self.git("init", "-q", "-b", "main")
+        self.write(self.HANDED_IN, '{"format": 1}\n')
+        before_any_commit = run_commit.handed_in_in_head(self.repository())
+        self.repository_with_a_commit()
+        self.commit_what_waits()
+        self.write(self.LATE, '{"format": 1}\n')
+        self.git("add", self.LATE)
+
+        self.assertEqual(before_any_commit, frozenset())
+        self.assertEqual(run_commit.handed_in_in_head(self.repository()), {self.HANDED_IN})
+
+    def test_reverting_the_run_that_took_it_in_puts_the_file_back_for_the_next_run(self) -> None:
+        """Covers: B182"""
+        self.repository_with_a_commit()
+        self.write(self.HANDED_IN, '{"format": 1}\n')
+        self.commit_what_waits()
+        self.commit(self.a_run_that_takes_it_in())
+
+        self.git("revert", "--no-edit", "HEAD")
+
+        self.assertEqual((self.root / self.HANDED_IN).read_text(encoding="utf-8"), '{"format": 1}\n')
+        self.assertFalse((self.root / "state/core/proposals.json").exists())
+        self.assertEqual(self.git("status", "--porcelain"), "")
+
+    def test_one_that_came_in_during_the_run_and_still_waits_outlives_a_revert_of_the_run(self) -> None:
+        """Covers: B182"""
+        self.repository_with_a_commit()
+        self.write(self.HANDED_IN, '{"format": 1}\n')
+        self.commit_what_waits()
+        before = self.a_run_that_takes_it_in()
+        self.write(self.LATE, '{"format": 1, "kind": "person"}\n')
+
+        self.commit(before)
+
+        self.assertNotIn(self.LATE, "\n".join(self.committed_paths()))
+        self.assertEqual(self.git("status", "--porcelain", "--untracked-files=all").splitlines(), [f"?? {self.LATE}"])
+
+        self.git("revert", "--no-edit", "HEAD")
+
+        self.assertEqual((self.root / self.LATE).read_text(encoding="utf-8"), '{"format": 1, "kind": "person"}\n')
+
+    def test_the_next_run_commits_the_one_the_run_before_it_left_waiting(self) -> None:
+        """Covers: B182"""
+        self.repository_with_a_commit()
+        before = self.a_run()
+        self.write(self.LATE, '{"format": 1}\n')
+        self.commit(before)
+
+        self.commit_what_waits()
+
+        self.assertEqual(self.committed_paths(), [f"A\t{self.LATE}"])
+
+
 class WhichRepositoryTest(RunCommitTest):
     """A store whose ``.git`` is a file that points at a git directory kept outside the store folder."""
 

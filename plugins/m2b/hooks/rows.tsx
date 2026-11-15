@@ -101,6 +101,6 @@ export function changesSummary(review: BandReview): string {
   return `  ${changes.length} ${changes.length === 1 ? 'fact' : 'facts'} changed: ${topics.join(', ')}`
 }
 
-function pressedLine(action: BandSettle, title: string): string {
+function pressedLine(action: BandPress['action'], title: string): string {
   return ` ${action === 'complete' ? 'keeping' : 'dropping'}: ${plainLine(title)}`
 }

@@ -42,6 +42,10 @@ row, between the candidates and the due tasks: what asks for keep or drop stands
 what only tells. The band is empty, and
 takes no room, while there is nothing to show.
 
+While the m2b pane sits beside the chat, which holds the same rows, the band steps back to one
+line, and where the pane is not in view it has one row more, for what this session was given:
+[the band beside the pane](#the-band-beside-the-pane).
+
 **Keep and drop are buttons: click them with the mouse.** Keep completes the task; drop marks it
 dropped and completes it; nothing else changes, and the next curation run reads which one you
 chose.
@@ -94,6 +98,281 @@ text it writes nothing and says what it needs; when `m2b` fails, the line says w
 request. To note with the model's help, for instance with a follow-up date, ask the model: it uses
 the tool below, or the skill `/m2b:capture` where the mod does not run.
 
+## This session, what waits and today, in the pane
+
+`/m2b-pane` opens the m2b pane in the view it starts in, with three parts. (`/m2b` alone is not
+this command: Claude Code runs the skill `/m2b:m2b` for it, which asks the model what m2b is.)
+
+![A Claude Code session in the fullscreen layout after /m2b-pane: the m2b pane sits beside the chat in its start view. In this session: the topic Northwind with 2 facts and 1 current item and "show", the distillate printed whole at the start, and "leave m2b out" of the project folder. Waits for you: 3 proposals from your sessions with "show", a "Still current?" question with keep and drop, the review row "1 fact changed: Sam" with ok, and "show" for the whole review. Today: one task due today and one overdue. Below them "settings". Left of the pane the band above the prompt is one line that counts what waits, and the status line stands below the prompt](images/pane.png)
+
+As text, another session:
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│ In this session                                              │
+│ [ show ] Northwind: 3 facts, 1 current                       │
+│ [ show ] Acme Ltd: 1 fact                                    │
+│ The distillate was printed whole at the start.               │
+│ [ leave m2b out ] of /home/alex/code/lumen                   │
+│ 1 note written in this session                               │
+│ Waits for you                                                │
+│ [ show ] 1 proposal from your sessions                       │
+│ [ keep ] [ drop ] Remember? Dana prefers tea                 │
+│ [ ok ] m2b: review                                           │
+│ [ show ] the whole review                                    │
+│ Today                                                        │
+│ due today: Buy screws                                        │
+│ overdue: Return the ladder                                   │
+│ [ settings ]                                                 │
+└──────────────────────────────────────────────────────────────┘
+```
+
+- **In this session** says what m2b put into this session: each topic whose facts it got, at its
+  start because the project path names it or before a prompt that named it, with the facts lines
+  and current items the topic held at that moment, and `show` for
+  [its lines](#a-topics-lines); how the start printed the distillate (whole,
+  cut to fit, or none because there was none to read); the folder the distillate is turned off
+  under, where it is, and the button that
+  [leaves m2b out of the session's folder](#leaving-m2b-out-of-a-folder) or turns it on again; and
+  how many notes the session wrote through
+  `/m2b-note` and the note tool. A note written with `m2b capture` in a shell is not counted.
+  `/clear` and a compaction begin the list of topics again, as the context no longer holds what
+  came before. A session this machine holds no note of, one that started under an earlier m2b or
+  without m2b's hooks, is said to be not known, which does not say it was given nothing.
+- **Waits for you** holds what the band holds, without its limit of three rows: one row for the
+  proposals from your sessions, every memory candidate and "Still current?" question with keep
+  and drop, and the open review with `ok`. They work as in the band, undo included. `show` on the
+  proposals turns the pane to [them](#the-proposals-from-your-sessions-in-the-pane), `show` under
+  the review to [the whole review](#the-whole-review-and-search-in-a-pane); `back` above that view,
+  Escape or `/m2b-pane` turn it [back](#back-to-the-start-view).
+- **Today** lists your own tasks due today, then the overdue ones, the most recent first. With
+  `band.due_tasks` off it says that tasks due are not shown.
+
+The first part is asked for each session by itself, with
+`m2b band --json --session <id> --session-only`, which reads one small file on this machine and
+no task list, and is told the session's project root: when the session starts, and once more five seconds later if m2b did not know the
+session yet; three seconds after you send a prompt, so a topic that came in with it shows while
+the turn still works; after a compaction; when a turn ends and when you type `/m2b-pane`. It is kept
+in the session's own state and is not part of the answer the open sessions share. After `/clear`
+the session goes on under a new id: the part says that m2b has not looked yet until, a second or
+a few later, it has asked for the new one. When m2b could not look, the part says so with the reason;
+with an installed m2b older than the band, which does not know the question, it says to update
+m2b and to run `/reload-plugins`.
+
+Where Claude Code cannot show a pane, `/m2b-pane` answers with the same lines as text, at most 20 of
+them and without any character that draws nothing, and names `/m2b-proposals` and `/m2b-review`
+where the pane has `show`. It waits up to two seconds for a fresh answer about the session, and
+without one the text says that m2b has not looked yet.
+
+### A topic's lines
+
+`show` beside a topic turns the pane to that topic: its facts and its current items, read with
+`m2b distillate topic` at the press. m2b keeps the names and counts of what it gave a session and
+not the lines, so these are the lines the distillate holds now; a curation run since the session
+got the topic may have changed them, and the view says so. `back`, Escape or `/m2b-pane` lead
+[back](#back-to-the-start-view).
+
+The lines are your facts, often about a customer. The band keeps them while the pane shows them
+and drops them when you go back, close the pane, turn it to another view or type `/clear`. They
+are not in the session's state, which other plugins can read; no command of the band answers with
+them as text, they are written to no file, and nothing of them is handed to the model: where
+Claude Code cannot show a pane, `/m2b-pane` lists the topics with their counts, as before. In a
+shell, `m2b distillate topic <name>` prints them, as `m2b search` prints what it finds.
+A topic the distillate no longer holds is said, and so is a distillate m2b could not read, with
+the reason.
+
+### Leaving m2b out of a folder
+
+Below what the session was given stands `leave m2b out` with the session's folder: its project
+root as Claude Code names it to the band, which a `cd` in a shell command does not move. m2b's
+hooks decide by the project folder Claude Code names to them, which is this folder where a session
+starts. The folder is shown whole: a character that would not draw, a line break or a space at its
+end is written out (`\x0a`, `\x20`), so the folder you read is the folder the press turns off. It is the answer to seeing one
+customer's facts in a session that is about something else. A press waits five seconds with
+`undo`, as keep and drop do, and then runs `m2b distillate off` for that folder: on this machine,
+sessions that start there or below get no distillate, no routing rule and no topic facts. This
+session keeps what its context already holds and gets no more topics, and the part says so.
+
+Where the distillate is off, the button is `turn on` beside the folder it is off under, which may
+lie above the session's; it runs `m2b distillate on` for that folder, with the same undo. When
+m2b could not write, the part says why until your next press or prompt. With an installed m2b
+that does not name the session's folder there is no button to leave m2b out: the band never
+guesses which folder a press would turn off.
+
+### Every setting, in the pane
+
+`settings` at the end of the start view, or `/m2b-settings`, turns the pane to the settings of
+m2b: every setting of this machine, of the store and of the owner, as `m2b settings` lists them
+([Configuration](configuration.md#every-setting-in-one-list)), each a row with its title and its
+value.
+
+![The pane beside the chat after /m2b-settings: "back", then every setting as a row with "open", its title and its value, 19 under "This machine", 6 under "The store, for every machine" and 6 under "The owner, for every machine", among them the machine's name, the store folder, the model of curation and whether sessions hand in proposals; left of the pane the band draws all its rows](images/settings.png)
+
+`open` on a row turns the pane to the setting's card:
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│ Settings · 15 of 31                                          │
+│ [ previous ] [ next ] [ list ]                               │
+│ Curation paused                                              │
+│ this machine · curation.paused                               │
+│ now: off                                                     │
+│ This machine starts no curation run by itself, none at a     │
+│ session start and none from a schedule. m2b curate --force   │
+│ still runs one, and captures keep reaching the inbox.        │
+│ [ turn on ]                                                  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+`previous` and `next` walk through every setting in the order of the list, so starting at the
+first card takes you through all of them once; `list` returns to the list, and Escape does the
+same from a card and leads on to the start view from the list. Escape pressed twice within half a
+second on a card stops at the list. A card says what the setting does and its default where the
+value differs from it. In a pane narrower than 41 columns a row of the list is the title with the
+value below it, and `list` stands below `previous` and `next`.
+
+With the keyboard in the pane, Tab moves the focus from button to button and Enter presses the
+one that has it. The band asks Claude Code to put the focus where the walk goes on: on `next`
+when a card is opened from the list or reached with `next` (on the last card on `previous`), on
+`previous` when you walk back (on the first card on `next`), and on the row of the card you left
+when `list` returns to the list. So Enter on `next`, pressed again and again, takes you through
+every setting. The band never puts the focus on a switch: Tab to it. After the press the focus
+is on `undo`, and after `undo`, or once the five seconds are over, on the button that leads on
+(`next`, on the last card `previous`). Escape hands the keyboard back to the prompt.
+
+![The pane beside the chat, driven with the keyboard. After /m2b-settings, Tab twice puts the focus on the first row and Enter opens its card, "Settings · 1 of 31"; Enter on "next", eight times, walks card by card to "Model of curation", which reads "now: haiku". Tab twice reaches "set to sonnet"; Enter turns it into "undo setting curation.model to sonnet", and Enter on "undo" takes the press back. Reached with Tab twice again, pressed and left alone, it is written after five seconds: the card reads "now: sonnet", "default: haiku" and offers "set to haiku". Tab and Enter on "list" return to the list, whose row now reads "Model of curation: sonnet"](images/settings-walk.gif)
+
+<sub>One real Claude Code session on a demo machine with invented notes, recorded by `scripts/readme-demo --only settings-walk`. Only keys are typed and no model is asked; the five seconds a press waits run as recorded.</sub>
+
+Seven settings are switches: `curation.read_sessions`, `curation.paused`, `curation.git_commit`,
+`band.due_tasks`, `sessions.propose`, `curation.model` and your `language`. Their cards offer the
+other values to press (`turn on`, `turn off`, `set to sonnet`). A press writes nothing for five
+seconds and offers `undo`, as keep and drop do; then the band runs `m2b settings set` and reads
+the list again, so the card shows what is true now. What the command refuses stands on the card
+in its own words. One change at a time: while one waits or is written, no other card offers a
+switch. Leaving the card within the five seconds, with `previous`, `next`, `list` or Escape,
+takes the press back, as leaving the settings does. A change that is already being written goes
+on; the list says which one is under way, and reads again when it has ended. Every other setting
+is shown with the command or the skill that changes it; the pane has no field to type into and
+changes no path, no program and no time limit.
+
+`sessions.propose` is the one switch a session's shell does not turn on: the command refuses
+where `CLAUDECODE` is set, as Claude Code sets it there. A press on its card does turn it on.
+Where the pane is drawn in a terminal, in the desktop app or in VS Code, the card offers
+`turn on`, below a line that says so, and the press waits its five seconds like every other; the
+band then runs the command with that variable empty, for this one press and no other. In the
+mobile app, and on a surface the band does not know, the card names the command for a terminal
+of your own and offers nothing that turns it on. On every surface the card says that every
+machine sharing the store needs an m2b that knows handing in, and it offers `turn off` where the
+setting is on, beside a line that a session gets the tool when it starts or its plugins are
+reloaded. Nothing checks who made a press: what it rests on, and what it does not hold against,
+is in
+[Security](../SECURITY.md#what-a-session-hands-in).
+
+A setting of a file that could not be read (a store out of reach, no profile yet) is listed as
+`not read` with the reason. On a machine that does not curate, the settings of the curation run
+are dimmed and say that they do nothing here. When the list cannot be read again after a change,
+the pane keeps the list it had and says so above it.
+
+The values hold folders, your name and what your store is called. The band keeps them for the
+pane's drawing alone: they are not in the session's state, which other plugins can read, and
+`/m2b-settings` answers one line without a value. It takes no value either, whatever follows its
+name: a value changes by a press and in no other way. Where Claude Code cannot show a pane, the
+command reads nothing and names `m2b settings`, which lists the settings in a terminal.
+
+### It opens by itself beside the chat
+
+Under the fullscreen layout Claude Code seats a pane beside the conversation. There the band opens
+the m2b pane by itself, with its first drawing on the terminal in a session: in the start view,
+without taking the keyboard, and Escape does not close it. After `/clear` it does so once more. Claude Code draws a pane nobody asked for only on a
+terminal wide enough for it (from 144 columns, from 110 once you have opened the pane yourself);
+below that the pane stays open undrawn and appears when you widen the terminal, and `/m2b-pane` or
+`show` on the band's row for this session shows it at once.
+
+On the main screen, where a pane is a block above the prompt that takes rows from the
+conversation, nothing opens by itself: `/m2b-pane` opens the pane there, as a dialog that Escape
+closes. Nothing opens in a curation run, nor before m2b is set up, and only a terminal's drawing
+opens the pane: in the desktop app and the other surfaces, `/m2b-pane` does.
+
+Closing the pane beside the chat on its start view is kept on this machine: from then on it does
+not open by itself, in this session or a later one, until you open it again with `/m2b-pane`, one of
+the band's other commands or `show` in the band. Closing the block above the prompt keeps nothing.
+
+### The band beside the pane
+
+The pane's start view holds every row of the band with its buttons. So while the pane sits beside
+the chat in that view and is the pane shown there, the band above the prompt draws one line at
+most:
+
+```text
+ Waits for you: 2 to keep or drop, 1 proposal from your sessions, the review
+```
+
+The line is the first there is of: why a press wrote nothing, which the start view does not show;
+that this session runs an older band than the installed m2b; an error reading the tasks or the
+proposals; and else the counts of what needs an answer, candidates and questions together, then
+the proposals, then the open review. The tasks due need no answer and stand in the pane. With
+none of these the band draws nothing.
+
+The pane's other views hold only some of the rows. While it is turned to the review, a search,
+the proposals or a topic, the band draws its rows as on its own, until `back` or Escape lead to
+the start view again.
+
+Where the pane is not in view, the band draws what it draws on its own, and one row more while
+this session was given at least one topic:
+
+```text
+ [ keep ] [ drop ] Remember? Dana prefers tea
+ [ show ] 2 topics given to this session
+```
+
+`show` opens the pane in its start view. That is your own open, so Claude Code places the pane at
+any width: under the fullscreen layout from 110 columns beside the chat, where it stays, and
+elsewhere as a dialog that Escape closes, on a terminal the block above the prompt. A session
+that was given no topic, that m2b holds no note of or has not looked at yet has no such row;
+`/m2b-pane` says which it is. Where no pane can be shown, or Claude Code refuses to open one, the
+band says so and names `/m2b-pane`, which answers with the lines.
+
+What each way of running Claude Code gets:
+
+| Layout | The pane | The band |
+|---|---|---|
+| fullscreen, wide (from 144 columns, from 110 once you opened the pane) | beside the chat, opened by itself | one line at most; every row while the pane is turned to another view |
+| fullscreen, narrower | open and undrawn until the terminal is wider; `show` in the band or `/m2b-pane` shows it now | every row, and the row for this session |
+| the main screen, any width | only when asked, as a block above the prompt | every row, and the row for this session; while the block shows, without that row |
+| beside the chat but narrow (a body of 24 to 40 columns) | every line wraps; topics by name and count, a topic's lines after `show` | one line at most |
+| the desktop app | as the app seats it; minimized to its small form, three counts and no button | one line at most beside the docked pane, every row beside the small form |
+| `claude -p`, no surface | none | none; `/m2b-pane` answers as text |
+
+The small form says how many topics this session was given, how many things wait for you and how
+many tasks are due today and overdue, or what m2b could not look at in place of a count. A click
+may not reach it, so keep, drop and `ok` stay in the band there.
+
+The band knows where the pane sits from the pane's own last drawing on the same surface, and asks
+Claude Code whether the pane is still open, drawn and the one shown. Whenever that is not certain
+(the pane closed, Claude Code says it is not drawn, another plugin's pane is the tab in front),
+the band draws every row. It is drawn again at once when the pane is first drawn in a seat, moves
+to another, turns to another view or closes; what else changes, such as another plugin's pane
+coming in front, it sees with its own next drawing. Claude Code says whether the pane is drawn and
+shown for the session as a whole: with a terminal and the desktop app on one session, the band of
+one can go by the pane of the other.
+
+### Back to the start view
+
+`/m2b-review`, `/m2b-search`, `/m2b-proposals`, `/m2b-settings` and `show` or `settings` in the
+start view turn the pane to their view and give it the keyboard. Escape there, the pane's close
+mark or the `back` button above the view lead back to the start view; the pane stays open. From
+the card of a setting they lead to the list of the settings first. Beside the chat it then stays
+without closing on Escape, so an Escape at the empty prompt does not take it away, and an Escape
+pressed twice within half a second leads back once and closes nothing. Above the prompt the pane
+stays a dialog, and a later Escape closes the block.
+
+With the keyboard in the pane, the band asks Claude Code to put the focus where a second Enter
+writes nothing: on `back` after `show` or `settings` turned the pane, and after `back` on the
+button that led there (on `settings` where that button is gone, as after the last proposal was
+answered). Outside the settings the band moves no focus within a view: after keep it is on
+`undo`.
+
 ## The whole review, and search, in a pane
 
 The band keeps to a few rows. `/m2b-review` opens the m2b pane beside the conversation with the
@@ -137,9 +416,9 @@ Where Claude Code cannot show a pane, for instance with no terminal attached, th
 with the content as text instead, its first 20 lines, each cut at 200 characters; that text stays
 in the conversation the model reads. A search without hits answers in one line and opens no pane,
 and one with more hits than `m2b` can hand over asks for a narrower search. The pane takes its data from the same refresh as the band, so it
-follows the next curation run within a minute. Its close mark closes it, and so does Escape while
-the pane holds the keyboard; it asks for the keyboard when it opens over an empty prompt, so the
-arrows scroll a long review.
+follows the next curation run within a minute. It asks for the keyboard when it opens over an
+empty prompt, so the arrows scroll a long review; Escape, the close mark and `back` above the view
+lead [back to the start view](#back-to-the-start-view).
 
 ## The proposals from your sessions, in the pane
 
@@ -148,7 +427,7 @@ each proposal with its text, what kind of thing it is (with the due day of a com
 topic, where it has one), the words it was taken from and their day: `said on` before words you
 typed, `pasted on` before words from text you pasted into a prompt, which may be someone else's.
 
-![The pane after /m2b-proposals: three proposals from the sessions, each with keep and drop, its kind, a due day for the commitment, and the words it was taken from with the day they were said; above them "keep all"](images/proposals.png)
+![The pane after /m2b-proposals: three proposals from the sessions, each with keep and drop, its kind, a due day for the commitment, and the words it was taken from with the day they were said; above them "back" and "keep all"; below the pane the band with its rows and the status line](images/proposals.png)
 
 As text, other proposals, one of them within its undo:
 
@@ -172,11 +451,16 @@ As text, other proposals, one of them within its undo:
 
 Keep and drop work as on a candidate: a click writes nothing for 5 seconds and offers `undo`, then
 the band runs `m2b proposals keep <id>` or `m2b proposals drop <id>`, which adds your answer to
-the store. `keep all` keeps the proposals the pane showed when you clicked it, without those you
+the store. `keep all` keeps the proposals the pane showed when you clicked it, without those a
+session handed in, which you keep or drop on their own, and without those you
 clicked on their own; one a curation run added a moment before is not kept unseen. Nothing is
 filed by the click: the next curation run writes a capture for each proposal you kept and files
 it, and the last line says how many answers wait for it. The row in the band and the pane follow
 at once.
+
+![The pane beside the chat, driven with the keyboard. After /m2b-pane the start view counts 3 proposals from your sessions; Tab to their "show" and Enter turn the pane to them, with the focus on "back". Tab twice reaches "keep" of the first, "Send Dana the photos of the shed."; Enter turns the row into "undo keeping: Send Dana the photos of the shed.", and Enter on "undo" brings keep and drop back. Kept again and left alone, the proposal is written after five seconds: the pane counts 2 proposals and says that 1 answer waits for the next curation run, and the band left of it counts 2 as well. Shift+Tab twice and Enter on "back" return to the start view, which now counts 2 proposals](images/pane-answers.gif)
+
+<sub>One real Claude Code session on a demo machine with invented notes, recorded by `scripts/readme-demo --only pane-answers`. Only keys are typed and no model is asked; the five seconds a press waits run as recorded.</sub>
 
 When `m2b` refuses an answer, because another machine answered that proposal the other way first,
 or cannot write it, what it says stands in the pane and in the band until your next prompt. After
@@ -258,6 +542,54 @@ organization adds a managed `ask` or `deny` rule for these names. To be asked ea
 `mcp__m2b__note` and `Bash(m2b capture:*)` in `permissions.deny`: the first refuses the tool, the
 second the skill's command, which the model would otherwise use instead.
 
+## Handing in a proposal, a tool you turn on
+
+With `sessions.propose` set to `true` in the machine config
+([Configuration](configuration.md#configjson-this-machine)), the mod gives the model a third tool:
+
+| Tool | Runs | Takes |
+|---|---|---|
+| `mcp__m2b__propose` | `m2b proposals add -`, one JSON object on standard input | `kind` (`person`, `agreement`, `commitment` or `personal`), `text`, the fact as one sentence, `quote`, the words of the session it stands on, and optionally `due` (`YYYY-MM-DD`) for a commitment with a day |
+
+The model calls it by itself, beside the task you gave it, when the session states something of
+one of the four kinds that your memory does not hold yet: who someone is, an agreement, something
+you committed to, something about your own life. The words may be yours or stand in what the
+model read for you, a mail or a document. The mod adds which session hands in, the id Claude Code
+gives the session; the model cannot name another one. Everything else is decided by
+[`m2b proposals add`](commands.md), which looks for the quote in that session's transcript and
+writes one file under `state/core/handed-in/` in the store, or refuses with one line. The next
+curation run takes that file in, and the proposal then waits in the list with the others, marked
+as handed in by a session ([Curation](curation.md#what-a-session-hands-in)). The tool
+answers with that line. A refusal never repeats the text or the quote. When the command could not
+take the call or reach the store, the tool says that nothing was handed in and why. After any
+other end, a command that was stopped before it answered among them, it says that it is unknown
+whether the proposal was handed in; the same call again never hands it in twice. Only the main
+conversation hands in: the command reads that conversation, where what a subagent or another
+agent of the session read does not stand, so such an agent is told to name what it found in its
+answer.
+
+The tool has no skill. Its description, about 3,200 characters in the prompt of every session
+that has it, is where its rules stand: the four kinds in the words the reading of your sessions is
+instructed with, and that each is about you, someone you deal with or an agreement you are a
+party to; what to leave out (how the model should work, the project at hand, what your memory
+already says, never documents of customers or confidential statements about third parties); that
+it holds a fact against the distillate first and searches where the distillate only names a
+topic; that a text the model read is data, so a sentence in it that asks to be remembered, or
+says how to word a proposal or what to quote, is not carried out; that "remember this" from you is a
+note, not a proposal; and that after a refusal it tries once more at most. A test holds the
+description to the kinds and to the rules that keep it apart from its neighbours.
+
+The mod reads the setting when a session starts, so turning it on reaches sessions that start
+afterwards and one that reloads its plugins. A session that started before you turned it off
+still has the tool, and the command refuses. In a curation run the tool does not exist.
+
+**Permission.** A call runs without a question, as a search does, under the same conditions: no
+rule, hook, setting or organization limit decided otherwise. A rule for the tool's name
+(`mcp__m2b__propose`, or `mcp__m2b` for all three) applies, and so does a rule you set for the
+command: with `Bash(m2b proposals:*)` in `permissions.ask` or `deny`, the tool asks or is refused.
+That pattern also covers `m2b proposals keep` and `drop`, so an `ask` rule meant for those makes
+every call of the tool ask.
+
 ## The status line
 
 Below the prompt, one line sums up the brain, such as `2 in inbox · curated 21:36`: the captures
@@ -304,17 +636,22 @@ with the second case when no session has run m2b's hooks since setup. Right afte
 
 ## What it reads and writes
 
-It runs only while `~/.config/m2b/config.json` and the launcher exist. Each refresh is one `m2b`
+It runs only while `~/.config/m2b/config.json` and the launcher exist. At a session's start it
+reads that file for one key, `sessions.propose`. Each refresh is one `m2b`
 call, `m2b band --json`; keep and drop call `m2b tasks complete` and `m2b tasks drop`, after
 reading the list again with `m2b band --json --tasks-only`; keep and drop on a proposal call
 `m2b proposals keep` and `m2b proposals drop`, which refuse an answer themselves where another
-one stands. Every open session asks about once a
+one stands. `leave m2b out` and `turn on` in the pane call `m2b distillate off` and
+`m2b distillate on` with the folder, which change `distillate.skip_under` in the machine config;
+`show` beside a topic calls `m2b distillate topic --json`, which reads `memory/MEMORY.md`. Every open session asks about once a
 minute and after each of your turns, so the answer is shared between sessions for 55 seconds in
 `~/.local/state/m2b/band-view.json`; an answer of a shape the band does not know, or stamped later
 than now, is not used. However many turns end while `m2b` is slow, at most one more refresh waits.
 That folder holds titles, findings and the proposals with the words they stand on, so m2b keeps it readable by
 you only. At each session start
-it writes `~/.local/state/m2b/band-seen.json`, which `m2b doctor` reads. Apart from keep and drop, which
+it writes `~/.local/state/m2b/band-seen.json`, which `m2b doctor` reads. That you closed the pane
+beside the chat by hand is one value, `paneClosedByHand`, in the store Claude Code keeps for the
+plugin under its own configuration folder. Apart from keep and drop, which
 change that one task in your task list (with the `markdown` backend, its file in `tasks/` of the
 store) or add your answer to a proposal as an empty file in `state/core/proposal-answers/`, it
 writes nothing in the store.
@@ -333,7 +670,7 @@ of the backends. With invented tasks:
     "reviews": []
   },
   "proposals": {
-    "proposals": [{"id": "0c1d2e3f4a5b", "kind": "person", "text": "Dana is head of IT at Northwind.", "quote": "Dana runs IT at Northwind", "day": "2026-03-04", "topic": "Northwind", "due": null}],
+    "proposals": [{"id": "0c1d2e3f4a5b", "kind": "person", "text": "Dana is head of IT at Northwind.", "quote": "Dana runs IT at Northwind", "day": "2026-03-04", "topic": "Northwind", "due": null, "source": "typed", "tool": null, "by": null}],
     "answered": 0
   },
   "status": {"machine_id": "alex-laptop", "inbox": {"count": 2, "evicted": 0}, "run": {"state": "succeeded", "last_succeeded_at": "2026-03-14T21:36:00+01:00"}, "backends": {"store": {"state": "reachable", "detail": ""}, "tasks": {"state": "reachable", "detail": ""}, "calendar": {"state": "not configured", "detail": ""}}}
@@ -347,12 +684,52 @@ kept for five minutes, so at most every five minutes the answer waits for the ca
 for at most 10 seconds whatever `calendar.timeout_seconds` says; a calendar that does not answer
 by then is reported as not reachable. `--tasks-only` leaves `proposals` and `status` out.
 
-`proposals` lists what a reading of your sessions proposed and still waits for your answer (one
-without an answer for 14 days no longer does), the earliest said first, and in `answered` how many answers wait for the next curation run. When
+`proposals` lists what a reading of your sessions proposed or a session handed in and still waits for your answer (one
+without an answer for 14 days no longer does), the earliest said first, and in `answered` how many answers wait for the next curation run. Each
+names where its words stand in `source` (`typed`, `pasted`, `tool` for a tool's result or `agent` for an
+answer of Claude), the tool in `tool` where it is a tool's result, and in `by` who proposed: `session`
+for one a session handed in, null for one a reading found. When
 that cannot be looked at (the proposals file or the answers folder is not downloaded, a newer m2b
 wrote the proposals file, the store is out of reach), `proposals` is `{"error": "<why>"}` and the
 other parts still answer. An entry of the proposals file that is not in the form, or holds half a
 character, is left out.
+
+With `--session <id>` the answer has one more part, `session`: what m2b gave the session with that
+id, as this machine noted it when it gave it.
+
+```json
+"session": {
+  "id": "0a1b2c3d-1111-4222-8333-444455556666",
+  "known": true,
+  "topics": [{"name": "Northwind", "facts": 3, "current": 1}],
+  "distillate": {"at_start": "whole", "off_under": null, "folder": "/home/alex/code/lumen"}
+}
+```
+
+`topics` are the topics whose facts the session got since its last start, at that start because
+the project path names them or before a prompt that named them, each with the facts lines and
+current items its block held at that moment; a curation run that changed the topic since does not
+change the numbers. `/clear` and a compaction are a start too: the context no longer holds what
+came before, so the list begins again, as it does for the topics that come in once per session.
+`distillate.at_start` says how that start printed the distillate: `whole`, `cut` to fit the
+start, `none` where there was none to read, and `null` where the start noted nothing of it.
+`distillate.off_under` is the folder the distillate is turned off under (`m2b distillate off`),
+as it is now, for the folder Claude Code names as the project or else the one the command runs
+in; a session that got topics before it was turned off still holds them. `distillate.folder` is
+that folder, with its links followed: the band hands it to `m2b distillate off`, so the button in
+the pane turns off the folder this answer is about. A session this machine
+holds no note of (the note is removed once it was not written for seven days, an m2b before these
+notes wrote none, and neither does a session without m2b's hooks) is `"known": false` with no
+topics, which does not say it was given nothing; a topic noted by an earlier m2b comes with
+`null` for its numbers. A value that is not 1 to 128 letters, digits and dashes is answered with
+`"session": {"error": "not a session id"}`, and a folder that cannot be looked at with an error
+of its own; the other parts still answer. The notes are kept on this machine under
+`~/.local/state/m2b/topics/`, one small file per session.
+
+With `--session-only` beside `--session`, the answer is `version` and `session` alone, and the
+command reaches no task list, no calendar and no store: the band asks it for every session by
+itself, while the rest of the answer is one the open sessions share. Without `--session`, and
+together with `--tasks-only`, it is refused.
 
 While a review task is open, `tasks.review` names the changes of the facts the last runs made, as
 the curation run kept them for the review: per change its `kind` (`rewrote`, `removed`,

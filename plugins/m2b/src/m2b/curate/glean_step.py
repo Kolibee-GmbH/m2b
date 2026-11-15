@@ -40,30 +40,20 @@ import dataclasses
 import datetime
 import re
 from collections import Counter
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
 
-from m2b import claude_code, glean, proposals, session_remotes, sessions
+from m2b import claude_code, folders_left_out, glean, proposals, sessions
 from m2b.config.machine import MachineConfig
-from m2b.config.profile import require_profile
-from m2b.curate import model
-from m2b.git_program import usable_git
-from m2b.ingest import TEXT_EXTENSIONS
-from m2b.notes.frontmatter import Note
-from m2b.notes.layout import CORPUS, INBOX, MEMORY, MEMORY_INDEX
-from m2b.notes.names import NoteName
+from m2b.curate import model, period_captures
+from m2b.notes.layout import MEMORY, MEMORY_INDEX
 from m2b.paths import MachinePaths
-from m2b.store.base import Store, StoreError
+from m2b.store.base import Store
 
 FIRST_PERIOD = datetime.timedelta(hours=24)
 LONGEST_PERIOD = datetime.timedelta(days=7)
 
 _MOMENT = "%Y-%m-%d %H:%M"
-# Why a session does not reach the model.
-_IN_A_FOLDER_LEFT_OUT = "folder"
-_OF_A_REPOSITORY_LEFT_OUT = "repository"
-_OF_NO_KNOWN_REPOSITORY = "unknown repository"
 # A slash command as the reader gives it: only its name.
 _COMMAND_NAME = re.compile(r"/\S+")
 
@@ -78,15 +68,6 @@ class Reading:
 
     skipped: str | None
     notes: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class _Captures:
-    """The texts captured in a period, and how many of its captures could not be read."""
-
-    texts: tuple[str, ...]
-    not_downloaded: int
-    unreadable: int
 
 
 def propose(
@@ -119,8 +100,8 @@ def propose(
             f"{_count(without_mark, 'text')} {'is' if without_mark == 1 else 'are'} without it: "
             "Claude Code may write its transcripts in a way this m2b does not read"
         )
-    why_left_out = _reasons_to_leave_out(store, config, machine, environ, started)
-    reasons = {session.session_id: why_left_out(session.folder) for session in found.sessions}
+    left_out = folders_left_out.rule(store, config, machine, environ, started)
+    reasons = {session.session_id: left_out.reason(session.folder) for session in found.sessions}
     considered = [session for session in found.sessions if reasons[session.session_id] is None]
     read = [session for session in considered if session.prompts]
     notes += _left_out_notes(Counter(reason for reason in reasons.values() if reason is not None))
@@ -130,7 +111,7 @@ def propose(
     if not read:
         proposals.save(store, dataclasses.replace(kept, read_until=started))
         return Reading(f"no session since {start.strftime(_MOMENT)} has a prompt of yours", tuple(notes))
-    captures = _captures(store, start, started)
+    captures = period_captures.captures_since(store, start, started)
     examples = proposals.examples(kept, started)
     if examples != glean.NO_EXAMPLES:
         notes.append(
@@ -163,7 +144,7 @@ def propose(
         f"{len(checked.not_quoted)} without the person's words, "
         f"{len(checked.already_captured)} captured already, {answer.malformed} not in the form"
     )
-    return Reading(None, (summary, *notes, *_capture_notes(captures)))
+    return Reading(None, (summary, *notes, *period_captures.capture_notes(captures)))
 
 
 def _nothing_marked(found: Sequence[sessions.Session]) -> int:
@@ -201,57 +182,12 @@ def _left_out_of(read: Sequence[sessions.Session]) -> list[str]:
     return [f"left out of these sessions: {', '.join(named)}"] if named else []
 
 
-def _reasons_to_leave_out(
-    store: Store, config: MachineConfig, machine: MachinePaths, environ: Mapping[str, str], started: datetime.datetime
-) -> Callable[[str], str | None]:
-    """For a session's folder, why the session does not reach the model, or None when it does."""
-    left_out = require_profile(store).worklog_leave_out
-    named = left_out.folders(machine.home)
-    by_remote = session_remotes.RemoteRule(
-        left_out.git_remote_contains,
-        machine.state_dir / session_remotes.NOTES_FOLDER,
-        started,
-        _asking_git(environ),
-    )
-
-    def reason(folder: str) -> str | None:
-        path = Path(folder)
-        # A folder that cannot be compared with the list is not shown to be outside it.
-        if not path.is_absolute() or any(path == root or root in path.parents for root in named):
-            return _IN_A_FOLDER_LEFT_OUT
-        if config.distillate.covering(path) is not None:
-            return _IN_A_FOLDER_LEFT_OUT
-        judged = by_remote.judge(folder)
-        if judged is session_remotes.ByRemote.UNKNOWN:
-            return _OF_NO_KNOWN_REPOSITORY
-        return _OF_A_REPOSITORY_LEFT_OUT if judged is session_remotes.ByRemote.LEFT_OUT else None
-
-    return reason
-
-
-def _asking_git(environ: Mapping[str, str]) -> Callable[[Path], frozenset[str] | None]:
-    """What git names as a folder's remotes now; nothing on a machine without a git to start.
-
-    Which git that is, is looked up at the first folder asked about, so a run in which no folder
-    needs it starts nothing.
-    """
-    found: list[str | None] = []
-
-    def ask(folder: Path) -> frozenset[str] | None:
-        if not found:
-            found.append(usable_git(environ))
-        git = found[0]
-        return session_remotes.remotes_in(folder, git, environ=environ) if git is not None else None
-
-    return ask
-
-
 def _left_out_notes(reasons: Mapping[str, int]) -> list[str]:
-    """How many sessions were not read for each reason, in the order of the reasons above."""
+    """How many sessions were not read for each reason: folder, repository, no known repository."""
     notes = []
-    in_folder = reasons.get(_IN_A_FOLDER_LEFT_OUT, 0)
-    of_repository = reasons.get(_OF_A_REPOSITORY_LEFT_OUT, 0)
-    unknown = reasons.get(_OF_NO_KNOWN_REPOSITORY, 0)
+    in_folder = reasons.get(folders_left_out.IN_A_FOLDER_LEFT_OUT, 0)
+    of_repository = reasons.get(folders_left_out.OF_A_REPOSITORY_LEFT_OUT, 0)
+    unknown = reasons.get(folders_left_out.OF_NO_KNOWN_REPOSITORY, 0)
     if in_folder:
         notes.append(f"{_count(in_folder, 'session')} in a folder that is left out {_were(in_folder)} not read")
     if of_repository:
@@ -273,68 +209,6 @@ def _distillate(store: Store) -> str:
         return store.read_text(f"{MEMORY}/{MEMORY_INDEX}")
     except FileNotFoundError:
         return ""
-
-
-def _captures(store: Store, start: datetime.datetime, end: datetime.datetime) -> _Captures:
-    """What was captured since ``start``, from the inbox and the archive, by the time in each name.
-
-    A capture that is not downloaded is counted and not read (a read would download it or hang),
-    and so is a folder that is not: what it holds cannot be listed. A text file the person dropped
-    into the inbox under a name of its own is a capture too: ingest names it only after this step.
-    """
-    texts: list[str] = []
-    not_downloaded = unreadable = 0
-    for folder in (INBOX, *_month_folders(start, end)):
-        scan = store.scan(folder)
-        dropped = folder == INBOX
-        not_downloaded += sum(1 for path in scan.evicted if _may_be_of_the_period(path, start, dropped))
-        for path in scan.files:
-            if not _is_capture_since(path, start, dropped):
-                continue
-            try:
-                texts.append(Note.parse(store.read_text(path)).body)
-            except (OSError, StoreError, UnicodeDecodeError):
-                unreadable += 1
-    return _Captures(tuple(texts), not_downloaded, unreadable)
-
-
-def _month_folders(start: datetime.datetime, end: datetime.datetime) -> Iterator[str]:
-    """The archive's folders for the months of the period; a capture is filed by its name's UTC time."""
-    month = start.astimezone(datetime.timezone.utc).date().replace(day=1)
-    last = end.astimezone(datetime.timezone.utc).date()
-    while month <= last:
-        yield f"{CORPUS}/{month:%Y}/{month:%m}"
-        month = (month + datetime.timedelta(days=32)).replace(day=1)
-
-
-def _is_capture_since(path: str, start: datetime.datetime, dropped: bool) -> bool:
-    """A capture by its name and the time in it; with ``dropped`` also a text file under any other name."""
-    name = NoteName.parse(PurePosixPath(path).name)
-    if name is not None:
-        return name.extension == "md" and name.time >= start
-    return dropped and PurePosixPath(path).suffix.lower() in TEXT_EXTENSIONS
-
-
-def _may_be_of_the_period(evicted: str, start: datetime.datetime, dropped: bool) -> bool:
-    """A capture of the period by its name, or a folder, which may hold one."""
-    return _is_capture_since(evicted, start, dropped) or not PurePosixPath(evicted).suffix
-
-
-def _capture_notes(captures: _Captures) -> list[str]:
-    notes = []
-    if captures.not_downloaded:
-        one = captures.not_downloaded == 1
-        notes.append(
-            f"{_count(captures.not_downloaded, 'capture')} of the period {'is' if one else 'are'} not downloaded, "
-            f"so a proposal may repeat {'it' if one else 'one'}"
-        )
-    if captures.unreadable:
-        one = captures.unreadable == 1
-        notes.append(
-            f"{_count(captures.unreadable, 'capture')} of the period could not be read, "
-            f"so a proposal may repeat {'it' if one else 'one'}"
-        )
-    return notes
 
 
 def _count(number: int, noun: str) -> str:

@@ -672,6 +672,12 @@ class CouldNotLookTest(SessionsFixture):
         self.assertEqual(found.sessions, ())
         self.assertEqual(found.unreadable, ("-shed/no-folder.jsonl",))
 
+    def test_a_line_nested_deeper_than_python_reads_is_passed_over(self) -> None:
+        path = self.transcript(typed("Dana runs purchasing", at(9)))
+        deep = '{"type": "user", "toolUseResult": ' + "[" * 100_000 + "]" * 100_000 + "}"
+        path.write_text(deep + "\n" + path.read_text(encoding="utf-8"), encoding="utf-8")
+        self.assertEqual(self.texts(), ["Dana runs purchasing"])
+
     def test_a_transcript_that_cannot_be_read_is_named_and_the_others_are_read(self) -> None:
         """Covers: B114"""
         self.transcript(typed("first of the day", at(9)), session="readable")

@@ -15,7 +15,7 @@ import test_commands
 from locations import PLUGIN_ROOT
 from m2b import cli, launcher, setup
 from m2b.config import store_path
-from m2b.config.machine import load_machine_config
+from m2b.config.machine import load_machine_config, set_machine_config_value
 from m2b.curate import model
 from m2b.store.guard import DatalessGuard
 from store_contract import FakeEviction
@@ -201,6 +201,22 @@ class NewStoreTest(SetupTest):
         self.assertEqual(code, cli.EXIT_USAGE)
         self.assertIn("curation_model", err)
         self.assertFalse(self.machine.config_file.exists())
+
+    def test_no_answer_of_setup_lets_sessions_hand_in_proposals(self) -> None:
+        """Covers: B173"""
+        answers = self.answers(propose=True, sessions={"propose": True}, read_sessions=True)
+        code, _, err = self.apply(answers)
+        self.assertEqual(code, 0, err)
+        self.assertNotIn("sessions", self.config())
+        self.assertFalse(load_machine_config(self.machine).sessions.propose)
+
+    def test_setup_keeps_the_switch_for_handing_in_as_the_owner_set_it(self) -> None:
+        """Covers: B173"""
+        self.apply(self.answers())
+        set_machine_config_value(self.machine, "sessions.propose", True)
+        code, _, err = self.apply(self.answers())
+        self.assertEqual(code, 0, err)
+        self.assertTrue(load_machine_config(self.machine).sessions.propose)
 
     def test_a_yes_to_reading_the_sessions_is_recorded_and_a_run_without_the_answer_keeps_it(self) -> None:
         """Covers: B123"""

@@ -240,6 +240,18 @@ def _parser() -> argparse.ArgumentParser:
     config_set.add_argument("key")
     config_set.add_argument("value", help="JSON, or plain text for a string")
 
+    every_setting = _command(
+        commands, "settings", settings.settings_command, "every setting of this machine, the store and the owner", True
+    )
+    switch = _command(
+        every_setting.add_subparsers(dest="action"),
+        "set",
+        settings.settings_set,
+        "change a switch to one of its values",
+    )
+    switch.add_argument("key", help="a switch, as m2b settings names it, such as curation.paused")
+    switch.add_argument("value", help="one of the switch's values, such as true")
+
     distillate_group = _group(commands, "distillate", "the distillate at session start, per project")
     for name, handler, help_text in (
         ("off", distillate_commands.distillate_off, "no distillate in sessions in this folder and below"),
@@ -248,6 +260,13 @@ def _parser() -> argparse.ArgumentParser:
         _command(distillate_group, name, handler, help_text).add_argument(
             "folder", nargs="?", help="the project folder; the current folder without it"
         )
+    _command(
+        distillate_group,
+        "topic",
+        distillate_commands.distillate_topic,
+        "the facts and current items of one topic, as the distillate holds them now",
+        json_flag=True,
+    ).add_argument("name", help="the topic's name, as its heading in the distillate has it")
 
     addons_group = _group(commands, "addons", "the add-ons of m2b on this machine")
     _command(addons_group, "list", addons_commands.addons_list, "each add-on and whether it is on", json_flag=True)
@@ -301,6 +320,8 @@ def _parser() -> argparse.ArgumentParser:
         given.set_defaults(all=False)
         if answer == "keep":
             given.add_argument("--all", action="store_true", help="every proposal that waits for an answer")
+    add = answers.add_parser(proposals_commands.ADD, help="hand in a proposal of a session, as JSON on standard input")
+    add.add_argument("input", nargs="?", choices=("-",), default="-", help="-: read standard input")
 
     refresh_group = _group(commands, "refresh", "memory lines past their day or gone quiet")
     refresh_due = _command(refresh_group, "due", refresh_commands.refresh_due, "what is due, for the refresh", True)
@@ -456,6 +477,12 @@ def _parser() -> argparse.ArgumentParser:
         commands, "band", band_commands.band_command, "what the band above the prompt shows, as JSON", json_flag=True
     )
     band_command.add_argument("--tasks-only", action="store_true", help="only the curator tasks, nothing else")
+    band_command.add_argument(
+        "--session", metavar="ID", action=_Once, help="also what m2b gave the session with this id"
+    )
+    band_command.add_argument(
+        "--session-only", action="store_true", help="only what m2b gave the session --session names"
+    )
 
     launcher = _group(commands, "launcher", "the launcher in ~/.local/bin")
     _command(launcher, "install", launcher_commands.launcher_install, "write or refresh the launcher")

@@ -85,7 +85,7 @@ class CommandsPageTest(unittest.TestCase):
             name for source in (PLUGIN / "hooks").glob("*.ts*") for name in BAND_COMMAND.findall(source.read_text())
         )
 
-        self.assertEqual(len(commands), 4, commands)
+        self.assertEqual(len(commands), 6, commands)
         self.assertEqual([name for name in commands if f"`/{name}" not in self.page], [])
 
     def test_the_readme_links_the_page(self) -> None:

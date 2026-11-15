@@ -6,7 +6,13 @@ import re
 import unittest
 
 from locations import PLUGIN_ROOT
-from m2b.notes.characters import HIDDEN_RANGES, unsafe_characters, with_hidden_written_out, without_hidden
+from m2b.notes.characters import (
+    HIDDEN_RANGES,
+    unsafe_characters,
+    with_hidden_written_out,
+    with_unseen_written_out,
+    without_hidden,
+)
 
 MOD_TABLE = PLUGIN_ROOT / "hooks" / "plain-text.ts"
 JOINERS = ("‌", "‍")
@@ -64,6 +70,24 @@ class HiddenCharactersTest(unittest.TestCase):
         )
         self.assertEqual(with_hidden_written_out("memory/dana\u200c\u200d.md"), "memory/dana<U+200C><U+200D>.md")
         self.assertEqual(with_hidden_written_out("memory/dana.md"), "memory/dana.md")
+
+    def test_for_one_line_of_a_terminal_the_control_characters_are_written_out_too(self) -> None:
+        line_break, escape, c1, delete = chr(0x0A), chr(0x1B), chr(0x9B), chr(0x7F)
+
+        self.assertEqual(
+            with_unseen_written_out(f"Inbox{line_break}next{escape}[2K{c1}{delete}" + chr(0x09) + chr(0x200D)),
+            "Inbox<U+000A>next<U+001B>[2K<U+009B><U+007F><U+0009><U+200D>",
+        )
+        self.assertEqual(with_unseen_written_out("Alex Ünal, 2 folders ~/code"), "Alex Ünal, 2 folders ~/code")
+        self.assertEqual(with_unseen_written_out(""), "")
+        self.assertEqual(
+            with_unseen_written_out("Inbox" + chr(0x2028) + "next" + chr(0x2029) + chr(0x85)),
+            "Inbox<U+2028>next<U+2029><U+0085>",
+        )
+        self.assertEqual(
+            with_unseen_written_out("a" + chr(0x2027) + chr(0x202F) + "b"), "a" + chr(0x2027) + chr(0x202F) + "b"
+        )
+        self.assertEqual(with_hidden_written_out(f"a{line_break}b"), f"a{line_break}b")
 
     def test_the_joiners_stay_because_emoji_and_scripts_need_them(self) -> None:
         """Covers: B143"""

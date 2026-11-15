@@ -120,10 +120,12 @@ From the next session on, [the band](band.md) above the prompt shows what curati
 keep or drop. It is a mod, a module Claude Code loads with the plugin, and runs only while mods are
 on in Claude Code: `m2b doctor` says in its line `band` whether it ran, and
 [What it needs](band.md#what-it-needs) what to do when it did not. With it come
-`/m2b-note <text>`, which notes a text at once without a model turn, `/m2b-review`,
-`/m2b-proposals` and `/m2b-search <text>`, which show the last curation run, the proposals from
-your sessions and search hits in a pane, and two tools through which the model notes and searches
-without a shell call. The worklog add-on is off until its own setup skill turns it on;
+`/m2b-note <text>`, which notes a text at once without a model turn, `/m2b-pane`, `/m2b-review`,
+`/m2b-proposals`, `/m2b-search <text>` and `/m2b-settings`, which show in a pane what m2b gave
+this session, what waits for you and what is due today, the last curation run, the proposals from
+your sessions, search hits and every setting of m2b, and two tools through which the model notes
+and searches without a shell call; a third, with which a session hands in proposals by itself, is off until you
+turn it on ([The band](band.md#handing-in-a-proposal-a-tool-you-turn-on)). The worklog add-on is off until its own setup skill turns it on;
 [Add-ons](addons.md) describes it.
 
 Setup asked, on the machine that curates, whether curation runs may read your sessions. It is off
@@ -218,7 +220,7 @@ m2b config set executables.claude "$(command -v claude)"
 | `<store>/memory/MEMORY.md` | the distillate every session sees |
 | `<store>/tasks/` | your tasks, with the `markdown` backend |
 | `~/.config/m2b/config.json` | this machine's settings |
-| `~/.local/state/m2b/` | lock, run log, temp files, the worklog's recordings, and while sessions are read the git remotes of the folders they start in |
+| `~/.local/state/m2b/` | lock, run log, temp files, the worklog's recordings, which topics each session of the last seven days was given, and while sessions are read the git remotes of the folders they start in |
 | `~/.local/state/m2b/memory-before-run/` | copies of `memory/` from before a run's model steps: the latest run's copy until the next run, and an older one while a review task still names it for a facts line a run removed or rewrote ([The curation run](curation.md)). They hold what your facts say, outside the store folder |
 | `~/.local/share/m2b/` | the copy of the worklog's herdr recorder, with the worklog add-on |
 | `~/.local/bin/m2b` | the launcher scripts and schedules call |

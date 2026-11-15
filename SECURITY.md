@@ -214,7 +214,10 @@ The step that reads your sessions has no tool at all ([Reading your sessions](#r
 
 ## Reading your sessions
 
-Off until you say yes in setup ([docs/curation.md](docs/curation.md#reading-your-sessions)). A
+Off until you say yes in setup or turn `curation.read_sessions` on yourself, with
+`m2b settings set` or with its switch in the m2b pane
+([docs/curation.md](docs/curation.md#reading-your-sessions)). Unlike handing in, this setting is
+not refused inside a Claude Code session: a session that may run `m2b` can turn it on. A
 curation run then gives a model what you typed in Claude Code since the last reading, with the
 folder and the day of each session: the prompts Claude Code marks as typed by you, with what you
 pasted into them kept apart from what you typed, without Claude's answers, tool results and what a
@@ -225,8 +228,9 @@ by its folder or by a git remote of its repository, does not reach it. With the 
 with the words it stood on, typed or pasted; so words of an earlier period go to the model again
 while such a proposal is among them, until 90 days after a run settled your answer to it.
 
-That model can call nothing: it reads its input and answers once. Code keeps a proposal only when
-the words it quotes stand in a prompt of the period, and nothing is filed before you say keep. The
+That model can call nothing: it reads its input and answers once. Code keeps a proposal of a
+reading only when the words it quotes stand in a prompt of the period, and nothing is filed before
+you say keep. The
 distillate and the proposals file lie in the store, so whoever can write the store can try to
 steer that model through them, and so can whoever wrote a mail, a page or an agent's answer you
 pasted into a prompt. What this reaches is which proposals you are shown and their text,
@@ -243,9 +247,111 @@ proposal whose text is its own and whose quote is three words you typed, and tha
 credential most likely stands: the same patterns run over it, which stays incomplete, and a value
 that begins a paste right after a name you typed goes like one typed whole.
 
+## What a session hands in
+
+Off until you turn it on yourself: with `m2b config set sessions.propose true` typed in a terminal
+outside Claude Code, or with a press on the setting's card in the band's pane
+([docs/band.md](docs/band.md#handing-in-a-proposal-a-tool-you-turn-on)). Setup never writes the
+setting, and the command does not turn it on where `CLAUDECODE` is set, as Claude Code sets it
+for every command of a session's shell. That is a threshold, not a boundary: a session that may
+run any command can write the config file, or run the command with that variable set empty.
+
+The press in the pane is the one call of the band that sets the variable empty. It rests on the
+way a press arrives: no tool of Claude Code hands the band a press. A press arrives as input on a
+client that draws the session, and a model whose tools steer that input presses as you do
+(below). The band then starts `m2b settings set sessions.propose true` itself; no permission
+rule of yours is asked or used for it. The band does that for this one call and no other, after
+the five seconds in which `undo` takes the press back. Claude Code does not say who pressed: a
+press carries no mark of a person, as a prompt you typed at the terminal does. The card offers
+the button where the client that draws it names itself the terminal, the desktop app or VS Code,
+and names the command to type where it names itself the mobile app. That name is the client's
+own word: it keeps a tap in the mobile app from turning the setting on, and nothing more. So the
+threshold for the press lies in the band, and it holds as far as the band and those clients are
+what runs:
+
+- Another plugin you installed can start the same command with an empty `CLAUDECODE` itself, with
+  the pane or without it, and could also change what a press says, what the pane draws and the
+  command the band starts. That holds without the press as well: the refusal goes by a variable,
+  and a command a plugin starts carries the value that plugin gives it. A plugin with code of its
+  own runs as you.
+- Whatever attaches to the session as a client presses as you do. A client over Remote Control
+  passes where it names itself the terminal, the desktop app or VS Code; what name the web
+  client gives itself, m2b does not know. The desktop app and VS Code can also draw a session
+  that runs on another machine. A process that runs as you needs no press: it can run the
+  command outside Claude Code itself.
+- Whatever types into your terminal or steers your screen can open the settings and press as you
+  do, and that includes the model of a session, this one or another, with a tool for it: computer
+  use, a browser on a page of Remote Control where that page offers the button, a shell that
+  sends keys to a terminal multiplexer.
+  A model that steers the keyboard could type the command into a terminal of your own as well. A
+  model that can only click could not: for it the press is a lower threshold than the command.
+
+What shows a press you did not make: while it waits, every client that draws the card shows it
+with `undo`, whichever client it was made on, and for those five seconds it can be taken back
+there. Afterwards the card says `now: on`, and so does `m2b settings`.
+
+With it on, the agent of a session can hand in a proposal by itself: a kind, a text it worded, and
+the words that text stands on. The words can be yours, or stand in what the agent read for its
+task: a file, a mail a connector returned, a web page, the output of a command. So a quote from
+somebody else's text lies in the store's state and syncs with it, with the session's id, the name
+of the tool and the time of the call: first as a file under `state/core/handed-in/`, and in
+`state/core/proposals.json` once a curation run took it in. Nothing is filed into memory before
+you say keep.
+
+What code holds, at the call, on the machine the session runs on:
+
+- The quote stands as whole words in one text of that session's transcript: what you typed, what
+  you pasted, what a tool returned or what Claude answered. The input of a call, a subagent's
+  conversation, what the model thought, a prompt without the mark of a person and a result that
+  gives the memory back are no such text.
+- The proposal says which of the four it is, the first that holds the quote in that order, and
+  for a tool's result the tool.
+- A session that worked in a folder or a repository you leave out hands nothing in, and neither
+  does one whose calls name a path in such a folder.
+- A credential in or around the quote, as far as the redaction's patterns reach, refuses the
+  proposal. That net has holes, here as everywhere.
+- No more than ten proposals of one session wait for a run, and a run takes no more than ten of
+  one session. That bounds what comes between two runs, not the list: after each run the same
+  session can hand in ten more, and nothing limits the number of sessions.
+
+What it does not hold:
+
+- That the words carry the text. A document can lead an agent to a proposal with a text of the
+  document's choosing over three words you typed, and that proposal says `said on`. Every
+  proposal a session handed in says so in its heading; read its text beside its words before you
+  keep it. `m2b proposals keep --all` and the pane's `keep all` leave such proposals: you answer
+  each by its id or with its own row. Where Claude Code cannot show a pane, `/m2b-proposals`
+  answers as text in the conversation, so a model then reads the texts of the waiting proposals,
+  an agent's wording among them, beside the command that keeps one.
+- Which wording waits. A proposal with the words or the text of one that waits is not added. Where
+  a session's proposal is there first, a reading's proposal for the same words does not come, and
+  dropping the session's keeps both away for 90 days. Within one run the reading comes first.
+- What a session read without a path. The rule of the folders covers what a call names by a path;
+  what came through a connector, the web or a command that names no such path is covered only by
+  the rule in the tool's description (never documents of customers or confidential statements
+  about third parties) and by your answer. A path hidden in a variable is not seen.
+- Who called. `m2b proposals add` can be called from a shell by an agent you allowed
+  `Bash(m2b:*)`, and such a call can name any session of this machine: a text of the caller's
+  choosing over words that stand in another session. That is less than the same permission gives
+  already, because with it `m2b capture` writes a note that is filed with no keep or drop.
+- What another machine found. The curation run that takes a file in may run on another machine
+  and reads no transcript. It checks the form again; where the words stand is what the machine
+  that handed in found. Whoever can write the store can write such a file, as they can write into
+  `memory/` with no proposal at all.
+
+A call runs without a permission question, in a headless session too, so a session you started to
+work through other people's text hands in without you seeing the call; your rule for the tool's
+name or for `Bash(m2b proposals:*)` comes first. A line planted in a file gives a proposal in each
+session that reads it, and a run adds a proposal with the same text once.
+
+A store that is a git repository keeps every proposal a run committed in its history, a dropped
+one too, beyond the 90 days the proposals file remembers it. That holds for the proposals of a
+reading as well.
+
 ## The tools the model calls
 
-Where the mod runs, the model has two tools, `mcp__m2b__note` and `mcp__m2b__search`. They can do
+Where the mod runs, the model has two tools, `mcp__m2b__note` and `mcp__m2b__search`, and where
+you turned handing in on a third, `mcp__m2b__propose` (above). The first two can do
 what the skills' commands can: add a note to `inbox/` (with a follow-up, also a task in your task
 list) and read the store through `m2b search`. A note the model writes is a capture like any other,
 so text the model read elsewhere, such as a web page, can reach the inbox the way the section above
@@ -257,7 +363,7 @@ like an instruction. Where the tool is not offered, the `search` skill runs `m2b
 shell: a hit then comes without those invisible characters too, but with its escape sequences
 and without the line that marks it as data.
 
-The mod lets a call of either tool run where Claude Code would only ask because no rule allows it,
+The mod lets a call of any of these tools run where Claude Code would only ask because no rule allows it,
 as the skills run their commands without asking; then neither the classifier of auto mode nor a
 `PermissionRequest` hook is asked. For the note tool this holds only for a note in your own words:
 every word of it stands in one prompt you submitted in the session (typed, sent over Remote Control,

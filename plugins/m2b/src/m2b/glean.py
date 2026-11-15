@@ -53,7 +53,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from m2b.notes.characters import unsafe_characters
+from m2b.notes.characters import can_be_written, unsafe_characters
 from m2b.notes.memory_index import MAX_TOPIC_NAME
 from m2b.sessions import Prompt, Session
 
@@ -62,9 +62,13 @@ AGREEMENT = "agreement"
 COMMITMENT = "commitment"
 PERSONAL = "personal"
 KINDS = (PERSON, AGREEMENT, COMMITMENT, PERSONAL)
-# Where in a prompt a proposal's quote stands. What was pasted may be anyone's words.
+# Where in a session a proposal's quote stands. What was pasted may be anyone's words. A reading
+# finds a quote in a prompt only; a session that hands a proposal in can also stand on what a tool
+# returned to it or on what Claude answered.
 TYPED = "typed"
 PASTED = "pasted"
+TOOL = "tool"
+AGENT = "agent"
 # A proposal is one fact or one task; a longer text is a summary, which nobody asked for.
 TEXT_LENGTH = 300
 QUOTE_WORDS = 3
@@ -275,7 +279,7 @@ def _proposal(entry: object, sessions: Sequence[Session]) -> Proposal | None:
         return None
     if number is None or not 1 <= number <= len(sessions):
         return None
-    if unsafe_characters(text + quote + topic) or not _can_be_written(text + quote + topic):
+    if unsafe_characters(text + quote + topic) or not can_be_written(text + quote + topic):
         return None
     return Proposal(kind, text, quote, sessions[number - 1].session_id, topic or None, due)
 
@@ -304,15 +308,6 @@ def _due(value: object) -> datetime.date | None:
     return datetime.date.fromisoformat(value)
 
 
-def _can_be_written(text: str) -> bool:
-    """False for half a character (a lone surrogate), which a model's escape can leave in its answer."""
-    try:
-        text.encode("utf-8")
-    except UnicodeEncodeError:
-        return False
-    return True
-
-
 def _collapsed(text: str) -> str:
     return " ".join(text.split())
 
@@ -320,6 +315,17 @@ def _collapsed(text: str) -> str:
 def _bare(text: str) -> str:
     """Without case, extra white space and the punctuation at its ends, for comparing wordings."""
     return _collapsed(text).casefold().strip(_ENDS)
+
+
+def captured_already(statements: Sequence[str], captures: Sequence[str]) -> bool:
+    """Whether one of the captures says what one of the statements says, by the second check.
+
+    For a proposal that comes without the prompt its quote stands in: each statement, the quote
+    and the text, is compared with each capture as a quote is, and taken as the text a capture of
+    it was worded from.
+    """
+    captured = [(_bare(capture), _words(_ADDITION.sub(" ", capture))) for capture in captures]
+    return any(_is_captured(_collapsed(statement), (statement,), captured) for statement in statements)
 
 
 def _is_captured(quote: str, quoted_from: Sequence[str], captured: Sequence[tuple[str, frozenset[str]]]) -> bool:

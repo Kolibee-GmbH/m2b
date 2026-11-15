@@ -36,7 +36,7 @@ flowchart LR
 | Sort | model, only with `m2b curate --sort-facts` | moves facts lines of an older distillate into topics; code puts the file back if a statement changed |
 | Lint | code; the model only to repair a broken memory link with exactly one candidate | checks names, links, conflict copies and the distillate's size |
 | Journal | code | adds the tasks you completed to the month's `corpus/YYYY/MM/YYYYMM-done.md` |
-| Proposals task | code | one task in your list while proposals from your sessions wait for your answer, completed once none waits |
+| Proposals task | code | takes in what sessions handed in ([What a session hands in](#what-a-session-hands-in)), lets unanswered proposals expire, and keeps one task in your list while proposals wait for your answer, completed once none waits |
 | Review task | code | one task in your list when something needs you |
 | Commit | code, only when the store folder is a git repository | one git commit of what changed in the store while the run ran, and before the first step one of the captures git does not know yet ([A commit per run](#a-commit-per-run)) |
 
@@ -289,7 +289,7 @@ m2b proposals keep <id>...    # or: m2b proposals keep --all
 m2b proposals drop <id>...
 ```
 
-`keep --all` and the pane's keep all keep every proposal that waits as it is written. Text you
+`keep --all` and the pane's keep all keep every proposal a reading found that waits, as it is written. Text you
 pasted can try to lead the model, also to a proposal that quotes words you typed, so read each
 proposal's text before you keep it.
 
@@ -345,6 +345,58 @@ it cannot read fails the step alone: the review says so, nothing is saved, and t
 the same time again. A period with texts of which none carries Claude Code's mark of who sent it
 fails the same way, so a Claude Code too old to write the mark never passes for a day on which
 nothing was typed.
+
+## What a session hands in
+
+A second way to a proposal, beside the reading and independent of it: with `sessions.propose` on
+([Configuration](configuration.md#configjson-this-machine)), the agent of a session hands a
+proposal in by itself when the session states who someone is, an agreement, a commitment of yours
+or something about your own life, also where the words stand in what it read for you, a mail or a
+document ([The band](band.md#handing-in-a-proposal-a-tool-you-turn-on)). The call is checked
+against that session's transcript on the machine it runs on, and what passes is one file under
+`state/core/handed-in/`.
+
+Every curation run that gets to its step for the proposals takes these files in, whether or not
+it reads your sessions: each becomes a proposal that waits, like one a reading found, and its file is
+removed. The run reads no transcript, the session may have run on another machine. It checks
+again what needs none (the form, hidden characters, credentials by pattern, the tool's name) and
+leaves out what you captured yourself since the day before that day, as far as a month back, and
+what is like a proposal that waits, was answered or expired. So a fact a session hands in and a
+reading proposes too waits once, and so does one that several sessions hand in. Where both come
+in one run, the reading's proposal is the one that waits: it is worded from what you typed and
+pasted alone. Where the session's came first, it stands in the reading's way, and dropping it
+keeps both from coming back for 90 days. Of one session a run takes ten; the session can hand in
+ten more after each run. The run's information says how
+many it added and how many not, by reason; a file that is not downloaded waits for the next run,
+and one a newer m2b wrote stays until this machine is updated.
+
+Such a proposal says where its words stand and that a session handed it in:
+
+```text
+38d8f71e327f  person, handed in by a session
+  Dana Whitfield runs purchasing at Acme.
+  in a result of Read on 2026-11-15: "Dana Whitfield runs purchasing at Acme"
+```
+
+The line reads `said on`, `pasted on`, `in a result of <tool> on` or `Claude wrote on`. The mark
+in the heading stands also where the words were typed: an agent worded the text, and it had read
+more than your words. Code found the words in the session; it never shows that they carry the
+text. Read a proposal before you keep it. `m2b proposals keep --all` and the pane's `keep all`
+leave the proposals sessions handed in, and the command says how many; you keep or drop each by
+its id, or with its own row in the pane.
+
+A proposal a session handed in is no example for the reading's model, and it expires and is
+remembered like any other. `m2b status` counts both ways apart, per source of the words:
+
+```text
+proposals a reading found in typed words: 2 waiting, 5 kept, 1 dropped, 0 expired in the last 30 days
+proposals sessions handed in from a tool's result: 1 waiting, 3 kept, 2 dropped, 0 expired in the last 30 days
+```
+
+Where the store is a git repository, a handed-in file is committed with the waiting captures
+before a run's first step, and the run takes in only what a commit holds, so taking that run back
+puts the file where the next run takes it in again; a file that came in later, or was not
+downloaded yet, waits for the next run ([A commit per run](#a-commit-per-run)).
 
 ## What runs when
 

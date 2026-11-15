@@ -44,11 +44,15 @@ from m2b.claude_code import HUMAN, PROMPT_BLOCK, sender_of
 from m2b.redaction import REDACTED, is_removed_behind, redact
 
 PROMPT_LENGTH = 2000
+# The flags of a record Claude Code wrote itself or that belongs to a subagent's conversation.
+NOT_THE_MAIN_CONVERSATION = ("isMeta", "isCompactSummary", "isSidechain")
 
 _HEADLESS = "sdk-cli"
 _SUGGESTION = "suggestion_accepted"
 # What Claude Code writes into the transcript when the person stops a turn.
 _INTERRUPTED = "[Request interrupted"
+# How the record of a shell line typed with "!" begins: its input, then what it printed.
+_SHELL_LINE = "<bash-"
 # A command's record starts with its tags; the same tags further in are text about a command.
 _COMMAND = re.compile(
     r"\A\s*(?:<command-message>[^<]*</command-message>\s*)?<command-name>\s*/?([^<\s]+)\s*</command-name>"
@@ -172,7 +176,8 @@ def _read(path: Path, start: datetime.datetime, end: datetime.datetime) -> _Read
         for line in handle:
             try:
                 record: Any = json.loads(line)
-            except ValueError:
+            # A line nested deeper than this Python reads is passed over like one that is no JSON.
+            except (ValueError, RecursionError):
                 continue
             if not isinstance(record, dict):
                 continue
@@ -194,8 +199,7 @@ def _read(path: Path, start: datetime.datetime, end: datetime.datetime) -> _Read
 
 def _may_be_a_prompt(record: Mapping[str, Any]) -> bool:
     """A record of the main conversation in the user's place that Claude Code did not write itself."""
-    flags = ("isMeta", "isCompactSummary", "isSidechain")
-    return record.get("type") == "user" and not any(record.get(flag) for flag in flags)
+    return record.get("type") == "user" and not any(record.get(flag) for flag in NOT_THE_MAIN_CONVERSATION)
 
 
 def _is_only_blocks(text: str) -> bool:
@@ -246,6 +250,52 @@ def _take(record: Mapping[str, Any], moment: datetime.datetime, reading: _Readin
             return False
         reading.prompts.append(Prompt(moment, shown, pasted))
     return True
+
+
+def prompt_of_a_person(record: Mapping[str, Any]) -> tuple[str, ...] | None:
+    """The texts of this record as the person sent it, or None for a record that is no prompt of theirs.
+
+    For a caller that looks for words in one session. A prompt is one text or several text parts,
+    and each is whole and as written here: nothing is redacted, cut, joined or taken out, and what
+    was pasted and the blocks Claude Code wrote are still in it. A record is the person's prompt
+    under the conditions ``read_sessions`` holds one to
+    (Claude Code's mark of a human sender, no suggested prompt, no slash command, the main
+    conversation), and under three more. A caller that says of words that the person typed them
+    must not take what Claude Code writes in their place, whatever sender the record names: the
+    output of a shell line, the note of a turn the person stopped, and a record that also holds a
+    tool's result.
+    """
+    if not _may_be_a_prompt(record):
+        return None
+    message = record.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    text = _text_of(content)
+    source = record.get("promptSource")
+    if text is None or _holds_a_tool_result(content) or sender_of(record) != HUMAN or source == _SUGGESTION:
+        return None
+    if source is None and _COMMAND.match(text):
+        return None
+    if text.lstrip().startswith((_SHELL_LINE, _INTERRUPTED)) or _is_only_blocks(text):
+        return None
+    return _text_parts_of(content)
+
+
+def time_of(record: Mapping[str, Any]) -> datetime.datetime | None:
+    """When the record was written, by its timestamp; None for a record without one that names its zone."""
+    return _time(record.get("timestamp"))
+
+
+def _text_parts_of(content: object) -> tuple[str, ...]:
+    if isinstance(content, str):
+        return (content,)
+    parts = content if isinstance(content, list) else []
+    texts = [part.get("text") for part in parts if isinstance(part, dict) and part.get("type") == "text"]
+    return tuple(text for text in texts if isinstance(text, str) and text.strip())
+
+
+def _holds_a_tool_result(content: object) -> bool:
+    parts = content if isinstance(content, list) else []
+    return any(isinstance(part, dict) and part.get("type") == "tool_result" for part in parts)
 
 
 def _typed(text: str) -> str:

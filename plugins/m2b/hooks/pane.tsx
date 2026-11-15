@@ -2,8 +2,9 @@ import type { CommandSpec, EngineInterface, ResolveInput } from 'claude-code'
 
 import type { BandPress, BandRun, BandSnapshot, PaneSearch, PaneView, SearchHit } from '../types'
 import { runM2b } from './m2b'
+import { CLOSED_BY_HAND } from './pane-seat'
 import { untoldFindings } from './tasks'
-import { plainLine } from './plain-text'
+import { plainLine, withoutHidden } from './plain-text'
 import { candidateRow, changesSummary, reviewRow } from './rows'
 import type { RowActions } from './rows'
 
@@ -225,24 +226,48 @@ export function searchLines(search: PaneSearch): string[] {
   return lines
 }
 
+/** The pane as a dialog: it asks for the keyboard, and Escape closes it as the person's close mark does. */
+export const AS_A_DIALOG = { id: PANE_ID, title: PANE_TITLE, closeOnEscape: true, focus: true } as const
+
 /**
  * Opens the pane and says where to look. A surface that cannot show it (no pane there, or none
- * attached) gets the content as the command's own lines instead.
+ * attached) gets the content as the command's own lines instead. `staysOpen` is for the start view
+ * where it sits beside the chat: Escape hands the keyboard back there and the pane stays.
  */
-export async function showPane($: EngineInterface, placedLine: string, lines: () => string[]): Promise<string> {
+export async function showPane(
+  $: EngineInterface,
+  placedLine: string,
+  lines: () => string[],
+  staysOpen = false,
+): Promise<string> {
   // `focus` is a request: the pane takes the keyboard, so the arrows scroll it, only over an empty prompt.
-  const opened = await $.ui.open({ id: PANE_ID, title: PANE_TITLE, closeOnEscape: true, focus: true })
+  const opened = await $.ui.open(staysOpen ? { id: PANE_ID, title: PANE_TITLE, focus: true } : AS_A_DIALOG)
   if (opened.isPlaced) {
+    await openedByThePerson($)
     return placedLine
   }
   // Undrawn, it would stay open and appear once a surface that places panes attaches.
   await $.ui.close({ id: PANE_ID })
-  return [`the m2b pane cannot be shown here: ${plainLine(opened.reason)}`, ...fallback(lines())].join('\n')
+  return [`the m2b pane cannot be shown here: ${withoutHidden(plainLine(opened.reason))}`, ...fallback(lines())].join('\n')
 }
 
+/**
+ * The person opened the pane, with a command or a press: it opens by itself again from the next
+ * session on, also after they once closed it by hand.
+ */
+async function openedByThePerson($: EngineInterface): Promise<void> {
+  try {
+    await $.store.delete(CLOSED_BY_HAND)
+  } catch {
+    // The pane is shown all the same; it then stays one that does not open by itself.
+  }
+}
+
+/** The lines as a model gets them: no character that draws nothing, and no more than a few lines of a few words. */
 function fallback(lines: string[]): string[] {
   const cut = lines
     .slice(0, FALLBACK_LINES)
+    .map(withoutHidden)
     .map(line => (line.length <= FALLBACK_LINE_LENGTH ? line : `${Array.from(line).slice(0, FALLBACK_LINE_LENGTH).join('')}…`))
   return lines.length > FALLBACK_LINES ? [...cut, `and ${lines.length - FALLBACK_LINES} more lines`] : cut
 }
@@ -251,14 +276,14 @@ function fallback(lines: string[]): string[] {
 export function paneTree(
   $: EngineInterface,
   e: ResolveInput,
-  view: PaneView | null,
+  view: PaneView,
   snapshot: BandSnapshot | null,
   run: BandRun | null,
   presses: Record<string, BandPress>,
   actions: RowActions,
 ) {
   const { Box, Text } = $.ui.resolve(e)
-  if (view?.kind === 'search') {
+  if (view.kind === 'search') {
     return (
       <Box flexDirection="column">
         {searchLines(view.search).map(line => (

@@ -9,8 +9,11 @@ import os
 import shutil
 import subprocess
 import unittest
+from typing import Any
+from unittest import mock
 
 import test_runner
+from m2b import proposals
 from m2b.curate import machine_state
 from m2b.run_record import FAILED, RUN_RECORD, SUCCEEDED, load_run_record
 
@@ -35,6 +38,8 @@ INGEST_FILES_A_FACT = [
 
 @unittest.skipIf(shutil.which("git") is None, "git is not installed")
 class RunInARepositoryTest(test_runner.RunnerTest):
+    SESSION = test_runner.HandedInStepTest.SESSION
+
     def setUp(self) -> None:
         super().setUp()
         # Neither the developer's nor the machine's git configuration reaches a test.
@@ -119,6 +124,49 @@ class RunInARepositoryTest(test_runner.RunnerTest):
         self.assertFalse((self.store_root / "memory/dana.md").exists())
         self.assertEqual(self.git("status", "--porcelain"), "")
 
+    def test_a_handed_in_proposal_is_committed_before_the_run_and_a_revert_puts_its_file_back(self) -> None:
+        """Covers: B182"""
+        self.curating()
+        self.repository()
+        file = test_runner.HandedInStepTest.handed_in(self)  # type: ignore[arg-type]
+        waiting = file.read_bytes()
+        relative = file.relative_to(self.store_root).as_posix()
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        self.assertEqual(self.git("show", "--name-status", "--format=", "HEAD~1"), f"A\t{relative}\n")
+        self.assertFalse(file.exists())
+        self.assertEqual(len(proposals.load(self.store).entries), 1)
+
+        self.git("revert", "--no-edit", "HEAD")
+
+        self.assertEqual(file.read_bytes(), waiting)
+        self.assertFalse((self.store_root / proposals.PROPOSALS_FILE).exists())
+
+    def test_a_handed_in_file_that_finished_downloading_after_the_commit_before_the_run_waits(self) -> None:
+        """Covers: B182"""
+        self.curating()
+        self.repository()
+        file = test_runner.HandedInStepTest.handed_in(self)  # type: ignore[arg-type]
+        self.eviction.evicted.add(file)
+        take_in = test_runner.runner.handed_in_intake.take_in
+
+        def arrived_by_now(*given: Any) -> Any:
+            self.eviction.evicted.discard(file)
+            return take_in(*given)
+
+        with mock.patch.object(test_runner.runner.handed_in_intake, "take_in", side_effect=arrived_by_now):
+            outcome = self.run_curate(fetch_timeout=0.3)
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        self.assertTrue(file.exists())
+        self.assertEqual(dict(proposals.load(self.store).entries), {})
+        record = load_run_record(self.store)
+        assert record is not None
+        told = [finding.text for finding in record.findings if finding.step == "proposals"]
+        self.assertEqual(told, ["1 handed-in proposal no commit holds yet, left for the next run, which commits first"])
+
     def test_after_a_later_run_with_nothing_to_do_the_revert_needs_its_record_dropped_first(self) -> None:
         """The way the docs name: git refuses while the later run's record is uncommitted."""
         self.curating()
@@ -167,7 +215,7 @@ class RunInARepositoryTest(test_runner.RunnerTest):
 
         self.assertEqual(outcome.state, SUCCEEDED)
         self.assertEqual(self.subjects()[1:], ["the store as Alex set it up"])
-        told = "the captures in the inbox were not committed before the run"
+        told = "the captures in the inbox and what sessions handed in were not committed before the run"
         self.assertIn(f"commit: {told}", outcome.message)
         self.assertIn("cannot lock ref", outcome.message)
         record = load_run_record(self.store)
@@ -279,7 +327,9 @@ class RunInARepositoryTest(test_runner.RunnerTest):
             outcome = self.run_curate()
 
         self.assertEqual(outcome.state, SUCCEEDED)
-        self.assertIn("the captures in the inbox were not committed before the run", outcome.message)
+        self.assertIn(
+            "the captures in the inbox and what sessions handed in were not committed before the run", outcome.message
+        )
         self.assertIn("the run is committed as 0123456789ab", outcome.message)
         (review,) = self.review_tasks()
         self.assertIn("were not committed before the run", review.notes)

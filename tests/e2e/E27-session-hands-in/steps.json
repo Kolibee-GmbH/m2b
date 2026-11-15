@@ -1,0 +1,4 @@
+{
+  "description": "E27 a session hands in: a scenario for the model level, where a real session reads a file and hands in a proposal with the tool of the mod. At the stub level there is no session to run, so the store stays as given.",
+  "steps": []
+}

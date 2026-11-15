@@ -23,6 +23,17 @@ next run. A store where that cannot be looked at is named in ``proposals.error``
 list in its part, and the other parts still answer: could not look is never an empty list.
 ``version`` is this core's: the launcher always runs the installed one, while a session keeps the
 band it loaded, so the band compares the two and asks for a reload when they differ.
+``session``, only with ``--session <id>``, is what m2b gave that session, as this machine noted it
+when it gave it: the topics by name, each with the facts lines and current items its block held
+then, and how the session's start printed the distillate. Whether the distillate is off for the
+folder is said as it is now, for the folder Claude Code names as the project or else the one the
+command runs in; ``distillate.folder`` names that folder as it resolves, so ``distillate off`` can
+be handed the very folder the answer is about. A value that is no session id is answered in
+``session.error`` and never looked
+up, and so is a folder that cannot be looked at: the other parts still answer.
+With ``--session-only`` the answer is that part and the version alone: every session asks it for
+itself, where the rest is one answer the open sessions share, so it reaches no task list, no
+calendar and no store. It needs ``--session`` and does not go with ``--tasks-only``.
 """
 
 from __future__ import annotations
@@ -34,7 +45,8 @@ import difflib
 import re
 from typing import Any
 
-from m2b.commands import Context
+from m2b import topic_state
+from m2b.commands import Context, UsageError
 from m2b.commands.backends import configured_store, configured_tasks
 from m2b.commands.doctor import NOT_REACHABLE, PROBE_FAILURES, REACHABLE, Check
 from m2b.commands.output import print_json
@@ -44,6 +56,7 @@ from m2b.commands.tasks import task_json
 from m2b.config.machine import MachineConfig, load_machine_config
 from m2b.curate import machine_state, memory_guard
 from m2b.curate.report import one_line
+from m2b.hook_input import project_folder
 from m2b.launcher import core_version
 from m2b.notes.memory_index import parse_fact_line
 from m2b.proposals import ProposalsError
@@ -57,16 +70,58 @@ CALENDAR_BUDGET_SECONDS = 10
 
 def band_command(arguments: argparse.Namespace, context: Context) -> int:
     """Always JSON: the band is its only reader; ``--json`` is accepted like elsewhere. ``--tasks-only``
-    leaves the status and the proposals out, for the band's second look before a keep or drop."""
+    leaves the status and the proposals out, for the band's second look before a keep or drop;
+    ``--session-only`` leaves out everything but what the named session was given."""
     config = load_machine_config(context.machine)
+    if arguments.session_only:
+        if arguments.session is None:
+            raise UsageError("--session-only needs --session <id>")
+        if arguments.tasks_only:
+            raise UsageError("--session-only does not go with --tasks-only")
+        print_json({"version": core_version(), "session": _session_part(config, context, arguments.session)})
+        return 0
     tasks, tasks_check = _tasks_part(config, context, datetime.datetime.now().astimezone())
     if arguments.tasks_only:
         print_json({"tasks": tasks})
         return 0
     status = status_answer(_short_calendar(config), context, tasks_check)
     waiting = _proposals_part(config, context)
-    print_json({"version": core_version(), "tasks": tasks, "proposals": waiting, "status": status})
+    answer = {"version": core_version(), "tasks": tasks, "proposals": waiting, "status": status}
+    if arguments.session is not None:
+        answer["session"] = _session_part(config, context, arguments.session)
+    print_json(answer)
     return 0
+
+
+def _session_part(config: MachineConfig, context: Context, session_id: str) -> dict[str, Any]:
+    """What this machine noted of the session, and whether the distillate is off where it runs.
+
+    A session nothing was noted of (started under an m2b before the notes, its note removed after
+    seven days, or without m2b's hooks) is not known and has no topics; that is not "was given
+    nothing".
+    """
+    if not topic_state.is_session_id(session_id):
+        return {"error": "not a session id"}
+    noted = topic_state.session(context.machine, session_id)
+    try:
+        folder = project_folder(context.environ).resolve()
+        off_under = config.distillate.covering(folder)
+    # A working directory that was removed, or a folder whose path does not resolve.
+    except (OSError, RuntimeError) as error:
+        return {"error": f"the session's folder cannot be looked at: {one_line(str(error))}"}
+    return {
+        "id": session_id,
+        "known": noted is not None,
+        "topics": [
+            {"name": topic.name, "facts": topic.facts, "current": topic.current}
+            for topic in (noted.topics if noted is not None else ())
+        ],
+        "distillate": {
+            "at_start": noted.distillate if noted is not None else None,
+            "off_under": str(off_under) if off_under is not None else None,
+            "folder": str(folder),
+        },
+    }
 
 
 def _proposals_part(config: MachineConfig, context: Context) -> dict[str, Any]:

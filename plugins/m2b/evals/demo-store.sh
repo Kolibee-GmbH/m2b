@@ -6,10 +6,20 @@ set -eu
 plugin=$(cd "$(dirname "$0")/.." && pwd)
 export M2B_CORE_ROOT="$plugin"
 m2b() { "$plugin/bin/m2b" "$@"; }
+# Only in the fresh HOME an eval gives a run. Where m2b is set up, the lines below would point its
+# config at this invented store and turn handing in on.
+if [ -n "${M2B_HOME:-}" ] || [ -e "$HOME/.config/m2b/config.json" ]; then
+    echo "demo-store.sh: M2B_HOME is set or m2b is set up in $HOME; this runs only in the fresh HOME of an eval run" >&2
+    exit 1
+fi
 store="$HOME/notes"
 mkdir -p "$store"
 m2b setup apply --answers "{\"store\": {\"backend\": \"folder\", \"path\": \"$store\"}, \"tasks\": {\"backend\": \"markdown\"}, \"owner\": \"Alex\", \"language\": \"en\", \"calendar\": \"none\", \"curates\": true, \"machine_id\": \"eval-machine\"}" >/dev/null
-# The note and search tools call the launcher, which finds the core in Claude Code's
+# The owner of this store turned handing in on, so every run with m2b carries the propose tool.
+# They do that in a terminal of their own, which the empty CLAUDECODE stands for: inside a Claude
+# Code session, where an eval's scaffold runs, the command does not turn this setting on.
+CLAUDECODE='' "$plugin/bin/m2b" config set sessions.propose true
+# The tools call the launcher, which finds the core in Claude Code's
 # installed_plugins.json. An eval loads the plugin from this folder without installing it, so the
 # entry is written here. The run's config folder sits beside its HOME; this script is not told its
 # path. Should that change, the note case fails with "not installed for this user" in its trace.

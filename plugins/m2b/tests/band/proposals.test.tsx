@@ -37,8 +37,9 @@ function proposedFake(): FakeM2b {
     .proposal(SHED, 'The spare key is in the shed.', 'the spare key is in the shed', { kind: 'personal', day: '2026-03-05' })
 }
 
+/** The buttons of the proposals themselves: `back`, which stands above every view but the pane's first, is left out. */
 async function buttons(ui: { findAll: (q: { type: string }) => Promise<{ key?: string }[]> }): Promise<(string | undefined)[]> {
-  return (await ui.findAll({ type: 'Button' })).map(button => button.key)
+  return (await ui.findAll({ type: 'Button' })).map(button => button.key).filter(key => key !== 'back')
 }
 
 test('while proposals wait the band shows one row with their number, whatever the number', async ($, on) => {
@@ -128,7 +129,7 @@ test('a proposal that stands on pasted text says pasted, one from a source the b
   const fake = new FakeM2b()
     .proposal(DANA, 'Dana is head of IT at Northwind.', 'Dana runs IT at Northwind', { day: '2026-03-04', source: 'pasted' })
     .proposal(LADDER, 'Call Sam about the ladder.', 'I still have to call Sam', { day: '2026-03-04', source: 'typed' })
-    .proposal(SHED, 'The spare key is in the shed.', 'the spare key is in the shed', { day: '2026-03-05', source: 'tool' })
+    .proposal(SHED, 'The spare key is in the shed.', 'the spare key is in the shed', { day: '2026-03-05', source: 'letter' })
     .proposal('d4d4d4d4d4d4', 'Kim moved to Globex.', 'Kim moved to Globex', { day: '2026-03-05' })
   await start($, on, fake)
   await typed($, 'm2b-proposals')
@@ -138,9 +139,40 @@ test('a proposal that stands on pasted text says pasted, one from a source the b
   expect(said).toEqual([
     'pasted on 2026-03-04: "Dana runs IT at Northwind"',
     'said on 2026-03-04: "I still have to call Sam"',
-    'from tool on 2026-03-05: "the spare key is in the shed"',
+    'from letter on 2026-03-05: "the spare key is in the shed"',
     'said on 2026-03-05: "Kim moved to Globex"',
   ])
+  await ui.unmount()
+})
+
+test('a proposal a session handed in says so, and its line names the tool of a result or Claude for an answer', async ($, on) => {
+  // Covers: B179
+  const handedIn = { day: '2026-03-04', by: 'session' }
+  const fake = new FakeM2b()
+    .proposal(DANA, 'Dana is head of IT at Northwind.', 'Dana runs IT at Northwind', {
+      ...handedIn,
+      source: 'tool',
+      tool: 'mcp__mail__get_message',
+    })
+    .proposal(LADDER, 'Call Sam about the ladder.', 'I still have to call Sam', { ...handedIn, source: 'agent', tool: null })
+    .proposal(SHED, 'The spare key is in the shed.', 'the spare key is in the shed', { ...handedIn, source: 'tool', tool: null })
+    .proposal('d4d4d4d4d4d4', 'Kim moved to Globex.', 'Kim moved to Globex', { ...handedIn, source: 'typed' })
+    .proposal('e5e5e5e5e5e5', 'Riley signs the orders.', 'Riley signs the orders', { day: '2026-03-04', by: null, tool: null })
+  await start($, on, fake)
+  await typed($, 'm2b-proposals')
+
+  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  const drawn = await texts(ui)
+  expect(drawn.filter(line => line.includes(' on 2026-03-0'))).toEqual([
+    'in a result of mcp__mail__get_message on 2026-03-04: "Dana runs IT at Northwind"',
+    'Claude wrote on 2026-03-04: "I still have to call Sam"',
+    'in a result of a tool on 2026-03-04: "the spare key is in the shed"',
+    'said on 2026-03-04: "Kim moved to Globex"',
+    'said on 2026-03-04: "Riley signs the orders"',
+  ])
+  // Each handed-in proposal says so in its heading, typed words too; the one a reading found does not.
+  expect(drawn.filter(line => line.endsWith('handed in by a session'))).toEqual(Array(4).fill('person, handed in by a session'))
+  expect(drawn.filter(line => line === 'person')).toEqual(['person'])
   await ui.unmount()
 })
 
@@ -248,7 +280,8 @@ test('keep is written once the undo window is over, and the pane and the band fo
   const fake = proposedFake()
   const { clock } = await start($, on, fake)
   await typed($, 'm2b-proposals')
-  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  // Above the prompt, where the band below it keeps its rows.
+  const ui = await $.ui.mount({ ...pane(PANE, 80, 'inline'), surface: 'terminal' })
 
   await ui.press({ key: `keep:${DANA}` })
   expect(await texts(ui)).toContain('keeping: Dana is head of IT at Northwind.')
@@ -314,6 +347,24 @@ test('keep all keeps the proposals the pane showed, in one call, and can be undo
   await ui.unmount()
 })
 
+test('keep all leaves what a session handed in, which is kept or dropped on its own', async ($, on) => {
+  // Covers: B179
+  const fake = new FakeM2b()
+    .proposal(DANA, 'Dana is head of IT at Northwind.')
+    .proposal(LADDER, 'Call Sam about the ladder.')
+    .proposal(SHED, 'The spare key is in the shed.', 'the spare key is in the shed', { source: 'tool', tool: 'Read', by: 'session' })
+  const { clock } = await start($, on, fake)
+  await typed($, 'm2b-proposals')
+
+  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  await ui.press({ key: 'keep-all' })
+  await clock.advance(6_000)
+
+  expect(fake.answers()).toEqual([['proposals', 'keep', DANA, LADDER]])
+  expect((fake.proposals ?? []).map(proposal => proposal.answer)).toEqual(['keep', 'keep', undefined])
+  await ui.unmount()
+})
+
 test('keep all leaves out a proposal pressed on its own, which keeps its own answer', async ($, on) => {
   // Covers: B127
   const fake = proposedFake()
@@ -340,7 +391,8 @@ test('an answer m2b refuses stands in the pane and in the band until the next pr
   const fake = proposedFake()
   const { clock } = await start($, on, fake)
   await typed($, 'm2b-proposals')
-  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  // Above the prompt, where the band below it keeps its rows.
+  const ui = await $.ui.mount({ ...pane(PANE, 80, 'inline'), surface: 'terminal' })
 
   await ui.press({ key: `keep:${DANA}` })
   // Another machine drops it while the press waits.

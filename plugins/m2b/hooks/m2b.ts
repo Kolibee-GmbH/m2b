@@ -3,11 +3,13 @@ import type { EngineInterface } from 'claude-code'
 /**
  * `isCut`: the answer passed what `$.process.run` keeps of standard output (4 MiB) and was cut.
  * `stderr` on success holds what the command reported beside its answer, such as a capture whose
- * follow-up task waits for the next curation run.
+ * follow-up task waits for the next curation run. Where the command ran and failed, `error` is the
+ * first line it reported and `stderr` all of it: a call the command line refused begins with its
+ * usage and names the reason below.
  */
 export type M2bOutcome =
   | { ok: true; stdout: string; stderr: string; isCut: boolean }
-  | { ok: false; error: string; exitCode?: number }
+  | { ok: false; error: string; exitCode?: number; stderr?: string }
 
 const LAUNCHER = '.local/bin/m2b'
 
@@ -45,25 +47,29 @@ export async function launcherPath($: EngineInterface): Promise<string | undefin
   return home === undefined ? undefined : `${home}/${LAUNCHER}`
 }
 
-/** Runs `m2b <args>`; a failure of any kind comes back as one line of text, never as a rejection. */
+/**
+ * Runs `m2b <args>`; a failure of any kind comes back as one line of text, never as a rejection.
+ * `env` are variables added to the ones the child gets from Claude Code, which it keeps.
+ */
 export async function runM2b(
   $: EngineInterface,
   args: readonly string[],
   timeoutMs: number,
   stdin?: string,
+  env?: Record<string, string>,
 ): Promise<M2bOutcome> {
   const launcher = await launcherPath($)
   if (launcher === undefined) {
     return { ok: false, error: 'neither M2B_HOME nor HOME is set' }
   }
   try {
-    const init = stdin === undefined ? { timeoutMs } : { timeoutMs, stdin }
+    const init = { timeoutMs, ...(stdin === undefined ? {} : { stdin }), ...(env === undefined ? {} : { env }) }
     const { exitCode, stdout, stderr, isStdoutTruncated } = await $.process.run([launcher, ...args], init)
     if (exitCode === 0) {
       return { ok: true, stdout, stderr, isCut: isStdoutTruncated }
     }
     const reason = firstLine(stderr)?.replace(/^m2b: /, '')
-    return { ok: false, error: reason ?? `m2b ${args.join(' ')} ended with exit ${exitCode}`, exitCode }
+    return { ok: false, error: reason ?? `m2b ${args.join(' ')} ended with exit ${exitCode}`, exitCode, stderr }
   } catch (error) {
     return { ok: false, error: `could not run ${launcher}: ${firstLine(String(error)) ?? 'no reason given'}` }
   }

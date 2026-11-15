@@ -38,7 +38,7 @@ There are two spellings, and they are two different things:
 
 | Skill | What it does |
 |---|---|
-| `/m2b:m2b` | says what m2b is and what to type; `/m2b:m2b setup` guides through setup, `/m2b:m2b status` shows the inbox, the last curation run and the backends, `/m2b:m2b doctor` checks the machine, `/m2b:m2b addons` shows the add-ons |
+| `/m2b:m2b` | says what m2b is and what to type; `/m2b:m2b setup` guides through setup, `/m2b:m2b status` shows the inbox, the last curation run and the backends, `/m2b:m2b doctor` checks the machine, `/m2b:m2b addons` shows the add-ons. Claude Code also runs it for `/m2b` alone; the pane is `/m2b-pane` |
 | `/m2b:setup` | sets this machine up, for a new store or one another machine already uses; `/m2b:m2b setup` starts it |
 | `/m2b:capture` | captures a note, a task or a calendar entry; saying "remember ..." does the same |
 | `/m2b:search` | searches archive, memory and inbox in full text |
@@ -56,10 +56,12 @@ do not do their work there. The first three start a curation run in the backgrou
 
 | Command | What it does |
 |---|---|
+| `/m2b-pane` | shows in the m2b pane what m2b gave this session, what waits for you and what is due today; there a press shows a topic's lines or leaves m2b out of the session's folder; under the fullscreen layout that pane opens by itself |
 | `/m2b-note <text>` | writes the text into the inbox at once, through `m2b capture` |
 | `/m2b-search [--word] <text>` | shows the hits of `m2b search` in the m2b pane; `--word` matches whole words only |
 | `/m2b-review` | shows the last curation run in the m2b pane: every finding, candidate and question |
 | `/m2b-proposals` | shows what your sessions proposed for your memory, each to keep or drop |
+| `/m2b-settings` | shows every setting of m2b in the m2b pane, a card per setting with what it does, and the switches to press; it takes no value and answers none ([The band](band.md#every-setting-in-the-pane)) |
 
 ## The `m2b` command
 
@@ -103,9 +105,10 @@ Reminders the Reminders app does the same. In a session, saying that a task is d
 |---|---|
 | `m2b curate [--force] [--detach]` | the curation run: without `--force` only when one is due, as a schedule calls it; `--detach` starts it in the background. `--refresh-all` and `--sort-facts` run now and do one more step, once ([Curation](curation.md#moving-over-an-older-distillate)) |
 | `m2b curate take-over` | makes this machine the curating machine ([Several machines](several-machines.md)) |
-| `m2b proposals [--json]` | what the reading of your sessions proposed and what waits for your answer |
-| `m2b proposals keep [--all] <ids>` | files these proposals with the next curation run |
+| `m2b proposals [--json]` | what the reading of your sessions proposed and what sessions handed in, as far as it waits for your answer |
+| `m2b proposals keep [--all] <ids>` | files these proposals with the next curation run; `--all` leaves those a session handed in, which you keep by id |
 | `m2b proposals drop <ids>` | forgets these proposals |
+| `m2b proposals add` | hands in a proposal of a session, read as one JSON object from standard input: `kind`, `text`, `quote`, `session`, optionally `due`. Off until `sessions.propose` is `true`. Refuses with one line when the quote does not stand in that session's transcript or the session worked where m2b does not read. The next curation run takes the proposal in |
 | `m2b lint scan [--json]` | findings about the store: broken links, misnamed notes, conflict copies |
 
 To pause the runs on a machine: `m2b config set curation.paused true`
@@ -117,6 +120,8 @@ To pause the runs on a machine: `m2b config set curation.paused true`
 |---|---|
 | `m2b setup inspect [--store-backend <backend>] [--store-path <folder>] [--json]` | what a store folder holds, before anything is written |
 | `m2b setup apply --answers <json> [--json]` | writes the setup from a JSON object of answers ([Getting started](getting-started.md)) |
+| `m2b settings [--json]` | every setting of this machine, the store and the owner: its value, its default, what it does and what changes it; a list, the paths of programs and an add-on come as a count, never with what they hold ([Configuration](configuration.md#every-setting-in-one-list)) |
+| `m2b settings set <key> <value>` | changes a switch to one of its values, such as `curation.paused true`; every other key is refused with a line that names what changes it |
 | `m2b config get [--json] [<key>]` | the machine config, or one key such as `store.path` |
 | `m2b config set <key> <value>` | sets one key of the machine config, validated first ([Configuration](configuration.md)) |
 | `m2b profile get [--json] [<key>]` | the owner's profile, or one key of it |
@@ -124,6 +129,7 @@ To pause the runs on a machine: `m2b config set curation.paused true`
 | `m2b profile merge <json>` | merges a JSON object into the profile |
 | `m2b distillate off [<folder>]` | no distillate in sessions in this folder and below, on this machine |
 | `m2b distillate on [<folder>]` | the distillate again in this folder |
+| `m2b distillate topic [--json] <name>` | the facts and current items of one topic, as the distillate holds them now; the m2b pane reads a topic's lines with it |
 | `m2b addons list [--json]` | each add-on and whether it is on |
 | `m2b addons on <addon>` | turns an add-on on; its setup skill does this once the add-on is set up |
 | `m2b addons off <addon>` | turns an add-on off; its settings stay |
@@ -143,7 +149,7 @@ These are listed by `--help`, but the plugin is their caller.
 
 | Command | Who calls it |
 |---|---|
-| `m2b band [--tasks-only] [--json]` | the band, for what it shows above the prompt |
+| `m2b band [--tasks-only] [--session <id> [--session-only]] [--json]` | the band, for what it shows above the prompt; with `--session`, also what m2b gave that session, and with `--session-only` nothing else |
 | `m2b refresh due [--json]` | the refresh step, for the memory lines past their day |
 | `m2b lint fix [--json]` | the lint step; it runs only inside a curation run |
 | `m2b curate model --skill <plugin:skill> --allow <rule>` | the worklog add-on's step in a curation run, for its fenced model step. Run by hand it starts that step on its own, with the tool rules you give it, outside a run |

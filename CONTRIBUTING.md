@@ -119,6 +119,7 @@ scripts/e2e --level model                                   # every scenario wit
 scripts/e2e --level model E18-remember-beside-auto-memory   # after each Claude Code minor update
 scripts/e2e --level model E22-recall-across-projects        # the same
 scripts/e2e --level model E26-tick-a-task                   # the same
+scripts/e2e --level model E27-session-hands-in              # the same
 scripts/e2e --level model E17-planted-capture               # and after a change to the ingest skill
 scripts/e2e --level model E14-topics                        # after a change to the ingest skill
 ```
@@ -142,6 +143,15 @@ one of them is done. It passes when that task is ticked, the other is still open
 reached the inbox: the todos skill ticked it, through the two commands its own allowed-tools
 cover. One session on Haiku, well under a minute; run it after a change to the todos skill or to
 the note tool's description.
+
+`E27-session-hands-in` turns `sessions.propose` on, as the owner does in a terminal of their own,
+and asks a session to read notes of a meeting and to hand in who a person is. It passes when one
+file under `state/core/handed-in/` names that person with the source `tool` and the tool `Read`,
+no file there claims another source, and no note reached the inbox: the mod's tool passed the
+session's id to `m2b proposals add`, and the command found the quote in the transcript of a
+headless session, where the result of `Read` stands on disk by the time the next call runs. The
+session is asked outright; how often one hands in unasked is what the evals measure. One session
+on Sonnet, well under a minute.
 
 `E17-planted-capture` runs a real ingest step over two captures written to steer it, one with an
 instruction in invisible characters and one that addresses the assistant in plain words, and over
@@ -231,18 +241,20 @@ and `claude plugin eval` scores both. [Evals](docs/evals.md) lists what each cas
 passes, how to read the scores, and the scores of the last run.
 
 Every case starts from the same invented store, `evals/demo-store.sh`: it sets m2b up in the
-fresh `HOME` the eval gives each run, so your own store is never read. Run it from the plugin,
+fresh `HOME` the eval gives each run, so your own store is never read. Its owner turned
+`sessions.propose` on, so every run with m2b carries the third tool, also in the cases that ask
+for no proposal. Run it from the plugin,
 then write its scores into the page:
 
 ```bash
 cd plugins/m2b
 claude plugin eval . --ablation with-without --scaffold --trust-plugin --no-publish --keep-temp \
-  -j 4 --max-cost-usd 6 --allow-tools mcp__m2b__search mcp__m2b__note Write Read Edit
+  -j 4 --max-cost-usd 15 --allow-tools mcp__m2b__search mcp__m2b__note mcp__m2b__propose Write Read Edit
 ../../scripts/evals-page
 ```
 
-It runs each case three times per arm, 48 runs in all, and takes a few minutes on your own login.
-The report prices the runs as the API would, a few dollars; on a Claude subscription nothing is
+It runs each case three times per arm, 84 runs in all, and takes a few minutes on your own login.
+The report prices the runs as the API would, about six dollars; on a Claude subscription nothing is
 billed and the runs count against the plan's usage limits instead. `--max-cost-usd` stops the
 suite once that price passes the ceiling. The report lands in
 `evals/results/`, which git ignores. The runs ask nothing, so the m2b tools and the file tools a
@@ -407,7 +419,7 @@ The screenshots in `docs/images/` come from real Claude Code sessions against a 
 invented data. After a change the README pictures show, record them again:
 
 ```bash
-scripts/readme-images                # all five
+scripts/readme-images                # all seven
 scripts/readme-images --only todos   # one, with the one its store depends on
 ```
 
@@ -418,19 +430,30 @@ Code runs with `--setting-sources project`, m2b from this checkout and its own `
 Three pictures ask the model something and cost one model turn each (`session-start`, `capture`,
 `todos`); their answers are the model's, so look at each before you commit it. The dates in them
 follow the day of the recording: one task is due that day, one is overdue, and the reminder is
-asked for a weekday three days ahead. The other two, `review` and `proposals`, type a command of
-the band, which opens its pane without a model. Their store is the first after a curation run
-that changed a fact and proposed three things from the sessions; a scripted model plays that run,
-the stub the scenarios use, over an invented session in a Claude Code folder of the demo's own.
-Your sessions are never read, and the two pictures differ between recordings only in their dates
-and times.
+asked for a weekday three days ahead. The other four type a command of the band, which opens its
+pane without a model: `review` and `proposals` on the main screen, where the pane is a block above
+the prompt, `pane` and `settings` under Claude Code's fullscreen layout in a terminal of 130
+columns, where the pane sits beside the chat. The recording turns that layout on for its own
+session with `CLAUDE_CODE_NO_FLICKER=1` in the session's environment; no setting of yours is read
+or written for it. Their store is the first after a curation run that changed a fact and proposed
+three things from the sessions; a scripted model plays that run, the stub the scenarios use, over
+an invented session in a Claude Code folder of the demo's own. Its memory holds one topic, a
+customer the demo project's folder names, so the pane's start view lists a topic the session was
+given. Your sessions are never read, and the four pictures differ between recordings only in
+their dates and times. `pane` and `settings` each build that store themselves, so `--only` records
+one of them alone.
 
-The moving picture at the top of the README, `docs/images/demo.gif`, follows one sentence from a
-prompt into a later session. Record it again after a change it shows:
+Three pictures move. `scripts/readme-demo` records all of them, `--only <name>` one:
 
 ```bash
-scripts/readme-demo
+scripts/readme-demo                        # all three
+scripts/readme-demo --only demo            # the README's, two model turns and a curation run
+scripts/readme-demo --only pane-answers    # no model
+scripts/readme-demo --only settings-walk   # no model
 ```
+
+The one at the top of the README, `docs/images/demo.gif`, follows one sentence from a prompt into
+a later session. Record it again after a change it shows.
 
 It needs `claude` logged in, [`agg`](https://docs.asciinema.org/manual/agg/) and `git`. It builds
 the same demo machine with an empty store and records three acts in a hidden terminal: a Claude
@@ -443,9 +466,19 @@ a minute. What the picture changes against the recording: a session's start is c
 answer and the wait for the run are shortened to a few seconds, and a line of words stands before
 each act.
 
-The script stops without a picture when the run left the note in the inbox, or when the terminal
-drew your home folder, your user name or your host name. That check reads plain text only, so
-watch the picture through as well, for example frame by frame with
-`ffmpeg -i docs/images/demo.gif -vf fps=2 /tmp/demo-%03d.png`, and keep the file under about 2 MB;
-the script prints its size. `--cast <file>` also keeps the recording the picture is rendered from,
-in asciinema's format.
+The other two, `pane-answers.gif` and `settings-walk.gif` in [The band](docs/band.md), show the
+pane driven with the keyboard and ask no model: one session each, under the fullscreen layout on
+the store after a curation run, that types a command of the band and then only Tab, Shift+Tab and
+Enter. One keeps a proposal, takes that back, keeps it again and lets it be written; the other
+walks through the settings with Enter on `next` and presses the switch of `curation.model` the
+same way. The five seconds a press waits with its `undo` pass as recorded. Record them again
+after a change to a view they pass through: a button added before another moves what Tab reaches.
+
+The script writes no picture when the demo machine does not hold what the picture shows: the run
+left the note in the inbox, the first proposal was not the one kept, or `curation.model` was not
+set. Nor does it write one when the terminal drew your home folder, your user name or your host
+name; the pictures after that one are still recorded. That check reads
+plain text only, so watch each picture through as well, for example frame by frame with
+`ffmpeg -i docs/images/demo.gif -vf fps=2 /tmp/demo-%03d.png`, and keep each file under about
+2 MB; the script prints its size. With `--only`, `--cast <file>` also keeps the recording the
+picture is rendered from, in asciinema's format.
