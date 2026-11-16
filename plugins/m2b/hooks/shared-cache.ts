@@ -16,6 +16,10 @@ type Entry = { writtenAtMs: number; value: unknown }
  * `load()`'s answer, or the one any session stored under `kind` within `FRESH_FOR_MS`. A value
  * `isValid` refuses, a file that cannot be read and a write that fails all fall back to loading:
  * the cache saves calls, it never decides what the band shows.
+ *
+ * An answer `isForAll` refuses is this session's alone: it is not stored, and one another session
+ * stored is not taken. What one session cannot reach another may, where an app starts Claude Code
+ * without the rights a terminal has, and its failure would stand in every band for a minute.
  */
 export async function shared<T>(
   $: EngineInterface,
@@ -23,6 +27,7 @@ export async function shared<T>(
   load: () => Promise<T>,
   isValid: (value: unknown) => value is T,
   isForced = false,
+  isForAll: (value: T) => boolean = () => true,
 ): Promise<T> {
   const path = await cachePath($, kind)
   if (path === undefined) {
@@ -31,7 +36,7 @@ export async function shared<T>(
   if (!isForced) {
     const stored = await readEntry($, path)
     const ageMs = stored === undefined ? -1 : (await $.clock.now()) - stored.writtenAtMs
-    if (stored !== undefined && ageMs >= 0 && ageMs < FRESH_FOR_MS && isValid(stored.value)) {
+    if (stored !== undefined && ageMs >= 0 && ageMs < FRESH_FOR_MS && isValid(stored.value) && isForAll(stored.value)) {
       return stored.value
     }
   }
@@ -40,6 +45,9 @@ export async function shared<T>(
   // now came from a clock that was set back since, and would keep every session from sharing.
   const startedAtMs = await $.clock.now()
   const value = await load()
+  if (!isForAll(value)) {
+    return value
+  }
   const latest = await readEntry($, path)
   if (latest !== undefined && latest.writtenAtMs > startedAtMs && latest.writtenAtMs <= (await $.clock.now())) {
     return value

@@ -721,7 +721,10 @@ settings are read with `m2b settings --json`, and a press on a value calls `m2b 
 which writes the machine config or, for your language, `profile.json` in the store. Every open session asks about once a
 minute and after each of your turns, so the answer is shared between sessions for 55 seconds in
 `~/.local/state/m2b/band-answer.json`; an answer of a shape the band does not know, or stamped later
-than now, is not used. However many turns end while `m2b` is slow, at most one more refresh waits.
+than now, is not used. An answer of a session that could not read the tasks stays with that session:
+it is not shared, and one that lies there is not used, since another session may reach the task list,
+for one where an app starts Claude Code without the access to Reminders your terminal has.
+However many turns end while `m2b` is slow, at most one more refresh waits.
 That folder holds titles, findings and the proposals with the words they stand on, so m2b keeps it readable by
 you only. At each session start
 it writes `~/.local/state/m2b/band-seen.json`, which `m2b doctor` reads. That you closed the pane

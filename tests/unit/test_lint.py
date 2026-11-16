@@ -11,7 +11,7 @@ from typing import Any
 from unittest import mock
 
 import test_commands
-from m2b import cli, lint
+from m2b import cli, lint, prompt_hook
 from m2b.config import profile
 from m2b.curate import report
 from m2b.store.folder import FolderStore
@@ -336,6 +336,39 @@ class TopicTest(LintFixture):
 
         self.assertEqual(len(findings), 1)
         self.assertIn("topic Dana", findings[0].text)
+
+    def test_a_topic_larger_than_a_prompt_brings_is_an_action_that_says_what_follows(self) -> None:
+        """Covers: B48"""
+        heading = "### Dana (Dana Berg, Berg family)\n"
+        line = "- Dana keeps the spare key of the shed in the blue pot (dana.md)\n"
+        fits = heading + line * ((prompt_hook.MAX_ADDED_BYTES - len(heading)) // len(line))
+        for topic, expected in ((fits, "distillate-size"), (fits + line, "topic-size")):
+            with self.subTest(expected=expected):
+                self.write("memory/MEMORY.md", INDEX.replace("- Dana's birthday is on 3 March (dana.md)\n", topic))
+
+                (finding,) = self.findings()
+
+                self.assertEqual(finding.code, expected)
+        self.assertEqual(finding.kind, report.ACTION)
+        size = len((fits + line).encode("utf-8"))
+        self.assertEqual(
+            finding.text,
+            f"in memory/MEMORY.md, the topic Dana is {size} bytes, over the 4 KB a prompt brings: "
+            "no prompt that names it adds its facts; shorten it or split it into two topics",
+        )
+
+    def test_a_topic_is_measured_as_a_prompt_brings_it_without_the_characters_that_draw_nothing(self) -> None:
+        """Covers: B48"""
+        heading = "### Dana (Dana Berg, Berg family)\n"
+        line = "- Dana keeps the spare key of the shed in the blue pot (dana.md)\n"
+        fits = heading + line * ((prompt_hook.MAX_ADDED_BYTES - len(heading)) // len(line))
+        soft_hyphens = "\u00ad" * prompt_hook.MAX_ADDED_BYTES
+        topic = fits.replace("blue pot", f"blue{soft_hyphens} pot", 1)
+        self.write("memory/MEMORY.md", INDEX.replace("- Dana's birthday is on 3 March (dana.md)\n", topic))
+
+        codes = [finding.code for finding in self.findings()]
+
+        self.assertNotIn("topic-size", codes)
 
 
 class ExpiryTest(LintFixture):

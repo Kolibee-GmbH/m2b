@@ -116,7 +116,9 @@ in the project folder's path, or, before a prompt, when the prompt names one; a 
 and regardless of case. A new fact that holds everywhere goes
 above the first `###`, because a line added at the end of `## Facts` would land in the last topic.
 A reader that knows nothing of topics reads their lines as ordinary facts. What every session
-starts with aims at 2 KB, and so does each topic; lint reports more.
+starts with aims at 2 KB, and so does each topic; lint reports more. A topic over 4 KB comes in
+with no prompt, because a prompt brings whole topics only: lint reports it as something to act on,
+to shorten the topic or split it in two.
 
 `## Current` holds topics under the same headings: a current item above its first `###` heading
 reaches every session, one under a topic comes in with that topic, below its facts under

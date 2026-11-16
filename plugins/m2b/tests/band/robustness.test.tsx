@@ -132,6 +132,33 @@ test('a shared answer stamped in the future is loaded again and replaced', async
   await ui.unmount()
 })
 
+test('a look that could not read the tasks is not stored for the other sessions', async ($, on) => {
+  // Covers: B93
+  const files: Files = new Map()
+  const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
+  fake.failure = 'reminders show-lists failed: error: you need to grant reminders access'
+  await start($, on, fake, {}, files)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await shownBand(ui)).toEqual(
+    sentenceOfM2b('m2b could not read the tasks: reminders show-lists failed: error: you need to grant reminders access'),
+  )
+  expect(files.has(CACHE)).toBe(false)
+  await ui.unmount()
+})
+
+test('a look another session stored that could not read the tasks is not taken: this session looks itself', async ($, on) => {
+  // Covers: B93
+  const unread = { candidates: [], review: null, error: 'm2b could not read the tasks: you need to grant reminders access' }
+  const files: Files = new Map([[CACHE, cached(NOW - 10_000, unread)]])
+  const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
+  await start($, on, fake, {}, files)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await shownBand(ui)).toEqual(rowSaying('1 waits for you'))
+  expect(fake.calls.map(call => call[0])).toContain('band')
+  expect(JSON.parse(files.get(CACHE) ?? '{}').value.snapshot.error).toBeNull()
+  await ui.unmount()
+})
+
 test('a launcher that cannot be started shows one error line and the status line could not look', async ($, on) => {
   // Covers: B95
   const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
