@@ -124,7 +124,7 @@ belong in its repository and its `CLAUDE.md`; m2b is for what has no repository.
 | | Holds | Where it lives | Who writes it |
 |---|---|---|---|
 | `CLAUDE.md` | instructions and facts for one project | in the repository | you, by hand |
-| Claude Code's memory | short notes Claude keeps for itself | Claude Code's own files, per project or user | Claude, in the session |
+| Claude Code's memory | short notes Claude keeps for itself | Claude Code's own files, per repository, on one machine | Claude, in the session |
 | m2b | your notes, facts and tasks across all projects, as plain files you own | a folder you choose, synced as you like | you capture; a curation run files |
 
 ## m2b or Claude Code's auto memory

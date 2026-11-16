@@ -7,6 +7,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The README's first line and the plugin's description say whose second brain m2b is and what it
+  has that Claude Code's own memory does not have by default: one store across all your projects
+  and machines. The README says near its top what m2b is not, a linked knowledge base, and that
+  facts with a last day are rewritten once it has passed. The description no longer says the pane
+  sits beside the chat, which holds only under the fullscreen layout.
+
+### Fixed
+
+- The README counted eight eval cases where [Evals](docs/evals.md) has fourteen, and
+  [Using m2b](docs/using.md) said Claude Code keeps its own memory per project or user: it keeps
+  it per repository, on one machine.
+
 ## [0.6.0] - 2026-11-16
 
 The band above the prompt is one row that counts what waits for you, and the m2b pane is where

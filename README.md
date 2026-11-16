@@ -3,7 +3,7 @@
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.png">
     <img src="docs/images/logo-light.png" alt="m2b" width="230">
   </picture>
-  <br><em>A second brain for Claude Code. The right context in every session.</em>
+  <br><em>Your second brain for Claude Code. People, agreements and tasks, across all your projects and machines.</em>
 </p>
 
 <p align="center">
@@ -31,8 +31,13 @@ Markdown files in a folder you own.
 
 What m2b adds to Claude Code's own memory, the notes Claude keeps for itself for each project:
 - one memory for all your projects and machines, in a folder you choose and sync as you like;
-- your words kept as you said them, and every fact pointing back to them;
-- tasks from the same sentence: "remind me to call the plumber on Friday" lands in your task list.
+- your own words kept in an archive, and every fact pointing back to them;
+- tasks from the same sentence: "remind me to call the plumber on Friday" lands in your task list;
+- facts that end on a known day, rewritten once the day has passed.
+
+m2b keeps what you know about people, agreements and your own life. It is no linked knowledge
+base: notes have no links to one another, nothing is synthesized from them, and search is full
+text ([Limits](#limits)).
 
 **What it costs.** Setup is three slash commands in Claude Code and a few questions; setup itself,
 started as `/m2b:setup` with every answer given at once, took 15 seconds (2026-11-12). A session
@@ -346,7 +351,7 @@ scripts/e2e --level stub    # end-to-end scenarios without a model
 [Integrations](docs/integrations.md); to add a store, task or calendar backend, [Writing a
 backend](docs/writing-a-backend.md). What m2b promises to do, and which defects it must not have, is
 listed in [Behavior](docs/behavior.md). What it does to Claude's answers is measured:
-[Evals](docs/evals.md) has eight cases, each run with m2b and without, and the scores of the last
+[Evals](docs/evals.md) has fourteen cases, each run with m2b and without, and the scores of the last
 run.
 
 ## License
