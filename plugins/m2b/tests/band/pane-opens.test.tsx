@@ -4,7 +4,6 @@ import type { Engine } from 'claude-code/testing'
 
 import { closeAnswer, docksFor, staysBesideChat } from '../../hooks/pane-seat'
 import { shownOf } from '../../hooks/pane-tabs'
-import { afterBack } from '../../hooks/settings'
 import type { PaneView } from '../../types'
 import { BAND, FakeM2b, SESSION_ID, pane, partLines, pressTab, shownTab, shownTabs, start, texts } from './harness'
 
@@ -313,31 +312,31 @@ test('the view the pane starts in has no way back to itself: Overview is the tab
 })
 
 // A test cannot make the person's close: the kit's engine raises none. What the close hook asks is
-// held here on the functions it asks, for every view a tab or a command turns the pane to.
-test("the person's close leads from the view of every tab but Overview, and from the fifth, to the view the pane starts in, and from a setting's card first to the list", () => {
+// held here on the functions it asks, for every view a tab or a command turns the pane to. All it
+// asks of the view is whether it is the one the pane starts in.
+test("the person's close leads from the view of every tab but Overview, and from the fifth, to the view the pane starts in, in one step from the settings and from their folded group too", () => {
   // Covers: B187
+  const isOnStartView = (view: PaneView | null): boolean => view === null
   const turned: PaneView[] = [
     { kind: 'proposals' },
     { kind: 'review' },
-    { kind: 'settings', press: 'p', at: null, drawn: 0 },
+    { kind: 'settings', press: 'p', aside: null, drawn: 0 },
+    // A folded group of the settings stands under a fifth tab: the close leads from it to the start view, not to the choices.
+    { kind: 'settings', press: 'p', aside: { name: 'about', title: 'About this setup' }, drawn: 1 },
     { kind: 'topic', name: 'Northwind', press: 'p', isRead: true },
     { kind: 'search', search: { query: 'tea', hits: [], total: 0, evicted: 0, unreadable: 0 } },
   ]
   for (const view of turned) {
     expect(shownOf(view)).not.toBe('overview')
-    expect(afterBack(view, false, false)).toBe('start')
+    // Off the start view the close is no close and leads back, wherever the pane sits.
+    expect(closeAnswer('person', isOnStartView(view), true, false)).toBe('back')
+    expect(closeAnswer('person', isOnStartView(view), false, false)).toBe('back')
   }
-  // Off the start view the close is no close and leads back, wherever the pane sits.
-  expect(closeAnswer('person', false, true, false)).toBe('back')
-  expect(closeAnswer('person', false, false, false)).toBe('back')
-  // A card stands one step below the list, under the same tab.
-  const card: PaneView = { kind: 'settings', press: 'p', at: 2, drawn: 0 }
-  expect(shownOf(card)).toBe('settings')
-  expect(afterBack(card, true, false)).toBe('list')
+  expect(turned.map(shownOf)).toEqual(['proposals', 'review', 'settings', 'aside', 'aside', 'aside'])
   // On Overview there is nowhere to lead back to: the close closes.
   expect(shownOf(null)).toBe('overview')
-  expect(closeAnswer('person', true, true, false)).toBe('by hand')
-  expect(closeAnswer('person', true, false, false)).toBe('close')
+  expect(closeAnswer('person', isOnStartView(null), true, false)).toBe('by hand')
+  expect(closeAnswer('person', isOnStartView(null), false, false)).toBe('close')
 })
 
 test('the tab Overview beside the chat opens the pane once more without the manners of a dialog, so it no longer closes on Escape', async ($, on) => {
@@ -385,7 +384,7 @@ test('the tab Overview asks again what this session was given', async ($, on) =>
 for (const [to, label, shows] of [
   ['proposals', 'Proposals', 'said on 2026-03-12: "Dana runs IT at Northwind"'],
   ['review', 'Review', 'lint: broken link in a.md'],
-  // The fake core of these tests knows no settings, and the list says so.
+  // The fake core of these tests knows no settings, and the view says so.
   ['settings', 'Settings', 'm2b could not read its settings: the installed m2b is older than this band; update m2b, then run /reload-plugins'],
 ] as const) {
   test(`the tab ${label} pressed in the start view turns the pane as a dialog, so Escape comes back from there too`, async ($, on) => {

@@ -25,6 +25,8 @@ ENTRY_KEYS = {
     "key",
     "file",
     "scope",
+    "group",
+    "place",
     "kind",
     "title",
     "does",
@@ -104,6 +106,43 @@ class SettingsListTest(SettingsFixture):
         self.assertEqual(answer["settings"][0]["key"], "version")
         self.assertEqual(len(scopes), 32)
 
+    def test_as_json_every_setting_names_its_group_and_its_place_and_the_groups_come_in_their_order(self) -> None:
+        """Covers: B210"""
+        answer = self.listed()
+
+        self.assertEqual(
+            answer["groups"],
+            [
+                {"name": "shows", "title": "What m2b shows", "folded": False},
+                {"name": "reads", "title": "What m2b reads", "folded": False},
+                {"name": "curation", "title": "Curation", "folded": False},
+                {"name": "about", "title": "About this setup", "folded": True},
+            ],
+        )
+        placed = {(entry["scope"], entry["key"]): (entry["group"], entry["place"]) for entry in answer["settings"]}
+        self.assertEqual(placed, catalog.places())
+        self.assertEqual(placed[("machine", "band.due_tasks")], ("shows", 1))
+        self.assertEqual(placed[("machine", "sessions.propose")], ("reads", 2))
+        self.assertEqual(placed[("owner", "language")], ("curation", 5))
+        self.assertEqual(placed[("machine", "store.path")], ("about", 1))
+        for group in answer["groups"]:
+            with self.subTest(group=group["name"]):
+                held = sorted(place for name, place in placed.values() if name == group["name"])
+                self.assertEqual(held, list(range(1, len(held) + 1)))
+
+    def test_a_file_that_cannot_be_read_keeps_its_settings_in_their_groups(self) -> None:
+        """Covers: B210"""
+        (self.store_root / STORE_SETTINGS_FILE_NAME).write_text("{ no json", encoding="utf-8")
+
+        answer = self.listed()
+
+        machine_that_curates = self.entry("curating_machine", catalog.STORE)
+        self.assertEqual(
+            (machine_that_curates["read"], machine_that_curates["group"], machine_that_curates["place"]),
+            (False, "curation", 2),
+        )
+        self.assertEqual(len(answer["groups"]), 4)
+
     def test_a_switch_comes_with_its_value_its_default_and_its_few_values(self) -> None:
         """Covers: B194"""
         self.assertEqual(
@@ -112,6 +151,8 @@ class SettingsListTest(SettingsFixture):
                 "key": "curation.paused",
                 "file": "config.json",
                 "scope": "machine",
+                "group": "curation",
+                "place": 3,
                 "kind": "switch",
                 "title": "Curation paused",
                 "does": catalog.named("curation.paused")[0].does,

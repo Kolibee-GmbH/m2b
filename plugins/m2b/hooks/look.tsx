@@ -1,4 +1,4 @@
-import type { ElementTable, RenderChildren, ThemeKey } from 'claude-code'
+import type { ElementTable, RenderChildren, ThemeKey, UiPressArgument } from 'claude-code'
 
 import type { BandDueTask } from '../types'
 import { plainLine, wholePath } from './plain-text'
@@ -27,7 +27,7 @@ export type Tone =
   | 'plain'
   // May be skipped: detail, what is not known yet.
   | 'quiet'
-  // The one of several that holds now: the tab whose view is shown.
+  // The one of several that holds now: the tab whose view is shown, the value a setting has.
   | 'shown'
   // What a line is about, where a part lists several things.
   | 'strong'
@@ -128,7 +128,8 @@ export function dueCounts(due: readonly BandDueTask[]): { text: string; tone: To
 /** How much a button asks to be pressed: the one action of its row, any other, or one beside the point. */
 export type ButtonKind = 'accent' | 'default' | 'quiet'
 
-export type ButtonSpec = { key: string; label: string; kind: ButtonKind; onPress: () => void }
+/** `onPress` is handed the press, which names the surface it was made on. */
+export type ButtonSpec = { key: string; label: string; kind: ButtonKind; onPress: (pressed: UiPressArgument) => void }
 
 export function button(ui: Pick<ElementTable, 'Button'>, spec: ButtonSpec) {
   const { Button } = ui
@@ -178,6 +179,54 @@ export function tabRow(ui: Pick<ElementTable, 'Box' | 'Button' | 'Text'>, tabs: 
           button(ui, { key: tab.turn.key, label: tab.label, kind: 'quiet', onPress: tab.turn.onPress })
         ),
       )}
+    </Box>
+  )
+}
+
+/**
+ * One value of a setting. `set` is the press that sets it: null for the value in force, and for a
+ * value that cannot be pressed where and when the row is drawn.
+ */
+export type ValueSpec = { label: string; isInForce: boolean; set: { key: string; onPress: (pressed: UiPressArgument) => void } | null }
+
+// Before the value in force, so it reads as the one that holds without its color.
+const IN_FORCE = '●'
+
+/**
+ * The values of a setting side by side: the one in force is marked and is no button, every other
+ * is a button that sets it, or stepped back where it cannot be pressed. The row breaks between
+ * values where it is too narrow for them.
+ */
+export function valueRow(ui: Pick<ElementTable, 'Box' | 'Button' | 'Text'>, values: readonly ValueSpec[], key?: string) {
+  const { Box, Text } = ui
+  return (
+    <Box key={key} flexDirection="row" columnGap={1} flexWrap="wrap">
+      {values.map(value => {
+        if (value.isInForce) {
+          return (
+            <Text {...styleOf('shown')} wrap="wrap">
+              {`${IN_FORCE} ${value.label}`}
+            </Text>
+          )
+        }
+        return value.set === null ? (
+          <Text {...styleOf('quiet')} wrap="wrap">
+            {value.label}
+          </Text>
+        ) : (
+          button(ui, { key: value.set.key, label: value.label, kind: 'default', onPress: value.set.onPress })
+        )
+      })}
+    </Box>
+  )
+}
+
+/** Blocks of several lines each, with an empty line between them, so each reads as one thing. */
+export function apart(ui: Pick<ElementTable, 'Box'>, blocks: readonly RenderChildren[]) {
+  const { Box } = ui
+  return (
+    <Box flexDirection="column" rowGap={1}>
+      {blocks}
     </Box>
   )
 }

@@ -40,6 +40,17 @@ All notable changes to this project are documented here. The format follows
   `back` above the views and `show` and `settings` on the start view are gone. After a press on
   a tab the focus stands on the tab that leads back, and after keep, drop or `ok` on the row's
   `undo`: after drop it stood on keep of the row below.
+- The settings in the pane are sorted by what you want from m2b, in four parts: "What m2b
+  shows", "What m2b reads", "Curation" and "About this setup". In the first three a setting is its
+  title, what it does and its values side by side: the value in force is marked (`● count`), and
+  a press on another value sets it, with the five seconds of `undo` as before. "About this setup"
+  is one row, `22 settings`: a press on it shows what only informs or is changed by a command
+  under a tab of its own, each with what changes it. The list by file with `open`, the card per
+  setting, `previous`, `next`, `list`, `turn on` and `set to …` are gone. After `undo` and once a
+  press is written the focus stands on the nearest button that sets nothing, the tab `Overview`
+  or the row of "About this setup", never on a value. `m2b settings --json` names the groups
+  under `groups`, and each setting's `group` and `place` in it; as text the list stays under the
+  three files.
 - The status line under the prompt says only what is wrong with m2b, such as `last curation run
   failed` or `calendar not reachable`, and is gone while nothing is. Claude Code draws a plugin's
   status line as a warning, so `0 in inbox · curated 18:02` warned in every session.

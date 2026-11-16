@@ -77,10 +77,11 @@ class PicturesTest(unittest.TestCase):
         self.assertEqual(commands, {"pane-answers": "/m2b-pane", "settings-walk": "/m2b-settings"})
 
     def test_only_the_second_press_is_given_the_five_seconds_after_which_it_is_written(self) -> None:
-        # The key after the press that is written: the first step back to the start view, and to the list.
+        # The key after the press that is written: the first step back to the start view, and Enter on the row
+        # that opens what only informs.
         after_the_write = {
             "pane-answers": (readme_demo.answering_beats(), readme_demo.SHIFT_TAB, 0),
-            "settings-walk": (readme_demo.settings_beats(), readme_demo.TAB, -1),
+            "settings-walk": (readme_demo.settings_beats(), readme_images.ENTER, -1),
         }
         for name, (beats, key, which) in after_the_write.items():
             with self.subTest(picture=name):
@@ -91,13 +92,32 @@ class PicturesTest(unittest.TestCase):
                 others = [beat.seconds for beat in beats[3:] if beat is not waited]
                 self.assertLess(max(others), 5.0)
 
-    def test_the_walk_presses_enter_on_next_as_often_as_settings_stand_before_the_model_of_curation(self) -> None:
+    def test_the_way_to_the_model_of_curation_is_the_buttons_the_settings_draw_around_its_other_value(self) -> None:
         presses = keys_of(readme_demo.PICTURES[2]).partition("/m2b-settings" + readme_images.ENTER)[2]
-        before = [setting.key for setting in catalog.settings()].index("curation.model")
+        model = (catalog.MACHINE, "curation.model")
+        in_sight = [held for group in catalog.groups() if not group.folded for held in group.holds]
+        choices = {(setting.scope, setting.key): setting.choices for setting in catalog.settings()}
 
-        # Past the three tabs to the first row, Enter opens its card, then Enter on next once per setting before.
-        opened_and_walked = readme_images.ENTER * (1 + before)
-        self.assertTrue(presses.startswith(readme_demo.TAB * 4 + opened_and_walked + readme_demo.TAB))
+        def values_to_press(settings: list[tuple[str, str]]) -> int:
+            """A switch draws a button for every value but the one in force; a setting that is no switch draws none."""
+            return sum(max(len(choices[held]) - 1, 0) for held in settings)
+
+        at = in_sight.index(model)
+        tabs_of_the_pane = 3
+        to_the_model = tabs_of_the_pane + values_to_press(in_sight[:at]) + 1
+        # From the row of the folded group, the button after the last value.
+        back_to_the_model = values_to_press(in_sight[at + 1 :]) + 1
+
+        self.assertEqual(readme_demo.TABS_TO_THE_MODEL, to_the_model)
+        self.assertEqual(readme_demo.BACK_TO_THE_MODEL, back_to_the_model)
+        self.assertEqual(choices[model], ("haiku", readme_demo.KEPT_MODEL))
+        self.assertTrue(catalog.groups()[-1].folded)
+        # The model stands nearer to that row than to the tabs, so the focus rests on the row after undo.
+        self.assertLess(len(in_sight) - at, at + 1)
+        pressed_and_undone = readme_demo.TAB * to_the_model + readme_images.ENTER * 2
+        pressed_again = readme_demo.SHIFT_TAB * back_to_the_model + readme_images.ENTER
+        opened_the_rest = readme_images.ENTER
+        self.assertEqual(presses, pressed_and_undone + pressed_again + opened_the_rest)
 
     def test_the_proposal_the_picture_keeps_is_one_of_the_demo_store(self) -> None:
         self.assertIn(readme_demo.KEPT_PROPOSAL, [text for _, text, _, _ in readme_images.PROPOSALS])

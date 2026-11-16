@@ -90,22 +90,19 @@ import {
   SETTINGS_IN_A_TERMINAL,
   SETTINGS_PLACED,
   SETTINGS_UNDO,
-  afterBack,
   askSettings,
   beginChange,
   beginSettings,
   dropWaitingChange,
   endChange,
   fillSettings,
-  focusKeyOfHeldCard,
+  foldedTitle,
   forgetSettingsUnless,
   heldSettings,
-  listOf,
   openSettings,
   readSettings,
-  rowKey,
+  restKey,
   settingsPane,
-  showsCard,
   startWriting,
   undoChange,
   waits,
@@ -653,9 +650,15 @@ async function turnSettings($: EngineInterface, press: string, change: (view: Se
   await update($, paneViewAtom, view => (view !== null && view.kind === 'settings' && view.press === press ? change(view) : view))
 }
 
-/** Draws the settings again after what their module holds changed. */
+/**
+ * Draws the settings again after what their module holds changed. A view turned to a group the
+ * list no longer has is turned back to the choices, so the tabs name what is drawn below them.
+ */
 function drawSettings($: EngineInterface, press: string): Promise<void> {
-  return turnSettings($, press, view => ({ ...view, drawn: view.drawn + 1 }))
+  return turnSettings($, press, view => {
+    const isGone = view.aside !== null && foldedTitle(press, view.aside.name) === null
+    return { ...view, aside: isGone ? null : view.aside, drawn: view.drawn + 1 }
+  })
 }
 
 /** Reads the list of the settings for an opening of the view; an answer for a view that was left is dropped. */
@@ -667,14 +670,14 @@ async function loadSettings($: EngineInterface, press: string): Promise<void> {
 }
 
 /**
- * Turns the pane to the list of the settings and reads it, with the focus on the button under
+ * Turns the pane to the settings and reads their list, with the focus on the button under
  * `focusKey`. The values are kept by the module that draws them, never in the session's state, and
  * only for this opening of the view.
  */
 async function showSettings($: EngineInterface, focusKey: string | null): Promise<void> {
   const press = await newPressToken($)
   beginSettings(press)
-  await asDialog($, { kind: 'settings', press, at: null, drawn: 0 })
+  await asDialog($, { kind: 'settings', press, aside: null, drawn: 0 })
   // The read does not wait for the focus.
   const focusMoved = focusInPane($, focusKey)
   await loadSettings($, press)
@@ -685,7 +688,7 @@ async function showSettings($: EngineInterface, focusKey: string | null): Promis
 // Claude Code started the command, and it knows that by this variable. The mod names it itself,
 // so that refusal does not rest on what the child happens to inherit.
 const FROM_A_SESSION = { CLAUDECODE: '1' } as const
-// What the core is told for the one press that turns handing in on, on its card: an empty value,
+// What the core is told for the one press that turns handing in on, on its value: an empty value,
 // which the core reads as a terminal of the owner's own, set over whatever the mod inherited. No
 // other call of the mod carries it.
 const BY_THE_PERSONS_PRESS = { CLAUDECODE: '' } as const
@@ -700,11 +703,11 @@ async function settleSetting($: EngineInterface, token: string): Promise<void> {
   const stillWaited = waits(token)
   const write = startWriting(token)
   if (write === null) {
-    // Taken back, or dropped because the list no longer offers the value: the card says what is true.
+    // Taken back, or dropped because the list no longer offers the value: the view says what is true.
     await drawOpenSettings($)
     if (stillWaited) {
-      // Dropped: `undo` is gone from under the focus, and the switches stand again where it stood.
-      await focusOnOpenCard($)
+      // Dropped: `undo` is gone from under the focus, and the values stand again where it stood.
+      await focusOffTheValues($)
     }
     return
   }
@@ -712,9 +715,9 @@ async function settleSetting($: EngineInterface, token: string): Promise<void> {
   let focusMoved: Promise<void> = Promise.resolve()
   try {
     await drawOpenSettings($)
-    // `undo` is gone from under the focus: it goes to the button that leads on, never to the
-    // switch that comes back. The write does not wait for it.
-    focusMoved = focusOnOpenCard($)
+    // `undo` is gone from under the focus: it goes to a button that sets nothing, never to a value that comes back.
+    // The write does not wait for it.
+    focusMoved = focusOffTheValues($)
     // `--`: a key and a value are handed on as the core named them, whatever they begin with.
     const from = write.isTurningHandingInOn ? BY_THE_PERSONS_PRESS : FROM_A_SESSION
     const outcome = await runM2b($, ['settings', 'set', '--', write.key, write.argument], WRITE_TIMEOUT_MS, undefined, from)
@@ -726,8 +729,11 @@ async function settleSetting($: EngineInterface, token: string): Promise<void> {
     endChange(token, refused)
   }
   await focusMoved
-  // The change is over at once in the view; the list follows when it is read.
+  // The change is over at once in the view; the list follows when it is read. The values are
+  // buttons again, which moves every button below them: the focus is asked for once more, and
+  // the read does not wait for it.
   await drawOpenSettings($)
+  const rests = focusOffTheValues($)
   const open = openSettings()
   if (open !== null) {
     await loadSettings($, open)
@@ -735,6 +741,7 @@ async function settleSetting($: EngineInterface, token: string): Promise<void> {
   if (refused === null) {
     $.clock.after(0, inBackground($, () => refresh($, true)))
   }
+  await rests
 }
 
 /** Draws the settings again for the opening the pane shows now, if it shows them. */
@@ -749,8 +756,8 @@ async function drawOpenSettings($: EngineInterface): Promise<void> {
  * Asks Claude Code for the focus of the pane on the button drawn under `key`. Claude Code keeps
  * the focus at its place in the row of buttons when a view is drawn anew, not on its button: left
  * alone, Enter pressed again would land on whatever stands at that place of the new drawing. So
- * where a press turns the pane to another view or to another card of the settings, and around a
- * press on a switch, the mod says where the focus goes. Where the pane does not hold the
+ * where a press turns the pane to another view or changes which buttons the settings draw, the
+ * mod says where the focus goes. Where the pane does not hold the
  * keyboard, as after Escape, Claude Code refuses, and the view is as drawn. Never throws.
  */
 async function focusInPane($: EngineInterface, key: string | null): Promise<void> {
@@ -765,34 +772,34 @@ async function focusInPane($: EngineInterface, key: string | null): Promise<void
 }
 
 /**
- * Asks for the focus on the button that leads on from the card the pane shows; nothing where it
- * shows no card. Never throws: a press is written whatever becomes of the focus.
+ * Asks for the focus on a button that sets nothing, near the setting that was pressed, where the
+ * pane shows the settings to choose; nothing where it shows another view or a group under its own
+ * tab, which draws none of those buttons: Claude Code would wait for a key that is not drawn.
+ * Never throws: a press is written whatever becomes of the focus.
  */
-async function focusOnOpenCard($: EngineInterface): Promise<void> {
+async function focusOffTheValues($: EngineInterface): Promise<void> {
   try {
     const view = await read($, paneViewAtom)
-    if (view !== null && view.kind === 'settings' && view.at !== null) {
-      await focusInPane($, focusKeyOfHeldCard(view.press, view.at, 'forward'))
+    if (view?.kind === 'settings' && view.aside === null) {
+      await focusInPane($, restKey())
     }
   } catch {
-    // The card is drawn all the same.
+    // The view is drawn all the same.
   }
 }
 
 function settingsActions($: EngineInterface, press: string): SettingsActions {
-  // Leaving a card takes back a press that still waits on it: from anywhere else nobody could.
-  const leaveFor = (at: number | null): Promise<void> => {
-    undoChange(press)
-    return turnSettings($, press, view => ({ ...view, at, drawn: view.drawn + 1 }))
-  }
   return {
-    open: async (at, reached) => {
-      await leaveFor(at)
-      await focusInPane($, focusKeyOfHeldCard(press, at, reached))
-    },
-    toList: async from => {
-      await leaveFor(null)
-      await focusInPane($, rowKey(from))
+    showGroup: async name => {
+      const title = foldedTitle(press, name)
+      if (title === null) {
+        return
+      }
+      // Leaving the values takes back a press that still waits on one: from the group's view nobody could.
+      undoChange(press)
+      await turnSettings($, press, view => ({ ...view, aside: { name, title }, drawn: view.drawn + 1 }))
+      // The group stands under a tab of its own, which holds no button: the focus goes to the tab that leads back.
+      await focusInPane($, tabKeyAfterTurn('settings', 'aside'))
     },
     choose: async (at, place, surface) => {
       const token = await newPressToken($)
@@ -803,14 +810,14 @@ function settingsActions($: EngineInterface, press: string): SettingsActions {
           inBackground($, () => settleSetting($, token)),
         )
         await drawSettings($, press)
-        // The one button that takes the press back: Enter once more is undo, whatever else the card offers.
+        // The one button that takes the press back: Enter once more is undo.
         await focusInPane($, SETTINGS_UNDO)
       }
     },
     undo: async () => {
       if (undoChange(press)) {
         await drawSettings($, press)
-        await focusOnOpenCard($)
+        await focusOffTheValues($)
       }
     },
   }
@@ -1518,7 +1525,7 @@ export const register: Register = on => {
     }
     const press = await newPressToken($)
     beginSettings(press)
-    await turnTo($, { kind: 'settings', press, at: null, drawn: 0 })
+    await turnTo($, { kind: 'settings', press, aside: null, drawn: 0 })
     const [answer] = (await showInPane($, SETTINGS_PLACED, () => [])).split('\n')
     if (answer !== SETTINGS_PLACED) {
       // No pane: nothing is read, and the list is where a terminal shows it.
@@ -1621,19 +1628,6 @@ export const register: Register = on => {
     const isOnStartView = view === null
     const isRightAfterBack = wentBackAtMs !== null && nowMs - wentBackAtMs < SAME_KEY_TWICE_MS
     const answer = closeAnswer(e.origin.kind, isOnStartView, staysBesideChat(paneSeats.values()), isRightAfterBack)
-    const isCardShown = view !== null && view.kind === 'settings' && showsCard(view, heldSettings(view.press))
-    const turn = answer === 'back' ? afterBack(view, isCardShown, isRightAfterBack) : 'start'
-    if (turn === 'stay') {
-      return { value: undefined }
-    }
-    if (turn === 'list') {
-      // A setting's card is one step below the list: the close leads there, and the next one on.
-      // A press that waits on the card is taken back: from the list nobody could.
-      wentBackAtMs = nowMs
-      dropWaitingChange()
-      await turnTo($, listOf(view))
-      return { value: undefined }
-    }
     if (answer === 'back') {
       if (!isOnStartView) {
         wentBackAtMs = nowMs

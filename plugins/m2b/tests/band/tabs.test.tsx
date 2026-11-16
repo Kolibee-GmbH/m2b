@@ -9,11 +9,14 @@ import type { SessionModel } from '../../hooks/session-view'
 import type { BandSession } from '../../types'
 import {
   FakeM2b,
+  FakeSettings,
+  NOTES,
   SESSION_ID,
   buttonsAt,
+  fakeSetting,
   inView,
   lookOf,
-  ok,
+  onOff,
   pane,
   partLines,
   pressTab,
@@ -41,28 +44,32 @@ const TURN_ENDED = { answer: 'done', durationMs: 5, isAborted: false, reason: 'a
 const TABS: readonly TabId[] = ['overview', 'proposals', 'review', 'settings']
 const LABELS: Readonly<Record<TabId, string>> = { overview: 'Overview', proposals: 'Proposals', review: 'Review', settings: 'Settings' }
 
-/** Every view of the pane: the four under their tabs, a setting's card under `Settings`, and the two under a fifth tab. */
-type View = TabId | 'card' | 'topic' | 'search'
-const VIEWS: readonly View[] = ['overview', 'proposals', 'review', 'settings', 'card', 'topic', 'search']
+/** Every view of the pane: the four under their tabs, and the three under a fifth tab, a folded group of the settings, a topic's lines and a search. */
+type View = TabId | 'group' | 'topic' | 'search'
+const VIEWS: readonly View[] = ['overview', 'proposals', 'review', 'settings', 'group', 'topic', 'search']
+/** The views that stand under a fifth tab. */
+const UNDER_A_FIFTH_TAB = ['group', 'topic', 'search'] as const
+/** The button of the row the settings keep their folded group behind, which turns the pane to that group. */
+const SHOW_GROUP = 'settings:fold:about'
 /** Which tab the row marks above each view. */
 const SHOWN: Readonly<Record<View, Shown>> = {
   overview: 'overview',
   proposals: 'proposals',
   review: 'review',
   settings: 'settings',
-  card: 'settings',
+  group: 'aside',
   topic: 'aside',
   search: 'aside',
 }
-/** The label of the fifth tab above the two views that have one. */
-const ASIDE: Readonly<Partial<Record<View, string>>> = { topic: 'Northwind', search: 'Search' }
+/** The label of the fifth tab above the three views that have one. */
+const ASIDE: Readonly<Partial<Record<View, string>>> = { group: 'About this setup', topic: 'Northwind', search: 'Search' }
 /** A line each view draws and no other does: the review has a part "Waits for you" too, so the overview is told by its part "Today". */
 const SAYS: Readonly<Record<View, string>> = {
   overview: 'Today',
   proposals: 'said on 2026-03-12: "Dana runs IT at Northwind"',
   review: 'lint: broken link in a.md',
-  settings: 'Curation paused: off',
-  card: 'What curation.paused does.',
+  settings: 'that only inform or are changed by a command',
+  group: `Store folder: ${NOTES}`,
   topic: KIM,
   search: 'memory/dana.md:3',
 }
@@ -72,7 +79,7 @@ const COMMANDS: Readonly<Record<View, string>> = {
   proposals: 'm2b-proposals',
   review: 'm2b-review',
   settings: 'm2b-settings',
-  card: 'm2b-settings',
+  group: 'm2b-settings',
   topic: 'm2b-pane',
   search: 'm2b-search',
 }
@@ -81,28 +88,9 @@ function typed($: Engine, command: string, args = ''): Promise<CommandRunResult>
   return $.command.run({ command, args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
 }
 
-function setting(key: string, title: string): Record<string, unknown> {
-  return {
-    key,
-    file: 'config.json',
-    scope: 'machine',
-    kind: 'switch',
-    title,
-    does: `What ${key} does.`,
-    read: true,
-    value: false,
-    shows: 'off',
-    default: false,
-    choices: [true, false],
-    changed_by: 'command',
-    change: `m2b settings set ${key} true|false`,
-    curation: false,
-  }
-}
-
 /**
  * A session with something under every tab: two topics, a candidate, a question and the review,
- * three proposals, a hit to search for, and two settings.
+ * three proposals, a hit to search for, and three settings, two to choose and one behind a row.
  */
 function fullFake(): FakeM2b {
   const fake = new FakeM2b()
@@ -123,8 +111,11 @@ function fullFake(): FakeM2b {
     .proposal(LADDER, 'Call Sam about the ladder.')
     .proposal(SHED, 'The spare key is in the shed.')
   fake.searchHits = [{ path: 'memory/dana.md', line: 3, text: 'Dana prefers tea' }]
-  const settings = [setting('curation.paused', 'Curation paused'), setting('sessions.propose', 'Sessions hand in proposals')]
-  fake.onSettings = () => ok(JSON.stringify({ curates: true, not_read: {}, settings }))
+  fake.onSettings = new FakeSettings([
+    fakeSetting('curation.paused', 'Curation paused', 'curation', 1, onOff('curation.paused', false)),
+    fakeSetting('sessions.propose', 'Sessions hand in proposals', 'reads', 1, onOff('sessions.propose', false)),
+    fakeSetting('store.path', 'Store folder', 'about', 1, { value: NOTES, shows: NOTES }),
+  ]).handle
   return fake
 }
 
@@ -135,12 +126,12 @@ function mounted($: Engine, columns = 80) {
 type Pane = Awaited<ReturnType<typeof mounted>>
 type Clock = Awaited<ReturnType<typeof start>>['clock']
 
-/** Turns the pane to `view` from wherever it is: by the view's command and, for a card and a topic, the press that leads on. */
+/** Turns the pane to `view` from wherever it is: by the view's command and, for a folded group and a topic, the press that shows it. */
 async function arrive($: Engine, clock: Clock, ui: Pane, view: View): Promise<void> {
   await typed($, COMMANDS[view], view === 'search' ? 'tea' : '')
   await clock.advance(1)
-  if (view === 'card') {
-    await ui.press({ key: 'setting:0' })
+  if (view === 'group') {
+    await ui.press({ key: SHOW_GROUP })
   }
   if (view === 'topic') {
     await ui.press({ key: 'topic:0' })
@@ -200,7 +191,7 @@ test("the tab shown is bold and underlined in the color of m2b's name, and every
   const { clock } = await start($, on, fullFake())
   const ui = await mounted($)
 
-  for (const view of ['overview', 'review', 'topic'] as const) {
+  for (const view of ['overview', 'review', 'topic', 'group'] as const) {
     await arrive($, clock, ui, view)
     const row = await shownTabs(ui)
     const marked = row.find(tab => tab.key === null)
@@ -310,9 +301,11 @@ test('the fifth tab stands there only while its view is shown: a press on any of
   const { clock } = await start($, on, fullFake())
   const ui = await mounted($)
 
-  for (const view of ['topic', 'search'] as const) {
+  for (const view of UNDER_A_FIFTH_TAB) {
     for (const to of TABS) {
       await arrive($, clock, ui, view)
+      // All four tabs that stay are buttons there, `Settings` above a folded group of the settings too.
+      expect(await shownTabs(ui)).toEqual(rowAbove('aside', ASIDE[view]))
       expect(await shownTabs(ui)).toHaveLength(5)
 
       await pressTab(ui, to)
@@ -444,7 +437,7 @@ test('in a pane as narrow as a dock gets the row holds the same tabs and breaks 
   const { clock } = await start($, on, fullFake())
   const ui = await mounted($, 24)
 
-  for (const view of ['overview', 'topic'] as const) {
+  for (const view of ['overview', 'topic', 'group'] as const) {
     await arrive($, clock, ui, view)
     expect(await shownTabs(ui)).toEqual(rowAbove(SHOWN[view], ASIDE[view]))
     expect((await ui.find({ key: 'tabs' }))?.props).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
@@ -584,6 +577,16 @@ test("a topic left by Overview gets its own button before the tabs' rule; left b
   // No other view has a row on the start view: the tab that leads back to it.
   expect(focusKeyAfterTab({ kind: 'review' }, 'overview', full)).toBe('tab:review:in:overview')
   expect(focusKeyAfterTab(null, 'settings', full)).toBe('tab:overview:in:settings')
+  // A folded group of the settings stands under a fifth tab, which is gone once it is left: the
+  // tabs' rule for the fifth tab holds, whichever tab is pressed above it, `Settings` among them.
+  const choices = { kind: 'settings', press: 'p1', aside: null, drawn: 0 } as const
+  const group = { ...choices, aside: { name: 'about', title: 'About this setup' }, drawn: 1 } as const
+  expect(focusKeyAfterTab(group, 'overview', full)).toBe('tab:proposals:in:overview')
+  expect(focusKeyAfterTab(group, 'proposals', full)).toBe('tab:overview:in:proposals')
+  expect(focusKeyAfterTab(group, 'review', full)).toBe('tab:overview:in:review')
+  expect(focusKeyAfterTab(group, 'settings', full)).toBe('tab:overview:in:settings')
+  // The choices stand under `Settings`, which leads back to them.
+  expect(focusKeyAfterTab(choices, 'review', full)).toBe('tab:settings:in:review')
 })
 
 test("the button of the topic that was left is a button of the start view and was none above the topic's lines", async ($, on) => {

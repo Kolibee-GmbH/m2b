@@ -6,8 +6,8 @@ import type { SessionModel } from './session-view'
 
 /*
  * The tabs above every view of the m2b pane: four that stay, always in one order, and a fifth for
- * a topic's lines or a search, which stands there only while it is shown. A tab is the one way
- * from a view to another, so no view has a button that leads back.
+ * a topic's lines, a search or the settings that only inform, which stands there only while it is
+ * shown. A tab is the one way from a view to another, so no view has a button that leads back.
  */
 
 /** A tab that stays, named like the view it turns the pane to. */
@@ -29,7 +29,10 @@ export function shownOf(view: PaneView | null): Shown {
   if (view === null) {
     return 'overview'
   }
-  return view.kind === 'topic' || view.kind === 'search' ? 'aside' : view.kind
+  if (view.kind === 'topic' || view.kind === 'search') {
+    return 'aside'
+  }
+  return view.kind === 'settings' && view.aside !== null ? 'aside' : view.kind
 }
 
 /**
@@ -68,6 +71,9 @@ export function focusKeyAfterTab(left: PaneView | null, to: TabId, model: Sessio
 function asideLabel(view: PaneView | null): string | null {
   if (view?.kind === 'topic') {
     return topicLabel(view.name)
+  }
+  if (view?.kind === 'settings' && view.aside !== null) {
+    return topicLabel(view.aside.title)
   }
   return view?.kind === 'search' ? SEARCH : null
 }

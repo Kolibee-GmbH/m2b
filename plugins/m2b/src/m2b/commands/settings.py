@@ -1,8 +1,9 @@
 """``config get / set``, ``profile get / set / merge`` and ``settings``: the settings, read and written by key.
 
 ``config`` and ``profile`` each read and write one file by any of its keys, for someone who knows
-the key. ``settings`` lists every setting of the three files from the catalog (``config.catalog``),
-and ``settings set`` changes a switch and nothing else, so a caller that offers a few switches to
+the key. ``settings`` lists every setting of the three files from the catalog (``config.catalog``):
+as text under its file, for someone who edits one, and as JSON also with the group a view shows it
+in. ``settings set`` changes a switch and nothing else, so a caller that offers a few switches to
 press cannot write a path, a program or a time limit through it, whatever key it sends.
 """
 
@@ -172,7 +173,8 @@ def settings_command(arguments: argparse.Namespace, context: Context) -> int:
     entries = catalog.entries(catalog.values(config, store, profile))
     if arguments.json:
         curates = None if store is None else store.curating_machine == config.machine_id
-        print_json({"curates": curates, "not_read": not_read, "settings": entries})
+        answer = {"curates": curates, "not_read": not_read, "groups": catalog.group_entries(), "settings": entries}
+        print_json(answer)
     else:
         _print_settings(entries, not_read)
     return 0

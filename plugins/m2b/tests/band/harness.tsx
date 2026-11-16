@@ -466,6 +466,191 @@ export function fail(message: string): ProcessRunResult {
   return { exitCode: 1, stdout: '', stderr: `m2b: ${message}\n`, isStdoutTruncated: false, isStderrTruncated: false }
 }
 
+/** A group of the settings as `m2b settings --json` names it: `folded` marks the one a view keeps behind one row. */
+export type FakeGroup = { name: string; title: string; folded: boolean }
+
+/** The core's four groups, in its order: three of choices, and what only informs or is changed by a command. */
+export const SETTING_GROUPS: readonly FakeGroup[] = [
+  { name: 'shows', title: 'What m2b shows', folded: false },
+  { name: 'reads', title: 'What m2b reads', folded: false },
+  { name: 'curation', title: 'Curation', folded: false },
+  { name: 'about', title: 'About this setup', folded: true },
+]
+
+/** A setting as `m2b settings --json` lists it: `group` is the name of its group, `place` its place there, counted from one. */
+export type FakeSetting = {
+  key: string
+  file: string
+  scope: string
+  group: string
+  place: number
+  kind: string
+  title: string
+  does: string
+  read: boolean
+  value: unknown
+  shows: string | null
+  default: unknown
+  choices: unknown[]
+  changed_by: string
+  change: string | null
+  curation: boolean
+}
+
+/** A setting of this machine that shows a value a command changes, at `place` of `group`, with whatever `fields` say otherwise. */
+export function fakeSetting(key: string, title: string, group: string, place: number, fields: Partial<FakeSetting> = {}): FakeSetting {
+  return {
+    key,
+    file: 'config.json',
+    scope: 'machine',
+    group,
+    place,
+    kind: 'shown',
+    title,
+    does: `What ${key} does.`,
+    read: true,
+    value: null,
+    shows: 'not set',
+    default: null,
+    choices: [],
+    changed_by: 'command',
+    change: `m2b config set ${key} <value>`,
+    curation: false,
+    ...fields,
+  }
+}
+
+/** The fields of a switch of on and off. */
+export function onOff(key: string, isOn: boolean): Partial<FakeSetting> {
+  return {
+    kind: 'switch',
+    value: isOn,
+    shows: isOn ? 'on' : 'off',
+    default: false,
+    choices: [true, false],
+    change: `m2b settings set ${key} true|false`,
+  }
+}
+
+/** The fields of a switch of a few names, with the one that is set. */
+export function oneOf(key: string, choices: string[], value: string): Partial<FakeSetting> {
+  return { kind: 'switch', value, shows: value, default: value, choices, change: `m2b settings set ${key} ${choices.join('|')}` }
+}
+
+/** The fields that put a setting into the store's file, and into the owner's. */
+export const IN_STORE: Partial<FakeSetting> = { file: 'store.json', scope: 'store' }
+export const OF_OWNER: Partial<FakeSetting> = { file: 'profile.json', scope: 'owner' }
+
+export const NOTES = '/home/alex/Notes'
+
+/** Where each setting of `settingsCatalog` stands in the list, which is by file: the place a press names. */
+export const SETTING_AT = {
+  MACHINE_ID: 0,
+  PATH: 1,
+  DUE: 2,
+  MODEL: 3,
+  PAUSED: 4,
+  PROPOSE: 5,
+  SKIP: 6,
+  EXECUTABLES: 7,
+  CURATING: 8,
+  BACKEND: 9,
+  TIMEOUT: 10,
+  LANGUAGE: 11,
+  CUSTOMERS: 12,
+} as const
+
+/**
+ * Thirteen settings as `m2b settings --json` lists them, by file: each kind, each file and each
+ * way a setting changes, in every group. The order in a group is not the order of the list: the
+ * curating machine, of the store's file, stands between two settings of this machine, and the
+ * store folder before this machine's name.
+ */
+export function settingsCatalog(): FakeSetting[] {
+  return [
+    fakeSetting('machine_id', "This machine's name", 'about', 2, { value: 'tower-1', shows: 'tower-1', changed_by: 'never by hand', change: null }),
+    fakeSetting('store.path', 'Store folder', 'about', 1, { value: NOTES, shows: NOTES, change: 'm2b config set store.path <folder>' }),
+    fakeSetting('band.due_tasks', 'Tasks in the band', 'shows', 1, oneOf('band.due_tasks', ['off', 'count', 'list'], 'count')),
+    fakeSetting('curation.model', 'Model of curation', 'curation', 1, { ...oneOf('curation.model', ['haiku', 'sonnet'], 'haiku'), curation: true }),
+    fakeSetting('curation.paused', 'Curation paused', 'curation', 3, { ...onOff('curation.paused', false), curation: true }),
+    fakeSetting('sessions.propose', 'Sessions hand in proposals', 'reads', 1, onOff('sessions.propose', false)),
+    fakeSetting('distillate.skip_under', 'Folders m2b is left out of', 'reads', 2, {
+      kind: 'named',
+      shows: '2 folders',
+      change: 'm2b distillate off|on [<folder>]',
+    }),
+    fakeSetting('executables', 'Programs m2b starts', 'about', 5, { kind: 'named', shows: '3 named', change: 'm2b config set executables.<program> <path>' }),
+    fakeSetting('curating_machine', 'Curating machine', 'curation', 2, { ...IN_STORE, value: 'tower-1', shows: 'tower-1', change: 'm2b curate take-over' }),
+    fakeSetting('tasks.backend', 'Task list', 'about', 3, { ...IN_STORE, value: 'markdown', shows: 'markdown', changed_by: 'setup', change: '/m2b:setup' }),
+    fakeSetting('tasks.timeout_seconds', 'Time limit of a tasks call', 'about', 4, {
+      ...IN_STORE,
+      value: 20,
+      shows: '20',
+      default: 20,
+      changed_by: 'by hand',
+      change: 'edit tasks.timeout_seconds in store.json, in the store folder',
+    }),
+    fakeSetting('language', 'Language', 'curation', 4, { ...OF_OWNER, ...oneOf('language', ['de', 'en'], 'en') }),
+    fakeSetting('customers', 'Customers', 'about', 6, { ...OF_OWNER, kind: 'named', shows: '2 customers', changed_by: 'setup', change: '/m2b:worklog-setup' }),
+  ]
+}
+
+/** What the core says to a session that turns handing in on, in short. */
+export const NO_SESSION_TURNS_IT_ON = 'sessions.propose is turned on in a terminal of your own, outside Claude Code'
+
+/** The core's two commands for the settings, `m2b settings --json` and `m2b settings set`, answered from memory. */
+export class FakeSettings {
+  entries: FakeSetting[]
+  /** The groups the answer names; null as a core from before it sorted the settings answers, without the key. */
+  groups: FakeGroup[] | null = SETTING_GROUPS.map(group => ({ ...group }))
+  curates: boolean | null = true
+  notRead: Record<string, string> = {}
+  /** When set, `m2b settings set` refuses with this line and changes nothing. */
+  refuses: string | null = null
+  /** When set, `m2b settings` fails with this as its message. */
+  listFails: string | null = null
+  /** When set, `m2b settings --json` answers this instead, whatever its shape. */
+  part: unknown = undefined
+  /** The variables each `m2b settings set` was handed, one entry per call. */
+  readonly changedWith: (Record<string, string> | undefined)[] = []
+
+  constructor(entries: FakeSetting[] = settingsCatalog()) {
+    this.entries = entries
+  }
+
+  /** The answer of `m2b settings --json` as it is now. */
+  answer(): unknown {
+    const groups = this.groups === null ? {} : { groups: this.groups }
+    return this.part ?? { curates: this.curates, not_read: this.notRead, ...groups, settings: this.entries }
+  }
+
+  handle = (args: readonly string[], env?: Record<string, string>): ProcessRunResult => {
+    if (args[0] !== 'set') {
+      return this.listFails === null ? ok(JSON.stringify(this.answer())) : fail(this.listFails)
+    }
+    this.changedWith.push(env)
+    const [key, value] = args[1] === '--' ? args.slice(2) : args.slice(1)
+    // As the core: no call that carries a `CLAUDECODE` with a value turns handing in on.
+    if (key === 'sessions.propose' && value === 'true' && env?.['CLAUDECODE']) {
+      return { ...fail(NO_SESSION_TURNS_IT_ON), exitCode: 2 }
+    }
+    const found = this.entries.find(one => one.key === key && one.kind === 'switch')
+    if (this.refuses !== null || found === undefined) {
+      return { ...fail(this.refuses ?? `${key} is no switch`), exitCode: 2 }
+    }
+    found.value = value === 'true' ? true : value === 'false' ? false : value
+    found.shows = found.value === true ? 'on' : found.value === false ? 'off' : String(found.value)
+    return ok('')
+  }
+}
+
+/** A fake launcher whose core knows the settings, with those settings to set a test up. */
+export function settingsWorld(entries: FakeSetting[] = settingsCatalog()): { fake: FakeM2b; settings: FakeSettings } {
+  const [fake, settings] = [new FakeM2b(), new FakeSettings(entries)]
+  fake.onSettings = settings.handle
+  return { fake, settings }
+}
+
 /** A slash command the mod registered, as `$.command.register` was handed it. */
 export type Registered = { name: string; immediate?: true }
 
@@ -860,9 +1045,10 @@ export async function linesAt(ui: Drawn, key: string): Promise<string[] | null> 
 export const PARTS = { waits: 'Waits for you', today: 'Today', session: 'This session', m2b: 'm2b' } as const
 /**
  * The key a part is drawn under, in whichever view: the overview's four, the one part of the
- * proposals, of a search and of a topic, and the review's `run` beside its own `waits`.
+ * proposals, of a search and of a topic, the review's `run` beside its own `waits`, and the
+ * settings' four, named like the core's groups.
  */
-export type PartKey = keyof typeof PARTS | 'proposals' | 'run' | 'search' | 'topic'
+export type PartKey = keyof typeof PARTS | 'proposals' | 'run' | 'search' | 'topic' | 'shows' | 'reads' | 'curation' | 'about'
 
 const PART_KEY = /^part:/
 
@@ -986,4 +1172,95 @@ export async function insetsAt(ui: Drawn, key: string): Promise<ShownInset[]> {
   return (found === undefined ? [] : allIn(found, 'Box'))
     .filter(box => box.props['paddingLeft'] !== undefined)
     .map(box => ({ paddingLeft: box.props['paddingLeft'], lines: linesOf(box) }))
+}
+
+/** What is drawn inside the element under `key`, in the order of its tree: a button as its key in brackets, a text as it reads. */
+export async function orderAt(ui: Drawn, key: string): Promise<string[]> {
+  const found = await ui.find({ key })
+  const inOrder = (element: Element): string[] => {
+    if (element.type === 'Button') {
+      return [`[${String(element.props['key'])}]`]
+    }
+    return element.type === 'Text' ? [shownText(element).trim()] : elementsIn(element.children).flatMap(inOrder)
+  }
+  return found === undefined ? [] : inOrder(found)
+}
+
+/** The mark that stands before the value of a setting that is in force. */
+const IN_FORCE = '● '
+
+/**
+ * A value of a setting's row as drawn: its label, and whether it is the one in force (marked, a
+ * text), one to press (a button, with its key) or one that cannot be pressed now (a dim text).
+ */
+export type ShownValue = { label: string; is: 'in force' | 'to press' | 'stepped back' | 'plain'; key: string | null }
+
+/**
+ * The row of values of the setting at `at` of the list, in the order drawn; null where the
+ * setting draws none, as one whose file was not read or one in a group kept behind one row.
+ * While a press on the setting waits the row holds `undo` and what the press does instead.
+ */
+export async function shownValues(ui: Drawn, at: number): Promise<ShownValue[] | null> {
+  const row = await ui.find({ key: `values:${at}` })
+  if (row === undefined) {
+    return null
+  }
+  return elementsIn(row.children).map(value => {
+    if (value.type === 'Button') {
+      return { label: String(value.props['label']), is: 'to press', key: String(value.props['key']) }
+    }
+    const text = shownText(value)
+    if (text.startsWith(IN_FORCE)) {
+      return { label: text.slice(IN_FORCE.length), is: 'in force', key: null }
+    }
+    return { label: text, is: value.props['dimColor'] === true ? 'stepped back' : 'plain', key: null }
+  })
+}
+
+/**
+ * The row of values of the setting at `at` as the one line it stands on, a button as its label in
+ * brackets and the value in force behind its mark; null where the setting draws no row.
+ */
+export async function valuesLine(ui: Drawn, at: number): Promise<string | null> {
+  return (await linesAt(ui, `values:${at}`))?.join(' ') ?? null
+}
+
+/** What the setting at `at` of the list draws, as the lines it stands on; null where the view does not draw it. */
+export function settingLines(ui: Drawn, at: number): Promise<string[] | null> {
+  return linesAt(ui, `setting:${at}`)
+}
+
+const SETS_A_VALUE = /^set:\d+:\d+$/
+
+/** The keys of the buttons of the view that set a value of a setting, in the order drawn. */
+export async function valueKeys(ui: Drawn): Promise<string[]> {
+  return (await viewButtons(ui)).filter(key => SETS_A_VALUE.test(key))
+}
+
+/** The places in the list of the settings the view draws, in the order drawn. */
+export async function drawnSettings(ui: Drawn): Promise<number[]> {
+  return (await ui.findAll({ type: 'Box' }))
+    .map(box => /^setting:(\d+)$/.exec(box.key ?? '')?.[1])
+    .filter((at): at is string => at !== undefined)
+    .map(Number)
+}
+
+/** A box as drawn: its key, how it lays out what it holds, and the boxes directly inside it. */
+export type ShownBox = { key: string | null; flexDirection: unknown; rowGap: unknown; columnGap: unknown; flexWrap: unknown; holds: ShownBox[] }
+
+function shownBox(box: Element): ShownBox {
+  return {
+    key: box.props['key'] === undefined ? null : String(box.props['key']),
+    flexDirection: box.props['flexDirection'],
+    rowGap: box.props['rowGap'],
+    columnGap: box.props['columnGap'],
+    flexWrap: box.props['flexWrap'],
+    holds: elementsIn(box.children, 'Box').map(shownBox),
+  }
+}
+
+/** The boxes directly inside the element drawn under `key`, each with the boxes it holds, in the order drawn. */
+export async function boxesAt(ui: Drawn, key: string): Promise<ShownBox[]> {
+  const found = await ui.find({ key })
+  return found === undefined ? [] : elementsIn(found.children, 'Box').map(shownBox)
 }

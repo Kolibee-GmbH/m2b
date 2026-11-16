@@ -9,8 +9,8 @@ run on the user's Claude login.
 
 The two of the pane ask no model: one session each, in Claude Code's fullscreen layout, where the
 pane sits beside the chat, on the store after a curation run. Keys alone drive them, a command of
-the band, then Tab, Shift+Tab and Enter: one answers a proposal in the pane, the other walks
-through the settings and presses a switch. The five seconds a press waits with its undo pass as
+the band, then Tab, Shift+Tab and Enter: one answers a proposal in the pane, the other sets a value
+in the settings. The five seconds a press waits with its undo pass as
 recorded.
 
 The demo machine, its environment and the way a session is started are the screenshots'
@@ -221,20 +221,32 @@ def answering_beats() -> tuple[Beat, ...]:
     )
 
 
-def settings_beats() -> tuple[Beat, ...]:
-    """Open the first setting's card, walk with Enter on ``next`` to the model of curation, press its
-    switch and take that back, press it again and let it be written, back to the list.
+# How many Tabs lead from the prompt to ``sonnet`` of the model of curation in the settings of the
+# demo store: three tabs of the pane, then every value that is not in force of the settings above
+# it (two of the tasks in the band, one each of the topics, of reading the sessions and of handing
+# in), then it.
+TABS_TO_THE_MODEL = 9
+# How many Shift+Tabs lead back to it from the row of "About this setup", the last button of the
+# view: every value that is not in force of the settings below the model (one each of the pause,
+# of the git commit and of the language), then it.
+BACK_TO_THE_MODEL = 4
 
-    The first row of the list is the fourth button: three tabs stand before it."""
+
+def settings_beats() -> tuple[Beat, ...]:
+    """Set the model of curation with a press on its other value and take that back, press it again
+    and let it be written, then open what only informs.
+
+    The focus goes to ``undo`` with the press. Once ``undo`` is gone it goes to the nearest button
+    that sets nothing, which for the model is the row of "About this setup" below the settings:
+    from there the value is a few Shift+Tabs back, and after the write Enter on the row opens the
+    rest under its own tab."""
     return pane_beats(
         "/m2b-settings",
         (
-            *pressed([TAB, TAB, TAB, TAB, ENTER], 2.0),
-            *(Beat(0.9, ENTER) for _ in range(8)),
-            *pressed([TAB, TAB, ENTER], 2.5),
+            *pressed([*[TAB] * TABS_TO_THE_MODEL, ENTER], 2.5),
             Beat(1.5, ENTER),
-            *pressed([TAB, TAB, ENTER], 1.5),
-            *pressed([TAB, ENTER], PRESS_SECONDS + 1.5),
+            *pressed([*[SHIFT_TAB] * BACK_TO_THE_MODEL, ENTER], 1.5),
+            Beat(PRESS_SECONDS + 1.5, ENTER),
             Beat(3.0),
         ),
     )
@@ -325,7 +337,7 @@ PICTURES = (
         SETTINGS_ROWS,
         PANE_FONT_SIZE,
         readme_images.build_demo_after_a_run,
-        pane_acts("Walk through every setting with Enter, and press a switch", settings_beats()),
+        pane_acts("Set a value with a press, take it back, set it again, open the rest", settings_beats()),
         model_not_written,
     ),
 )
