@@ -81,9 +81,11 @@ REMINDER_DAYS_AHEAD = 3
 @dataclass(frozen=True)
 class Shot:
     """One picture: a session in a terminal of ``columns`` x ``rows`` that types ``prompt`` and is
-    drawn ``answer_seconds`` later. ``fresh_store`` builds the demo store named by ``store`` first;
-    without it the shot runs on the store the shot before it left. ``full_screen`` is Claude Code's
-    fullscreen layout, where m2b's pane sits beside the chat."""
+    drawn ``answer_seconds`` later; a shot without a prompt types nothing and shows the session as it
+    starts. ``fresh_store`` builds the demo store named by ``store`` first; without it the shot runs
+    on the store the shot before it left. ``full_screen`` is Claude Code's fullscreen layout, where
+    m2b's pane sits beside the chat. ``settings`` are set on the demo machine before the session, so
+    a shot that names some builds its own store and no shot runs on the one it leaves."""
 
     name: str
     rows: int
@@ -93,6 +95,7 @@ class Shot:
     store: str = EVERYDAY
     columns: int = COLUMNS
     full_screen: bool = False
+    settings: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -117,7 +120,8 @@ class Recording:
 # In this order: todos runs on the store the capture left, so it lists the task just captured, and
 # both panes show the same run. The shots after todos type a command of the band and wait for no
 # model: two on the main screen, and two with the pane beside the chat, each on a store of its own,
-# so recording one alone leaves the pictures before it as they are.
+# so recording one alone leaves the pictures before it as they are. The last asks nothing: it shows
+# the band at the end of the hint line below the prompt, in a terminal wide enough for every count.
 SHOTS = (
     Shot("session-start", 30, 30, "When does Sam bring the plywood, and where is the spare key for the shed?", True),
     Shot(
@@ -132,6 +136,7 @@ SHOTS = (
     Shot("proposals", 46, 6, "/m2b-proposals", False, AFTER_A_RUN),
     Shot("pane", 25, 6, "/m2b-pane", True, AFTER_A_RUN, WIDE, True),
     Shot("settings", 50, 6, "/m2b-settings", True, AFTER_A_RUN, WIDE, True),
+    Shot("band-below", 12, 6, "", True, EVERYDAY, WIDE, settings=(("band.place", "below"),)),
 )
 
 CORPUS = {
@@ -484,9 +489,13 @@ def reminder_weekday(today: datetime.date) -> str:
 
 
 def steps_for(shot: Shot, today: datetime.date | None = None) -> list[tuple[float, str]]:
-    """Trust the demo folder (the dialog defaults to "No, exit"), let the start settle, ask, wait."""
+    """Trust the demo folder (the dialog defaults to "No, exit"), let the start settle, ask, wait.
+    A shot without a prompt only lets the start settle and waits."""
+    trust = [(8, DOWN), (1, ENTER)]
+    if not shot.prompt:
+        return [*trust, (14 + shot.answer_seconds, "")]
     prompt = shot.prompt.replace(WEEKDAY, reminder_weekday(today or datetime.date.today()))
-    return [(8, DOWN), (1, ENTER), (14, prompt), (1, ENTER), (shot.answer_seconds, "")]
+    return [*trust, (14, prompt), (1, ENTER), (shot.answer_seconds, "")]
 
 
 def session_environment(environ: Mapping[str, str], shot: Shot) -> dict[str, str]:
@@ -592,6 +601,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             for shot in shots_for(arguments.only):
                 if shot.fresh_store:
                     STORES[shot.store](environ)
+                for key, value in shot.settings:
+                    _m2b(environ, "settings", "set", key, value)
                 recording = Path(work) / f"{shot.name}.bin"
                 session = session_environment(environ, shot)
                 drawn = record(claude_command(), PROJECT, session, shot.rows, steps_for(shot), shot.columns)

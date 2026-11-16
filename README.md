@@ -70,7 +70,7 @@ in the one after it ask where the spare key is. [Getting started](docs/getting-s
 what you should see at each step, and [Install](#install) what m2b needs. Before you install:
 [what runs on your machine](#what-runs-on-your-machine) and [uninstalling](#uninstalling).
 
-![A Claude Code session in an unrelated project is asked when Sam brings the plywood and where the spare key for the shed is. Claude calls the m2b search tool once and answers from the notes: Sam said he would bring the plywood on Saturday 14 November (sam.md), and the key is under the blue pot by the back door (house.md). Above the prompt the band is one row, "m2b 1 waits for you" with the button "open", and below it one task due today and one overdue, by name](docs/images/session-start.png)
+![A Claude Code session in an unrelated project is asked when Sam brings the plywood and where the spare key for the shed is. Claude answers from the notes it started with, without a tool call: Sam brings the plywood for the shed roof on 14 November (sam.md), two days before the day of the picture, and the key is under the blue pot by the back door (house.md). Above the prompt the band is one row, "m2b 1 waits for you" with the button "open", and below it one task due today and one overdue, by name](docs/images/session-start.png)
 
 <sub>A new session in an unrelated repository answers from your notes. Above the prompt, [the band](#the-band)
 counts what waits for you and names what is due. All names and notes are invented.</sub>
@@ -164,6 +164,10 @@ it. While nothing waits and no task is to show, the row is `m2b` and `open` alon
 `band.place` moves the band to the end of the hint line below the prompt (`below`) or draws it
 only while it has something to say (`waiting`) ([Where it stands](docs/band.md#where-it-stands)). Below the prompt, a status
 line appears only while something is wrong with m2b.
+
+![A Claude Code session on the main screen with band.place set to below: nothing of m2b stands above the prompt. The hint line below the prompt reads "manual mode on", "? for shortcuts" and "1 agent" in the dim text of Claude Code and ends in "m2b", "1 waits for you", "1 overdue" and "1 due today" in their colors and the command /m2b-pane, dim](docs/images/band-below.png)
+
+<sub>The band with `band.place` set to `below`: at the end of the hint line below the prompt, in a terminal of 130 columns.</sub>
 
 `/m2b-review` opens the pane in the picture with the whole last run, `/m2b-proposals` the
 proposals from your sessions, `/m2b-search <text>` search hits, and `/m2b-note <text>` notes a
