@@ -7,6 +7,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-16
+
 ### Changed
 
 - The README's first line and the plugin's description say whose second brain m2b is and what it
