@@ -394,6 +394,9 @@ proposals a reading found in typed words: 2 waiting, 5 kept, 1 dropped, 0 expire
 proposals sessions handed in from a tool's result: 1 waiting, 3 kept, 2 dropped, 0 expired in the last 30 days
 ```
 
+`waiting` counts the proposals without an answer. One you answered since the last curation run is
+counted apart until that run files it: `1 waiting, 2 answered for the next run, 3 kept, ...`.
+
 Where the store is a git repository, a handed-in file is committed with the waiting captures
 before a run's first step, and the run takes in only what a commit holds, so taking that run back
 puts the file where the next run takes it in again; a file that came in later, or was not

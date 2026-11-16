@@ -8,7 +8,7 @@ from typing import Any
 from unittest import mock
 
 import test_runner
-from m2b import cli, proposals
+from m2b import cli, proposal_answers, proposals
 from m2b.curate import machine_state
 from m2b.run_record import RUN_RECORD
 
@@ -238,7 +238,7 @@ class StatusTest(test_runner.RunnerTest):
                     "commitment": nothing,
                     "personal": nothing,
                 },
-                "ways": {"reading": {"typed": {"waiting": 1, "kept": 2, "dropped": 1, "expired": 1}}},
+                "ways": {"reading": {"typed": {"waiting": 1, "answered": 0, "kept": 2, "dropped": 1, "expired": 1}}},
             },
         )
         self.assertIn("\nproposals: kept 2 of 3 answered in the last 30 days (67%), 1 expired without an answer\n", out)
@@ -283,10 +283,10 @@ class StatusTest(test_runner.RunnerTest):
         self.assertEqual(
             status["proposal_answers"]["ways"],
             {
-                "reading": {"pasted": {"waiting": 0, "kept": 0, "dropped": 0, "expired": 1}},
+                "reading": {"pasted": {"waiting": 0, "answered": 0, "kept": 0, "dropped": 0, "expired": 1}},
                 "session": {
-                    "agent": {"waiting": 1, "kept": 0, "dropped": 0, "expired": 0},
-                    "tool": {"waiting": 1, "kept": 1, "dropped": 0, "expired": 0},
+                    "agent": {"waiting": 1, "answered": 0, "kept": 0, "dropped": 0, "expired": 0},
+                    "tool": {"waiting": 1, "answered": 0, "kept": 1, "dropped": 0, "expired": 0},
                 },
             },
         )
@@ -298,6 +298,40 @@ class StatusTest(test_runner.RunnerTest):
             "in the last 30 days",
         ):
             self.assertIn(f"\n{line}\n", out)
+
+    def test_a_proposal_the_person_answered_is_not_counted_as_waiting_for_an_answer(self) -> None:
+        """Covers: B181"""
+        self.curating(curation={"read_sessions": True})
+        self.proposed(("open", 1), ("open", 1), ("open", 1))
+        proposal_answers.give(self.store, [f"{0:012x}"], proposal_answers.KEEP)
+        proposal_answers.give(self.store, [f"{1:012x}"], proposal_answers.DROP)
+
+        status = self.status()
+        _, out, _ = self.run_command("status")
+
+        self.assertEqual(
+            status["proposal_answers"]["ways"],
+            {"reading": {"typed": {"waiting": 1, "answered": 2, "kept": 0, "dropped": 0, "expired": 0}}},
+        )
+        self.assertIn(
+            "\nproposals a reading found in typed words: 1 waiting, 2 answered for the next run, "
+            "0 kept, 0 dropped, 0 expired in the last 30 days\n",
+            out,
+        )
+
+    def test_an_expired_proposal_kept_late_counts_as_answered_as_the_list_of_proposals_counts_it(self) -> None:
+        """Covers: B181"""
+        self.curating(curation={"read_sessions": True})
+        self.proposed(("expired", 40), ("expired", 3), ("expired", 3))
+        proposal_answers.give(self.store, [f"{0:012x}"], proposal_answers.KEEP)
+        proposal_answers.give(self.store, [f"{1:012x}"], proposal_answers.DROP)
+
+        ways = self.status()["proposal_answers"]["ways"]
+
+        self.assertEqual(
+            ways, {"reading": {"typed": {"waiting": 0, "answered": 1, "kept": 0, "dropped": 0, "expired": 2}}}
+        )
+        self.assertEqual(proposal_answers.waiting(self.store).answered, 1)
 
     def test_a_machine_that_only_lets_sessions_hand_in_has_the_part_too(self) -> None:
         """Covers: B181"""

@@ -305,7 +305,7 @@ async function holdSnapshot($: EngineInterface, next: BandSnapshot): Promise<voi
 }
 
 async function loadNow($: EngineInterface, isForced: boolean): Promise<void> {
-  const view = await shared($, SHARED_ANSWER, () => loadView($), isView, isForced)
+  const view = await shared($, SHARED_ANSWER, () => loadView($), isView, isForced, hasReadTheTasks)
   // m2b can stop being set up while the call ran; its answer must not draw the band back.
   if (!(await isSetUp($))) {
     await clearBand($)
@@ -395,6 +395,11 @@ function releaseNumbers(version: string): number[] | null {
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+/** A look that could not read the tasks says something about the session that looked, not about the tasks. */
+function hasReadTheTasks(view: BandView): boolean {
+  return view.snapshot.error === null
 }
 
 function isView(value: unknown): value is BandView {

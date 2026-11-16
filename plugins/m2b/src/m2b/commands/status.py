@@ -20,7 +20,7 @@ import datetime
 import json
 from typing import Any
 
-from m2b import proposals
+from m2b import proposal_answers, proposals
 from m2b.addons import ADDONS, is_on
 from m2b.atomic_file import replace_atomically
 from m2b.commands import Context
@@ -146,17 +146,19 @@ def _proposal_answers(store: Store, config: MachineConfig, now: datetime.datetim
     in a store that never held a proposal: there the part would say nothing to anyone.
     ``keep_rate`` is null without an answer in the period, which is not a rate of 0. ``ways`` says
     the same per way a proposal came, a reading or a session that handed it in, and per source of
-    its words, with how many wait: whether sessions hand in, and whether what they hand in is kept.
+    its words, with how many wait for an answer and how many have one that waits for the next run:
+    whether sessions hand in, and whether what they hand in is kept.
     """
     try:
         current = proposals.load(store)
+        answered = proposal_answers.awaiting_a_run(current.entries, proposal_answers.read(store))
     except (ConfigError, proposals.ProposalsError, StoreError) as error:
         return {"error": str(error)}
     if not (config.curation.read_sessions or config.sessions.propose or current.entries or current.counts):
         return None
     start = now - proposals.KEEP_RATE_PERIOD
     outcomes = proposals.outcomes_since(current, start)
-    ways = proposals.by_way_and_source(current, start)
+    ways = proposals.by_way_and_source(current, start, answered)
     rate = outcomes.keep_rate
     return {
         "days": proposals.KEEP_RATE_PERIOD.days,
@@ -268,9 +270,10 @@ def _proposal_ways_lines(answers: dict[str, Any]) -> list[str]:
     lines = []
     for way, sources in answers.get("ways", {}).items():
         for source, counts in sources.items():
+            answered = f"{counts['answered']} answered for the next run, " if counts["answered"] else ""
             lines.append(
                 f"proposals {_WAYS.get(way, f'{way} from')} {_SOURCES.get(source, source)}: "
-                f"{counts['waiting']} waiting, {counts['kept']} kept, {counts['dropped']} dropped, "
+                f"{counts['waiting']} waiting, {answered}{counts['kept']} kept, {counts['dropped']} dropped, "
                 f"{counts['expired']} expired in the last {answers['days']} days"
             )
     return lines

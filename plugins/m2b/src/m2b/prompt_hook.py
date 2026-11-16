@@ -3,7 +3,8 @@
 Claude Code runs it on ``UserPromptSubmit`` and adds what it prints as ``additionalContext``. A
 topic comes in when one of its words is in the prompt or in the project folder's path, once per
 session (the session start notes what it showed), at most 4 KB of whole topics per prompt; a topic
-held back by the cap is not noted and comes with the next prompt that names it. Topic facts come
+held back by the cap is not noted and comes with the next prompt that names it. A topic that is
+larger than the cap by itself comes with no prompt; lint reports it as an action (B48). Topic facts come
 from captures that may hold someone else's text, so they come under the same framing as the
 distillate, and without the characters that draw nothing (B143).
 

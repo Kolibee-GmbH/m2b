@@ -87,13 +87,22 @@ def read(store: Store) -> dict[str, str]:
 def waiting(store: Store) -> Waiting:
     answers = read(store)
     entries = proposals.load(store).entries
-    still_open = {key: entry for key, entry in entries.items() if entry.state == proposals.OPEN}
-    unanswered = [(key, entry) for key, entry in still_open.items() if key not in answers]
+    unanswered = [
+        (key, entry) for key, entry in entries.items() if entry.state == proposals.OPEN and key not in answers
+    ]
     unanswered.sort(key=lambda item: (item[1].day, item[0]))
-    kept_late = sum(
-        1 for key, entry in entries.items() if entry.state == proposals.EXPIRED and answers.get(key) == KEEP
+    return Waiting(tuple(unanswered), len(awaiting_a_run(entries, answers)))
+
+
+def awaiting_a_run(entries: Mapping[str, Entry], answers: Mapping[str, str]) -> frozenset[str]:
+    """The ids whose answer the next run settles: an open proposal with an answer, and an expired
+    one with a keep. A drop of an expired one is not among them, since the run does nothing with it."""
+    return frozenset(
+        key
+        for key, entry in entries.items()
+        if (entry.state == proposals.OPEN and key in answers)
+        or (entry.state == proposals.EXPIRED and answers.get(key) == KEEP)
     )
-    return Waiting(tuple(unanswered), len(still_open) - len(unanswered) + kept_late)
 
 
 def expire(store: Store, now: datetime.datetime) -> proposals.Aged:

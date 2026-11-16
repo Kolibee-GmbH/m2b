@@ -4,7 +4,8 @@
 notes without ``created`` or ``source``, a ``created`` without offset (tolerated, X5), notes in the
 wrong month, refs and ``[[links]]`` that lead nowhere (B22), fact files no facts line points to
 (lines are parsed, X13), an oversized or missing distillate, topic headings that would bring their
-facts in too often or never (B48), incomplete bundles, the binary volume,
+facts in too often or never and a topic too large for a prompt to bring (B48), incomplete bundles, the
+binary volume,
 conflict copies in the corpus and of task files (B157), tasks whose capture is gone, and evicted
 files, which are listed and never read (B6). The inbox is ingest's: what waits there is no finding
 (X12). A symlink is one wherever it lies, the inbox included, because no listing shows it and
@@ -28,10 +29,12 @@ from pathlib import Path, PurePosixPath
 from m2b.atomic_file import HIDDEN_TEMP_PREFIX
 from m2b.curate.report import ACTION, INFO
 from m2b.notes import frontmatter as keys
+from m2b.notes.characters import without_hidden
 from m2b.notes.frontmatter import Note, NoteFormatError, read_created
 from m2b.notes.layout import CORPUS, INBOX, MEMORY, MEMORY_INDEX, TASKS, is_journal_name
 from m2b.notes.memory_index import MAX_TOPIC_NAME, MemoryIndex, Topic, is_day, split_topics
 from m2b.notes.names import NoteName
+from m2b.prompt_hook import MAX_ADDED_BYTES
 from m2b.store.base import ConflictCopy, Scan, Store, StoreError, SymlinkError, fetch_command
 from m2b.tasks import markers
 from m2b.tasks.base import Tasks, TasksError
@@ -302,11 +305,29 @@ def _index(
 
 
 def _sizes(report: LintReport, index_path: str, text: str) -> None:
-    """Each view against the target: what every session starts with, and each topic on its own."""
+    """Each view against the target: what every session starts with, and each topic on its own.
+
+    A topic larger than a prompt brings is an action, not a size to aim below: the prompt hook adds
+    whole topics only, so no prompt that names such a topic adds its facts, and no session says so.
+    """
     split = split_topics(text)
     start = len((split.general + ", ".join(block.topic.name for block in split.blocks)).encode("utf-8"))
     views = [("the part every session starts with", start)]
-    views += [(f"the topic {block.topic.name}", len(block.text.encode("utf-8"))) for block in split.blocks]
+    for block in split.blocks:
+        size = len(block.text.encode("utf-8"))
+        # The prompt hook measures a topic as it goes to the model, without the characters that draw nothing.
+        brought = len(without_hidden(block.text).encode("utf-8"))
+        if brought > MAX_ADDED_BYTES:
+            report.add(
+                "topic-size",
+                ACTION,
+                index_path,
+                f"in {index_path}, the topic {block.topic.name} is {brought} bytes, over the "
+                f"{MAX_ADDED_BYTES // 1024} KB a prompt brings: no prompt that names it adds its facts; "
+                "shorten it or split it into two topics",
+            )
+        else:
+            views.append((f"the topic {block.topic.name}", size))
     for view, size in views:
         if size > DISTILLATE_TARGET_BYTES:
             report.add(
