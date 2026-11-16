@@ -600,8 +600,8 @@ test('a first look that fails says its sentence above the prompt, on a machine w
   await above.unmount()
 })
 
-test('an error another session shared, with no settings of the band, is taken without asking m2b, and said below the prompt where this band stands', async ($, on) => {
-  // Covers: B213, B214
+test('an error another session shared is not taken: this band asks m2b itself and keeps its counts below the prompt', async ($, on) => {
+  // Covers: B93, B214
   const files: Files = new Map()
   const fake = belowFake()
   const { clock } = await start($, on, fake, {}, files)
@@ -616,8 +616,8 @@ test('an error another session shared, with no settings of the band, is taken wi
 
   await clock.advance(10_000)
 
-  expect(fake.calls).toHaveLength(callsBefore)
-  expect(await enginesHint(hint)).toEqual({ hint: HINT, tail: sentence })
+  expect(fake.calls).toHaveLength(callsBefore + 1)
+  expect(await enginesHint(hint)).toEqual({ hint: HINT, tail: TAIL })
   expect(await everyText(above)).toEqual([ENGINES_OWN_DRAWING])
   await hint.unmount()
   await above.unmount()

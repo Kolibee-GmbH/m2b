@@ -2,7 +2,7 @@
 name: m2b
 description: The entry point of m2b, the owner's second brain - says what it is and what to type, and with an argument guides through setup, shows the status or checks the machine. Use when the user types /m2b:m2b, asks "what is m2b", "how do I use my second brain", "what can m2b do", "is my second brain working", says "the band is empty", "the band says could not look", "das Band zeigt nichts", "the status line is missing", or wants the worklog add-on explained or turned on.
 argument-hint: "[setup | status | doctor | addons]"
-allowed-tools: Bash(m2b status), Bash(m2b status *), Bash(m2b doctor), Bash(m2b doctor *), Bash(m2b addons *)
+allowed-tools: Bash(m2b status), Bash(m2b status *), Bash(m2b doctor), Bash(m2b doctor *), Bash(m2b addons *), Bash(m2b config get band.place)
 ---
 
 # m2b
@@ -68,10 +68,21 @@ prompt, for the reason the line gives) or `cannot commit` (the store folder is a
 curation run on this machine cannot commit into it, for the reason the line gives), with what to do. Report `not recorded`
 too, and say that it matters only on the machine that curates, where the model steps need that program. Report
 `band: not seen` with the reason its line gives: the band does not run because Claude Code loads no
-mods, or no plugin hooks at all, in the latest session. A band that shows nothing and an empty
-status line are no fault: the band draws a row only while something waits for an answer or a task
-is due, the status line speaks only when something is wrong, and `/m2b-pane` opens the pane
-whenever the band runs. When all are fine, say so in one line.
+mods, or no plugin hooks at all, in the latest session. An empty status line is no fault: it
+speaks only when something is wrong. When all are fine, say so in one line.
+
+Whether a band that shows nothing is a fault depends on where it stands. When the owner asks
+about that, also run
+
+```bash
+m2b config get band.place
+```
+
+With `above` the band is one row above the prompt in every session, `m2b` and `open` alone while
+it has nothing to say, so no row there means the band does not run or m2b has not answered yet.
+With `below` it is the end of the hint line below the prompt. With `waiting` it draws a row only
+while it has something to say (a count, a task it shows or a sentence), and a band that shows
+nothing is no fault. `/m2b-pane` opens the pane whenever the band runs.
 
 ## Any other argument
 

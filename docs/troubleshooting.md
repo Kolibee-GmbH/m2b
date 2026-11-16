@@ -63,7 +63,7 @@ for a setup without a calendar.
   store folder or is reached through it, move the repository out of it (`git init --separate-git-dir <a folder
   outside>` in the store folder does that for an existing repository) and name the new place.
 - **The session start says the last run failed.** The review task in your list names the step
-  and the cause. Fix it and run `m2b curate --force`.
+  and the cause. Fix it and run `m2b curate --force`, or press `curate now` in the m2b pane.
 - **A topic's facts do not come in when you name it.** The hook that brings them says nothing when
   it fails. `m2b doctor` starts it and says in its line `prompt-hook` why it does not answer.
 - **`curating` in the pane's part "m2b", or `run: running` in `m2b status`, for a long time.** A

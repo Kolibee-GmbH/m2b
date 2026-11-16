@@ -37,6 +37,10 @@ All notable changes to this project are documented here. The format follows
 - The band above the prompt is there in every session unless `band.place` says otherwise: a
   session where nothing waits now shows one calm row, `m2b  [ open ]`, where it showed none.
   `m2b settings set band.place waiting` brings the band of 0.6.0 back.
+- `/m2b:m2b doctor` and `/m2b:setup` say what the band shows for each place. Asked about a band
+  that shows nothing, the skill `m2b` reads the place with `m2b config get band.place`, which it
+  may run without asking, and no longer calls an empty band no fault where the band stands above
+  the prompt.
 
 ## [0.6.1] - 2026-11-16
 

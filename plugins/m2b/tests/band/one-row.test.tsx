@@ -350,22 +350,6 @@ for (const [place, drawn] of WITH_NOTHING_TO_SAY) {
   })
 }
 
-test('an error another session shared, with no settings of the band, is taken without asking m2b: a band that holds none yet says it above the prompt', async ($, on) => {
-  // Covers: B213
-  const sentence = 'm2b could not read the tasks: reminders did not answer within 20 seconds'
-  const snapshot = { candidates: [], review: null, error: sentence }
-  const stored = { writtenAtMs: NOW - 1_000, value: { snapshot, status: 'could not look', version: '0.3.0' } }
-  const fake = new FakeM2b().candidate('c1', 'Remember? Dana prefers tea')
-  fake.shows = ONLY_WHILE_WAITING
-  const { clock } = await start($, on, fake, {}, new Map([[SHARED_ANSWER, JSON.stringify(stored)]]))
-
-  const band = await drawBand($, clock, MAIN_SCREEN)
-
-  expect(fake.calls).toEqual([])
-  expect(await shownBand(band)).toEqual(sentenceOfM2b(sentence))
-  await band.unmount()
-})
-
 /** What m2b draws above the prompt with nothing to say, where the band is above it. */
 const ABOVE_THE_PROMPT = [
   ['above', CALM_ROW],

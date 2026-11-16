@@ -1,8 +1,9 @@
 # The band
 
-The band is where m2b tells you, inside Claude Code, that something waits for you: one row above
-the prompt. It is part of m2b and needs no setup of its own; it starts once m2b is set up on the
-machine.
+The band is m2b's row in a Claude Code session: it says how many things wait for you and has the
+one button that opens the m2b pane. It stands above the prompt in every session, unless the
+setting [`band.place`](#where-it-stands) says otherwise. It is part of m2b and needs no setup of
+its own; it starts once m2b is set up on the machine.
 
 ```text
  m2b  4 wait for you  1 overdue  2 due today  [ open ]
@@ -28,7 +29,7 @@ Ctrl+A) and no plugin can unfold it, so nothing stands only in the band.
   | `band.due_tasks` | The band |
   |---|---|
   | `count` (without an entry) | `1 overdue  2 due today` in the row |
-  | `list` | below the row the first three by name, today's first, then the overdue ones, the most recent first, then `and 2 more` |
+  | `list` | below the row the first three by name, today's first, then the overdue ones, the most recent first, then `and 2 more`; counted as with `count` where the band stands [below the prompt](#where-it-stands) |
   | `off` | none |
 
   ```text
@@ -50,8 +51,8 @@ waits in the color of a warning.
 
 In place of the counts the row is one sentence where m2b could not read the task list or the
 proposals, or where `open` could show no pane. What m2b says to a press in the pane stands in the
-pane, where the press was made. The band is empty, and takes no room, while nothing waits, no
-task is to show and nothing is wrong.
+pane, where the press was made. While nothing waits, no task is to show and nothing is wrong,
+the row is `m2b` and `open` alone, or there is none, as [`band.place`](#where-it-stands) says.
 
 `open` is your own open of the pane, so Claude Code places it at any width: under the fullscreen
 layout from 110 columns beside the chat, where it stays, and elsewhere as a dialog that Escape
@@ -64,6 +65,69 @@ a proposal are the exception: there each such character is written out (`\x1b`, 
 of left out, and so is every other character a terminal draws with no width (zero-width
 characters, soft hyphens, variation selectors, tag characters), because keep keeps the text as it
 is stored, and a part the pane left out would be kept unseen.
+
+### Where it stands
+
+`band.place` in the machine config says where the band stands on this machine.
+`m2b settings set band.place below` changes it, and so does a press on a value under
+`Where the band stands` in [the settings](#every-setting-in-the-pane).
+
+| `band.place` | The band |
+|---|---|
+| `above` (without an entry) | its row above the prompt in every session, calm while it has nothing to say |
+| `waiting` | its row above the prompt only while it has something to say: a count, a task or a sentence |
+| `below` | nothing above the prompt; the hint line below the prompt ends in the band |
+
+With `above`, the row is calm while nothing waits, no task is to show and nothing is wrong: `m2b`
+and `open` alone, both dim.
+
+```text
+ m2b  [ open ]
+╭──────────────────────────────────────────────────────────────╮
+│ >                                                            │
+╰──────────────────────────────────────────────────────────────╯
+```
+
+The pane is then one press away in every session: a click on `open`, or Ctrl+X, then Tab, which
+puts the focus on the button, and Enter. With `waiting` the band draws nothing while the row
+would be calm and takes no room; `/m2b-pane` opens the pane.
+
+With `below`, m2b draws nothing above the prompt. The hint line below the prompt, where Claude
+Code says `? for shortcuts`, ends in the band: after Claude Code's own text stand `m2b`, the
+counts in their colors and the way into the pane.
+
+```text
+  ? for shortcuts  m2b  4 wait for you  1 overdue  2 due today  [ open ]
+```
+
+The way into the pane is the button `open` under the fullscreen layout, where a mouse click
+presses it. No key reaches a button below the prompt, and outside the fullscreen layout no click
+does either, so there the line names the command `/m2b-pane`, dim, where the button would stand.
+
+m2b draws its part only where the line has room for it, and never cuts Claude Code's text. The
+room is counted with Claude Code's hint and with 27 cells for the label of the session's mode,
+which Claude Code draws before the hint: the widest one, `bypass permissions on`. Where the line
+has not room for every count, the last give way first and `…` stands for them:
+
+```text
+  ? for shortcuts  m2b  4 wait for you  …  /m2b-pane
+```
+
+Where not even the first count has room beside that mark, and where the width of the line is not
+known, the line stays Claude Code's, which adds m2b's words at its end, dim, and cuts them where
+the line ends:
+
+```text
+  ? for shortcuts · m2b 4 wait for you · 1 overdue · 2 due today · /m2b-pane
+```
+
+While nothing waits, the line ends in `m2b` and the way into the pane alone (`m2b · /m2b-pane`
+in Claude Code's own line). A sentence in place of the counts stands at the end of the line too.
+The hint line is one line, so your tasks due are counted there and never listed: with
+`band.due_tasks` set to `list` the band below the prompt counts them as with `count`. What another
+plugin added to the hint line stays, before m2b's part.
+
+Before m2b's first answer in a session the band draws nothing, wherever it stands.
 
 ## When a curation run fails
 
@@ -134,6 +198,7 @@ As text, another session:
 │ ╭──────────────────────────────────────────────────────────╮ │
 │ │ m2b                                                      │ │
 │ │ 2 in inbox · curated 18:02                               │ │
+│ │ [ curate now ]                                           │ │
 │ ╰──────────────────────────────────────────────────────────╯ │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -188,11 +253,25 @@ what you can press.
   again, as the context no longer holds what came before. A session this machine holds no note
   of, one that started under an earlier m2b or without m2b's hooks, is said to be not known,
   which does not say it was given nothing.
-- **m2b** says how m2b itself stands. While all is well it is one dim line: how many notes wait
-  in the inbox, where any do, and when m2b last curated. What is wrong stands above it in the
-  error color, each with its reason: a curation run that failed, a calendar m2b could not reach,
-  an inbox it could not read. A session that still runs an older m2b than the installed one
-  says so here and names `/reload-plugins`.
+- **m2b** says how m2b itself stands. While all is well it is one dim line about curation:
+  `curating` during a run, else how many notes wait in the inbox, where any do, and when m2b
+  last curated, and `curation paused` where this machine starts no run by itself. What is wrong
+  stands above it in the error color, each with its reason: a curation run that failed, a
+  calendar m2b could not reach, an inbox it could not read. A session that still runs an older
+  m2b than the installed one says so here and names `/reload-plugins`.
+
+  On the machine that curates the store, the button `curate now` stands below the line about
+  curation. A press writes nothing for five seconds: the row offers `undo` beside
+  `starting a curation run`, as after keep and drop. Then the band runs
+  `m2b curate --force --detach --json` once, which starts one curation run in the background,
+  also while curation is [paused](curation.md#pausing). The part says `curating` at once and has
+  no button while a run is under way, whoever started it; after the run the line names the new
+  time and the button is there again. A press that started no run says why above the line about
+  curation, in the error color, until your next press on the button or your next prompt:
+  `No curation run started: a curation run is already running on this machine`, for one. On a
+  machine that does not curate, the part has no button and says which machine does
+  (`Curation runs on tower-1.`); where m2b cannot tell which machine curates, it has neither.
+  The button says nothing of what a run costs ([Cost and privacy](cost-and-privacy.md)).
 
 What **This session** says is asked for each session by itself, with
 `m2b band --json --session <id> --session-only`, which reads one small file on this machine and
@@ -254,7 +333,7 @@ m2b: every setting of this machine, of the store and of the owner, the ones `m2b
 ([Configuration](configuration.md#every-setting-in-one-list)), in four parts by what you want
 from m2b: **What m2b shows**, **What m2b reads**, **Curation** and **About this setup**.
 
-![The pane beside the chat after /m2b-settings, under the tab Settings. The part "What m2b shows" holds "Tasks in the band" with the values off, count and list, list marked as the one in force, and "Topics in the band" with on and off, off marked. The part "What m2b reads" holds "Curation reads your sessions" and "Sessions hand in proposals", each with on and off and off marked, the second with the line "Your press here turns it on, as a terminal of your own does", and "Folders m2b is left out of", which reads "no folders" and names the command that changes it. Below each title stands what the setting does](images/settings.png)
+![The pane beside the chat after /m2b-settings, under the tab Settings. The part "What m2b shows" holds "Where the band stands" with the values above, below and waiting, above marked as the one in force, "Tasks in the band" with off, count and list, list marked, and "Topics in the band" with on and off, off marked. The part "What m2b reads" begins with "Curation reads your sessions", on and off with off marked, and "Sessions hand in proposals", which the lower edge of the picture cuts. Below each title stands what the setting does](images/settings.png)
 
 In the first three parts a setting is its title, below it what it does, and below that its values
 side by side. The value in force is marked with `●` and is no button; every other value is a
@@ -266,11 +345,22 @@ button that sets it. The top of the view:
 │                                                              │
 │ ╭──────────────────────────────────────────────────────────╮ │
 │ │ What m2b shows                                           │ │
+│ │ Where the band stands                                    │ │
+│ │ The band is m2b's row in a session, with the button that │ │
+│ │ opens the pane: above keeps it above the prompt, also    │ │
+│ │ while nothing waits; waiting draws it there only while   │ │
+│ │ something waits or a task is due; below puts it at the   │ │
+│ │ end of the hint line under the prompt and leaves the     │ │
+│ │ space above free. Below the prompt no key reaches the    │ │
+│ │ button and a mouse click only under the fullscreen       │ │
+│ │ layout: /m2b-pane opens the pane.                        │ │
+│ │ ● above [ below ] [ waiting ]                            │ │
+│ │                                                          │ │
 │ │ Tasks in the band                                        │ │
-│ │ Your tasks due today or overdue in the band above the    │ │
-│ │ prompt: off shows none there, count says how many, list  │ │
-│ │ names the first three. The pane lists them whatever this │ │
-│ │ says.                                                    │ │
+│ │ Your tasks due today or overdue in the band: off shows   │ │
+│ │ none there, count says how many, list names the first    │ │
+│ │ three, which a band below the prompt counts as well. The │ │
+│ │ pane lists them whatever this says.                      │ │
 │ │ [ off ] ● count [ list ]                                 │ │
 │ │                                                          │ │
 │ │ Topics in the band                                       │ │
@@ -310,12 +400,13 @@ sets nothing, the tab `Overview` above the first setting or the row of `About th
 the last, so Enter pressed once more never sets a value. After a press on that row it is on the
 tab `Settings`. Escape hands the keyboard back to the prompt.
 
-![The pane beside the chat, driven with the keyboard. After /m2b-settings, nine Tabs put the focus on "sonnet" beside the marked "haiku" under "Model of curation"; Enter puts "undo" and "changing to sonnet" where the values stood, and Enter on "undo" takes the press back, with the focus on "22 settings", the row of "About this setup" below the settings. Four Shift+Tabs lead back to "sonnet"; pressed again and left alone, it is written after five seconds: the row reads "haiku" as a button and "sonnet" marked, and the focus is on "22 settings" again. Enter there opens the fifth tab "About this setup" with 22 settings that only inform or are changed by a command, the store folder, the kind of store and the machine's name among them, each with what changes it](images/pane-settings.gif)
+![The pane beside the chat, driven with the keyboard. After /m2b-settings, eleven Tabs put the focus on "sonnet" beside the marked "haiku" under "Model of curation"; Enter puts "undo" and "changing to sonnet" where the values stood, and Enter on "undo" takes the press back, with the focus on "22 settings", the row of "About this setup" below the settings. Four Shift+Tabs lead back to "sonnet"; pressed again and left alone, it is written after five seconds: the row reads "haiku" as a button and "sonnet" marked, and the focus is on "22 settings" again. Enter there opens the fifth tab "About this setup" with 22 settings that only inform or are changed by a command, the store folder, the kind of store and the machine's name among them, each with what changes it](images/pane-settings.gif)
 
 <sub>One real Claude Code session on a demo machine with invented notes, recorded by `scripts/readme-demo --only pane-settings`. Only keys are typed and no model is asked; the five seconds a press waits run as recorded.</sub>
 
-Eight settings are switches: `curation.read_sessions`, `curation.paused`, `curation.git_commit`,
-`band.due_tasks`, `band.topics`, `sessions.propose`, `curation.model` and your `language`. Their
+Nine settings are switches: `curation.read_sessions`, `curation.paused`, `curation.git_commit`,
+`band.place`, `band.due_tasks`, `band.topics`, `sessions.propose`, `curation.model` and your
+`language`. Their
 values are the buttons. A press on one writes nothing for five seconds: where the values stood
 is `undo` and what the press does, as after keep and drop.
 
@@ -384,7 +475,8 @@ the band's other commands or `open` in the band. Closing the block above the pro
 The band is the same row wherever the pane is: it counts, the pane lists and answers. Beside a
 docked pane, `open` gives the pane the keyboard.
 
-What each way of running Claude Code gets:
+What each way of running Claude Code gets, with the band's row where
+[`band.place`](#where-it-stands) has it:
 
 | Layout | The pane | The band |
 |---|---|---|
@@ -422,7 +514,7 @@ stays a dialog, and a later Escape closes the block.
 With the keyboard in the pane, the band asks Claude Code to put the focus where a second Enter
 writes nothing: after a press on a tab, on the tab that leads back to the view you left, so Enter
 pressed again returns there; after a press on a topic's button on `Overview`, and from there back
-on that topic's button; after keep, drop, `ok` or `turn off here` on the row's `undo`. Once an answer is written its
+on that topic's button; after keep, drop, `ok`, `turn off here` or `curate now` on the row's `undo`. Once an answer is written its
 row is gone, and the focus stands on the row that moved up.
 
 ## The whole review, and search, in a pane
@@ -715,7 +807,9 @@ call, `m2b band --json`; keep and drop call `m2b tasks complete` and `m2b tasks 
 reading the list again with `m2b band --json --tasks-only`; keep and drop on a proposal call
 `m2b proposals keep` and `m2b proposals drop`, which refuse an answer themselves where another
 one stands. `turn off here` and `turn on here` in the pane call `m2b distillate off` and
-`m2b distillate on` with the folder, which change `distillate.skip_under` in the machine config;
+`m2b distillate on` with the folder, which change `distillate.skip_under` in the machine config.
+`curate now` calls `m2b curate --force --detach --json`, which starts a curation run in the
+background; what that run reads and writes is in [The curation run](curation.md).
 A topic's button calls `m2b distillate topic --json`, which reads `memory/MEMORY.md`. The
 settings are read with `m2b settings --json`, and a press on a value calls `m2b settings set`,
 which writes the machine config or, for your language, `profile.json` in the store. Every open session asks about once a
@@ -742,7 +836,7 @@ of the backends. With invented tasks:
 ```json
 {
   "version": "0.3.0",
-  "band": {"due_tasks": "count", "topics": false},
+  "band": {"place": "above", "due_tasks": "count", "topics": false},
   "tasks": {
     "candidates": [{"id": "c1", "title": "Remember? Sam brings the plywood", "notes": "m2b:candidate", "due": null, "completed": false, "completed_at": null, "dropped": false, "marker": "candidate"}],
     "questions": [],
@@ -753,16 +847,18 @@ of the backends. With invented tasks:
     "proposals": [{"id": "0c1d2e3f4a5b", "kind": "person", "text": "Dana is head of IT at Northwind.", "quote": "Dana runs IT at Northwind", "day": "2026-03-04", "topic": "Northwind", "due": null, "source": "typed", "tool": null, "by": null}],
     "answered": 0
   },
-  "status": {"machine_id": "alex-laptop", "inbox": {"count": 2, "evicted": 0}, "run": {"state": "succeeded", "last_succeeded_at": "2026-03-14T21:36:00+01:00"}, "backends": {"store": {"state": "reachable", "detail": ""}, "tasks": {"state": "reachable", "detail": ""}, "calendar": {"state": "not configured", "detail": ""}}}
+  "status": {"machine_id": "alex-laptop", "curating_machine": "alex-laptop", "this_machine_curates": true, "inbox": {"count": 2, "evicted": 0}, "run": {"state": "succeeded", "last_succeeded_at": "2026-03-14T21:36:00+01:00"}, "backends": {"store": {"state": "reachable", "detail": ""}, "tasks": {"state": "reachable", "detail": ""}, "calendar": {"state": "not configured", "detail": ""}}}
 }
 ```
 
 `version` is the installed core's, which the band compares with its own. `band` is the section
-of that name in the machine config: how the band shows your tasks due and whether it counts the
-session's topics. `tasks.due_by_today` names your own tasks due today or overdue, the earliest
-first, whatever the band shows of them; with `band.due_tasks` set to `list`, `tasks.due` names
+of that name in the machine config: where the band stands, how it shows your tasks due and
+whether it counts the session's topics. `tasks.due_by_today` names your own tasks due today or
+overdue, the earliest first, whatever the band shows of them; with `band.due_tasks` set to `list`, `tasks.due` names
 them too. `status` holds more
-fields than shown, as `m2b status --json` does. When the task list cannot be
+fields than shown, as `m2b status --json` does; `curating_machine` and `this_machine_curates`
+say which machine curates the store and whether it is this one, the machine on which the pane's
+part "m2b" has `curate now`. When the task list cannot be
 read, `tasks` is `{"error": "<why>"}` and `status` still answers. The checks of the backends are
 kept for five minutes, so at most every five minutes the answer waits for the calendar too, here
 for at most 10 seconds whatever `calendar.timeout_seconds` says; a calendar that does not answer
@@ -832,8 +928,11 @@ In `plugins/m2b/hooks/`: `register.tsx` and its helpers, loaded through `"module
 
 ## How you see it runs
 
-While all is well and nothing waits, the band and the status line are both empty: no candidate,
-no question, no proposal, no open review, no task due to show and, with `band.topics` on, no
-topic given to the session. `/m2b-pane` opens the pane whenever the band runs, and `m2b doctor`
+A session the band runs in shows its row above the prompt once m2b has answered, unless
+[`band.place`](#where-it-stands) says otherwise. While all is well and nothing waits, the row is
+`m2b` and `open` alone and the status line is empty: no candidate, no question, no proposal, no
+open review, no task due to show and, with `band.topics` on, no topic given to the session. With
+`band.place` set to `waiting` there is no row then, and with `below` the hint line below the
+prompt ends in `m2b` and the way into the pane. `/m2b-pane` opens the pane whenever the band runs, and `m2b doctor`
 says in its line `band` whether the latest session ran it. When m2b cannot answer, or the band's own refresh fails, the status line says
 `could not look` instead of an old state.

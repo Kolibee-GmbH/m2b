@@ -445,8 +445,9 @@ function isSnapshot(value: unknown): value is BandSnapshot {
 /**
  * A band from before the band's place shared its answer without one, or without any settings:
  * that answer is not taken, and m2b is asked, so a band never moves to another place because an
- * older session answered last. An answer that failed is taken as it is: the band says the error
- * where it stands (`holdSnapshot`).
+ * older session answered last. An answer that could not read the tasks is no other session's to
+ * take, whatever settings it names (`hasReadTheTasks`): a band says its own error where it stands
+ * (`holdSnapshot`).
  */
 function isShows(value: unknown): value is BandShows {
   return (
