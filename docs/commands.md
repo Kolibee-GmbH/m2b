@@ -78,7 +78,7 @@ command answers as JSON with it.
 |---|---|
 | `m2b capture [--follow-up <day>] [--quiet] [--source <name>] [--json] <text>` | writes a new note into the inbox; with `--follow-up YYYY-MM-DD` also a task due that day; `--quiet` keeps the note out of everything proactive; `--source` says who wrote it, `cli` when left out ([Integrations](integrations.md)); without text, or with `-`, it reads standard input |
 | `m2b search [--any] [--word] [--json] <terms>` | full text over archive, memory and inbox; the terms are one phrase, with `--any` each term counts on its own |
-| `m2b source [--json] <name>` | one fact file or note, read whole by its name: the name a distillate line ends with (`dana.md`), or a note's name from the archive (a document's or picture's name answers its note); a fact file with its lines, last day, earlier values and evidence, a note with its words and what curation added, a document's note with its original name and outline. A path or any other name is refused with exit 2; a file not on this machine is named with the command that fetches it |
+| `m2b source [--json [--viewer]] <name>` | one fact file or note, read whole by its name: the name a distillate line ends with (`dana.md`), or a note's name from the archive (a document's or picture's name answers its note); a fact file with its lines, last day, earlier values and evidence, a note with its words and what curation added, a document's note with its original name and outline. A path or any other name is refused with exit 2; a file not on this machine is named with the command that fetches it. `--viewer` adds for a note whether `m2b store open` opens its file, why not, and where it lies; the pane passes it, the skill `m2b:search` cannot |
 | `m2b todos [--json]` | open tasks by due date, and today's events |
 | `m2b rediscover [--count <n>] [--month <YYYY-MM>] [--today <day>] [--json]` | old notes back into view, three without `--count`; `--today YYYY-MM-DD` sets the day that counts as today |
 | `m2b status [--json]` | the inbox, the last curation run, whether one is due, the backends |
@@ -145,6 +145,7 @@ To pause the runs on a machine: `m2b config set curation.paused true`
 |---|---|
 | `m2b store check-local [--json] <paths>` | names the files among these that the sync service has not downloaded |
 | `m2b store fetch [--timeout <seconds>] <paths>` | downloads them |
+| `m2b store open <name>` | opens a PDF or a picture of the archive in the system's viewer, by its file name, never a path: only where its first bytes are of that kind, the file is on this machine and the session has a screen (not over SSH on a Mac; a display on Linux). Any other kind is refused with exit 2, since a viewer for it could run what it holds; the pane's `open the file` runs it |
 
 ### What m2b calls itself
 

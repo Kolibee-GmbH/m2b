@@ -464,6 +464,7 @@ test('the lines are kept for the press that asked, and turning the pane away dro
     { kind: 'tasks', press: 'p1', drawn: 1 },
     { kind: 'facts', press: 'p1', drawn: 1 },
     { kind: 'fact', press: 'p1', drawn: 1 },
+    { kind: 'source', press: 'p1', from: 'p1', drawn: 1 },
     { kind: 'topic', press: 'p2', isRead: false },
   ] as const) {
     beginTopic('p1', 'Acme Ltd')

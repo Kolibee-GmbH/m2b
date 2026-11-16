@@ -30,6 +30,13 @@ All notable changes to this project are documented here. The format follows
   topic with its counts. `details` opens the fact's file, with what it rests on: the notes and
   documents behind it ([What m2b knows](docs/band.md#what-m2b-knows)). Behind it is a new command,
   `m2b distillate topics [--json]`.
+- Below a fact's file, `show` on each note or document it rests on opens it: a note's words as you
+  captured them and what the curation run added, a document's original name and what stands on
+  which page. A PDF or a picture on this machine has `open the file`, which opens it in the
+  system's viewer; any other kind is named with where it lies and never started, since a viewer for
+  it could run what it holds. The tab of the fact file leads back. Behind the button is a new
+  command, `m2b store open <name>`, which opens only a PDF or a picture of the archive whose bytes
+  are of that kind, and only where the session has a screen.
 
 ## [0.7.0] - 2026-11-16
 

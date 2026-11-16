@@ -328,3 +328,23 @@ export function pathLine(ui: Pick<ElementTable, 'Box' | 'Text'>, path: string, t
     </Box>
   )
 }
+
+/**
+ * A file's name on as many lines as it needs: it breaks after a `-`, `_` or `.` and never inside
+ * a word, as `pathLine` breaks a path before its slashes; a name with none of them wraps where it
+ * must.
+ */
+export function nameLine(ui: Pick<ElementTable, 'Box' | 'Text'>, name: string, tone: Tone = 'plain') {
+  const { Box, Text } = ui
+  return (
+    <Box flexDirection="row" flexWrap="wrap">
+      {plainLine(name)
+        .split(/(?<=[-_.])/)
+        .map(piece => (
+          <Text {...styleOf(tone)} wrap="wrap">
+            {piece}
+          </Text>
+        ))}
+    </Box>
+  )
+}

@@ -1,7 +1,7 @@
 ---
 name: search
 description: Searches the owner's second brain (archive, distillate, inbox) in full text. Use when the user says "what did I note about X", "search my second brain", "is there anything in my notes about X", "what do I know about X", "was habe ich mir zu X notiert", "such im second brain", "steht dazu was in meinen Notizen", or when a personal question without a home in the current repository comes up, or a name the session does not explain. Only reads; never invents a note.
-allowed-tools: Bash(m2b search *), Bash(m2b source *)
+allowed-tools: Bash(m2b search *), Bash(m2b source --json -- *)
 ---
 
 # Search

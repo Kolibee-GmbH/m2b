@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 
+from m2b import viewer
 from m2b.commands import Context, ProblemError, UsageError
 from m2b.commands.backends import configured_store
 from m2b.commands.output import print_json
@@ -27,7 +28,7 @@ from m2b.source import (
     SourceRefusedError,
     read_source,
 )
-from m2b.store.base import fetch_command
+from m2b.store.base import Store, fetch_command
 
 FACT_FILE = "fact file"
 NOT_READ = "not read"
@@ -44,7 +45,8 @@ def source_command(arguments: argparse.Namespace, context: Context) -> int:
         raise ProblemError(with_hidden_written_out(str(error))) from error
     name = with_hidden_written_out(arguments.name)
     if arguments.json:
-        print_json({"name": name, **_as_json(source)})
+        viewer_fields = _viewer_json(source, store, context) if arguments.viewer else {}
+        print_json({"name": name, **_as_json(source), **viewer_fields})
     else:
         print("\n".join(_as_text(source)))
     return 0
@@ -79,6 +81,23 @@ def _as_json(source: Source) -> dict[str, object]:
         "evicted": source.evicted,
         "fetch": fetch_command(_name(source.path)) if source.evicted else None,
         "reason": _name(source.reason) or None,
+    }
+
+
+def _viewer_json(source: Source, store: Store, context: Context) -> dict[str, object]:
+    """For a picture's or a document's note, whether ``m2b store open`` opens the file, why not, and
+    where it lies; the pane offers ``open the file`` or names the path. Only with ``--viewer``, which
+    the pane passes: the skill ``m2b:search`` hands the JSON to a session's model, which is never
+    given a path into the store."""
+    if not isinstance(source, NoteSource):
+        return {}
+    if source.original is None:
+        return {"opens": False, "not_opened": None, "file": None}
+    why_not = viewer.why_not_opened(source.original, bool(source.original_here), context.environ)
+    return {
+        "opens": why_not is None,
+        "not_opened": _name(why_not) if why_not is not None else None,
+        "file": _name(str(store.path(source.original))),
     }
 
 

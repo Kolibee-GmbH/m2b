@@ -586,6 +586,7 @@ test('the titles are kept for the opening that read them, and turning the pane t
     { kind: 'tasks', press: 'p2', drawn: 0 },
     { kind: 'facts', press: 'p1', drawn: 0 },
     { kind: 'fact', press: 'p1', drawn: 0 },
+    { kind: 'source', press: 'p1', from: 'p1', drawn: 0 },
   ] as const) {
     beginTasks('p1')
     fillTasks('p1', READ_LIST)

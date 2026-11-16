@@ -441,7 +441,9 @@ test("the fact's file is one part under its title, with its last day, lines and 
       count: null,
       lines: [
         '2026-10-12 a note: Dana, my sister.',
+        '[show]',
         '2026-11-16 a document, handbook.pdf: p. 1: club name',
+        '[show]',
         '20260903T100000Z-phone-c3d4.md: not downloaded to this machine',
         '20260101T000000Z-cli-0000.md: no note of the archive has this name',
         '20260202T090000Z-cli-1111.md: could not be read',
@@ -458,8 +460,8 @@ test("the fact's file is one part under its title, with its last day, lines and 
   ])
   // An entry read is plain; one not on this machine, not found or not readable is in the error color.
   expect((await piecesAt(ui, 'part:fact:evidence')).map(drawn => drawn.color)).toEqual(['remember', undefined, undefined, 'error', 'error', 'error'])
-  // The file is read, never pressed: the tabs are the one way on.
-  expect(await viewButtons(ui)).toEqual([])
+  // Only an entry that was read can be pressed, to show its source; the tabs are the way to every other view.
+  expect(await viewButtons(ui)).toEqual(['show:0', 'show:1'])
   await ui.unmount()
 })
 
@@ -516,17 +518,20 @@ test('of more than eight evidence entries the view shows eight and says how many
 
   await ui.press({ key: 'details:0' })
 
+  // Each entry shown was read, so each has its `show` below it.
+  const shownEight = Array.from({ length: 8 }, (_, at) => [`2026-10-12 a note: line ${at}`, '[show]']).flat()
   const rests = (await shownParts(ui)).find(part => part.key === 'fact:evidence')?.lines ?? []
-  expect(rests).toHaveLength(9)
-  expect(rests.slice(0, 8)).toEqual(Array.from({ length: 8 }, (_, at) => `2026-10-12 a note: line ${at}`))
-  expect(rests[8]).toBe('3 more not shown')
+  expect(rests).toHaveLength(17)
+  expect(rests.slice(0, 16)).toEqual(shownEight)
+  expect(rests[16]).toBe('3 more not shown')
   expect((await lookOf(ui, '3 more not shown'))?.dimColor).toBe(true)
+  expect(await viewButtons(ui)).toEqual(Array.from({ length: 8 }, (_, at) => `show:${at}`))
 
   fake.sourceAnswer = { ...danaFile(), evidence: entries.slice(0, 8) }
   await pressTab(ui, 'facts')
   await ui.press({ key: 'details:0' })
   const eight = (await shownParts(ui)).find(part => part.key === 'fact:evidence')?.lines ?? []
-  expect(eight).toHaveLength(8)
+  expect(eight).toEqual(shownEight)
   expect(eight.some(line => line.endsWith('more not shown'))).toBe(false)
   await ui.unmount()
 })
@@ -871,6 +876,7 @@ test('the facts are kept for the opening that read them, and turning the pane to
     { kind: 'settings', press: 'p1', aside: null, drawn: 0 },
     { kind: 'topic', press: 'p1', isRead: true },
     { kind: 'fact', press: 'p1', drawn: 0 },
+    { kind: 'source', press: 'p1', from: 'p1', drawn: 0 },
     { kind: 'facts', press: 'p2', drawn: 0 },
   ] as const) {
     beginFacts('p1')
@@ -903,6 +909,8 @@ test('a fact file is kept for the press that read it, and turning the pane to an
     { kind: 'topic', press: 'p1', isRead: true },
     { kind: 'facts', press: 'p1', drawn: 0 },
     { kind: 'fact', press: 'p2', drawn: 0 },
+    // A source shown from another opening of a fact file; one shown from this opening keeps it.
+    { kind: 'source', press: 'p1', from: 'p2', drawn: 0 },
   ] as const) {
     beginFactFile('p1', 'dana.md')
     fillFactFile('p1', READ_FILE_LOOK)

@@ -44,7 +44,7 @@ import {
   showPane,
 } from './pane'
 import { CLOSED_BY_HAND, closeAnswer, docksFor, staysBesideChat } from './pane-seat'
-import { focusKeyAfterTab, paneTabs, tabKeyAfterTurn } from './pane-tabs'
+import { BACK_TO_THE_FACT_FILE_KEY, focusKeyAfterTab, paneTabs, tabKeyAfterTurn } from './pane-tabs'
 import type { TabId } from './pane-tabs'
 import { plainLine, wholePath } from './plain-text'
 import {
@@ -123,10 +123,13 @@ import {
   forgetFactsUnless,
   readFactFile,
   readFacts,
+  showKey,
 } from './facts-tab'
-import type { FactsActions } from './facts-tab'
+import type { Evidence, FactsActions } from './facts-tab'
 import { NO_LONGER_OPEN, beginTasks, fillTasks, forgetTasksUnless, heldTasks, isOpenIn, noteRefusal, readTasks, taskPressKey, tasksPane } from './tasks-tab'
 import type { OpenTask, TaskActions } from './tasks-tab'
+import { beginSource, evidenceIndexOf, fillSource, forgetSourceUnless, noteOpening, openFile, openingOf, readSource, sourcePane } from './source-view'
+import type { SourceActions } from './source-view'
 import { beginTopic, fillTopic, forgetTopicUnless, heldTopic, readTopic, topicNameOf, topicPane } from './topic'
 import {
   NOTE_COMMAND_LINE,
@@ -700,6 +703,7 @@ async function turnTo($: EngineInterface, view: PaneView | null): Promise<void> 
   forgetSettingsUnless(view)
   forgetTasksUnless(view)
   forgetFactsUnless(view)
+  forgetSourceUnless(view)
   await update($, paneViewAtom, () => view)
 }
 
@@ -831,8 +835,49 @@ async function showFactFile($: EngineInterface, file: string): Promise<void> {
   await focusMoved
 }
 
+/**
+ * `show` on an evidence row of the fact file shown as `from`: that source under a tab of its own,
+ * read with `m2b source --json --viewer`; the focus on the tab of the fact file, which leads back.
+ */
+async function showSource($: EngineInterface, from: string, index: number, evidence: Evidence): Promise<void> {
+  const opening = await newPressToken($)
+  beginSource(opening, from, index, evidence)
+  await asDialog($, { kind: 'source', press: opening, from, drawn: 0 })
+  const focusMoved = focusInPane($, BACK_TO_THE_FACT_FILE_KEY)
+  if (fillSource(opening, await readSource($, evidence.name))) {
+    await redrawn($, 'source', opening)
+  }
+  await focusMoved
+}
+
+/**
+ * The tab of the fact file above a source: the fact file as it was drawn, which its module kept,
+ * the focus on `show` of the row the source was opened from.
+ */
+async function backToFactFile($: EngineInterface, from: string): Promise<void> {
+  const view = await read($, paneViewAtom)
+  const index = view?.kind === 'source' ? evidenceIndexOf(view.press) : null
+  await asDialog($, { kind: 'fact', press: from, drawn: 0 })
+  await focusInPane($, index === null ? tabKeyAfterTurn('facts', 'aside') : showKey(index))
+}
+
+function sourceActions($: EngineInterface, press: string): SourceActions {
+  return {
+    open: async original => {
+      // A second press while the viewer is asked for would ask twice.
+      if (openingOf(press).state === 'opening' || !noteOpening(press, { state: 'opening' })) {
+        return
+      }
+      await redrawn($, 'source', press)
+      if (noteOpening(press, await openFile($, original))) {
+        await redrawn($, 'source', press)
+      }
+    },
+  }
+}
+
 /** Draws the view of the opening `opening` names again, where it is still shown: what its module holds changed. */
-async function redrawn($: EngineInterface, kind: 'facts' | 'fact', opening: string): Promise<void> {
+async function redrawn($: EngineInterface, kind: 'facts' | 'fact' | 'source', opening: string): Promise<void> {
   await update($, paneViewAtom, view =>
     view !== null && view.kind === kind && view.press === opening ? { ...view, drawn: view.drawn + 1 } : view,
   )
@@ -1054,7 +1099,9 @@ async function viewOfPane(
     case 'facts':
       return factsPane($, e, factsOf(view.press), factsActions($), bodyColumns)
     case 'fact':
-      return factFilePane($, e, view.press, bodyColumns)
+      return factFilePane($, e, view.press, { show: (index, evidence) => showSource($, view.press, index, evidence) }, bodyColumns)
+    case 'source':
+      return sourcePane($, e, view.press, sourceActions($, view.press), bodyColumns)
     case 'review': {
       const model = {
         snapshot: await read($, snapshotAtom),
@@ -1657,7 +1704,7 @@ export const register: Register = on => {
     await carryPressesOver($)
     // A reload of the mod took the lines of a topic, the values of the settings, the open tasks and
     // the facts with the old module: the pane starts over.
-    if (['topic', 'settings', 'tasks', 'facts', 'fact'].includes((await read($, paneViewAtom))?.kind ?? '')) {
+    if (['topic', 'settings', 'tasks', 'facts', 'fact', 'source'].includes((await read($, paneViewAtom))?.kind ?? '')) {
       await turnTo($, null)
     }
     loadedVersion = await readLoadedVersion($)
@@ -1932,6 +1979,7 @@ export const register: Register = on => {
     forgetSettingsUnless(null)
     forgetTasksUnless(null)
     forgetFactsUnless(null)
+    forgetSourceUnless(null)
     paneSeats.clear()
     return next(e)
   })
@@ -1948,7 +1996,7 @@ export const register: Register = on => {
     const { Box } = ui
     return (
       <Box flexDirection="column">
-        <Box marginBottom={1}>{tabRow(ui, paneTabs(view, proposals?.waiting.length ?? 0, to => turnByTab($, to)))}</Box>
+        <Box marginBottom={1}>{tabRow(ui, paneTabs(view, proposals?.waiting.length ?? 0, to => turnByTab($, to), from => backToFactFile($, from)))}</Box>
         {await viewOfPane($, e, view, proposals, e.props.bodyColumns)}
       </Box>
     )

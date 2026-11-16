@@ -144,7 +144,9 @@ class SourceSkillTest(unittest.TestCase):
         front = skill_text("search").split("---", 2)[1]
         allowed = next(line for line in front.splitlines() if line.startswith("allowed-tools:"))
 
-        self.assertIn("Bash(m2b source *)", allowed)
+        # Only this form: anything after `--` is the name, so no flag reaches the command unasked.
+        self.assertIn("Bash(m2b source --json -- *)", allowed)
+        self.assertNotIn("Bash(m2b source *)", allowed)
         self.assertIn("m2b source --json -- dana.md", bash_examples("search")[-1])
 
     def test_the_search_skill_names_the_three_kinds_of_answer_and_never_reads_a_document(self) -> None:

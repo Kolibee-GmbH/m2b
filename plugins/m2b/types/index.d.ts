@@ -147,7 +147,8 @@ export type PaneSearch = {
  * way: this value never says what a setting holds. `aside` is the group the view shows in place of
  * the choices, one the view keeps behind one row, by the name and the title the core gave it, and
  * null for the choices; `drawn` counts up when what the module holds changed, which draws the pane
- * again.
+ * again. A source a fact rests on names in `from` the opening of the fact file it was shown from,
+ * which is where its way back leads.
  */
 export type PaneView =
   | { kind: 'review' }
@@ -157,6 +158,7 @@ export type PaneView =
   | { kind: 'tasks'; press: string; drawn: number }
   | { kind: 'facts'; press: string; drawn: number }
   | { kind: 'fact'; press: string; drawn: number }
+  | { kind: 'source'; press: string; from: string; drawn: number }
   | { kind: 'settings'; press: string; aside: { name: string; title: string } | null; drawn: number }
 
 /**

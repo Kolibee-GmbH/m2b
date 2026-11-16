@@ -643,7 +643,7 @@ class SearchSkillTest(unittest.TestCase):
         fields = self.frontmatter()
 
         self.assertEqual(fields["name"], "search")
-        self.assertEqual(fields["allowed-tools"], "Bash(m2b search *), Bash(m2b source *)")
+        self.assertEqual(fields["allowed-tools"], "Bash(m2b search *), Bash(m2b source --json -- *)")
         self.assertTrue(fields["description"])
 
     def test_the_skill_searches_with_json_and_names_the_fetch_command(self) -> None:

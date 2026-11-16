@@ -312,6 +312,9 @@ def _parser() -> argparse.ArgumentParser:
         commands, "source", source_commands.source_command, "one fact file or note, read whole by its name", True
     )
     source.add_argument("name", help="the name a distillate line ends with, or a note's name; never a path")
+    source.add_argument(
+        "--viewer", action="store_true", help="with --json: whether `m2b store open` opens the file, and where it lies"
+    )
 
     again = _command(commands, "rediscover", rediscover_commands.rediscover_command, "old notes back into view", True)
     again.add_argument("--count", type=int, default=3, help="at most this many notes; 3 without it")
@@ -385,6 +388,8 @@ def _parser() -> argparse.ArgumentParser:
     fetch = _command(store_group, "fetch", store.store_fetch, "download evicted files")
     fetch.add_argument("paths", nargs="+")
     fetch.add_argument("--timeout", type=float, default=store.DEFAULT_FETCH_TIMEOUT_SECONDS)
+    opener = _command(store_group, "open", store.store_open, "open a PDF or a picture of the archive in its viewer")
+    opener.add_argument("name", help="the file's name, as a note or an evidence link names it; never a path")
 
     ingest_group = _group(commands, "ingest", "the curator's steps on inbox captures", listed=False)
     _command(

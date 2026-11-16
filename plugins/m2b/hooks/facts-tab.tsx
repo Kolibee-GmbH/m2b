@@ -15,7 +15,8 @@ import { plainLine } from './plain-text'
  *
  * The facts are the owner's and often a customer's. As a topic's lines, they are this module's
  * alone, for the opening that read them, and dropped the moment the pane turns away: the session's
- * state is one every plugin can read.
+ * state is one every plugin can read. A fact file stays kept while a source it rests on is shown
+ * (`show`, in `source-view.tsx`): the tab that leads back draws it as it was.
  */
 
 export type StartFact = { statement: string; file: string | null }
@@ -87,12 +88,16 @@ export function holdsFacts(): boolean {
   return heldFacts !== null || heldFile !== null
 }
 
-/** Drops what is kept unless `view` is the opening it was read for. */
+/**
+ * Drops what is kept unless `view` is the opening it was read for; a fact file stays while a source
+ * it rests on is shown, which leads back to it.
+ */
 export function forgetFactsUnless(view: PaneView | null): void {
   if (heldFacts !== null && !(view?.kind === 'facts' && view.press === heldFacts.press)) {
     heldFacts = null
   }
-  if (heldFile !== null && !(view?.kind === 'fact' && view.press === heldFile.press)) {
+  const isFileShown = (view?.kind === 'fact' && view.press === heldFile?.press) || (view?.kind === 'source' && view.from === heldFile?.press)
+  if (heldFile !== null && !isFileShown) {
     heldFile = null
   }
 }
@@ -103,7 +108,7 @@ const EXIT_USAGE = 2
 const UNKNOWN_COMMAND = /invalid choice|unrecognized arguments/
 
 /** Whether m2b refused the call as a core from before the command would. */
-function isOlderCore(outcome: { exitCode?: number; stderr?: string }): boolean {
+export function isOlderCore(outcome: { exitCode?: number; stderr?: string }): boolean {
   return outcome.exitCode === EXIT_USAGE && UNKNOWN_COMMAND.test(outcome.stderr ?? '')
 }
 const OTHER_SHAPE = 'm2b answered something other than the facts'
@@ -127,11 +132,11 @@ export async function readFacts($: EngineInterface): Promise<FactsLook> {
   return parseFacts(outcome.stdout)
 }
 
-function isObject(value: unknown): value is Record<string, unknown> {
+export function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function strings(value: unknown): string[] | null {
+export function strings(value: unknown): string[] | null {
   return Array.isArray(value) && value.every(item => typeof item === 'string') ? value : null
 }
 
@@ -172,6 +177,17 @@ export async function readFactFile($: EngineInterface, file: string): Promise<Fa
   return parseFactFile(outcome.stdout)
 }
 
+/** Why `m2b source --json` did not read the source, where it says so; null for a source it read. */
+export function notReadError(answer: Record<string, unknown>): string | null {
+  if (answer['kind'] !== 'not read') {
+    return null
+  }
+  if (typeof answer['fetch'] === 'string') {
+    return `not downloaded to this machine; ${answer['fetch']} fetches it`
+  }
+  return typeof answer['reason'] === 'string' ? answer['reason'] : 'it could not be read'
+}
+
 export function parseFactFile(text: string): FactFileLook {
   let answer: unknown
   try {
@@ -182,9 +198,9 @@ export function parseFactFile(text: string): FactFileLook {
   if (!isObject(answer)) {
     return { state: 'failed', error: OTHER_FILE }
   }
-  if (answer['kind'] === 'not read') {
-    const fetch = typeof answer['fetch'] === 'string' ? `not downloaded to this machine; ${answer['fetch']} fetches it` : null
-    return { state: 'failed', error: fetch ?? (typeof answer['reason'] === 'string' ? answer['reason'] : 'it could not be read') }
+  const notRead = notReadError(answer)
+  if (notRead !== null) {
+    return { state: 'failed', error: notRead }
   }
   const lines = strings(answer['lines'])
   const earlier = strings(answer['earlier'])
@@ -225,12 +241,19 @@ export function factsTopicKey(index: number): string {
   return `facts-topic:${index}`
 }
 
+/** The key of `show` on the evidence row drawn at `index`. */
+export function showKey(index: number): string {
+  return `show:${index}`
+}
+
+export type FactFileActions = { show: (index: number, evidence: Evidence) => Promise<void> }
+
 export type FactsActions = {
   details: (file: string) => Promise<void>
   showTopic: (name: string) => Promise<void>
 }
 
-function textOrNull(value: unknown): string | null {
+export function textOrNull(value: unknown): string | null {
   return typeof value === 'string' ? value : null
 }
 
@@ -297,7 +320,7 @@ function evidenceLine(item: Evidence): string {
 }
 
 /** The fact file under its own tab: its title, last day, lines, earlier values and evidence. */
-export function factFilePane($: EngineInterface, e: ResolveInput, press: string, columns: number) {
+export function factFilePane($: EngineInterface, e: ResolveInput, press: string, actions: FactFileActions, columns: number) {
   const ui = $.ui.resolve(e)
   const file = factFileNameOf(press)
   const look = factFileOf(press)
@@ -306,6 +329,7 @@ export function factFilePane($: EngineInterface, e: ResolveInput, press: string,
       look.state === 'reading' ? said(ui, READING_FILE, 'quiet') : said(ui, `m2b could not read the fact file: ${plainLine(look.error)}`, 'trouble')
     return part(ui, { key: 'fact', title: plainLine(file), waits: false, columns }, [line])
   }
+  const { Box } = ui
   const shown = look.evidence.slice(0, EVIDENCE_SHOWN)
   const more = look.evidence.length - shown.length
   const facts = part(ui, { key: 'fact', title: plainLine(look.title), waits: false, columns }, [
@@ -318,7 +342,16 @@ export function factFilePane($: EngineInterface, e: ResolveInput, press: string,
     return facts
   }
   const evidence = part(ui, { key: 'fact:evidence', title: 'What it rests on', waits: false, columns }, [
-    ...shown.map(item => said(ui, evidenceLine(item), item.state === 'read' ? 'plain' : 'trouble')),
+    ...shown.map((item, index) =>
+      item.state === 'read' ? (
+        <Box key={`evidence:${index}`} flexDirection="column">
+          {said(ui, evidenceLine(item))}
+          {pressLine(ui, [{ key: showKey(index), label: 'show', kind: 'quiet', onPress: () => actions.show(index, item) }], null)}
+        </Box>
+      ) : (
+        said(ui, evidenceLine(item), 'trouble')
+      ),
+    ),
     more > 0 && said(ui, `${more} more not shown`, 'quiet'),
   ])
   return [facts, evidence]

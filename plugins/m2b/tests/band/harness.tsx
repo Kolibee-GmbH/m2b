@@ -246,6 +246,12 @@ export class FakeM2b {
   /** What `m2b source --json` answers for any name; `null` fails it with `sourceFails`. */
   sourceAnswer: Record<string, unknown> | null = null
   sourceFails = 'no fact file or note is named that'
+  /** What `m2b source --json --viewer` answers, by the name it is handed; a name not here fails it with `sourceFails`. */
+  viewerAnswers: Record<string, Record<string, unknown>> = {}
+  /** When set, `m2b source --json --viewer` ends with this whatever the name, as a core that does not know the option. */
+  viewerRefusal: ProcessRunResult | null = null
+  /** How `m2b store open` ends; how long it takes is `delayMs`'s. */
+  openAnswer: ProcessRunResult = ok("opened corpus/2026/11/20261116T165634Z-cli-7198.pdf in the system's viewer\n")
   /**
    * The machine's `band` settings as `m2b band --json` names them: where the band stands, how it
    * shows the tasks due, and whether it counts the topics. Null as a core before these settings
@@ -371,8 +377,18 @@ export class FakeM2b {
     if (args[0] === 'band') {
       return this.bandAnswer(args.includes('--tasks-only'))
     }
+    if (args[0] === 'source' && args.includes('--viewer')) {
+      if (this.viewerRefusal !== null) {
+        return this.viewerRefusal
+      }
+      const answer = this.viewerAnswers[args.at(-1) ?? '']
+      return answer === undefined ? fail(this.sourceFails) : ok(JSON.stringify(answer))
+    }
     if (args[0] === 'source') {
       return this.sourceAnswer === null ? fail(this.sourceFails) : ok(JSON.stringify(this.sourceAnswer))
+    }
+    if (args[0] === 'store' && args[1] === 'open') {
+      return this.openAnswer
     }
     if (args[0] === 'search') {
       if (this.searchFails !== null) {
@@ -517,6 +533,16 @@ export class FakeM2b {
   /** The calls that read a fact file or a note by its name. */
   sourceCalls(): string[][] {
     return this.calls.filter(call => call[0] === 'source')
+  }
+
+  /** The calls that read a source a fact rests on, for the pane. */
+  viewerCalls(): string[][] {
+    return this.calls.filter(call => call[0] === 'source' && call.includes('--viewer'))
+  }
+
+  /** The calls that opened a file of the archive in the system's viewer, or tried to. */
+  openCalls(): string[][] {
+    return this.calls.filter(call => call[0] === 'store' && call[1] === 'open')
   }
 
   /** The calls that turned the distillate off or on for a folder. */
@@ -1269,7 +1295,8 @@ export const PARTS = { waits: 'Waits for you', today: 'Today', session: 'This se
 /**
  * The key a part is drawn under, in whichever view: the overview's four, the one part of the
  * proposals, of a search and of a topic, the review's `run` beside its own `waits`, the
- * settings' four, named like the core's groups, the two of the facts and the two of a fact's file.
+ * settings' four, named like the core's groups, the two of the facts, the two of a fact's file and
+ * the three of a source a fact rests on.
  */
 export type PartKey =
   | keyof typeof PARTS
@@ -1285,6 +1312,9 @@ export type PartKey =
   | 'facts:topics'
   | 'fact'
   | 'fact:evidence'
+  | 'source'
+  | 'source:outline'
+  | 'source:added'
 
 const PART_KEY = /^part:/
 
