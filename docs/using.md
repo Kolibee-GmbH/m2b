@@ -36,6 +36,14 @@ m2b capture "Dana's birthday is on 3 March"
 m2b capture --follow-up 2026-11-20 "Call the plumber about the shed"
 ```
 
+A file goes in two ways. Drop it into `inbox/` in the store, from the Finder or a phone's share
+sheet, and the next curation run makes a note beside it. Or, in a session, name it with its path:
+"keep this contract, ~/Documents/lease.pdf, it runs until March". The `capture` skill copies it
+into the inbox with your words through `m2b capture-file`, and Claude Code asks you before every
+such copy, since the file goes into a folder that syncs to every machine. A file over 25 MB, a
+folder, a link and a text file are refused; `capture.file_limit_mb` sets the size. A PDF is read
+up to its 60th page, and a picture as a picture ([A document in the inbox](curation.md#a-document-in-the-inbox)).
+
 ## The distillate at session start
 
 A session-start hook prints the distillate, at most 8 KB: lasting facts, each pointing to its

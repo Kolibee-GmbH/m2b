@@ -37,6 +37,12 @@ All notable changes to this project are documented here. The format follows
   it could run what it holds. The tab of the fact file leads back. Behind the button is a new
   command, `m2b store open <name>`, which opens only a PDF or a picture of the archive whose bytes
   are of that kind, and only where the session has a screen.
+- A session keeps a file you name with its path: "keep this contract, ~/Documents/lease.pdf".
+  The `capture` skill copies it into the inbox with your words, through the new command
+  `m2b capture-file <path> [words]`, and Claude Code asks you before every copy: no skill may run
+  it alone, since the file goes into a folder that syncs. A folder, a link, a text file and a file
+  over 25 MB are refused; the size is the new setting `capture.file_limit_mb`
+  ([Capture](docs/using.md#capture)).
 
 ## [0.7.0] - 2026-11-16
 

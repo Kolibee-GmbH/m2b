@@ -302,6 +302,14 @@ def _parser() -> argparse.ArgumentParser:
     )
     capture.add_argument("--quiet", action="store_true", help="keep it out of everything proactive")
     capture.add_argument("--follow-up", help="YYYY-MM-DD: also create a task due that day")
+    capture_file = _command(
+        commands, "capture-file", capture_commands.capture_file_command, "copy a file into the inbox, with words"
+    )
+    capture_file.add_argument("path", help="the file's absolute path")
+    capture_file.add_argument("words", nargs="?", help="what to keep with it; - reads them from standard input")
+    capture_file.add_argument(
+        "--source", default=capture_commands.DEFAULT_SOURCE, help="claude from a session, cli otherwise"
+    )
 
     search = _command(commands, "search", search_commands.search_command, "full text over archive, memory, inbox", True)
     search.add_argument("terms", nargs="+", help="one phrase; with --any, one phrase per term")

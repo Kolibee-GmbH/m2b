@@ -145,9 +145,15 @@ def _pending_problem(
             return f"{relative} has no sidecar note; run m2b ingest normalize first"
         return None
     try:
-        report.captures.append(_pending_capture(store, relative, sorted(set(stems[stem]) - {name})))
+        capture = _pending_capture(store, relative, sorted(set(stems[stem]) - {name}))
     except (UnicodeDecodeError, NoteFormatError, IngestError, StoreError) as error:
         return f"{relative} cannot be ingested yet ({error}); run m2b ingest normalize first"
+    # `m2b capture-file` on another machine writes the note before the file, and a sync service
+    # uploads each on its own: filed now, the note would go to the archive without its file, and
+    # the file would get a second, empty note when it arrives.
+    if capture.kind == keys.KIND_SIDECAR and not capture.members:
+        return f"{relative} stands for a file that is not in {INBOX}/ yet; it is filed once the file has synced here"
+    report.captures.append(capture)
     return None
 
 
@@ -439,7 +445,7 @@ def _normalize_binary(
     report: NormalizeReport,
 ) -> None:
     name = PurePosixPath(relative).name
-    extension = _schema_extension(name)
+    extension = schema_extension(name)
     if NoteName.parse(name) is not None:
         stem = name.rsplit(".", 1)[0]
         if not store.exists(f"{INBOX}/{stem}.md"):
@@ -489,18 +495,20 @@ def _continues_bundle(store: Store, sidecar: str, extension: str, relative: str)
 
 
 def _write_sidecar(store: Store, relative: str, member: str, created: datetime.datetime) -> None:
-    note = _sidecar_note(member, None, created)
+    note = sidecar_note(member, None, created)
     store.create_exclusive(relative, note.render().encode("utf-8"))
 
 
 def _sidecar_bytes(name: NoteName, extension: str, original: str, created: datetime.datetime) -> bytes:
     stem = str(name).rsplit(".", 1)[0]
-    return _sidecar_note(f"{stem}.{extension}", original, created).render().encode("utf-8")
+    return sidecar_note(f"{stem}.{extension}", original, created).render().encode("utf-8")
 
 
-def _sidecar_note(member: str, original: str | None, created: datetime.datetime) -> Note:
+def sidecar_note(member: str, original: str | None, created: datetime.datetime, words: str = "") -> Note:
+    """The note beside a picture or a document: what it is, the words it came with, and its original name."""
     extension = member.rsplit(".", 1)[1]
-    note = Note.new({keys.KIND: keys.KIND_SIDECAR}, f"A {extension} file, captured as {member}.\n")
+    said = f"{words.strip()}\n" if words.strip() else ""
+    note = Note.new({keys.KIND: keys.KIND_SIDECAR}, f"A {extension} file, captured as {member}.\n{said}")
     fields = _frontmatter(note)
     set_created(fields, created)
     parsed = NoteName.parse(member)
@@ -675,7 +683,7 @@ def _mtime(store: Store, relative: str) -> datetime.datetime:
     return datetime.datetime.fromtimestamp(os.lstat(store.path(relative)).st_mtime).astimezone().replace(microsecond=0)
 
 
-def _schema_extension(name: str) -> str:
+def schema_extension(name: str) -> str:
     """The extension a binary keeps in its schema name; ``bin`` when the schema cannot hold it."""
     extension = name.rsplit(".", 1)[1] if "." in name else ""
     return extension if extension.isascii() and extension.isalnum() else "bin"

@@ -41,6 +41,7 @@ const NOTE_RULES = [
   'If it says it is unknown whether the note was saved, do not call again: tell the user, and search for the note before noting it again.',
   'Answer in one line: what was kept, and the follow-up date if there was one.',
   'A calendar entry is not a note: the skill m2b:capture adds those.',
+  'A file the user names with its path, a PDF, a scan or a picture, is not a note either: the skill m2b:capture copies it into the inbox, and Claude Code asks the user first.',
   'A task the user says is done is not a note either: the skill m2b:todos ticks it.',
 ] as const
 

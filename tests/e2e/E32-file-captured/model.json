@@ -1,0 +1,48 @@
+{
+  "description": "E32 at the model level: as E31, and the copy is allowed, as when the owner says yes to Claude Code's question (`Bash(m2b capture-file *)` stands for that yes). The capture skill copies the file with the owner's words through `m2b capture-file`: one copy of the PDF in the inbox and one note beside it, a sidecar with the original name and words about the lease. It runs on haiku. Run it after each Claude Code minor update.",
+  "steps": [
+    {
+      "run": [
+        "sh",
+        "-c",
+        "printf '%%PDF-1.4\\n%%invented lease\\n' > lease.pdf && pwd"
+      ],
+      "save": {
+        "work": "(\\S+)"
+      }
+    },
+    {
+      "run": [
+        "claude",
+        "-p",
+        "Remember this file for me: {work}/lease.pdf, it is the lease of the flat, signed in October.",
+        "--setting-sources",
+        "project",
+        "--plugin-dir",
+        "{core_plugin}",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Skill,mcp__m2b__note,mcp__m2b__search,Bash(m2b capture-file *)",
+        "--max-turns",
+        "10",
+        "--model",
+        "haiku",
+        "--output-format",
+        "stream-json",
+        "--verbose"
+      ]
+    }
+  ],
+  "invariants": [
+    {
+      "count": 1,
+      "glob": "inbox/*.pdf"
+    },
+    {
+      "count": 1,
+      "glob": "inbox/*.md",
+      "content": "kind: sidecar[\\s\\S]*(?i:lease)[\\s\\S]*original name: lease\\.pdf"
+    }
+  ]
+}

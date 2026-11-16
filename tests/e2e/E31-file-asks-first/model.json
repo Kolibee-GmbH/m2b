@@ -1,0 +1,49 @@
+{
+  "description": "E31 at the model level: a real Claude Code session is asked to remember a file it is given with its whole path, and no one says yes to the copy. The session may call the note and search tools and the capture skill, as any session with m2b may; `m2b capture-file` is in no skill's allowed tools, so Claude Code asks, and with no one to answer (dontAsk) it is denied: the session's result names `m2b capture-file` among the calls it was denied, and no copy of the file reaches the store. A note in words may. It runs on haiku. Run it after each Claude Code minor update: the answer is the model's and Claude Code's, not m2b's code.",
+  "steps": [
+    {
+      "run": [
+        "sh",
+        "-c",
+        "printf '%%PDF-1.4\\n%%invented lease\\n' > lease.pdf && pwd"
+      ],
+      "save": {
+        "work": "(\\S+)"
+      }
+    },
+    {
+      "run": [
+        "claude",
+        "-p",
+        "Remember this file for me: {work}/lease.pdf, it is the lease of the flat, signed in October.",
+        "--setting-sources",
+        "project",
+        "--plugin-dir",
+        "{core_plugin}",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Skill,mcp__m2b__note,mcp__m2b__search",
+        "--max-turns",
+        "10",
+        "--model",
+        "haiku",
+        "--output-format",
+        "stream-json",
+        "--verbose"
+      ],
+      "stdout": "\"permission_denials\":\\[[^\\]]*\"command\":\"m2b capture-file "
+    }
+  ],
+  "invariants": [
+    {
+      "count": 0,
+      "glob": "inbox/*.pdf"
+    },
+    {
+      "count": 0,
+      "glob": "inbox/*.md",
+      "content": "kind: sidecar"
+    }
+  ]
+}

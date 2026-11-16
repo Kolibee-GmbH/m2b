@@ -305,3 +305,47 @@ class TaskDayTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def allowed_patterns(name: str) -> list[str]:
+    """The commands a skill may run without asking, each ``Bash(<pattern>)`` as written."""
+    front = skill_text(name).split("---", 2)[1]
+    line = next((line for line in front.splitlines() if line.startswith("allowed-tools:")), "allowed-tools:")
+    return re.findall(r"Bash\(([^)]*)\)", line)
+
+
+def covers(pattern: str, command: str) -> bool:
+    """Whether Claude Code lets a skill run ``command`` under ``pattern`` unasked: ``*`` stands for
+    anything, and a space before it for a word boundary, so ``m2b capture *`` is not ``m2b capture-file``."""
+    expression = "".join(".*" if part == "*" else re.escape(part) for part in re.split(r"(\*)", pattern))
+    return re.fullmatch(expression, command) is not None
+
+
+class CaptureFileSkillTest(unittest.TestCase):
+    def test_no_skill_may_copy_a_file_into_the_store_without_asking(self) -> None:
+        """Covers: B235"""
+        command = "m2b capture-file --source claude -- /Users/alex/Documents/lease.pdf -"
+        self.assertTrue(covers("m2b capture *", "m2b capture --source claude -"))
+        for skill in sorted(path.name for path in SKILLS.iterdir() if (path / "SKILL.md").exists()):
+            for pattern in allowed_patterns(skill):
+                with self.subTest(skill=skill, pattern=pattern):
+                    self.assertFalse(covers(pattern, command))
+
+    def test_the_capture_skill_copies_a_file_the_user_named_with_the_command_and_their_words(self) -> None:
+        """Covers: B235"""
+        text = one_line(skill_text("capture"))
+
+        example = "m2b capture-file --source claude -- /Users/alex/Documents/lease.pdf -"
+        self.assertTrue(any(example in block for block in bash_examples("capture")))
+        for said in (
+            "Claude Code asks the user before it runs",
+            "only for a file the user named",
+            "even where the tool is offered",
+        ):
+            with self.subTest(said=said):
+                self.assertIn(said, text)
+        self.assertIn(
+            "A file the user names with its path, a PDF, a scan or a picture, is not a note either: the skill "
+            "m2b:capture copies it into the inbox, and Claude Code asks the user first.",
+            tool_description("NOTE_RULES"),
+        )

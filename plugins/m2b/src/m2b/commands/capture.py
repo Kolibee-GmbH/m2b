@@ -1,4 +1,5 @@
-"""``capture``: the text as an argument, or on standard input with ``-`` or no argument.
+"""``capture``: the text as an argument, or on standard input with ``-`` or no argument;
+``capture-file``: a file of the machine with words beside it, which no skill runs without asking.
 
 The skill passes its text on standard input, so quotes, dollar signs and line breaks arrive as
 written; a capture from Claude Code carries the source ``claude``, one typed on the command line
@@ -10,8 +11,10 @@ from __future__ import annotations
 import argparse
 import contextlib
 import sys
+from pathlib import Path
 
 from m2b.capture import capture
+from m2b.capture_file import CaptureFileRefusedError, capture_file
 from m2b.commands import Context, UsageError
 from m2b.commands.backends import configured_store
 from m2b.commands.output import print_json
@@ -55,4 +58,21 @@ def capture_command(arguments: argparse.Namespace, context: Context) -> int:
         )
     else:
         print(result.path)
+    return 0
+
+
+def capture_file_command(arguments: argparse.Namespace, context: Context) -> int:
+    """Prints the note and the copy it wrote, each on a line; a path m2b does not copy ends with exit 2."""
+    words = sys.stdin.read() if arguments.words == "-" else arguments.words or ""
+    config = load_machine_config(context.machine)
+    store = configured_store(config, context.machine)
+    with contextlib.suppress(FetchError):
+        store.fetch([STORE_SETTINGS_FILE_NAME], STORE_SETTINGS_FETCH_SECONDS)
+    require_inbox_writable(store)
+    try:
+        captured = capture_file(store, Path(arguments.path), words, arguments.source, config.capture.file_limit_mb)
+    except (CaptureFileRefusedError, ValueError) as error:
+        raise UsageError(str(error)) from error
+    print(captured.note)
+    print(captured.file)
     return 0

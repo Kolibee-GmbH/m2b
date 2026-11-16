@@ -913,6 +913,26 @@ class PendingTest(IngestFixture):
         self.assertEqual(report.stuck, ["inbox/later/20261107T091500Z-cli-a1b2.md"])
         self.assertIn("subfolder", report.problems[0])
 
+    def test_a_sidecar_whose_file_has_not_synced_waits_with_a_line_and_is_filed_once_the_file_is_there(self) -> None:
+        """Covers: B236"""
+        stem = "20261116T210500Z-claude-5e6f"
+        self.write(
+            f"inbox/{stem}.md",
+            "---\ncreated: 2026-11-16T22:05:00+01:00\nsource: claude\nkind: sidecar\n---\n"
+            f"A pdf file, captured as {stem}.pdf.\nThe lease of the flat.\n",
+        )
+
+        before = ingest.pending(self.store)
+        self.write(f"inbox/{stem}.pdf", b"%PDF-1.4\n")
+        after = ingest.pending(self.store)
+
+        self.assertEqual((before.captures, before.stuck), ([], [f"inbox/{stem}.md"]))
+        self.assertIn("not in inbox/ yet", before.problems[0])
+        self.assertEqual(
+            [(capture.file, capture.members) for capture in after.captures], [(f"{stem}.md", (f"{stem}.pdf",))]
+        )
+        self.assertEqual(after.problems, [])
+
     def test_a_bundle_whose_sidecar_is_evicted_is_only_named_as_evicted(self) -> None:
         stem = "20261107T091600Z-cli-c3d4"
         scan = mock.Mock(files=[f"inbox/{stem}.HEIC", f"inbox/{stem}.jpg"], evicted=[f"inbox/{stem}.md"])
