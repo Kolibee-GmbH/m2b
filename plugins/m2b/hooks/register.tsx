@@ -112,6 +112,8 @@ import {
   waits,
 } from './settings'
 import type { SettingsActions } from './settings'
+import { NO_LONGER_OPEN, beginTasks, fillTasks, forgetTasksUnless, heldTasks, isOpenIn, noteRefusal, readTasks, taskPressKey, tasksPane } from './tasks-tab'
+import type { OpenTask, TaskActions } from './tasks-tab'
 import { beginTopic, fillTopic, forgetTopicUnless, heldTopic, readTopic, topicPane } from './topic'
 import {
   NOTE_COMMAND_LINE,
@@ -637,6 +639,10 @@ async function turnByTab($: EngineInterface, to: TabId): Promise<void> {
     await showSettings($, focusKey)
     return
   }
+  if (to === 'tasks') {
+    await showTasks($, focusKey)
+    return
+  }
   await asDialog($, { kind: to })
   const focusMoved = focusInPane($, focusKey)
   $.clock.after(0, inBackground($, () => refresh($, true)))
@@ -675,6 +681,7 @@ async function asDialog($: EngineInterface, view: PaneView): Promise<void> {
 async function turnTo($: EngineInterface, view: PaneView | null): Promise<void> {
   forgetTopicUnless(view)
   forgetSettingsUnless(view)
+  forgetTasksUnless(view)
   await update($, paneViewAtom, () => view)
 }
 
@@ -695,6 +702,87 @@ async function showTopic($: EngineInterface, name: string): Promise<void> {
     await update($, paneViewAtom, view => (view !== null && view.kind === 'topic' && view.press === press ? { ...view, isRead: true } : view))
   }
   await focusMoved
+}
+
+/**
+ * Turns the pane to the tab `Tasks` and reads the open tasks as the list holds them now. As a
+ * topic's lines, the titles are kept by the module that draws them, for this opening alone.
+ */
+async function showTasks($: EngineInterface, focusKey: string | null): Promise<void> {
+  const opening = await newPressToken($)
+  beginTasks(opening)
+  await asDialog($, { kind: 'tasks', press: opening, drawn: 0 })
+  const focusMoved = focusInPane($, focusKey)
+  await readTasksFor($, opening)
+  await focusMoved
+}
+
+/** Reads the tasks for the opening `opening` names and draws the tab again; an answer for a tab that was left is dropped. */
+async function readTasksFor($: EngineInterface, opening: string): Promise<void> {
+  if (fillTasks(opening, await readTasks($))) {
+    await drawTasks($, opening)
+  }
+}
+
+/** Draws the tab of the opening `opening` names again: what its module holds changed. */
+async function drawTasks($: EngineInterface, opening: string): Promise<void> {
+  await update($, paneViewAtom, view =>
+    view !== null && view.kind === 'tasks' && view.press === opening ? { ...view, drawn: view.drawn + 1 } : view,
+  )
+}
+
+/**
+ * `done` on a task: the same press as keep on a candidate, five seconds of undo, then
+ * `m2b tasks complete`. Written, the tab reads the list again and the band its counts; refused,
+ * the row stays and says why until the next press on it.
+ */
+function taskActions($: EngineInterface, opening: string): TaskActions {
+  return {
+    done: async task => {
+      noteRefusal(opening, task.id, null)
+      await press($, taskPressKey(task.id), 'complete', taskDoneWrite($, opening, task), undoKey(task.id))
+    },
+    undo: id => undo($, taskPressKey(id)),
+  }
+}
+
+function taskDoneWrite($: EngineInterface, opening: string, task: OpenTask): PressWrite {
+  return async () => {
+    let refused: string | null = null
+    try {
+      refused = await whyNotOpen($, task)
+      if (refused === null) {
+        // `--`: with the markdown backend a task id is a file name, and it may start with a dash.
+        const outcome = await runM2b($, ['tasks', 'complete', '--', task.id], WRITE_TIMEOUT_MS)
+        refused = outcome.ok ? null : outcome.error
+      }
+    } catch (error) {
+      refused = String(error)
+    }
+    if (refused !== null) {
+      noteRefusal(opening, task.id, refused)
+      await drawTasks($, opening)
+      return false
+    }
+    await readTasksFor($, opening)
+    return true
+  }
+}
+
+/**
+ * Why a task pressed five seconds ago is not to be completed now, or null where it is still open:
+ * another session may have ticked or dropped it meanwhile, and the markdown backend would write a
+ * dropped task as completed.
+ */
+async function whyNotOpen($: EngineInterface, task: OpenTask): Promise<string | null> {
+  const now = await readTasks($)
+  if (now.state === 'failed') {
+    return now.error
+  }
+  if (now.state === 'read' && isOpenIn(now, task.id)) {
+    return null
+  }
+  return NO_LONGER_OPEN
 }
 
 type SettingsView = Extract<PaneView, { kind: 'settings' }>
@@ -901,6 +989,8 @@ async function viewOfPane(
       return topicPane($, e, view.name, heldTopic(view.press), bodyColumns)
     case 'search':
       return searchPane($, e, view.search, bodyColumns)
+    case 'tasks':
+      return tasksPane($, e, heldTasks(view.press), presses, taskActions($, view.press), bodyColumns)
     case 'review': {
       const model = {
         snapshot: await read($, snapshotAtom),
@@ -1501,9 +1591,9 @@ export const register: Register = on => {
     lookTimers.clear()
     isOpeningDue = true
     await carryPressesOver($)
-    // A reload of the mod took the lines of a topic, and the values of the settings, with the old
-    // module: the pane starts over.
-    if (['topic', 'settings'].includes((await read($, paneViewAtom))?.kind ?? '')) {
+    // A reload of the mod took the lines of a topic, the values of the settings and the open tasks
+    // with the old module: the pane starts over.
+    if (['topic', 'settings', 'tasks'].includes((await read($, paneViewAtom))?.kind ?? '')) {
       await turnTo($, null)
     }
     loadedVersion = await readLoadedVersion($)
@@ -1772,10 +1862,11 @@ export const register: Register = on => {
     })
     return result
   }).catch(async (_, e, next) => {
-    // The pane closes without its view being turned: a topic's lines and the settings' values go
-    // all the same, and so do the seats, which the pane's next drawing notes anew.
+    // The pane closes without its view being turned: a topic's lines, the settings' values and the
+    // tasks go all the same, and so do the seats, which the pane's next drawing notes anew.
     forgetTopicUnless(null)
     forgetSettingsUnless(null)
+    forgetTasksUnless(null)
     paneSeats.clear()
     return next(e)
   })

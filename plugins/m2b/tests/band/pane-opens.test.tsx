@@ -314,14 +314,15 @@ test('the view the pane starts in has no way back to itself: Overview is the tab
 // A test cannot make the person's close: the kit's engine raises none. What the close hook asks is
 // held here on the functions it asks, for every view a tab or a command turns the pane to. All it
 // asks of the view is whether it is the one the pane starts in.
-test("the person's close leads from the view of every tab but Overview, and from the fifth, to the view the pane starts in, in one step from the settings and from their folded group too", () => {
+test("the person's close leads from the view of every tab but Overview, and from the sixth, to the view the pane starts in, in one step from the settings and from their folded group too", () => {
   // Covers: B187
   const isOnStartView = (view: PaneView | null): boolean => view === null
   const turned: PaneView[] = [
     { kind: 'proposals' },
     { kind: 'review' },
+    { kind: 'tasks', press: 'p', drawn: 1 },
     { kind: 'settings', press: 'p', aside: null, drawn: 0 },
-    // A folded group of the settings stands under a fifth tab: the close leads from it to the start view, not to the choices.
+    // A folded group of the settings stands under a sixth tab: the close leads from it to the start view, not to the choices.
     { kind: 'settings', press: 'p', aside: { name: 'about', title: 'About this setup' }, drawn: 1 },
     { kind: 'topic', name: 'Northwind', press: 'p', isRead: true },
     { kind: 'search', search: { query: 'tea', hits: [], total: 0, evicted: 0, unreadable: 0 } },
@@ -332,7 +333,7 @@ test("the person's close leads from the view of every tab but Overview, and from
     expect(closeAnswer('person', isOnStartView(view), true, false)).toBe('back')
     expect(closeAnswer('person', isOnStartView(view), false, false)).toBe('back')
   }
-  expect(turned.map(shownOf)).toEqual(['proposals', 'review', 'settings', 'aside', 'aside', 'aside'])
+  expect(turned.map(shownOf)).toEqual(['proposals', 'review', 'tasks', 'settings', 'aside', 'aside', 'aside'])
   // On Overview there is nowhere to lead back to: the close closes.
   expect(shownOf(null)).toBe('overview')
   expect(closeAnswer('person', isOnStartView(null), true, false)).toBe('by hand')

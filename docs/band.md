@@ -298,7 +298,7 @@ without one the text says that m2b has not looked yet.
 A topic's button turns the pane to that topic: its facts and its current items, read with
 `m2b distillate topic` at the press. m2b keeps the names and counts of what it gave a session and
 not the lines, so these are the lines the distillate holds now; a curation run since the session
-got the topic may have changed them, and the view says so. The topic stands under a fifth tab
+got the topic may have changed them, and the view says so. The topic stands under a sixth tab
 that bears its name while the pane shows it; the tab `Overview`, Escape or `/m2b-pane` lead
 [back](#back-to-the-start-view).
 
@@ -381,7 +381,7 @@ machine and the folders m2b is left out of: each shows its value, marked, and be
 command that changes it (`change: m2b curate take-over`).
 
 **About this setup** is one row: the button `22 settings` and beside it `that only inform or are
-changed by a command`. A press on it turns the view to that group alone, under a fifth tab that
+changed by a command`. A press on it turns the view to that group alone, under a sixth tab that
 bears its title: each setting as its title with its value, and below it what changes it, the
 command, the setup skill, where it is edited by hand, or that m2b keeps it.
 
@@ -498,11 +498,24 @@ click may not reach it: `open` in the band shows the pane with its buttons.
 ### The tabs
 
 One row of tabs stands above every view of the pane, always in this order: `Overview`, the view
-the pane starts in; `Proposals`, with the number that wait; `Review`; `Settings`. The tab of the
+the pane starts in; `Proposals`, with the number that wait; `Review`; `Tasks`; `Settings`. The tab of the
 view you look at is marked and is no button, every other turns the pane to its view. A topic's
-lines, the hits of a search and the settings of `About this setup` stand under a fifth tab, which
+lines, the hits of a search and the settings of `About this setup` stand under a sixth tab, which
 is there only while the pane shows them. No view has a button that leads back: the tabs are the
 one way from a view to another.
+
+### All your open tasks
+
+The tab `Tasks` shows every open task of your list, read with `m2b todos --json` the moment you
+turn the pane to it, in groups by when each is due: `Overdue`, `Today`, `Next 7 days`, `Later`
+and `Without a date`, a group with no task left out. Each row is when the task is due, in the
+color the part "Today" gives it (`overdue`, `due today`, otherwise the day, `Thu 20 Nov`), and its
+title, with `done` below. A press on `done` writes nothing for five seconds and offers `undo`, as
+keep does; then, if the task is still open in your list, it is ticked and the tab reads the list again. Where your task list
+refuses, the row stays and says why. A task file m2b cannot read is named above the groups, under
+`Not listed`, and the other tasks stand below it. The review, the memory candidates and the questions are not
+here: they wait under "Waits for you" in the overview. The titles are held by the pane alone, for
+as long as the tab is shown, and never in the session's state, which other plugins can read.
 
 ### Back to the start view
 

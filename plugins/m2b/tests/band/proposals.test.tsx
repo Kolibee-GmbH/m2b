@@ -103,14 +103,14 @@ test('while proposals wait the band counts each, and the pane has one row with t
   // them. The one button of the view is curate now, in the part about m2b.
   expect(await waits(ui)).toEqual(['3 proposals from your sessions', 'in the tab Proposals'])
   expect(await buttons(ui)).toEqual([CURATE_NOW])
-  expect((await shownTabs(ui)).map(tab => tab.label)).toEqual(['Overview', 'Proposals 3', 'Review', 'Settings'])
+  expect((await shownTabs(ui)).map(tab => tab.label)).toEqual(['Overview', 'Proposals 3', 'Review', 'Tasks', 'Settings'])
 
   fake.proposals = fake.proposals?.slice(0, 1) ?? null
   await clock.advance(60_000)
   expect(await shownBand(band)).toEqual(rowSaying('1 waits for you'))
   expect(await waits(ui)).toEqual(['1 proposal from your sessions', 'in the tab Proposals'])
   expect(await buttons(ui)).toEqual([CURATE_NOW])
-  expect((await shownTabs(ui)).map(tab => tab.label)).toEqual(['Overview', 'Proposals 1', 'Review', 'Settings'])
+  expect((await shownTabs(ui)).map(tab => tab.label)).toEqual(['Overview', 'Proposals 1', 'Review', 'Tasks', 'Settings'])
   await ui.unmount()
   await band.unmount()
 })
@@ -131,7 +131,7 @@ test('with no proposal waiting the band counts none, the pane has no line for th
   expect(await texts(ui)).toContain('Nothing waits for you.')
   // Nothing of the proposals to press: curate now is the view's one button.
   expect(await buttons(ui)).toEqual([CURATE_NOW])
-  expect((await shownTabs(ui)).map(tab => tab.label)).toEqual(['Overview', 'Proposals', 'Review', 'Settings'])
+  expect((await shownTabs(ui)).map(tab => tab.label)).toEqual(['Overview', 'Proposals', 'Review', 'Tasks', 'Settings'])
   await ui.unmount()
 })
 

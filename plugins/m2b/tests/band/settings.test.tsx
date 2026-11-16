@@ -812,7 +812,7 @@ test('a list that cannot be read again after a change stays as it was read, with
   expect(await viewButtons(ui)).toEqual(BUTTONS)
   expect((await shownParts(ui)).map(part => part.key)).toEqual(['shows', 'reads', 'curation', 'about'])
   // The tabs above it lead on.
-  expect((await shownTabs(ui)).map(tab => tab.label)).toEqual(['Overview', 'Proposals', 'Review', 'Settings'])
+  expect((await shownTabs(ui)).map(tab => tab.label)).toEqual(['Overview', 'Proposals', 'Review', 'Tasks', 'Settings'])
   // Read again, the trouble is over and the view shows what is true.
   settings.listFails = null
   await typed($, 'm2b-settings')
@@ -909,6 +909,7 @@ for (const [to, label] of [
   ['overview', 'Overview'],
   ['proposals', 'Proposals'],
   ['review', 'Review'],
+  ['tasks', 'Tasks'],
 ] as const) {
   test(`the tab ${label} pressed within the five seconds takes the press back: nothing is written`, async ($, on) => {
     // Covers: B198
@@ -1197,7 +1198,7 @@ test("the person's close on the settings leads to the start view in one step, fr
   // All the hook asks of the view is whether it is the one the pane starts in.
   const isOnStartView = (view: PaneView | null): boolean => view === null
 
-  // The choices stand under the tab Settings, a folded group under a fifth tab of its own.
+  // The choices stand under the tab Settings, a folded group under a sixth tab of its own.
   expect(shownOf(choices)).toBe('settings')
   expect(shownOf(group)).toBe('aside')
   for (const view of [choices, group]) {

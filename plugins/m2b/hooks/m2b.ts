@@ -9,7 +9,7 @@ import type { EngineInterface } from 'claude-code'
  */
 export type M2bOutcome =
   | { ok: true; stdout: string; stderr: string; isCut: boolean }
-  | { ok: false; error: string; exitCode?: number; stderr?: string }
+  | { ok: false; error: string; exitCode?: number; stderr?: string; stdout?: string }
 
 const LAUNCHER = '.local/bin/m2b'
 
@@ -69,7 +69,7 @@ export async function runM2b(
       return { ok: true, stdout, stderr, isCut: isStdoutTruncated }
     }
     const reason = firstLine(stderr)?.replace(/^m2b: /, '')
-    return { ok: false, error: reason ?? `m2b ${args.join(' ')} ended with exit ${exitCode}`, exitCode, stderr }
+    return { ok: false, error: reason ?? `m2b ${args.join(' ')} ended with exit ${exitCode}`, exitCode, stderr, stdout }
   } catch (error) {
     return { ok: false, error: `could not run ${launcher}: ${firstLine(String(error)) ?? 'no reason given'}` }
   }

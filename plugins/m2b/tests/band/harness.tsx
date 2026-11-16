@@ -107,6 +107,18 @@ export const RUN_STARTED = 'a curation run started in the background (process 47
 export const RUN_UNDER_WAY = 'a curation run is already running on this machine'
 export const CURATES_ELSEWHERE = 'this machine is not the curating machine; tower-2 is'
 
+/** An open task as `m2b todos --json` lists it; `due` a day, or a day with a time, as the core writes it. */
+export type FakeTodo = { id: string; title: string; notes: string; due: string | null }
+
+/** The groups of `m2b todos --json`, by their keys; the core counts today among the next seven days. */
+export type TodoGroup = 'overdue' | 'due_within_7_days' | 'later' | 'without_date'
+
+/** The answer of `m2b todos --json`: the day the core counts as today and the open tasks in its groups. */
+export type FakeTodos = { today: string } & Record<TodoGroup, FakeTodo[]>
+
+/** The day of `NOW` as the core counts it. */
+export const TODAY = '2026-03-14'
+
 /** A topic whose facts the core gave a session, with what its block held then. */
 export type FakeTopic = { name: string; facts: number | null; current: number | null }
 
@@ -151,6 +163,16 @@ export class FakeM2b {
   /** Unset, the installed core is one from before `distillate topic`: it refuses the action. */
   knowsTopics = true
   tasks: FakeTask[] = []
+  /** What `m2b todos --json` answers: the owner's open tasks, which hold none of the curator tasks. */
+  todos: FakeTodos = { today: TODAY, overdue: [], due_within_7_days: [], later: [], without_date: [] }
+  /** When set, `m2b todos --json` prints this in place of its answer, whatever its shape. */
+  todosPrints: string | null = null
+  /** When set, `m2b todos` fails with this as its message. */
+  todosFails: string | null = null
+  /** Task files `m2b todos --json` names as unreadable, each with its reason; it then ends with exit 1. */
+  todosUnreadable: { path: string; reason: string }[] = []
+  /** When set, `m2b tasks complete` fails with this as its message, and nothing is completed. */
+  completeFails: string | null = null
   status: unknown = STATUS
   failure: string | null = null
   statusFails = false
@@ -284,6 +306,12 @@ export class FakeM2b {
     return this
   }
 
+  /** Adds an open task to the group `group` of the owner's list. */
+  todo(group: TodoGroup, id: string, title: string, due: string | null = null): this {
+    this.todos[group].push({ id, title, notes: '', due })
+    return this
+  }
+
   proposal(id: string, text: string, quote = text, fields: Partial<FakeProposal> = {}): this {
     const proposed = { id, kind: 'person', text, quote, day: '2026-03-12', topic: null, due: null, ...fields }
     this.proposals = [...(this.proposals ?? []), proposed]
@@ -384,11 +412,20 @@ export class FakeM2b {
       this.given = this.given === null ? null : { ...this.given, offUnder: args[1] === 'off' ? (args.at(-1) ?? null) : null }
       return ok('')
     }
+    if (args[0] === 'todos') {
+      return this.todosAnswer()
+    }
     if (this.failure !== null) {
       return fail(this.failure)
     }
     const [, verb, ...rest] = args
     const id = rest[0] === '--' ? rest[1] : rest[0]
+    if (verb === 'complete' && this.completeFails !== null) {
+      return fail(this.completeFails)
+    }
+    if (verb === 'complete' && this.completeTodo(id)) {
+      return ok('')
+    }
     const task = this.tasks.find(open => open.id === id)
     if (task === undefined) {
       return fail(`no task with id ${id}`)
@@ -396,6 +433,35 @@ export class FakeM2b {
     task.completed = true
     task.dropped = verb === 'drop'
     return ok('')
+  }
+
+  /** As `m2b todos --json` answers: the open tasks by group, no unreadable file and no calendar. */
+  todosAnswer(): ProcessRunResult {
+    if (this.todosFails !== null) {
+      return fail(this.todosFails)
+    }
+    if (this.todosPrints !== null) {
+      return ok(this.todosPrints)
+    }
+    const events = { configured: false, message: 'no calendar is set up' }
+    const answer = `${JSON.stringify({ ...this.todos, unreadable: this.todosUnreadable, events })}\n`
+    return this.todosUnreadable.length === 0 ? ok(answer) : { ...ok(answer), exitCode: 1 }
+  }
+
+  /** Completes the open task `id` of the owner's list, as the core does; false where the list holds none of that id. */
+  completeTodo(id: string | undefined): boolean {
+    const groups: TodoGroup[] = ['overdue', 'due_within_7_days', 'later', 'without_date']
+    const group = groups.find(name => this.todos[name].some(open => open.id === id))
+    if (group === undefined) {
+      return false
+    }
+    this.todos[group] = this.todos[group].filter(open => open.id !== id)
+    return true
+  }
+
+  /** The calls that read the owner's open tasks. */
+  todosCalls(): string[][] {
+    return this.calls.filter(call => call[0] === 'todos')
   }
 
   /** As `m2b distillate topic --json -- <name>` answers: the topic's lines, or that the distillate holds none of the name. */
@@ -1057,7 +1123,7 @@ export async function answerKeys(ui: { findAll: (q: { type: string }) => Promise
 
 /** The key of the box that holds the pane's row of tabs. */
 const TABS = 'tabs'
-const TAB_IDS: readonly TabId[] = ['overview', 'proposals', 'review', 'settings']
+const TAB_IDS: readonly TabId[] = ['overview', 'proposals', 'review', 'tasks', 'settings']
 
 /**
  * A tab of the pane's row as drawn: its label, and the key of its button; `key` is null for the
@@ -1078,7 +1144,7 @@ export async function shownTabs(ui: Drawn): Promise<ShownTab[]> {
   })
 }
 
-/** Which tab the row marks as the one shown: one of the four by its place, or the fifth beside them. */
+/** Which tab the row marks as the one shown: one of the five by its place, or the sixth beside them. */
 export async function shownTab(ui: Drawn): Promise<Shown> {
   const at = (await shownTabs(ui)).findIndex(tab => tab.key === null)
   if (at === -1) {

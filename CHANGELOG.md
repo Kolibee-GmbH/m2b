@@ -22,6 +22,11 @@ All notable changes to this project are documented here. The format follows
   `m2b source <name>`; it takes a name, never a path, and reads only fact files and notes of the
   archive ([Noting and searching as tools of the model](docs/band.md#noting-and-searching-as-tools-of-the-model)).
 
+- The pane has a tab `Tasks`: every open task of your list, in groups by when it is due
+  (overdue, today, the next seven days, later, without a date), each with `done`, which ticks it
+  after five seconds of `undo` ([All your open tasks](docs/band.md#all-your-open-tasks)). The tab
+  stands between `Review` and `Settings`.
+
 ## [0.7.0] - 2026-11-16
 
 m2b is there in every session: the band's row stands above the prompt also while nothing waits,

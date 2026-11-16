@@ -5,22 +5,23 @@ import { topicShowKey } from './session-view'
 import type { SessionModel } from './session-view'
 
 /*
- * The tabs above every view of the m2b pane: four that stay, always in one order, and a fifth for
+ * The tabs above every view of the m2b pane: five that stay, always in one order, and a sixth for
  * a topic's lines, a search or the settings that only inform, which stands there only while it is
  * shown. A tab is the one way from a view to another, so no view has a button that leads back.
  */
 
 /** A tab that stays, named like the view it turns the pane to. */
-export type TabId = 'overview' | 'proposals' | 'review' | 'settings'
+export type TabId = 'overview' | 'proposals' | 'review' | 'tasks' | 'settings'
 
-/** What the pane shows, as its row of tabs has it: one of the four, or the fifth beside them. */
+/** What the pane shows, as its row of tabs has it: one of the five, or the sixth beside them. */
 export type Shown = TabId | 'aside'
 
-const TAB_IDS: readonly TabId[] = ['overview', 'proposals', 'review', 'settings']
+const TAB_IDS: readonly TabId[] = ['overview', 'proposals', 'review', 'tasks', 'settings']
 const LABELS: Readonly<Record<TabId, string>> = {
   overview: 'Overview',
   proposals: 'Proposals',
   review: 'Review',
+  tasks: 'Tasks',
   settings: 'Settings',
 }
 const SEARCH = 'Search'
@@ -48,7 +49,7 @@ export function tabKey(to: TabId, shown: Shown): string {
 /**
  * The key of the tab the focus is asked for once a press turned the pane from `left` to `to`: the
  * tab that leads back to the view that was left. The same key pressed again returns there, and the
- * focus never stands on a button that writes. The fifth tab is gone once it is left: `Overview`
+ * focus never stands on a button that writes. The sixth tab is gone once it is left: `Overview`
  * stands in for it, and on the overview itself the tab beside it.
  */
 export function tabKeyAfterTurn(left: Shown, to: Shown): string {

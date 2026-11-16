@@ -80,7 +80,7 @@ test('a press on a topic shows its lines as the distillate holds them now, and s
   expect(await texts(ui)).toEqual(['Acme Ltd', AS_IT_IS_NOW, KIM, PAYS, 'Current', AUDIT])
   // Opened anew as a dialog, so Escape leads back to the view the pane starts in.
   expect(opened.slice(opensBefore)).toEqual([AS_A_DIALOG])
-  // The lines are read, never pressed: the tabs above them are the one way on, the topic's own beside the four.
+  // The lines are read, never pressed: the tabs above them are the one way on, the topic's own beside the five.
   expect(await viewButtons(ui)).toEqual([])
   expect((await shownTabs(ui)).at(-1)).toEqual({ label: 'Acme Ltd', key: null })
   await ui.unmount()
@@ -172,6 +172,7 @@ test('the tab Overview forgets the lines, and the next press reads them again', 
 for (const [to, label] of [
   ['proposals', 'Proposals'],
   ['review', 'Review'],
+  ['tasks', 'Tasks'],
   ['settings', 'Settings'],
 ] as const) {
   test(`the tab ${label} forgets the lines too: back on the start view, the next press reads them again`, async ($, on) => {
@@ -284,7 +285,7 @@ test('while m2b reads, the view says so, and an answer that comes after the tab 
   await ui.unmount()
 })
 
-test('an answer that comes after another tab was pressed is dropped too, and draws no fifth tab again', async ($, on) => {
+test('an answer that comes after another tab was pressed is dropped too, and draws no sixth tab again', async ($, on) => {
   // Covers: B190
   const fake = givenAcme()
   fake.delayMs = args => (args[1] === 'topic' ? 2_000 : 0)
@@ -300,7 +301,7 @@ test('an answer that comes after another tab was pressed is dropped too, and dra
   await pressed
 
   expect(await shownTab(ui)).toBe('review')
-  expect(await shownTabs(ui)).toHaveLength(4)
+  expect(await shownTabs(ui)).toHaveLength(5)
   expect(await texts(ui)).not.toContain(KIM)
   await pressTab(ui, 'overview')
   expect(await texts(ui)).not.toContain(KIM)
@@ -455,7 +456,13 @@ test('the lines are kept for the press that asked, and turning the pane away dro
   forgetTopicUnless({ kind: 'topic', name: 'Acme Ltd', press: 'p1', isRead: true })
   expect(heldTopic('p1')).toEqual(lines)
 
-  for (const other of [null, { kind: 'review' }, { kind: 'proposals' }, { kind: 'topic', name: 'Acme Ltd', press: 'p2', isRead: false }] as const) {
+  for (const other of [
+    null,
+    { kind: 'review' },
+    { kind: 'proposals' },
+    { kind: 'tasks', press: 'p1', drawn: 1 },
+    { kind: 'topic', name: 'Acme Ltd', press: 'p2', isRead: false },
+  ] as const) {
     beginTopic('p1')
     fillTopic('p1', lines)
     forgetTopicUnless(other)

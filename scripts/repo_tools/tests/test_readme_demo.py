@@ -107,7 +107,7 @@ class PicturesTest(unittest.TestCase):
             return sum(max(len(choices[held]) - 1, 0) for held in settings)
 
         at = in_sight.index(model)
-        tabs_of_the_pane = 3
+        tabs_of_the_pane = 4
         to_the_model = tabs_of_the_pane + values_to_press(in_sight[:at]) + 1
         # From the row of the folded group, the button after the last value.
         back_to_the_model = values_to_press(in_sight[at + 1 :]) + 1

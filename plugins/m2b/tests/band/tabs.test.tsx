@@ -39,17 +39,25 @@ const KIM = "Kim Lee leads Northwind's IT"
 const LONG_NAME = 'Riverside Community Choir'
 const LONG_NAME_CUT = 'Riverside Community…'
 const LIST = ['settings', '--json']
+const TODOS = ['todos', '--json']
+const LADDER_TASK = 'Return the ladder to Sam'
 const TURN_ENDED = { answer: 'done', durationMs: 5, isAborted: false, reason: 'answer' } as const
 
 /** The tabs that stay, in the order drawn. */
-const TABS: readonly TabId[] = ['overview', 'proposals', 'review', 'settings']
-const LABELS: Readonly<Record<TabId, string>> = { overview: 'Overview', proposals: 'Proposals', review: 'Review', settings: 'Settings' }
+const TABS: readonly TabId[] = ['overview', 'proposals', 'review', 'tasks', 'settings']
+const LABELS: Readonly<Record<TabId, string>> = {
+  overview: 'Overview',
+  proposals: 'Proposals',
+  review: 'Review',
+  tasks: 'Tasks',
+  settings: 'Settings',
+}
 
-/** Every view of the pane: the four under their tabs, and the three under a fifth tab, a folded group of the settings, a topic's lines and a search. */
+/** Every view of the pane: the five under their tabs, and the three under a sixth tab, a folded group of the settings, a topic's lines and a search. */
 type View = TabId | 'group' | 'topic' | 'search'
-const VIEWS: readonly View[] = ['overview', 'proposals', 'review', 'settings', 'group', 'topic', 'search']
-/** The views that stand under a fifth tab. */
-const UNDER_A_FIFTH_TAB = ['group', 'topic', 'search'] as const
+const VIEWS: readonly View[] = ['overview', 'proposals', 'review', 'tasks', 'settings', 'group', 'topic', 'search']
+/** The views that stand under a sixth tab. */
+const UNDER_A_SIXTH_TAB = ['group', 'topic', 'search'] as const
 /** The button of the row the settings keep their folded group behind, which turns the pane to that group. */
 const SHOW_GROUP = 'settings:fold:about'
 /** Which tab the row marks above each view. */
@@ -57,28 +65,31 @@ const SHOWN: Readonly<Record<View, Shown>> = {
   overview: 'overview',
   proposals: 'proposals',
   review: 'review',
+  tasks: 'tasks',
   settings: 'settings',
   group: 'aside',
   topic: 'aside',
   search: 'aside',
 }
-/** The label of the fifth tab above the three views that have one. */
+/** The label of the sixth tab above the three views that have one. */
 const ASIDE: Readonly<Partial<Record<View, string>>> = { group: 'About this setup', topic: 'Northwind', search: 'Search' }
 /** A line each view draws and no other does: the review has a part "Waits for you" too, so the overview is told by its part "Today". */
 const SAYS: Readonly<Record<View, string>> = {
   overview: 'Today',
   proposals: 'said on 2026-03-12: "Dana runs IT at Northwind"',
   review: 'lint: broken link in a.md',
+  tasks: LADDER_TASK,
   settings: 'that only inform or are changed by a command',
   group: `Store folder: ${NOTES}`,
   topic: KIM,
   search: 'memory/dana.md:3',
 }
-/** The command that turns the pane to each view, or to the view a press leads on from. */
+/** The command that turns the pane to each view, or to the view a press leads on from: the tasks have no command, only their tab. */
 const COMMANDS: Readonly<Record<View, string>> = {
   overview: 'm2b-pane',
   proposals: 'm2b-proposals',
   review: 'm2b-review',
+  tasks: 'm2b-pane',
   settings: 'm2b-settings',
   group: 'm2b-settings',
   topic: 'm2b-pane',
@@ -91,7 +102,8 @@ function typed($: Engine, command: string, args = ''): Promise<CommandRunResult>
 
 /**
  * A session with something under every tab: two topics, a candidate, a question and the review,
- * three proposals, a hit to search for, and three settings, two to choose and one behind a row.
+ * three proposals, an open task, a hit to search for, and three settings, two to choose and one
+ * behind a row.
  */
 function fullFake(): FakeM2b {
   const fake = new FakeM2b()
@@ -111,6 +123,7 @@ function fullFake(): FakeM2b {
     .proposal(DANA, 'Dana is head of IT at Northwind.', 'Dana runs IT at Northwind')
     .proposal(LADDER, 'Call Sam about the ladder.')
     .proposal(SHED, 'The spare key is in the shed.')
+  fake.todo('later', 't1', LADDER_TASK, '2026-04-02')
   fake.searchHits = [{ path: 'memory/dana.md', line: 3, text: 'Dana prefers tea' }]
   fake.onSettings = new FakeSettings([
     fakeSetting('curation.paused', 'Curation paused', 'curation', 1, onOff('curation.paused', false)),
@@ -127,10 +140,13 @@ function mounted($: Engine, columns = 80) {
 type Pane = Awaited<ReturnType<typeof mounted>>
 type Clock = Awaited<ReturnType<typeof start>>['clock']
 
-/** Turns the pane to `view` from wherever it is: by the view's command and, for a folded group and a topic, the press that shows it. */
+/** Turns the pane to `view` from wherever it is: by the view's command and, for the tasks, a folded group and a topic, the press that shows it. */
 async function arrive($: Engine, clock: Clock, ui: Pane, view: View): Promise<void> {
   await typed($, COMMANDS[view], view === 'search' ? 'tea' : '')
   await clock.advance(1)
+  if (view === 'tasks') {
+    await pressTab(ui, 'tasks')
+  }
   if (view === 'group') {
     await ui.press({ key: SHOW_GROUP })
   }
@@ -141,11 +157,11 @@ async function arrive($: Engine, clock: Clock, ui: Pane, view: View): Promise<vo
 
 /** The row of tabs as drawn above the view `shown`: a tab's key names the tab and the view it stands above. */
 function rowAbove(shown: Shown, aside?: string, proposals = 'Proposals 3'): ShownTab[] {
-  const four = TABS.map(id => ({
+  const staying = TABS.map(id => ({
     label: id === 'proposals' ? proposals : LABELS[id],
     key: id === shown ? null : `tab:${id}:in:${shown}`,
   }))
-  return aside === undefined ? four : [...four, { label: aside, key: null }]
+  return aside === undefined ? staying : [...staying, { label: aside, key: null }]
 }
 
 /** The key of every button the pane draws, the tabs among them. */
@@ -153,7 +169,7 @@ async function everyButton(ui: Pane): Promise<string[]> {
   return (await ui.findAll({ type: 'Button' })).map(button => String(button.key))
 }
 
-test('above the view the pane starts in stand Overview, Proposals with the number that wait, Review and Settings: Overview as a text, the others as buttons', async ($, on) => {
+test('above the view the pane starts in stand Overview, Proposals with the number that wait, Review, Tasks and Settings: Overview as a text, the others as buttons', async ($, on) => {
   // Covers: B204
   await start($, on, fullFake())
 
@@ -163,6 +179,7 @@ test('above the view the pane starts in stand Overview, Proposals with the numbe
     { label: 'Overview', key: null },
     { label: 'Proposals 3', key: 'tab:proposals:in:overview' },
     { label: 'Review', key: 'tab:review:in:overview' },
+    { label: 'Tasks', key: 'tab:tasks:in:overview' },
     { label: 'Settings', key: 'tab:settings:in:overview' },
   ])
   // The row is the first thing drawn: the view stands below it.
@@ -171,7 +188,7 @@ test('above the view the pane starts in stand Overview, Proposals with the numbe
   await ui.unmount()
 })
 
-test('the four tabs stand above every view in the same order: the one whose view is shown is a text and no button, every other a button', async ($, on) => {
+test('the five tabs stand above every view in the same order: the one whose view is shown is a text and no button, every other a button', async ($, on) => {
   // Covers: B204
   const { clock } = await start($, on, fullFake())
   const ui = await mounted($)
@@ -182,7 +199,7 @@ test('the four tabs stand above every view in the same order: the one whose view
     expect(await texts(ui)).toContain(SAYS[view])
     expect(await shownTabs(ui)).toEqual(rowAbove(SHOWN[view], ASIDE[view]))
     // No tab is drawn twice: once as the text that is shown, or once as a button.
-    expect((await everyButton(ui)).filter(key => key.startsWith('tab:'))).toHaveLength(4 - (ASIDE[view] === undefined ? 1 : 0))
+    expect((await everyButton(ui)).filter(key => key.startsWith('tab:'))).toHaveLength(5 - (ASIDE[view] === undefined ? 1 : 0))
   }
   await ui.unmount()
 })
@@ -192,7 +209,7 @@ test("the tab shown is bold and underlined in the color of m2b's name, and every
   const { clock } = await start($, on, fullFake())
   const ui = await mounted($)
 
-  for (const view of ['overview', 'review', 'topic', 'group'] as const) {
+  for (const view of ['overview', 'review', 'tasks', 'topic', 'group'] as const) {
     await arrive($, clock, ui, view)
     const row = await shownTabs(ui)
     const marked = row.find(tab => tab.key === null)
@@ -267,7 +284,7 @@ test('with a core that does not know proposals the tab says Proposals without a 
   await ui.unmount()
 })
 
-test("a topic's lines stand under a fifth tab with the topic's name, cut to 20 characters, and a search under one named Search", async ($, on) => {
+test("a topic's lines stand under a sixth tab with the topic's name, cut to 20 characters, and a search under one named Search", async ($, on) => {
   // Covers: B204
   const fake = fullFake()
   // A name of exactly 20 characters is shown whole, and one m2b gave with what a terminal would run is cleaned.
@@ -297,17 +314,17 @@ test("a topic's lines stand under a fifth tab with the topic's name, cut to 20 c
   await ui.unmount()
 })
 
-test('the fifth tab stands there only while its view is shown: a press on any of the four takes it away', async ($, on) => {
+test('the sixth tab stands there only while its view is shown: a press on any of the five takes it away', async ($, on) => {
   // Covers: B204
   const { clock } = await start($, on, fullFake())
   const ui = await mounted($)
 
-  for (const view of UNDER_A_FIFTH_TAB) {
+  for (const view of UNDER_A_SIXTH_TAB) {
     for (const to of TABS) {
       await arrive($, clock, ui, view)
-      // All four tabs that stay are buttons there, `Settings` above a folded group of the settings too.
+      // All five tabs that stay are buttons there, `Settings` above a folded group of the settings too.
       expect(await shownTabs(ui)).toEqual(rowAbove('aside', ASIDE[view]))
-      expect(await shownTabs(ui)).toHaveLength(5)
+      expect(await shownTabs(ui)).toHaveLength(6)
 
       await pressTab(ui, to)
 
@@ -375,6 +392,7 @@ test('a press on each tab turns the pane to its view, from every other view, and
       await arrive($, clock, ui, from)
       expect(await texts(ui)).toContain(SAYS[from])
       const listsBefore = fake.settingCalls().length
+      const todosBefore = fake.todosCalls().length
 
       await pressTab(ui, to)
       await clock.advance(1)
@@ -383,8 +401,9 @@ test('a press on each tab turns the pane to its view, from every other view, and
       const shown = await texts(ui)
       expect(shown).toContain(SAYS[to])
       expect(shown).not.toContain(SAYS[from])
-      // The settings are read for each opening of their view, and by no other tab.
+      // The settings and the open tasks are each read for each opening of their view, and by no other tab.
       expect(fake.settingCalls().slice(listsBefore)).toEqual(to === 'settings' ? [LIST] : [])
+      expect(fake.todosCalls().slice(todosBefore)).toEqual(to === 'tasks' ? [TODOS] : [])
     }
   }
   // Nothing a tab does answers a row or changes a setting.
@@ -438,7 +457,7 @@ test('in a pane as narrow as a dock gets the row holds the same tabs and breaks 
   const { clock } = await start($, on, fullFake())
   const ui = await mounted($, 24)
 
-  for (const view of ['overview', 'topic', 'group'] as const) {
+  for (const view of ['overview', 'tasks', 'topic', 'group'] as const) {
     await arrive($, clock, ui, view)
     expect(await shownTabs(ui)).toEqual(rowAbove(SHOWN[view], ASIDE[view]))
     expect((await ui.find({ key: 'tabs' }))?.props).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
@@ -452,7 +471,7 @@ test('in a pane as narrow as a dock gets the row holds the same tabs and breaks 
 // that was left. Claude Code looks a key up in what is drawn when the focus is asked for and waits
 // only for one that is not drawn yet: a key the view before drew too would be found there.
 
-/** Which tab's view a second press on the same key shows: the one that was left, or what stands in for a fifth tab. */
+/** Which tab's view a second press on the same key shows: the one that was left, or what stands in for a sixth tab. */
 function leadsBackTo(left: Shown, to: TabId): TabId {
   if (left !== 'aside') {
     return left
@@ -460,18 +479,61 @@ function leadsBackTo(left: Shown, to: TabId): TabId {
   return to === 'overview' ? 'proposals' : 'overview'
 }
 
-test('after a press on a tab the focus is asked for the tab that leads back to the view that was left; Overview stands in for a fifth tab, and Proposals on the overview itself', () => {
+test('after a press on a tab the focus is asked for the tab that leads back to the view that was left; Overview stands in for a sixth tab, and Proposals on the overview itself', () => {
   // Covers: B201
   const every: readonly Shown[] = [...TABS, 'aside']
   const asked = Object.fromEntries(every.map(left => [left, every.map(to => tabKeyAfterTurn(left, to))]))
 
-  // Each row: the view that was left; each column: the view turned to, in the order of the tabs, the fifth last.
+  // Each row: the view that was left; each column: the view turned to, in the order of the tabs, the sixth last.
   expect(asked).toEqual({
-    overview: ['tab:proposals:in:overview', 'tab:overview:in:proposals', 'tab:overview:in:review', 'tab:overview:in:settings', 'tab:overview:in:aside'],
-    proposals: ['tab:proposals:in:overview', 'tab:overview:in:proposals', 'tab:proposals:in:review', 'tab:proposals:in:settings', 'tab:proposals:in:aside'],
-    review: ['tab:review:in:overview', 'tab:review:in:proposals', 'tab:overview:in:review', 'tab:review:in:settings', 'tab:review:in:aside'],
-    settings: ['tab:settings:in:overview', 'tab:settings:in:proposals', 'tab:settings:in:review', 'tab:overview:in:settings', 'tab:settings:in:aside'],
-    aside: ['tab:proposals:in:overview', 'tab:overview:in:proposals', 'tab:overview:in:review', 'tab:overview:in:settings', 'tab:overview:in:aside'],
+    overview: [
+      'tab:proposals:in:overview',
+      'tab:overview:in:proposals',
+      'tab:overview:in:review',
+      'tab:overview:in:tasks',
+      'tab:overview:in:settings',
+      'tab:overview:in:aside',
+    ],
+    proposals: [
+      'tab:proposals:in:overview',
+      'tab:overview:in:proposals',
+      'tab:proposals:in:review',
+      'tab:proposals:in:tasks',
+      'tab:proposals:in:settings',
+      'tab:proposals:in:aside',
+    ],
+    review: [
+      'tab:review:in:overview',
+      'tab:review:in:proposals',
+      'tab:overview:in:review',
+      'tab:review:in:tasks',
+      'tab:review:in:settings',
+      'tab:review:in:aside',
+    ],
+    tasks: [
+      'tab:tasks:in:overview',
+      'tab:tasks:in:proposals',
+      'tab:tasks:in:review',
+      'tab:overview:in:tasks',
+      'tab:tasks:in:settings',
+      'tab:tasks:in:aside',
+    ],
+    settings: [
+      'tab:settings:in:overview',
+      'tab:settings:in:proposals',
+      'tab:settings:in:review',
+      'tab:settings:in:tasks',
+      'tab:overview:in:settings',
+      'tab:settings:in:aside',
+    ],
+    aside: [
+      'tab:proposals:in:overview',
+      'tab:overview:in:proposals',
+      'tab:overview:in:review',
+      'tab:overview:in:tasks',
+      'tab:overview:in:settings',
+      'tab:overview:in:aside',
+    ],
   })
   // The key never names the tab of the view turned to, which is drawn as a text and takes no focus.
   for (const left of every) {
@@ -565,7 +627,7 @@ test('a topic left for the overview has the key of its button there, by its plac
   expect(topicShowKey(modelWith({ given: { ...GIVEN_TWO, topics: [] } }), 'Northwind')).toBeNull()
   expect(topicShowKey(modelWith({}), 'Northwind')).toBeNull()
   expect(topicShowKey(modelWith({ given: { ...GIVEN_TWO, error: 'the machine state cannot be read' } }), 'Northwind')).toBeNull()
-  // Then the tab's own rule holds: the fifth tab is gone, and on the overview Proposals stands in for it.
+  // Then the tab's own rule holds: the sixth tab is gone, and on the overview Proposals stands in for it.
   expect(tabKeyAfterTurn('aside', 'overview')).toBe('tab:proposals:in:overview')
 })
 
@@ -579,14 +641,16 @@ test("a topic left by Overview gets its own button before the tabs' rule; left b
   expect(focusKeyAfterTab(acme, 'overview', modelWith({}))).toBe('tab:proposals:in:overview')
   // No other view has a row on the start view: the tab that leads back to it.
   expect(focusKeyAfterTab({ kind: 'review' }, 'overview', full)).toBe('tab:review:in:overview')
+  expect(focusKeyAfterTab({ kind: 'tasks', press: 'p1', drawn: 1 }, 'overview', full)).toBe('tab:tasks:in:overview')
   expect(focusKeyAfterTab(null, 'settings', full)).toBe('tab:overview:in:settings')
-  // A folded group of the settings stands under a fifth tab, which is gone once it is left: the
-  // tabs' rule for the fifth tab holds, whichever tab is pressed above it, `Settings` among them.
+  // A folded group of the settings stands under a sixth tab, which is gone once it is left: the
+  // tabs' rule for the sixth tab holds, whichever tab is pressed above it, `Settings` among them.
   const choices = { kind: 'settings', press: 'p1', aside: null, drawn: 0 } as const
   const group = { ...choices, aside: { name: 'about', title: 'About this setup' }, drawn: 1 } as const
   expect(focusKeyAfterTab(group, 'overview', full)).toBe('tab:proposals:in:overview')
   expect(focusKeyAfterTab(group, 'proposals', full)).toBe('tab:overview:in:proposals')
   expect(focusKeyAfterTab(group, 'review', full)).toBe('tab:overview:in:review')
+  expect(focusKeyAfterTab(group, 'tasks', full)).toBe('tab:overview:in:tasks')
   expect(focusKeyAfterTab(group, 'settings', full)).toBe('tab:overview:in:settings')
   // The choices stand under `Settings`, which leads back to them.
   expect(focusKeyAfterTab(choices, 'review', full)).toBe('tab:settings:in:review')
