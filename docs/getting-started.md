@@ -116,13 +116,13 @@ nor a model. Both end with a first capture, a curation run and a first search.
    know it, `m2b doctor` says in its line `band` whether the latest session ran m2b's hooks, and
    `m2b distillate on` turns the distillate back on in a folder where it was turned off.
 
-From the next session on, [the band](band.md) above the prompt shows what curation asks you to
-keep or drop. It is a mod, a module Claude Code loads with the plugin, and runs only while mods are
+From the next session on, [the band](band.md) above the prompt counts what curation asks you to
+keep or drop, and its `open` shows the m2b pane, where you answer. It is a mod, a module Claude Code loads with the plugin, and runs only while mods are
 on in Claude Code: `m2b doctor` says in its line `band` whether it ran, and
 [What it needs](band.md#what-it-needs) what to do when it did not. With it come
 `/m2b-note <text>`, which notes a text at once without a model turn, `/m2b-pane`, `/m2b-review`,
-`/m2b-proposals`, `/m2b-search <text>` and `/m2b-settings`, which show in a pane what m2b gave
-this session, what waits for you and what is due today, the last curation run, the proposals from
+`/m2b-proposals`, `/m2b-search <text>` and `/m2b-settings`, which show in a pane what waits for
+you, what is due today and what m2b gave this session, the last curation run, the proposals from
 your sessions, search hits and every setting of m2b, and two tools through which the model notes
 and searches without a shell call; a third, with which a session hands in proposals by itself, is off until you
 turn it on ([The band](band.md#handing-in-a-proposal-a-tool-you-turn-on)). The worklog add-on is off until its own setup skill turns it on;

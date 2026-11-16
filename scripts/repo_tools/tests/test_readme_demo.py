@@ -26,15 +26,19 @@ class BeatsTest(unittest.TestCase):
             (beats[-1].seconds, beats[-1].shown, beats[-1].settles), (30, readme_demo.ANSWER_SECONDS, True)
         )
 
-    def test_the_session_whose_start_begins_the_run_types_nothing_and_waits_past_two_looks_of_the_status_line(
+    def test_the_session_whose_start_begins_the_run_types_nothing_until_the_run_had_its_time_then_shows_it(
         self,
     ) -> None:
         beats = readme_demo.start_beats()
 
         self.assertEqual(beats[:3], readme_demo.session_beats("hi!", 30)[:3])
-        self.assertEqual("".join(beat.keys for beat in beats[3:]), "")
-        self.assertGreater(sum(beat.seconds for beat in beats), 2 * 60)
-        self.assertEqual((beats[-1].shown, beats[-1].settles), (readme_demo.RUN_SECONDS, False))
+        # Nothing is typed before the wait for the run is over: the run starts with the session alone.
+        waited = next(index for index, beat in enumerate(beats) if beat.seconds == readme_demo.RUN_WAIT_SECONDS)
+        self.assertEqual("".join(beat.keys for beat in beats[3:waited]), "")
+        self.assertEqual((beats[waited].shown, beats[waited].settles), (readme_demo.RUN_SECONDS, False))
+        self.assertGreater(sum(beat.seconds for beat in beats[: waited + 1]), 2 * 60)
+        self.assertEqual("".join(beat.keys for beat in beats[waited:]), "/m2b-review" + readme_images.ENTER)
+        self.assertEqual(beats[-1], readme_demo.Beat(readme_demo.SHOWN_RUN_SECONDS))
 
 
 def keys_of(picture: Picture) -> str:
@@ -46,9 +50,9 @@ class PicturesTest(unittest.TestCase):
     def test_the_readme_s_picture_comes_first_and_the_two_of_the_pane_are_wide_enough_to_dock_it(self) -> None:
         sizes = {picture.name: (picture.columns, picture.rows) for picture in readme_demo.PICTURES}
 
-        self.assertEqual(list(sizes), ["demo", "pane-answers", "settings-walk"])
+        self.assertEqual(list(sizes), ["demo", "pane-answers", "pane-settings"])
         self.assertEqual(sizes["demo"], (readme_demo.COLUMNS, readme_demo.ROWS))
-        self.assertEqual({sizes["pane-answers"][0], sizes["settings-walk"][0]}, {readme_images.WIDE})
+        self.assertEqual({sizes["pane-answers"][0], sizes["pane-settings"][0]}, {readme_images.WIDE})
 
     def test_a_picture_of_the_pane_is_one_session_in_the_full_screen_layout_that_asks_no_model(self) -> None:
         demo = readme_images.demo_environment({"PATH": "/usr/bin"})
@@ -74,14 +78,14 @@ class PicturesTest(unittest.TestCase):
                 set(presses.replace(readme_demo.SHIFT_TAB, "")), {readme_demo.TAB, readme_images.ENTER}, picture.name
             )
 
-        self.assertEqual(commands, {"pane-answers": "/m2b-pane", "settings-walk": "/m2b-settings"})
+        self.assertEqual(commands, {"pane-answers": "/m2b-pane", "pane-settings": "/m2b-settings"})
 
     def test_only_the_second_press_is_given_the_five_seconds_after_which_it_is_written(self) -> None:
         # The key after the press that is written: the first step back to the start view, and Enter on the row
         # that opens what only informs.
         after_the_write = {
             "pane-answers": (readme_demo.answering_beats(), readme_demo.SHIFT_TAB, 0),
-            "settings-walk": (readme_demo.settings_beats(), readme_images.ENTER, -1),
+            "pane-settings": (readme_demo.settings_beats(), readme_images.ENTER, -1),
         }
         for name, (beats, key, which) in after_the_write.items():
             with self.subTest(picture=name):
@@ -370,7 +374,7 @@ class RenderTest(unittest.TestCase):
         self.assertEqual([entry[1].name for entry in seen], ["invoice-tool", "invoice-tool", "garden-site"])
         self.assertEqual({entry[0] for entry in seen}, {tuple(readme_images.claude_command())})
         self.assertIn(readme_demo.SENTENCE, seen[0][4])
-        self.assertEqual(seen[1][4], readme_images.DOWN + readme_images.ENTER)
+        self.assertEqual(seen[1][4], readme_images.DOWN + readme_images.ENTER + "/m2b-review" + readme_images.ENTER)
         self.assertIn(readme_demo.QUESTION, seen[2][4])
         self.assertEqual(["M2B_MODEL_RUNNER" in act.environ for act in acts], [True, False, True])
         self.assertEqual({entry[2:4] for entry in seen}, {(readme_demo.ROWS, readme_demo.COLUMNS)})

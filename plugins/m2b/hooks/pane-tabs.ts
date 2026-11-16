@@ -60,8 +60,9 @@ export function tabKeyAfterTurn(left: Shown, to: Shown): string {
 
 /**
  * The key of the button the focus is asked for once a press on the tab `to` turned the pane from
- * the view `left`. A topic left for the start view has a way back of its own there, `show` on its
- * row, where `model` has the start view draw that row; every other turn follows the tabs' rule.
+ * the view `left`. A topic left for the start view has a way back of its own there, the button
+ * that bears its name, where `model` has the start view draw it; every other turn follows the
+ * tabs' rule.
  */
 export function focusKeyAfterTab(left: PaneView | null, to: TabId, model: SessionModel): string {
   const show = to === 'overview' && left?.kind === 'topic' ? topicShowKey(model, left.name) : null

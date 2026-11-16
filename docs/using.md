@@ -27,7 +27,7 @@ Calendars); `m2b calendar list --writable` names the calendars it can write. A G
 calendar works when Apple Calendar shows it. Calendar entries are experimental: a small extra
 beside a notes product, kept apart from what m2b promises, not a sign of known faults.
 
-![Asked to remember that the shed roof needs 40 screws and to be reminded on a weekday, Claude calls the m2b note tool with a follow-up date, which writes one inbox file and a task due that day; below the answer the band shows a question, a task due today and an overdue one, and the status line counts 3 in the inbox](images/capture.png)
+![Asked to remember that the shed roof needs 40 screws and to be reminded on a weekday, Claude calls the m2b note tool with a follow-up date, which writes one inbox file and a task due that day; below the answer the band is one row, "m2b 1 waits for you" with the button "open", and one task due today and one overdue below it](images/capture.png)
 
 From a terminal or a script, without a Claude session, the same goes through the command:
 
@@ -66,7 +66,7 @@ is set up. Rediscover brings one or a few old notes back, each with its reason, 
 did I note last spring?". A file iCloud Drive has not downloaded is named, never read and never
 counted as missing.
 
-!["What's on my list?" runs the todos skill: one overdue task, one due today, the screws captured just before within the next seven days, one without a date, and a note that no calendar is set up on this machine; the band below repeats the two due tasks](images/todos.png)
+!["What's on my list?" runs the todos skill: one overdue task, one due today, the screws captured just before within the next seven days, one without a date, and a note that no calendar is set up on this machine; the band below counts 1 that waits and names the two due tasks](images/todos.png)
 
 ## The curation run
 
@@ -94,7 +94,7 @@ without "remember this": who runs what at a customer, what was agreed, what you 
 Friday. A curation run can read what you typed in Claude Code since the last reading and propose
 it, each proposal with the words it stands on beside it, said or pasted. It is off until you say yes in setup
 (`curation.read_sessions` in the machine config), and nothing is filed before you say keep: in
-the band's pane, which `/m2b-proposals` opens, or with `m2b proposals`, `m2b proposals keep <id>`
+the m2b pane, which `/m2b-proposals` turns to them, or with `m2b proposals`, `m2b proposals keep <id>`
 and `m2b proposals drop <id>`. Only the prompts you typed are read, with what you pasted into them
 and with credentials redacted: no answer of Claude, no tool result, nothing a plugin or another
 agent sent, and no session you left out by its folder or its git remote ([Reading your sessions](curation.md#reading-your-sessions)).
@@ -112,8 +112,8 @@ it in the m2b pane, or delete the task, and it does not come back for 90 days.
 off", and the `todos` skill ticks it: it finds the task in your list and asks when more than one
 fits. With Apple Reminders you can also tick in the Reminders app. In a terminal with Markdown
 tasks, `m2b tasks list` shows every open task with its id, the review task and these questions
-among them; `m2b tasks complete <id>` ticks one and `m2b tasks drop <id>` drops one. The band's
-keep and drop buttons call the same two commands.
+among them; `m2b tasks complete <id>` ticks one and `m2b tasks drop <id>` drops one. Keep and
+drop in the m2b pane call the same two commands.
 
 ## Who it is for
 
@@ -158,9 +158,9 @@ What m2b has that Claude Code's memory does not:
 | fact file | one file in `memory/` for one subject, such as `dana.md`: its facts, and under "Evidence" links to the captures they came from |
 | topic | a heading in the distillate for one subject, such as a customer or a club, whose facts come in only when a session is about it |
 | review task | the one task m2b keeps in your task list for what a run needs you to look at: a step that failed, a finding, a facts line it removed or rewrote. Ticking it, or `ok` in the m2b pane, closes it |
-| proposal | a fact a curation run suggests from what you typed and pasted in your sessions, or a session hands in by itself, with the words it stands on beside it. Each way is off until you turn it on, the reading in setup and handing in with `m2b config set sessions.propose true` in a terminal of your own or a press on its card in the pane, and nothing is filed before you keep it |
+| proposal | a fact a curation run suggests from what you typed and pasted in your sessions, or a session hands in by itself, with the words it stands on beside it. Each way is off until you turn it on, the reading in setup and handing in with `m2b config set sessions.propose true` in a terminal of your own or a press on its `on` in the pane's settings, and nothing is filed before you keep it |
 | memory candidate | a task "Remember? ..." that proposes one fact, put into your list by a script or an integration of yours: tick it and the next run files it |
-| band | the rows above the prompt where you keep or drop what curation proposes, and the status line below it |
+| band | the row above the prompt that counts what waits for your answer, with `open` for the m2b pane, where you keep or drop what curation proposes; below the prompt, a status line while something is wrong with m2b |
 | mod | a module Claude Code loads with a plugin. m2b's mod is the band, with its `/m2b-...` commands and the tools of the model: note, search and, where you turn it on, handing in a proposal |
 | add-on | an optional piece of m2b, off until its own setup: `worklog` |
 | herdr | an [agent runtime](https://herdr.dev), a product of its own. Only the worklog add-on needs it; the rest of m2b runs without it |

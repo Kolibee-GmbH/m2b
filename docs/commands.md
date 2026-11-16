@@ -56,12 +56,12 @@ do not do their work there. The first three start a curation run in the backgrou
 
 | Command | What it does |
 |---|---|
-| `/m2b-pane` | shows in the m2b pane what m2b gave this session, what waits for you and what is due today; there a press shows a topic's lines or leaves m2b out of the session's folder; under the fullscreen layout that pane opens by itself |
+| `/m2b-pane` | shows in the m2b pane its overview: what waits for you, what is due today, what m2b gave this session and how m2b itself stands; there a press shows a topic's lines or turns m2b off in the session's folder, and the tabs above lead to the other views; under the fullscreen layout that pane opens by itself |
 | `/m2b-note <text>` | writes the text into the inbox at once, through `m2b capture` |
 | `/m2b-search [--word] <text>` | shows the hits of `m2b search` in the m2b pane; `--word` matches whole words only |
 | `/m2b-review` | shows the last curation run in the m2b pane: every finding, candidate and question |
 | `/m2b-proposals` | shows what your sessions proposed for your memory, each to keep or drop |
-| `/m2b-settings` | shows every setting of m2b in the m2b pane, a card per setting with what it does, and the switches to press; it takes no value and answers none ([The band](band.md#every-setting-in-the-pane)) |
+| `/m2b-settings` | shows every setting of m2b in the m2b pane, sorted by what you want from m2b, each with what it does and, for a switch, its values to press; it takes no value and answers none ([The band](band.md#every-setting-in-the-pane)) |
 
 ## The `m2b` command
 
@@ -120,7 +120,7 @@ To pause the runs on a machine: `m2b config set curation.paused true`
 |---|---|
 | `m2b setup inspect [--store-backend <backend>] [--store-path <folder>] [--json]` | what a store folder holds, before anything is written |
 | `m2b setup apply --answers <json> [--json]` | writes the setup from a JSON object of answers ([Getting started](getting-started.md)) |
-| `m2b settings [--json]` | every setting of this machine, the store and the owner: its value, its default, what it does and what changes it; a list, the paths of programs and an add-on come as a count, never with what they hold ([Configuration](configuration.md#every-setting-in-one-list)) |
+| `m2b settings [--json]` | every setting of this machine, the store and the owner: its value, its default, what it does and what changes it; a list, the paths of programs and an add-on come as a count, never with what they hold; `--json` also names the group each has in the pane's settings ([Configuration](configuration.md#every-setting-in-one-list)) |
 | `m2b settings set <key> <value>` | changes a switch to one of its values, such as `curation.paused true`; every other key is refused with a line that names what changes it |
 | `m2b config get [--json] [<key>]` | the machine config, or one key such as `store.path` |
 | `m2b config set <key> <value>` | sets one key of the machine config, validated first ([Configuration](configuration.md)) |

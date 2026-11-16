@@ -2,10 +2,10 @@
 
 The README's follows one sentence from a prompt into a later session, in three acts: a Claude Code
 session in one demo project is told to remember a sentence, the start of the next session begins the
-curation run that files it with a real model, in the background and without a key typed, and a
-session in another project is asked for it. The store starts empty, so the fact the last act
-answers with can only come from the run in the second. It costs two model turns and one curation
-run on the user's Claude login.
+curation run that files it with a real model, in the background and without a key typed, then a
+command of the band shows that run in the pane, and a session in another project is asked for it.
+The store starts empty, so the fact the last act answers with can only come from the run in the
+second. It costs two model turns and one curation run on the user's Claude login.
 
 The two of the pane ask no model: one session each, in Claude Code's fullscreen layout, where the
 pane sits beside the chat, on the store after a curation run. Keys alone drive them, a command of
@@ -52,7 +52,8 @@ ROWS = 22
 FONT_SIZE = 16
 # The pane's pictures are wider than the README's, so their letters are smaller: the file stays small.
 PANE_ROWS = 26
-SETTINGS_ROWS = 30
+# Enough rows that the value just written stays in sight when the focus rests on the row below the settings.
+SETTINGS_ROWS = 38
 PANE_FONT_SIZE = 14
 TAB = "\t"
 SHIFT_TAB = "\x1b[Z"
@@ -76,10 +77,13 @@ KEY_SECONDS = 0.05
 LOOK_SECONDS = 1.0
 ANSWER_SECONDS = 4.0
 RUN_SECONDS = 3.0
-# The status line looks at the store when a session starts, before the run that start begins has
-# registered, and then once a minute. A run over one note takes well under a minute, so the look a
-# minute after the start shows it done; the wait passes that look with room to spare.
+# A run over one note takes well under a minute; the wait gives it room to spare. Nothing shows
+# while it runs: the status line speaks only of trouble, and the band only of what waits.
 RUN_WAIT_SECONDS = 105
+# The command that shows the last curation run in the pane, and the time the pane takes to draw it;
+# the picture then rests on the act's last frame like on every other.
+SHOW_THE_RUN = "/m2b-review"
+SHOWN_RUN_SECONDS = 2.0
 # A wait is over at the first spell this long without anything drawn; what is drawn later, when the
 # band looks at the store again, follows within TAIL_SECONDS.
 QUIET_SECONDS = 2.0
@@ -158,9 +162,16 @@ def session_beats(prompt: str, answer_seconds: float) -> tuple[Beat, ...]:
 
 
 def start_beats() -> tuple[Beat, ...]:
-    """Start a session and type nothing: the run its start began files the note meanwhile, and the
-    status line under the prompt is where that shows."""
-    return (*SESSION_START, Beat(LOOK_SECONDS), Beat(RUN_WAIT_SECONDS, shown=RUN_SECONDS))
+    """Start a session and type nothing while the run its start began files the note; then ask the
+    band for the last curation run, which the pane shows with its times."""
+    return (
+        *SESSION_START,
+        Beat(LOOK_SECONDS),
+        Beat(RUN_WAIT_SECONDS, shown=RUN_SECONDS),
+        *typed(SHOW_THE_RUN),
+        Beat(0.5, ENTER),
+        Beat(SHOWN_RUN_SECONDS),
+    )
 
 
 def with_the_real_model(environ: Mapping[str, str]) -> dict[str, str]:
@@ -175,7 +186,7 @@ def acts_for(environ: Mapping[str, str]) -> list[Act]:
     return [
         Act("Tell Claude Code once, in any project", claude, first, environ, session_beats(SENTENCE, 45)),
         Act(
-            "The next session start files the note in the background: 1 in inbox becomes 0",
+            "The next session start files the note in the background; /m2b-review shows that run",
             claude,
             first,
             with_the_real_model(environ),
@@ -332,7 +343,7 @@ PICTURES = (
         kept_proposal_not_written,
     ),
     Picture(
-        "settings-walk",
+        "pane-settings",
         readme_images.WIDE,
         SETTINGS_ROWS,
         PANE_FONT_SIZE,

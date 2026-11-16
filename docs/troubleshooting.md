@@ -66,7 +66,8 @@ for a setup without a calendar.
   and the cause. Fix it and run `m2b curate --force`.
 - **A topic's facts do not come in when you name it.** The hook that brings them says nothing when
   it fails. `m2b doctor` starts it and says in its line `prompt-hook` why it does not answer.
-- **`curating` for a long time.** A run is going on; each model step is stopped after
+- **`curating` in the pane's part "m2b", or `run: running` in `m2b status`, for a long time.** A
+  run is going on; each model step is stopped after
   `curation.model_timeout_minutes` (15). When it ends, its outcome is added to
   `~/.local/state/m2b/run.log`.
 - **Tasks "not reachable" with Apple Reminders.** The terminal Claude Code runs in needs access:

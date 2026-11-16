@@ -63,7 +63,7 @@ step:
   `MEMORY.md`. Any other change puts `memory/` back and fails the step.
 - **Ingest and lint** keep their edits. Each facts line they removed or rewrote, and each fact file
   they emptied or removed, is listed in the review task, and again in every later review until you
-  complete the task, in your task list or with `ok` in [the band](band.md), where `/m2b-review`
+  complete the task, in your task list or with `ok` in [the m2b pane](band.md), where `/m2b-review`
   shows each change with the added and removed words marked. `memory/` as it was before the run is
   kept in
   `~/.local/state/m2b/memory-before-run/<time of the run>/` as long as such a finding names it, so a
@@ -293,8 +293,9 @@ m2b proposals drop <id>...
 pasted can try to lead the model, also to a proposal that quotes words you typed, so read each
 proposal's text before you keep it.
 
-With the band, one row above the prompt says how many wait, and `/m2b-proposals` opens them in a
-pane where keep, drop and keep all are buttons ([the band](band.md#the-proposals-from-your-sessions-in-the-pane));
+With the band, the row above the prompt counts them among what waits for you, and
+`/m2b-proposals` or the tab `Proposals` shows them in the m2b pane, where keep, drop and keep all
+are buttons ([the band](band.md#the-proposals-from-your-sessions-in-the-pane));
 they add the same answers as the commands.
 
 An answer is filed by the next curation run: harvest writes a capture with the proposal's text
@@ -310,7 +311,7 @@ the number up to date, whether or not it reads the sessions, and completes the t
 waits. A task you completed or deleted comes back only when a proposal was added since.
 
 **Without an answer.** A proposal you did not answer within 14 days expires: it leaves the
-listing, the task and the band's row, and is not proposed again for 90 days. It does not count as
+listing, the task and the band's count, and is not proposed again for 90 days. It does not count as
 dropped. While it is remembered, `m2b proposals keep <id>` still keeps it. Every curation run lets
 proposals expire and removes those kept, dropped or expired 90 days ago, whether or not it reads
 the sessions.
@@ -523,4 +524,5 @@ color of a warning. It is refreshed about once a minute and after each of your t
 | `could not look` | `m2b status` gave no answer at all; run it in a terminal to see why |
 
 Several are joined with ` · `. When m2b last curated, whether a run is going on and how many
-captures wait in the inbox is what `m2b status` says in a terminal.
+captures wait in the inbox is what the part "m2b" of the pane's overview says, and `m2b status`
+in a terminal.
