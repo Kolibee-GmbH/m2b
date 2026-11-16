@@ -394,6 +394,13 @@ def _parser() -> argparse.ArgumentParser:
     )
     ingest_note.add_argument("file")
     ingest_note.add_argument("text", help="the note, or - to read it from standard input")
+    ingest_outline = _command(
+        ingest_group, "outline", ingest_commands.ingest_outline, "add a document's outline to its note", curator=True
+    )
+    ingest_outline.add_argument("file", help="the note of the document in the inbox")
+    ingest_outline.add_argument(
+        "lines", nargs="+", help="p. 3: …, pp. 6-9: …, outline: pages 1-60 of 75; - reads them from standard input"
+    )
     _command(
         ingest_group,
         "facts-filed",

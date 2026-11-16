@@ -1,0 +1,77 @@
+{
+  "description": "E29 the outline of a document: a PDF dropped into the inbox becomes a bundle, and `m2b curate --force` runs the ingest step: the stub replays the ingest skill's commands under the step's real rules, files a fact from the document, writes its outline into the document's note with `m2b ingest outline` in one call on standard input, a page or a run of pages per line and where it stopped, and moves the bundle into the corpus without a denial; search finds a word that stands only in the outline.",
+  "model": {
+    "skills": {
+      "/m2b:ingest": {
+        "actions": [
+          {
+            "tool": "Bash",
+            "command": "m2b ingest list --json"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest normalize --json"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest list --json"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/memory/MEMORY.md"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/inbox/<capture:cli>"
+          },
+          {
+            "tool": "Write",
+            "file_path": "<store>/memory/alex.md",
+            "content": "# Alex\n\n- Full member of the rowing club since 1 March 2026, member 1187.\n\n## Evidence\n\n- [[<capture:cli>]]\n"
+          },
+          {
+            "tool": "Edit",
+            "file_path": "<store>/memory/MEMORY.md",
+            "old_string": "## Facts\n\n",
+            "new_string": "## Facts\n\n- Alex is a full member of the rowing club since 1 March 2026 (alex.md)\n\n"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest facts-filed <capture:cli>"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest outline <capture:cli> -",
+            "stdin": "pp. 1-2: contents; questions to the secretary Nora Lind\np. 3: membership kinds; Alex Example joined 1 March 2026, member 1187\npp. 4-5: fees $240, due 31 January; locker 37\noutline: pages 1-60 of 75\n"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest note <capture:cli> 'filed: fact alex.md'"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest finish <capture:cli>"
+          }
+        ]
+      }
+    }
+  },
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "stdout": "\\Athe curation run succeeded\\ninbox: 1 captures? filed, 0 waiting\\n\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "search",
+        "Nora"
+      ],
+      "stdout": "corpus/\\d{4}/\\d{2}/\\d{8}T\\d{6}Z-cli-[0-9a-f]{4}\\.md:\\d+: pp\\. 1-2: contents; questions to the secretary Nora Lind"
+    }
+  ]
+}

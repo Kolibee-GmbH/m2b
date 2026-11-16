@@ -115,15 +115,17 @@ how to run it.
 
 | Model | Found | Right | Runs |
 |---|---|---|---|
-| haiku, the default | 1.00 | 1.00 | 3 |
+| haiku, the default | 0.97 | 0.97 | 3 |
 | sonnet | 1.00 | 1.00 | 3 |
 
-Measured on 2026-11-12 with Claude Code 2.1.322, which resolves both names to its current models.
-No run failed, left a capture in the inbox, filed a fact or a task from the capture that holds
-nothing or wrote a line no capture stands behind. `haiku` in each of its runs and `sonnet` in two
-of three started a topic for a single person, a neighbour, where the filing rules leave the place
-open, and in one run `haiku` wrote a facts line of its own for a new customer beside the two its
-captures bring.
+Measured on 2026-11-16 with Claude Code 2.1.325, after the ingest skill learned to read a long PDF
+whole and outline it; the inbox holds no document, so this is what the change does to plain
+captures. No run of these failed, left a capture in the inbox, filed a fact or a task from the
+capture that holds nothing or wrote a line no capture stands behind. In one run `haiku` wrote two
+facts lines of customers without the customer's name ("Office at Harbour Street 12"), which the
+eval does not count as the customer's facts. A run of `haiku` earlier that day, with the skill's
+outline still passed as arguments, filed a task `x` from the capture that holds nothing, and so
+missed the bar once in three runs. On 2026-11-12, before the change, both models were at 1.00.
 
 The same runs over a copy of the inbox dated a week earlier, so that the captures were ten days
 old, had `haiku` at 1.00 and `sonnet` at 0.98: in one of three runs `sonnet` wrote a phone number

@@ -135,6 +135,17 @@ def ingest_note(arguments: argparse.Namespace, context: Context) -> int:
     return 0
 
 
+def ingest_outline(arguments: argparse.Namespace, context: Context) -> int:
+    # On standard input the lines come as the document wrote them: a `$` or a backtick in a quoted
+    # argument would be the shell's, and a call it turned into a substitution is denied in the step.
+    # "\n" alone ends a line, as in a note's trailer, so a U+2028 in a document stays in its line.
+    given = sys.stdin.read().split("\n") if arguments.lines == ["-"] else arguments.lines
+    lines = [line.strip() for line in given if line.strip()]
+    store = _store(context)
+    _guarded(lambda: ingest.add_outline(store, arguments.file, lines))
+    return 0
+
+
 def ingest_facts_filed(arguments: argparse.Namespace, context: Context) -> int:
     store = _store(context)
     _guarded(lambda: ingest.set_facts_filed(store, arguments.file))

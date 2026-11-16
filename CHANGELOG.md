@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A PDF of more than one page in the inbox is read whole, up to its 60th page, and its note in the
+  archive says what stands on which page: `pp. 4-5: fees 240, due 31 January; locker 37`. Until now
+  a curation run read the first pages of a long document and filed what stood there; the rest was
+  in no fact and in nothing a search reads. `m2b search` finds the outline, and the note says where
+  the run stopped in a longer document ([A document in the inbox](docs/curation.md#a-document-in-the-inbox)).
+
 ## [0.7.0] - 2026-11-16
 
 m2b is there in every session: the band's row stands above the prompt also while nothing waits,

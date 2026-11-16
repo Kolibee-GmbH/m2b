@@ -1,0 +1,26 @@
+{
+  "store_files": {
+    "memory/MEMORY.md": "# Memory\n\n## Facts\n\n- Alex is a full member of the rowing club since 1 March 2026 (alex.md)\n\n## Current\n\n- Planning the trip to Porto\n",
+    "store.json": "{\n  \"format\": 3,\n  \"tasks\": {\"backend\": \"markdown\"},\n  \"curating_machine\": \"sb-test-e2e\",\n  \"journal_since\": \"2026-11-01\"\n}\n",
+    "profile.json": "{\n  \"version\": 1,\n  \"owner\": \"Alex\",\n  \"language\": \"en\"\n}\n",
+    "state/core/candidates.json": "{\n  \"format\": 1,\n  \"candidates\": {}\n}\n"
+  },
+  "store_patterns": [
+    {
+      "path": "corpus/*/*/????????T??????Z-cli-????.md",
+      "content": "---\nkind: sidecar\ncreated: [^\n]+\nsource: cli\ncurated: true\nfacts_filed: true\n---\nA pdf file, captured as \\d{8}T\\d{6}Z-cli-[0-9a-f]{4}\\.pdf\\.\n<!-- m2b:curation -->\noriginal name: club-handbook\\.pdf\npp\\. 1-2: contents; questions to the secretary Nora Lind\np\\. 3: membership kinds; Alex Example joined 1 March 2026, member 1187\npp\\. 4-5: fees \\$240, due 31 January; locker 37\noutline: pages 1-60 of 75\nfiled: fact alex\\.md\n"
+    },
+    {
+      "path": "corpus/*/*/????????T??????Z-cli-????.pdf",
+      "content": "%PDF-1\\.4\n% invented bytes of a club handbook, no real PDF\n"
+    },
+    {
+      "path": "memory/alex.md",
+      "content": "# Alex\n\n- Full member of the rowing club since 1 March 2026, member 1187\\.\n\n## Evidence\n\n- \\[\\[\\d{8}T\\d{6}Z-cli-[0-9a-f]{4}\\.md\\]\\]\n"
+    },
+    {
+      "path": "state/core/last-run.json",
+      "content": "\\{\\\n\\ \\ \"state\":\\ \"succeeded\",\\\n\\ \\ \"machine_id\":\\ \"sb\\-test\\-e2e\",\\\n\\ \\ \"started_at\":\\ \"[^\"]+\",\\\n\\ \\ \"finished_at\":\\ \"[^\"]+\",\\\n\\ \\ \"steps\":\\ \\[\\\n\\ \\ \\ \\ \\{\\\n\\ \\ \\ \\ \\ \\ \"name\":\\ \"harvest\",\\\n\\ \\ \\ \\ \\ \\ \"result\":\\ \"succeeded\"\\\n\\ \\ \\ \\ \\},\\\n\\ \\ \\ \\ \\{\\\n\\ \\ \\ \\ \\ \\ \"name\":\\ \"ingest\",\\\n\\ \\ \\ \\ \\ \\ \"result\":\\ \"succeeded\"\\\n\\ \\ \\ \\ \\},\\\n\\ \\ \\ \\ \\{\\\n\\ \\ \\ \\ \\ \\ \"name\":\\ \"refresh\",\\\n\\ \\ \\ \\ \\ \\ \"result\":\\ \"skipped\",\\\n\\ \\ \\ \\ \\ \\ \"detail\":\\ \"no\\ fact\\ is\\ past\\ its\\ day\"\\\n\\ \\ \\ \\ \\},\\\n\\ \\ \\ \\ \\{\\\n\\ \\ \\ \\ \\ \\ \"name\":\\ \"lint\",\\\n\\ \\ \\ \\ \\ \\ \"result\":\\ \"succeeded\"\\\n\\ \\ \\ \\ \\},\\\n\\ \\ \\ \\ \\{\\\n\\ \\ \\ \\ \\ \\ \"name\":\\ \"journal\",\\\n\\ \\ \\ \\ \\ \\ \"result\":\\ \"succeeded\"\\\n\\ \\ \\ \\ \\},\\\n\\ \\ \\ \\ \\{\\\n\\ \\ \\ \\ \\ \\ \"name\":\\ \"proposals\",\\\n\\ \\ \\ \\ \\ \\ \"result\":\\ \"skipped\",\\\n\\ \\ \\ \\ \\ \\ \"detail\":\\ \"no\\ proposal\\ waits\\ for\\ an\\ answer\"\\\n\\ \\ \\ \\ \\},\\\n\\ \\ \\ \\ \\{\\\n\\ \\ \\ \\ \\ \\ \"name\":\\ \"review\",\\\n\\ \\ \\ \\ \\ \\ \"result\":\\ \"succeeded\"\\\n\\ \\ \\ \\ \\}\\\n\\ \\ \\],\\\n\\ \\ \"findings\":\\ \\[\\\n\\ \\ \\ \\ \\{\\\n\\ \\ \\ \\ \\ \\ \"step\":\\ \"lint\",\\\n\\ \\ \\ \\ \\ \\ \"kind\":\\ \"info\",\\\n\\ \\ \\ \\ \\ \\ \"text\":\\ \"1\\ binary\\ files,\\ 0\\.1\\ KB\\ in\\ corpus/\"\\\n\\ \\ \\ \\ \\}\\\n\\ \\ \\],\\\n\\ \\ \"addons\":\\ \\[\\]\\\n\\}\\\n"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "description": "E30 a file the ingest step cannot read: a drawing dropped into the inbox becomes a bundle, the stub replays the ingest skill's commands under the step's real rules, notes that the file was not read and why, files nothing from it, and moves the bundle into the corpus; the run succeeds.",
+  "model": {
+    "skills": {
+      "/m2b:ingest": {
+        "actions": [
+          {
+            "tool": "Bash",
+            "command": "m2b ingest list --json"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest normalize --json"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest list --json"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/memory/MEMORY.md"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/inbox/<capture:cli>"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest note <capture:cli> 'not read: garden-plan.dwg, a drawing format the step cannot open'"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest note <capture:cli> 'filed: nothing to file'"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest finish <capture:cli>"
+          }
+        ]
+      }
+    }
+  },
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "stdout": "\\Athe curation run succeeded\\ninbox: 1 captures? filed, 0 waiting\\n\\Z"
+    }
+  ]
+}

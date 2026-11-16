@@ -72,7 +72,10 @@ The frontmatter is a block between `---` lines, one `key: value` per line, lists
 
 **Photos and other binary files** become a bundle: the original under the schema name, a reading
 copy when the format needs one (HEIC as JPEG on macOS), and a sidecar `<stem>.md` with
-`kind: sidecar`. The sidecar moves last, so a bundle in the archive is always complete.
+`kind: sidecar`. The sidecar moves last, so a bundle in the archive is always complete. For a PDF
+of more than one page the curator writes the document's outline into the sidecar's trailer, one
+line per page or run of pages (`p. 3: ...`, `pp. 6-9: ...`) and, where it stopped before the last
+page, `outline: pages 1-60 of 75`.
 
 ## Memory
 

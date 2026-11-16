@@ -116,7 +116,11 @@ per fact, and remove old current items when they are over.
 ## 4. Each capture
 
 Read `<store>/inbox/<file>`. A capture with `kind: sidecar` stands for a photo or other file;
-read its members too (the `.jpg` reading copy where there is one). Then, in this order:
+read its members too (the `.jpg` reading copy where there is one). A PDF of more than one page is
+read whole, in parts of at most 20 pages (`pages: "1-20"`, then `"21-40"`), up to its 60th page,
+and its facts come from all you read. A member you cannot read (a kind you cannot open, a read that
+fails) gets one line, `m2b ingest note <file> "not read: <what, and why>"`, and the capture goes on
+like any other. Then, in this order:
 
 **Facts**, unless `facts_filed` is `true` (then they are filed already; skip to tasks).
 
@@ -258,6 +262,24 @@ m2b ingest ref <file> https://example.org/passport-office
 
 Where an older note is clearly about the same thing, find it with `m2b search <words>` and add
 its archive file name the same way. At most two searches per capture.
+
+**Outline.** A PDF of more than one page gets an outline in its note, in one call on standard
+input, before the line on what you filed: one line per page, or per run of pages on one matter,
+naming what a later search would look for (names, numbers, days, the document's own words), and,
+where you stopped before its last page, how far you read:
+
+```bash
+m2b ingest outline <file> - <<'OUTLINE'
+p. 3: membership kinds; Alex Example joined 1 March 2026, member 1187
+pp. 6-9: the boathouse: opening hours, bays, cleaning, repairs
+outline: pages 1-60 of 75
+OUTLINE
+```
+
+A run of pages is written with a hyphen and runs forward (`pp. 6-9`); a single page is `p. 6`.
+Exit 1 from `outline` names the line it refused and writes nothing: correct that line and make the
+call once more. Refused again, write `m2b ingest note <file> "no outline: <why>"` and go on with the
+note and the move.
 
 **Note and move.** One line saying what you filed, then the move:
 
