@@ -73,6 +73,7 @@ counted as missing.
 It starts by itself at session start on the curating machine when a capture waits in the inbox
 or the last successful run is more than 20 hours old. A schedule is optional; it helps when captures arrive
 while the curating machine has no session for days ([On a schedule](curation.md#on-a-schedule)).
+To start one yourself, press `curate now` in the m2b pane or run `m2b curate --force` in a terminal.
 The model reads only when there is something to read: new captures, or a fact past the day it
 was true until, such as an appointment. A step that fails is reported and the run goes on; the
 review task in your list says what needs you. If the store folder is a git repository, each run
@@ -160,7 +161,7 @@ What m2b has that Claude Code's memory does not:
 | review task | the one task m2b keeps in your task list for what a run needs you to look at: a step that failed, a finding, a facts line it removed or rewrote. Ticking it, or `ok` in the m2b pane, closes it |
 | proposal | a fact a curation run suggests from what you typed and pasted in your sessions, or a session hands in by itself, with the words it stands on beside it. Each way is off until you turn it on, the reading in setup and handing in with `m2b config set sessions.propose true` in a terminal of your own or a press on its `on` in the pane's settings, and nothing is filed before you keep it |
 | memory candidate | a task "Remember? ..." that proposes one fact, put into your list by a script or an integration of yours: tick it and the next run files it |
-| band | the row above the prompt that counts what waits for your answer, with `open` for the m2b pane, where you keep or drop what curation proposes; below the prompt, a status line while something is wrong with m2b |
+| band | m2b's row in a session, above the prompt unless `band.place` moves it: it counts what waits for your answer and has `open` for the m2b pane, where you keep or drop what curation proposes; below the prompt, a status line while something is wrong with m2b |
 | mod | a module Claude Code loads with a plugin. m2b's mod is the band, with its `/m2b-...` commands and the tools of the model: note, search and, where you turn it on, handing in a proposal |
 | add-on | an optional piece of m2b, off until its own setup: `worklog` |
 | herdr | an [agent runtime](https://herdr.dev), a product of its own. Only the worklog add-on needs it; the rest of m2b runs without it |

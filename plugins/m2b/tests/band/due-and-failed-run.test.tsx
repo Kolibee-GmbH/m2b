@@ -3,6 +3,7 @@ import { expect, test } from 'claude-code/testing'
 import { parseBandShows } from '../../hooks/tasks'
 import {
   BAND,
+  CALM_ROW,
   ENGINES_OWN_DRAWING,
   FakeM2b,
   HOME,
@@ -55,7 +56,7 @@ test('with count the tasks due are two counts in the row, the overdue ones first
 test('with list the tasks due stand below the row by name: today first, then the most recent overdue ones, three and "and N more"', async ($, on) => {
   // Covers: B102
   const fake = dueFake()
-  fake.shows = { dueTasks: 'list', topics: false }
+  fake.shows = { place: 'above', dueTasks: 'list', topics: false }
   await start($, on, fake)
 
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -81,7 +82,7 @@ test('with list the tasks due stand below the row by name: today first, then the
 test('with list and three tasks due or fewer, no line says there are more', async ($, on) => {
   // Covers: B102
   const fake = dueFake()
-  fake.shows = { dueTasks: 'list', topics: false }
+  fake.shows = { place: 'above', dueTasks: 'list', topics: false }
   fake.dueTasks = fake.dueTasks?.slice(0, 3) ?? null
   await start($, on, fake)
 
@@ -93,7 +94,7 @@ test('with list and three tasks due or fewer, no line says there are more', asyn
 test('with off the band says nothing of the tasks due, and the pane lists them all the same', async ($, on) => {
   // Covers: B102
   const fake = dueFake()
-  fake.shows = { dueTasks: 'off', topics: false }
+  fake.shows = { place: 'above', dueTasks: 'off', topics: false }
   await start($, on, fake)
 
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -114,10 +115,20 @@ for (const dueTasks of ['off', 'count', 'list'] as const) {
   test(`without a task due the band draws nothing for them, with ${dueTasks} too`, async ($, on) => {
     // Covers: B102
     const fake = new FakeM2b()
-    fake.shows = { dueTasks, topics: false }
+    fake.shows = { place: 'waiting', dueTasks, topics: false }
     await start($, on, fake)
     const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
     expect(await everyText(ui)).toEqual([ENGINES_OWN_DRAWING])
+    await ui.unmount()
+  })
+
+  test(`without a task due a band that is always there is calm and says nothing of them, with ${dueTasks} too`, async ($, on) => {
+    // Covers: B102, B213
+    const fake = new FakeM2b()
+    fake.shows = { place: 'above', dueTasks, topics: false }
+    await start($, on, fake)
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await shownBand(ui)).toEqual(CALM_ROW)
     await ui.unmount()
   })
 }
@@ -125,18 +136,37 @@ for (const dueTasks of ['off', 'count', 'list'] as const) {
 test('tasks due alone draw the band: as a count, or by name below a row that says nothing else, and not at all with off', async ($, on) => {
   // Covers: B102
   const fake = new FakeM2b()
+  fake.shows = { place: 'waiting', dueTasks: 'count', topics: false }
   fake.dueTasks = [{ id: 't2', title: 'Call Dana', due: '2026-03-14', overdue: false }]
   const { clock } = await start($, on, fake)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await shownBand(ui)).toEqual(rowSaying('1 due today'))
 
-  fake.shows = { dueTasks: 'list', topics: false }
+  fake.shows = { place: 'waiting', dueTasks: 'list', topics: false }
   await clock.advance(60_000)
   expect(await shownBand(ui)).toEqual({ isNamed: true, says: '', below: ['due today Call Dana'], buttons: [OPEN] })
 
-  fake.shows = { dueTasks: 'off', topics: false }
+  fake.shows = { place: 'waiting', dueTasks: 'off', topics: false }
   await clock.advance(60_000)
   expect(await everyText(ui)).toEqual([ENGINES_OWN_DRAWING])
+  await ui.unmount()
+})
+
+test('tasks due alone, where the band is always there: a count, or their names below a row that says nothing else, and with off the calm row', async ($, on) => {
+  // Covers: B102, B213
+  const fake = new FakeM2b()
+  fake.dueTasks = [{ id: 't2', title: 'Call Dana', due: '2026-03-14', overdue: false }]
+  const { clock } = await start($, on, fake)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await shownBand(ui)).toEqual(rowSaying('1 due today'))
+
+  fake.shows = { place: 'above', dueTasks: 'list', topics: false }
+  await clock.advance(60_000)
+  expect(await shownBand(ui)).toEqual({ isNamed: true, says: '', below: ['due today Call Dana'], buttons: [OPEN] })
+
+  fake.shows = { place: 'above', dueTasks: 'off', topics: false }
+  await clock.advance(60_000)
+  expect(await shownBand(ui)).toEqual(CALM_ROW)
   await ui.unmount()
 })
 
@@ -159,8 +189,8 @@ test('an answer without the band part, as of a core before it, shows the tasks i
   await inPane.unmount()
 })
 
-test('a shared answer of a band before the settings, with tasks due and no word on how to show them, is drawn as counts', async ($, on) => {
-  // Covers: B102
+test('a shared answer of a band before the settings, with tasks due and no word on how to show them, is not taken: m2b is asked, and the tasks are shown as its own answer says', async ($, on) => {
+  // Covers: B102, B213
   const due = [
     { id: 't1', title: 'Return the drill', overdue: true },
     { id: 't2', title: 'Call Dana', overdue: false },
@@ -168,17 +198,20 @@ test('a shared answer of a band before the settings, with tasks due and no word 
   const stored = { snapshot: { candidates: [], review: null, error: null, due }, status: null, version: '0.3.0' }
   const files: Files = new Map([[`${HOME}/.local/state/m2b/band-answer.json`, JSON.stringify({ writtenAtMs: NOW - 1_000, value: stored })]])
   const fake = new FakeM2b()
+  fake.shows = { place: 'above', dueTasks: 'list', topics: false }
+  fake.dueTasks = [{ id: 't4', title: 'Water the plants', due: '2026-03-14', overdue: false }]
   await start($, on, fake, {}, files)
 
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(fake.calls).toEqual([])
-  expect(await shownBand(ui)).toEqual(rowSaying('1 overdue  1 due today'))
+  expect(fake.calls).toEqual([['band', '--json']])
+  // Neither the tasks the older band shared nor counts: the machine lists them, and m2b names one.
+  expect(await shownBand(ui)).toEqual({ isNamed: true, says: '', below: ['due today Water the plants'], buttons: [OPEN] })
   await ui.unmount()
 })
 
 test('a shared answer whose settings of the band are of another shape is loaded again instead of drawn', async ($, on) => {
   // Covers: B102
-  const snapshot = { candidates: [], review: null, error: null, due: [], shows: { dueTasks: 'rows', topics: false } }
+  const snapshot = { candidates: [], review: null, error: null, due: [], shows: { place: 'above', dueTasks: 'rows', topics: false } }
   const stored = { snapshot, status: null, version: '0.3.0' }
   const files: Files = new Map([[`${HOME}/.local/state/m2b/band-answer.json`, JSON.stringify({ writtenAtMs: NOW - 1_000, value: stored })]])
   const fake = dueFake()
@@ -192,15 +225,30 @@ test('a shared answer whose settings of the band are of another shape is loaded 
 
 test('the band part is read whole or not at all: a value this band does not know leaves what a machine without an entry shows', () => {
   // Covers: B102
-  expect(parseBandShows({ due_tasks: 'list', topics: true })).toEqual({ dueTasks: 'list', topics: true })
-  expect(parseBandShows({ due_tasks: 'off', topics: false })).toEqual({ dueTasks: 'off', topics: false })
-  expect(parseBandShows({ due_tasks: 'count', topics: false })).toEqual({ dueTasks: 'count', topics: false })
+  expect(parseBandShows({ due_tasks: 'list', topics: true })).toEqual({ place: 'above', dueTasks: 'list', topics: true })
+  expect(parseBandShows({ due_tasks: 'off', topics: false })).toEqual({ place: 'above', dueTasks: 'off', topics: false })
+  expect(parseBandShows({ due_tasks: 'count', topics: false })).toEqual({ place: 'above', dueTasks: 'count', topics: false })
   expect(parseBandShows(undefined)).toBeUndefined()
   expect(parseBandShows({ due_tasks: 'rows', topics: true })).toBeUndefined()
   expect(parseBandShows({ due_tasks: true, topics: true })).toBeUndefined()
   expect(parseBandShows({ due_tasks: 'list' })).toBeUndefined()
   expect(parseBandShows({ due_tasks: 'list', topics: 'yes' })).toBeUndefined()
   expect(parseBandShows(['list', true])).toBeUndefined()
+  // Beside a place it knows, too.
+  expect(parseBandShows({ place: 'below', due_tasks: 'rows', topics: true })).toBeUndefined()
+  expect(parseBandShows({ place: 'below', due_tasks: 'list', topics: 'yes' })).toBeUndefined()
+})
+
+test('the place of the band is one of three; a core that names none has the band above, and a place this band does not know leaves the part unread', () => {
+  // Covers: B213
+  const rest = { due_tasks: 'list', topics: true }
+  for (const place of ['above', 'below', 'waiting'] as const) {
+    expect(parseBandShows({ place, ...rest })).toEqual({ place, dueTasks: 'list', topics: true })
+  }
+  expect(parseBandShows(rest)).toEqual({ place: 'above', dueTasks: 'list', topics: true })
+  for (const unknown of ['beside', 'Above', '', true, null, ['above']]) {
+    expect(parseBandShows({ place: unknown, ...rest })).toBeUndefined()
+  }
 })
 
 test('a failed run is shown once in a session, by the time it started today, naming where the review is', async ($, on) => {

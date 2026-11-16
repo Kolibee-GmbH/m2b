@@ -104,7 +104,7 @@ class SettingsListTest(SettingsFixture):
         scopes = [entry["scope"] for entry in answer["settings"]]
         self.assertEqual(sorted(scopes, key=["machine", "store", "owner"].index), scopes)
         self.assertEqual(answer["settings"][0]["key"], "version")
-        self.assertEqual(len(scopes), 32)
+        self.assertEqual(len(scopes), 33)
 
     def test_as_json_every_setting_names_its_group_and_its_place_and_the_groups_come_in_their_order(self) -> None:
         """Covers: B210"""
@@ -121,7 +121,8 @@ class SettingsListTest(SettingsFixture):
         )
         placed = {(entry["scope"], entry["key"]): (entry["group"], entry["place"]) for entry in answer["settings"]}
         self.assertEqual(placed, catalog.places())
-        self.assertEqual(placed[("machine", "band.due_tasks")], ("shows", 1))
+        self.assertEqual(placed[("machine", "band.place")], ("shows", 1))
+        self.assertEqual(placed[("machine", "band.due_tasks")], ("shows", 2))
         self.assertEqual(placed[("machine", "sessions.propose")], ("reads", 2))
         self.assertEqual(placed[("owner", "language")], ("curation", 5))
         self.assertEqual(placed[("machine", "store.path")], ("about", 1))
@@ -416,6 +417,13 @@ class SettingsSetTest(SettingsFixture):
                 self.assertEqual(load_machine_config(self.machine).band.due_tasks, way)
                 self.assertEqual(self.entry("band.due_tasks")["value"], way)
 
+        self.assertEqual(self.entry("band.place")["value"], "above")
+        for place in ("below", "waiting", "above"):
+            with self.subTest(place=place):
+                self.assertEqual(self.run_command("settings", "set", "band.place", place)[0], cli.EXIT_OK)
+                self.assertEqual(load_machine_config(self.machine).band.place, place)
+                self.assertEqual(self.entry("band.place")["value"], place)
+
         self.assertEqual(self.run_command("settings", "set", "language", "de")[0], cli.EXIT_OK)
         loaded = load_profile(self.store)
         assert loaded is not None
@@ -430,6 +438,7 @@ class SettingsSetTest(SettingsFixture):
             ("band.topics", "0", "band.topics is true or false, not 0"),
             ("band.due_tasks", "true", "band.due_tasks is off or count or list, not true"),
             ("band.due_tasks", "all", "band.due_tasks is off or count or list, not all"),
+            ("band.place", "under", "band.place is above or below or waiting, not under"),
             ("curation.model", "opus", "curation.model is haiku or sonnet here, not opus"),
             ("curation.model", "true", "curation.model is haiku or sonnet here, not true"),
             ("language", "fr", "language is de or en, not fr"),
@@ -557,7 +566,7 @@ class RulesOfAChangeTest(SettingsFixture):
 class WhatAnotherDeviceWroteTest(SettingsFixture):
     """The store's files can be written from other devices; nothing in them forges a line or leaks a name."""
 
-    LINES = 32 * 3 + 3 + 2
+    LINES = 33 * 3 + 3 + 2
 
     def write_raw(self, name: str, raw: dict[str, Any]) -> None:
         (self.store_root / name).write_text(json.dumps(raw), encoding="utf-8")

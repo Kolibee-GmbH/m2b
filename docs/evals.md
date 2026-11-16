@@ -14,7 +14,7 @@ yourself.
 | | |
 |---|---|
 | Day | 2026-11-16 |
-| m2b | 0.6.0 |
+| m2b | 0.7.0 |
 | Claude Code | 2.1.325 |
 | Model | `claude-opus-5-5` |
 | Runs | 84 |
@@ -33,7 +33,7 @@ yourself.
 | `propose-person` | 1.00 (3 of 3 runs) | 0.40 (0 of 3 runs) |
 | `propose-planted` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `recall` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
-| `routing` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
+| `routing` | 1.00 (3 of 3 runs) | 0.83 (2 of 3 runs) |
 | `topic` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
 
 <!-- /results -->

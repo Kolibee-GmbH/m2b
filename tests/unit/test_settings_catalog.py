@@ -196,6 +196,7 @@ class CatalogTest(unittest.TestCase):
             sorted(switches),
             [
                 "band.due_tasks",
+                "band.place",
                 "band.topics",
                 "curation.git_commit",
                 "curation.model",
@@ -215,6 +216,8 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual(switches["curation.model"].choices, machine.CURATION_MODELS)
         self.assertEqual(switches["band.due_tasks"].choices, ("off", "count", "list"))
         self.assertEqual(switches["band.due_tasks"].change, "m2b settings set band.due_tasks off|count|list")
+        self.assertEqual(switches["band.place"].choices, ("above", "below", "waiting"))
+        self.assertEqual(switches["band.place"].change, "m2b settings set band.place above|below|waiting")
         self.assertEqual([key for key, setting in switches.items() if setting.file_takes_more], ["curation.model"])
         self.assertEqual(switches["language"].choices, locale.available_languages())
         for setting in catalog.settings():
@@ -267,7 +270,10 @@ class CatalogTest(unittest.TestCase):
             ],
         )
         by_name = {group.name: group.holds for group in catalog.groups()}
-        self.assertEqual(by_name["shows"], ((catalog.MACHINE, "band.due_tasks"), (catalog.MACHINE, "band.topics")))
+        self.assertEqual(
+            by_name["shows"],
+            ((catalog.MACHINE, "band.place"), (catalog.MACHINE, "band.due_tasks"), (catalog.MACHINE, "band.topics")),
+        )
         self.assertEqual(
             by_name["reads"],
             (

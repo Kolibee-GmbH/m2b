@@ -7,6 +7,54 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-16
+
+m2b is there in every session: the band's row stands above the prompt also while nothing waits,
+calm, as the way into the m2b pane. A setting moves the band below the prompt or shows it only
+while something waits, as before. The pane starts a curation run on a press. Nothing is to do
+after the update. A session that started before it keeps the band it has until `/reload-plugins`,
+and the pane's part "m2b" says so.
+
+### Added
+
+- A setting for where the band stands, `band.place`, in the settings under "What m2b shows":
+  `above`, `below` or `waiting` (`m2b settings set band.place below`).
+  - `above` is what a machine without an entry has: the band's row is above the prompt in every
+    session. While nothing waits and no task is due it is calm, `m2b` and `open` alone, both
+    stepped back, so the pane is one press away: Ctrl+X Tab, then Enter, or a click.
+  - `waiting` is the band as it was: there only while something waits or a task is due, and
+    `/m2b-pane` opens the pane otherwise.
+  - `below` leaves the space above the prompt free and puts the band at the end of the hint line
+    under it: `m2b`, the counts in their colors, as many as the line has room for (`…` stands
+    for the rest), and, under the fullscreen layout, the button `open` for a mouse click; no key
+    reaches a button there, so anywhere else the line names `/m2b-pane`. Where the line has not
+    room for the first count, m2b's words are added to the engine's own line, stepped back, and
+    cut where it ends (`m2b 1 waits for you · /m2b-pane`). The tasks due are counted there,
+    never listed
+    ([#30](https://github.com/Kolibee-GmbH/m2b/pull/30)).
+
+- `curate now` in the m2b pane: on the machine that curates, the overview's part "m2b" has a
+  button below the line that says when m2b last curated. A press waits five seconds with `undo`,
+  then starts one curation run in the background, also while curation is paused; the part says
+  `curating` while the run goes and names no button then. A press that started no run says why.
+  On a machine that does not curate the part says which one does
+  ([#30](https://github.com/Kolibee-GmbH/m2b/pull/30)).
+- `m2b curate --detach --json` answers the start in the background as data: whether a run
+  started and, where none did, why
+  ([#30](https://github.com/Kolibee-GmbH/m2b/pull/30)).
+
+### Changed
+
+- The band above the prompt is there in every session unless `band.place` says otherwise: a
+  session where nothing waits now shows one calm row, `m2b  [ open ]`, where it showed none.
+  `m2b settings set band.place waiting` brings the band of 0.6.0 back
+  ([#30](https://github.com/Kolibee-GmbH/m2b/pull/30)).
+- `/m2b:m2b doctor` and `/m2b:setup` say what the band shows for each place. Asked about a band
+  that shows nothing, the skill `m2b` reads the place with `m2b config get band.place`, which it
+  may run without asking, and no longer calls an empty band no fault where the band stands above
+  the prompt
+  ([#30](https://github.com/Kolibee-GmbH/m2b/pull/30)).
+
 ## [0.6.1] - 2026-11-16
 
 ### Changed

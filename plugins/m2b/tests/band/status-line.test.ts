@@ -1,6 +1,16 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { COULD_NOT_LOOK, curationLine, healthOf, statusLine } from '../../hooks/status-line'
+import {
+  COULD_NOT_LOOK,
+  NOT_KNOWN,
+  curatingMachineOf,
+  curationLine,
+  healthOf,
+  noRunStarted,
+  parseRunStart,
+  statusLine,
+  whileCurating,
+} from '../../hooks/status-line'
 
 const NOW = Date.parse('2026-03-14T17:30:00Z')
 
@@ -153,13 +163,21 @@ describe('the line that says how curation stands', () => {
   })
 })
 
+/** What the health of `answer` says of curation: this machine curates, and no run is under way. */
+const CURATES_HERE = { curates: true, isCurating: false }
+
 describe('how m2b stands, for the part of the pane about m2b itself', () => {
   test('while nothing is wrong it names no trouble, and the line about curation is the one that says how curation stands', () => {
     // Covers: B206
-    expect(healthOf(answer({}), NOW)).toEqual({ curation: '3 in inbox · curated 18:02', troubles: [] })
-    expect(healthOf(answer({ paused: true, run: { state: 'running' } }), NOW)).toEqual({ curation: 'curating · curation paused', troubles: [] })
+    expect(healthOf(answer({}), NOW)).toEqual({ curation: '3 in inbox · curated 18:02', troubles: [], ...CURATES_HERE })
+    expect(healthOf(answer({ paused: true, run: { state: 'running' } }), NOW)).toEqual({
+      curation: 'curating · curation paused',
+      troubles: [],
+      ...CURATES_HERE,
+      isCurating: true,
+    })
     // Nothing in the inbox and no time of a run that succeeded: nothing to say.
-    expect(healthOf(answer({ inbox: { count: 0 }, run: { state: 'succeeded' } }), NOW)).toEqual({ curation: null, troubles: [] })
+    expect(healthOf(answer({ inbox: { count: 0 }, run: { state: 'succeeded' } }), NOW)).toEqual({ curation: null, troubles: [], ...CURATES_HERE })
   })
 
   test('a last curation run that failed is a sentence with what the run said, and one that ends with a full stop where it said nothing', () => {
@@ -194,7 +212,12 @@ describe('how m2b stands, for the part of the pane about m2b itself', () => {
   test('an answer without a part about m2b is one trouble, where the status line says that it could not look', () => {
     // Covers: B206
     for (const noAnswer of [undefined, null, 'ok', 7]) {
-      expect(healthOf(noAnswer, NOW)).toEqual({ curation: null, troubles: ['m2b could not look at how it stands.'] })
+      expect(healthOf(noAnswer, NOW)).toEqual({
+        curation: null,
+        troubles: ['m2b could not look at how it stands.'],
+        curates: null,
+        isCurating: false,
+      })
       expect(statusLine(noAnswer)).toBe(COULD_NOT_LOOK)
     }
   })
@@ -229,6 +252,7 @@ describe('how m2b stands, for the part of the pane about m2b itself', () => {
         'm2b could not read store.json: bad json',
         'm2b could not reach the calendar: timed out',
       ],
+      ...CURATES_HERE,
     })
     // The status line names the same things in the same order, in its few words and without a reason.
     const { store_error: _, ...withoutStore } = wrong
@@ -239,12 +263,148 @@ describe('how m2b stands, for the part of the pane about m2b itself', () => {
       'm2b could not reach the calendar: timed out',
     ])
     // What still can be said of curation stays: the inbox beside a run that failed.
-    expect(healthOf(answer({ run: { state: 'failed' } }), NOW)).toEqual({ curation: '3 in inbox', troubles: ['The last curation run failed.'] })
+    expect(healthOf(answer({ run: { state: 'failed' } }), NOW)).toEqual({
+      curation: '3 in inbox',
+      troubles: ['The last curation run failed.'],
+      ...CURATES_HERE,
+    })
   })
 
   test('a reason is one plain line, whatever the answer holds', () => {
     // Covers: B206
     const run = { state: 'failed', message: 'the ingest step\nfailed\u001b[2J' }
     expect(healthOf(answer({ run }), NOW).troubles).toEqual(['The last curation run failed: the ingest step failed'])
+  })
+})
+
+describe('what m2b knows of curation on this machine, for the button that starts a run', () => {
+  test('whether this machine curates and which one does come from the answer, and where it names no curating machine neither is known', () => {
+    // Covers: B216
+    expect(healthOf(answer({}), NOW).curates).toBe(true)
+    expect(curatingMachineOf(answer({}))).toBe('alex-laptop')
+    const elsewhere = answer({ curating_machine: 'tower-2', this_machine_curates: false })
+    expect(healthOf(elsewhere, NOW).curates).toBe(false)
+    expect(curatingMachineOf(elsewhere)).toBe('tower-2')
+    // Only `true` says that this machine curates.
+    for (const said of [undefined, null, 'true', 1]) {
+      expect(healthOf(answer({ curating_machine: 'tower-2', this_machine_curates: said }), NOW).curates).toBe(false)
+    }
+    // No machine named: not known, whatever the answer says of this one.
+    for (const machine of [undefined, null, '', 7, ['tower-2']]) {
+      for (const curates of [true, false]) {
+        const unnamed = answer({ curating_machine: machine, this_machine_curates: curates })
+        expect(healthOf(unnamed, NOW).curates).toBeNull()
+        expect(curatingMachineOf(unnamed)).toBeNull()
+      }
+    }
+    for (const noAnswer of [undefined, null, 'tower-2', 7, ['tower-2']]) {
+      expect(curatingMachineOf(noAnswer)).toBeNull()
+    }
+  })
+
+  test('how m2b stands never names the machine that curates: the name is a value of a setting, read apart', () => {
+    // Covers: B216, B197
+    for (const status of [answer({}), answer({ curating_machine: 'tower-2', this_machine_curates: false }), answer({ run: { state: 'running' } })]) {
+      const health = healthOf(status, NOW)
+      expect(Object.keys(health).sort()).toEqual(['curates', 'curation', 'isCurating', 'troubles'])
+      expect(JSON.stringify(health)).not.toContain('alex-laptop')
+      expect(JSON.stringify(health)).not.toContain('tower-2')
+      expect(JSON.stringify(whileCurating(health))).not.toContain('alex-laptop')
+    }
+  })
+
+  test('a run is under way where the answer says its state is running, and nowhere else', () => {
+    // Covers: B216
+    expect(healthOf(answer({ run: { state: 'running' } }), NOW).isCurating).toBe(true)
+    for (const run of [{ state: 'succeeded' }, { state: 'failed' }, { state: 'none' }, { state: 'Running' }, { error: 'state.json: bad json' }, {}, undefined, null, 'running']) {
+      expect(healthOf(answer({ run }), NOW).isCurating).toBe(false)
+    }
+    // Beside a trouble too: the store that cannot be read does not hide the run.
+    expect(healthOf(answer({ run: { state: 'running' }, store_error: 'bad json', curating_machine: null }), NOW)).toEqual({
+      curation: 'curating',
+      troubles: ['m2b could not read store.json: bad json'],
+      curates: null,
+      isCurating: true,
+    })
+  })
+
+  test('where m2b gave no answer about itself nothing is known of curation and nothing is said', () => {
+    // Covers: B216
+    expect(NOT_KNOWN).toEqual({ curation: null, troubles: [], curates: null, isCurating: false })
+    expect(healthOf(undefined, NOW)).toEqual({ ...NOT_KNOWN, troubles: ['m2b could not look at how it stands.'] })
+  })
+
+  test('right after a start m2b stands as with a run under way: the line says curating, and the rest is as it was', () => {
+    // Covers: B216
+    const before = healthOf(answer({ run: { state: 'failed', message: 'the ingest step failed' } }), NOW)
+    const kept = structuredClone(before)
+
+    expect(whileCurating(before)).toEqual({ ...before, isCurating: true, curation: 'curating' })
+    expect(whileCurating(before).troubles).toEqual(['The last curation run failed: the ingest step failed'])
+    // What it was handed is not changed.
+    expect(before).toEqual(kept)
+    expect(whileCurating(NOT_KNOWN)).toEqual({ ...NOT_KNOWN, isCurating: true, curation: 'curating' })
+    expect(NOT_KNOWN.isCurating).toBe(false)
+    // As the line reads once m2b's status says that a run is under way.
+    expect(whileCurating(before).curation).toBe(healthOf(answer({ run: { state: 'running' } }), NOW).curation)
+  })
+
+  test('the answer of the command that starts a run: a run where its kind says started; a refusal the band knows by its kind alone; any other kind as a failure in the command\'s words; anything else is no such answer', () => {
+    // Covers: B216
+    const started = 'a curation run started in the background (process 4711); m2b status shows how it goes'
+    expect(parseRunStart(JSON.stringify({ kind: 'started', message: started }))).toEqual({ isStarted: true })
+    expect(parseRunStart(`${JSON.stringify({ kind: 'started', message: started })}\n`)).toEqual({ isStarted: true })
+    // More than the two fields, or the kind alone, is read all the same.
+    expect(parseRunStart(JSON.stringify({ kind: 'started', message: started, pid: 4711 }))).toEqual({ isStarted: true })
+    expect(parseRunStart(JSON.stringify({ kind: 'started' }))).toEqual({ isStarted: true })
+
+    // The three reasons the band has words for: the command's sentence, which can name a machine or a folder, is left out.
+    const sentences = ['tower-2 curates this store', 'run: m2b fetch /home/alex/Notes/store.json', '', undefined, null, 7]
+    for (const refusal of ['running', 'not-curating', 'not-downloaded'] as const) {
+      for (const message of sentences) {
+        expect(parseRunStart(JSON.stringify({ kind: refusal, message }))).toEqual({ isStarted: false, refusal, reason: null })
+      }
+    }
+
+    // Any other kind is a failure told in the command's words, or by the kind's name where it has none.
+    for (const kind of ['paused', 'not-due', 'queued', 'Started', 'started ', 'failed', 'RUNNING']) {
+      expect(parseRunStart(JSON.stringify({ kind, message: 'why' }))).toEqual({ isStarted: false, refusal: 'failed', reason: 'why' })
+      for (const message of [undefined, null, '', 7, ['a sentence']]) {
+        expect(parseRunStart(JSON.stringify({ kind, message }))).toEqual({ isStarted: false, refusal: 'failed', reason: kind })
+      }
+    }
+    expect(parseRunStart(JSON.stringify({ kind: '', message: 'why' }))).toEqual({ isStarted: false, refusal: 'failed', reason: 'why' })
+
+    const noSuchAnswer = [
+      '',
+      started,
+      '{"kind":"started"',
+      'null',
+      '7',
+      '"started"',
+      '["started"]',
+      JSON.stringify({ message: started }),
+      JSON.stringify({ kind: true, message: started }),
+      JSON.stringify({ kind: null, message: started }),
+    ]
+    for (const stdout of noSuchAnswer) {
+      expect(parseRunStart(stdout)).toBeNull()
+    }
+  })
+
+  test('what the pane says of a press that started no run: the band\'s own words for the reasons it knows, which name no machine and no folder, and the reason it was handed for a failure', () => {
+    // Covers: B216
+    const reason = 'tower-2 curates the store in /home/alex/Notes'
+    expect(noRunStarted('running', null)).toBe('No curation run started: a curation run is already running on this machine')
+    expect(noRunStarted('not-curating', null)).toBe('No curation run started: another machine curates the store')
+    expect(noRunStarted('not-downloaded', null)).toBe('No curation run started: store.json is not downloaded on this machine')
+    // A reason handed beside a refusal the band knows is not said: its own words stand.
+    for (const refusal of ['running', 'not-curating', 'not-downloaded'] as const) {
+      expect(noRunStarted(refusal, reason)).toBe(noRunStarted(refusal, null))
+      expect(noRunStarted(refusal, reason)).not.toContain('tower-2')
+    }
+    expect(noRunStarted('failed', reason)).toBe(`No curation run started: ${reason}`)
+    // The reason is gone where the mod was loaded again since: the state still says that the start failed.
+    expect(noRunStarted('failed', null)).toBe('No curation run started: m2b did not say why')
   })
 })

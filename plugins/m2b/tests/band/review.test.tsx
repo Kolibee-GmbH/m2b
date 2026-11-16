@@ -3,7 +3,9 @@ import { expect, test } from 'claude-code/testing'
 import { parseReview } from '../../hooks/tasks'
 import {
   BAND,
+  CALM_ROW,
   FakeM2b,
+  ONLY_WHILE_WAITING,
   answerKeys,
   insetsAt,
   linesAt,
@@ -286,6 +288,7 @@ test('ok pressed in the view of the review on a review a run rewrote says so abo
 test('ok on a review another session closed writes nothing, says so where it was pressed, and takes the row away', async ($, on) => {
   // Covers: B106, B207
   const fake = changedFake()
+  fake.shows = ONLY_WHILE_WAITING
   const { clock } = await start($, on, fake)
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
   const ui = await startView($)
@@ -306,6 +309,30 @@ test('ok on a review another session closed writes nothing, says so where it was
   ])
   expect(await answerKeys(ui)).toEqual([])
   expect(await linesAt(ui, REVIEW_ROW)).toBeNull()
+  await ui.unmount()
+  await band.unmount()
+})
+
+test('ok on a review another session closed leaves a band that is always there calm: what m2b said is in the pane', async ($, on) => {
+  // Covers: B207, B213
+  const fake = changedFake()
+  const { clock } = await start($, on, fake)
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const ui = await startView($)
+
+  await ui.press({ key: 'ok:r1' })
+  const review = fake.tasks.find(task => task.id === 'r1')
+  if (review !== undefined) {
+    review.completed = true
+  }
+  await clock.advance(UNDO_MS)
+
+  expect(fake.writes()).toEqual([])
+  expect(await shownBand(band)).toEqual(CALM_ROW)
+  expect(await partLines(ui, 'waits')).toEqual([
+    'Already settled in another session, nothing written: Review of the last curation run',
+    'Nothing waits for you.',
+  ])
   await ui.unmount()
   await band.unmount()
 })

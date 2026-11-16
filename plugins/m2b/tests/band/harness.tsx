@@ -30,6 +30,22 @@ export const BAND = {
   },
 } as const
 
+/** The hint line below the prompt as the engine raises it: its own text, and no tail yet. */
+export const HINT = '? for shortcuts'
+// `plugin` names whose hooks the kit draws through; the engine raises the line once, for no plugin.
+export const PROMPT_HINT = {
+  plugin: 'm2b',
+  component: 'PromptHint',
+  requestId: 'prompt-hint',
+  props: { isDraft: false, isWorking: false, hint: HINT },
+} as const
+
+/** The band's settings on a machine without an entry for them, as a session shares them beside the tasks it read. */
+export const SHOWN_WITHOUT_ENTRY: BandShows = { place: 'above', dueTasks: 'count', topics: false }
+
+/** A machine whose band is there only while it has something to say. */
+export const ONLY_WHILE_WAITING: BandShows = { place: 'waiting', dueTasks: 'count', topics: false }
+
 export type FakeTask = {
   id: string
   title: string
@@ -54,8 +70,13 @@ export type FakeProposal = {
   answer?: 'keep' | 'drop'
 }
 
-/** A status with nothing wrong, which clears the status line. */
+/** The machine the fake answers for, which curates its store. */
+export const THIS_MACHINE = 'tower-1'
+
+/** A status with nothing wrong, which clears the status line, on the machine that curates the store. */
 export const STATUS = {
+  curating_machine: THIS_MACHINE,
+  this_machine_curates: true,
   inbox: { count: 2, evicted: 0 },
   run: { state: 'succeeded', last_succeeded_at: '2026-03-14T18:02:00+01:00' },
   backends: { tasks: { state: 'reachable', detail: '' } },
@@ -64,6 +85,27 @@ export const STATUS = {
 /** A status with something wrong, and what the status line says to it: a line that was written, not cleared. */
 export const TROUBLED_STATUS = { ...STATUS, backends: { tasks: { state: 'not reachable', detail: 'no grant' } } }
 export const TROUBLE_LINE = 'tasks not reachable'
+
+/** The same on a machine that does not curate: another one does. */
+export const STATUS_ELSEWHERE = { ...STATUS, curating_machine: 'tower-2', this_machine_curates: false }
+
+/** The key of the button in the part "m2b" that starts a curation run, on the machine that curates; its `undo`; and how the button reads as a line. */
+export const CURATE_NOW = 'curate:now'
+export const UNDO_CURATE = 'undo:curate'
+export const CURATE_NOW_LINE = '[curate now]'
+
+/** The call that starts one curation run in the background and answers how the start went. */
+export const CURATE_NOW_CALL = ['curate', '--force', '--detach', '--json']
+
+/** An answer of `m2b curate --detach --json`: what became of the start, and the sentence the command has for it. */
+export function runStart(kind: string, message: string): ProcessRunResult {
+  return ok(`${JSON.stringify({ kind, message })}\n`)
+}
+
+/** The answers of the core, in its words: a run that started, and the two ways none does with `--force`. */
+export const RUN_STARTED = 'a curation run started in the background (process 4711); m2b status shows how it goes'
+export const RUN_UNDER_WAY = 'a curation run is already running on this machine'
+export const CURATES_ELSEWHERE = 'this machine is not the curating machine; tower-2 is'
 
 /** A topic whose facts the core gave a session, with what its block held then. */
 export type FakeTopic = { name: string; facts: number | null; current: number | null }
@@ -163,11 +205,17 @@ export class FakeM2b {
   /** When set, `m2b search` fails with this as its message. */
   searchFails: string | null = null
   /**
-   * The machine's `band` settings as `m2b band --json` names them: how the band shows the tasks
-   * due, and whether it counts the topics. Null as a core before these settings answers: no `band`
-   * part, and the tasks due under `due` alone.
+   * The machine's `band` settings as `m2b band --json` names them: where the band stands, how it
+   * shows the tasks due, and whether it counts the topics. Null as a core before these settings
+   * answers: no `band` part, and the tasks due under `due` alone.
    */
-  shows: BandShows | null = { dueTasks: 'count', topics: false }
+  shows: BandShows | null = { place: 'above', dueTasks: 'count', topics: false }
+  /** Unset, the installed core is one from before the band's place: its `band` part names none. */
+  knowsPlace = true
+  /** When set, the `band` part of the answer is this instead, whatever its shape. */
+  bandPart: unknown = undefined
+  /** When set, `m2b band --json` prints this in place of its answer, as a core that answers no JSON. */
+  bandPrints: string | null = null
   /**
    * The tasks due today or overdue. `m2b band --json` names them under `due_by_today` whatever the
    * band shows, and under `due` too while it lists them. Null where the answer names none under
@@ -202,6 +250,8 @@ export class FakeM2b {
    * installed core is one from before the command: it refuses it as an unknown choice.
    */
   onSettings: ((args: readonly string[], env?: Record<string, string>) => ProcessRunResult) | null = null
+  /** How `m2b curate --detach --json` ends: as the core answers a run it started, until a test says otherwise. */
+  curateAnswer: ProcessRunResult = runStart('started', RUN_STARTED)
   /** The installed core's version, as `m2b band --json` answers it. */
   version = '0.3.0'
   /** The version in the manifest of the plugin the band was loaded from; null when it cannot be read. */
@@ -271,7 +321,7 @@ export class FakeM2b {
       return fail(NOT_SET_UP)
     }
     if (args[0] === 'band') {
-      return this.bandAnswer()
+      return this.bandAnswer(args.includes('--tasks-only'))
     }
     if (args[0] === 'search') {
       if (this.searchFails !== null) {
@@ -302,6 +352,9 @@ export class FakeM2b {
         : `/home/alex/Notes/${path}`
       const result = ok(`${stdout}\n`)
       return this.captureNotice === null ? result : { ...result, stderr: `m2b: ${this.captureNotice}\n` }
+    }
+    if (args[0] === 'curate') {
+      return this.curateAnswer
     }
     if (args[0] === 'proposals' && args[1] === 'add') {
       this.handedIn.push(stdin ?? '')
@@ -399,10 +452,16 @@ export class FakeM2b {
     return { due_by_today: due, ...(this.shows.dueTasks === 'list' ? { due } : {}) }
   }
 
-  /** As `m2b band --json` answers: the band's settings, the open curator tasks by marker, or the error, and the status. */
-  bandAnswer(): ProcessRunResult {
+  /**
+   * As `m2b band --json` answers: the band's settings, the open curator tasks by marker, or the
+   * error, and the status; with `--tasks-only` the tasks alone.
+   */
+  bandAnswer(isTasksOnly = false): ProcessRunResult {
     if (this.statusFails) {
       return fail('could not read the machine config')
+    }
+    if (this.bandPrints !== null) {
+      return ok(this.bandPrints)
     }
     if (this.beforeCandidateList !== null) {
       this.beforeCandidateList()
@@ -422,9 +481,21 @@ export class FakeM2b {
             ...(this.reviewDetails !== null && open('review').length > 0 ? { review: this.reviewDetails } : {}),
           }
         : { error }
+    if (isTasksOnly) {
+      return ok(JSON.stringify({ tasks }))
+    }
     const proposals = this.proposalsPart ?? this.waitingProposals()
-    const band = this.shows === null ? {} : { band: { due_tasks: this.shows.dueTasks, topics: this.shows.topics } }
+    const band = this.bandPart === undefined ? this.settingsPart() : { band: this.bandPart }
     return ok(JSON.stringify({ version: this.version, ...band, tasks, ...(proposals === null ? {} : { proposals }), status: this.status }))
+  }
+
+  /** The `band` part as the installed core names the machine's settings; none from a core before them. */
+  settingsPart(): Record<string, unknown> {
+    if (this.shows === null) {
+      return {}
+    }
+    const place = this.knowsPlace ? { place: this.shows.place } : {}
+    return { band: { ...place, due_tasks: this.shows.dueTasks, topics: this.shows.topics } }
   }
 
   waitingProposals(): unknown {
@@ -439,6 +510,11 @@ export class FakeM2b {
       proposals: waiting.map(({ answer: _, ...fields }) => fields),
       answered: this.proposals.length - waiting.length,
     }
+  }
+
+  /** The calls that started a curation run, or tried to. */
+  curateCalls(): string[][] {
+    return this.calls.filter(call => call[0] === 'curate')
   }
 
   /** The calls that listed the settings or changed one. */
@@ -817,9 +893,25 @@ export async function start(
   // A compaction asked to `skip` is one a hook blocked: the conversation stays as it is.
   on('session.compact', (_, e) => (e.instructions === 'skip' ? { skip: 'a hook blocked it' } : { messages: e.messages }))
   // Stands for the engine's own drawing, which is what the band leaves to when it has nothing to show.
+  // The hint line is drawn as the terminal draws it: the engine's text, and at its end what a hook added.
   on('ui.render', ($, e) => {
-    const { Text } = $.ui.resolve(e)
-    return <Text>{ENGINES_OWN_DRAWING}</Text>
+    const { Box, Text } = $.ui.resolve(e)
+    if (e.component !== 'PromptHint') {
+      return <Text>{ENGINES_OWN_DRAWING}</Text>
+    }
+    // Each in a box of its own: the kit hands a box on with its key, a text without.
+    return (
+      <Box flexDirection="row">
+        <Box key={ENGINES_HINT}>
+          <Text>{e.props.hint}</Text>
+        </Box>
+        {e.props.tail !== undefined && (
+          <Box key={ENGINES_TAIL}>
+            <Text>{e.props.tail}</Text>
+          </Box>
+        )}
+      </Box>
+    )
   })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await clock.advance(1)
@@ -858,9 +950,23 @@ function shownText(element: HandedOn): string {
 }
 
 /** The key of the band's row, of the tasks listed below it, and of its one button. */
-const BAND_ROW = 'row:m2b'
+export const BAND_ROW = 'row:m2b'
 const BAND_TASKS = 'tasks'
 export const OPEN = 'open'
+/** The key of the hint line where m2b draws it, with the band at its end. */
+export const HINT_ROW = 'row:m2b-below'
+
+const ENGINES_HINT = 'engine:hint'
+const ENGINES_TAIL = 'engine:tail'
+
+/** The hint line as the engine drew it: its text, and what was added at its end, null where nothing was. */
+export type EnginesHint = { hint: string; tail: string | null }
+
+/** The hint line the engine's stand-in drew; null where m2b drew the line itself. */
+export async function enginesHint(ui: Drawn): Promise<EnginesHint | null> {
+  const hint = await ui.find({ key: ENGINES_HINT })
+  return hint === undefined ? null : { hint: hint.text, tail: (await ui.find({ key: ENGINES_TAIL }))?.text ?? null }
+}
 
 /** The line of the band's row: the one text that is cut where the row is too narrow, with its pieces inside. */
 async function bandLineOf(ui: Drawn): Promise<{ texts: Element[]; line: Element | undefined } | null> {
@@ -904,6 +1010,9 @@ export async function shownBand(ui: Drawn): Promise<ShownBand | null> {
 export function rowSaying(says: string): ShownBand {
   return { isNamed: true, says, below: [], buttons: [OPEN] }
 }
+
+/** The calm band, with nothing to say: `m2b` and `open`, no word between them and nothing below. */
+export const CALM_ROW: ShownBand = { isNamed: true, says: '', below: [], buttons: [OPEN] }
 
 /** A band whose row is a sentence that names m2b itself, so no `m2b` stands before it. */
 export function sentenceOfM2b(says: string): ShownBand {

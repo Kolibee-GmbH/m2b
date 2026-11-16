@@ -43,7 +43,8 @@ turned on per machine: run their setups (such as `/m2b:worklog-setup`) again on 
 curating machine; `take-over` lists the add-ons that were on in the last run.
 
 On a machine that does not curate, `m2b status` answers the question whether a run is due with
-`due: asked on <machine>, the curating machine`: only that machine decides it, so ask there.
+`due: asked on <machine>, the curating machine`: only that machine decides it, so ask there. The
+m2b pane says `Curation runs on <machine>.` there and has no `curate now`.
 
 ## When the curating machine is away
 

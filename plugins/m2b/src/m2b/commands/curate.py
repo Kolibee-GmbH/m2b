@@ -6,7 +6,8 @@ import argparse
 import sys
 
 from m2b import launcher
-from m2b.commands import Context, ProblemError
+from m2b.commands import Context, ProblemError, UsageError
+from m2b.commands.output import print_json
 from m2b.config.machine import load_machine_config
 from m2b.curate import model, report, runner
 from m2b.curate.detach import start_detached
@@ -17,8 +18,13 @@ from m2b.run_record import FAILED
 def curate_run(arguments: argparse.Namespace, context: Context) -> int:
     """One run, or with ``--detach`` one started in the background; only a failed run exits 1.
 
-    A run that happened is told in two lines: how it ended, and what it did to the inbox.
+    A run that happened is told in two lines: how it ended, and what it did to the inbox. A start
+    in the background is told in one line, or with ``--json`` as data: ``kind`` says whether a run
+    started and, where none did, why (``detach``'s kinds), so a caller that draws the answer need
+    not read the sentence, and ``message`` is that sentence.
     """
+    if arguments.json and not arguments.detach:
+        raise UsageError("--json goes with --detach: a run in the foreground is told in lines")
     if arguments.detach:
         start = start_detached(
             context.machine,
@@ -28,7 +34,10 @@ def curate_run(arguments: argparse.Namespace, context: Context) -> int:
             arguments.refresh_all,
             arguments.sort_facts,
         )
-        print(start.message)
+        if arguments.json:
+            print_json({"kind": start.kind, "message": start.message})
+        else:
+            print(start.message)
         return 0
     outcome = runner.curate(
         context.machine,

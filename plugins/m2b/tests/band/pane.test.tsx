@@ -11,6 +11,7 @@ import {
   FakeM2b,
   HOME,
   NOW,
+  SHOWN_WITHOUT_ENTRY,
   STATUS,
   insetsAt,
   linesAt,
@@ -301,7 +302,7 @@ test('an answer an older session shared, without the run, leaves the run line as
   // The refresh the command starts lands first; the older session writes after it.
   await clock.advance(1)
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
-  const older = { snapshot: { candidates: [], review: null, error: null }, status: null, version: '0.3.0' }
+  const older = { snapshot: { candidates: [], review: null, error: null, shows: SHOWN_WITHOUT_ENTRY }, status: null, version: '0.3.0' }
   files.set(`${HOME}/.local/state/m2b/band-answer.json`, JSON.stringify({ writtenAtMs: NOW + 59_500, value: older }))
   await clock.advance(60_000)
   expect((await partLines(ui, 'run'))?.[0]).toBe('succeeded, 18:00 to 18:02')
@@ -310,7 +311,7 @@ test('an answer an older session shared, without the run, leaves the run line as
 
 test('a shared answer whose run has the wrong shape is loaded again', async ($, on) => {
   // Covers: B101
-  const snapshot = { candidates: [], review: null, error: null }
+  const snapshot = { candidates: [], review: null, error: null, shows: SHOWN_WITHOUT_ENTRY }
   const view = { snapshot, status: null, version: '0.3.0', run: { state: 7 } }
   const files: Files = new Map([[`${HOME}/.local/state/m2b/band-answer.json`, JSON.stringify({ writtenAtMs: NOW, value: view })]])
   const fake = reviewedFake()

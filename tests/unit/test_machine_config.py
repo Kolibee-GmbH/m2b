@@ -161,6 +161,21 @@ class ParseTest(unittest.TestCase):
         with self.assertRaises(InvalidConfigError):
             machine.parse_machine_config(_config(distillate={"skip_under": ["code/acme"]}), HOME)
 
+    def test_the_band_stands_above_the_prompt_unless_the_config_names_another_place(self) -> None:
+        """Covers: B213"""
+
+        def place(**band: object) -> str:
+            return machine.parse_machine_config(_config(band=band), HOME).band.place
+
+        self.assertEqual(machine.parse_machine_config(_config(), HOME).band.place, "above")
+        self.assertEqual(place(topics=True), "above")
+        for written in ("above", "below", "waiting"):
+            with self.subTest(written=written):
+                self.assertEqual(place(place=written), written)
+        for written in ("under", "Above", "", True, None, ["below"]):
+            with self.subTest(written=written), self.assertRaisesRegex(InvalidConfigError, "place"):
+                place(place=written)
+
     def test_the_band_shows_the_tasks_due_as_a_count_unless_the_config_names_another_way(self) -> None:
         """Covers: B102"""
 

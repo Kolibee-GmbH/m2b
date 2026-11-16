@@ -56,7 +56,7 @@ do not do their work there. The first three start a curation run in the backgrou
 
 | Command | What it does |
 |---|---|
-| `/m2b-pane` | shows in the m2b pane its overview: what waits for you, what is due today, what m2b gave this session and how m2b itself stands; there a press shows a topic's lines or turns m2b off in the session's folder, and the tabs above lead to the other views; under the fullscreen layout that pane opens by itself |
+| `/m2b-pane` | shows in the m2b pane its overview: what waits for you, what is due today, what m2b gave this session and how m2b itself stands; there a press shows a topic's lines, turns m2b off in the session's folder or, on the machine that curates, starts a curation run (`curate now`), and the tabs above lead to the other views; under the fullscreen layout that pane opens by itself |
 | `/m2b-note <text>` | writes the text into the inbox at once, through `m2b capture` |
 | `/m2b-search [--word] <text>` | shows the hits of `m2b search` in the m2b pane; `--word` matches whole words only |
 | `/m2b-review` | shows the last curation run in the m2b pane: every finding, candidate and question |
@@ -103,7 +103,7 @@ Reminders the Reminders app does the same. In a session, saying that a task is d
 
 | Command | What it does |
 |---|---|
-| `m2b curate [--force] [--detach]` | the curation run: without `--force` only when one is due, as a schedule calls it; `--detach` starts it in the background. `--refresh-all` and `--sort-facts` run now and do one more step, once ([Curation](curation.md#moving-over-an-older-distillate)) |
+| `m2b curate [--force] [--detach [--json]]` | the curation run: without `--force` only when one is due, as a schedule calls it; `--detach` starts it in the background and says in one line whether a run started, with `--json` as data (`kind` and `message`), which is how `curate now` in the m2b pane starts one ([Curation](curation.md#when-it-runs)). `--refresh-all` and `--sort-facts` run now and do one more step, once ([Curation](curation.md#moving-over-an-older-distillate)) |
 | `m2b curate take-over` | makes this machine the curating machine ([Several machines](several-machines.md)) |
 | `m2b proposals [--json]` | what the reading of your sessions proposed and what sessions handed in, as far as it waits for your answer |
 | `m2b proposals keep [--all] <ids>` | files these proposals with the next curation run; `--all` leaves those a session handed in, which you keep by id |
@@ -149,7 +149,7 @@ These are listed by `--help`, but the plugin is their caller.
 
 | Command | Who calls it |
 |---|---|
-| `m2b band [--tasks-only] [--session <id> [--session-only]] [--json]` | the band, for what it shows above the prompt; with `--session`, also what m2b gave that session, and with `--session-only` nothing else |
+| `m2b band [--tasks-only] [--session <id> [--session-only]] [--json]` | the band, for what its row and the pane show; with `--session`, also what m2b gave that session, and with `--session-only` nothing else |
 | `m2b refresh due [--json]` | the refresh step, for the memory lines past their day |
 | `m2b lint fix [--json]` | the lint step; it runs only inside a curation run |
 | `m2b curate model --skill <plugin:skill> --allow <rule>` | the worklog add-on's step in a curation run, for its fenced model step. Run by hand it starts that step on its own, with the tool rules you give it, outside a run |

@@ -409,6 +409,7 @@ def _parser() -> argparse.ArgumentParser:
     curate_parser.set_defaults(handler=curate_commands.curate_run)
     curate_parser.add_argument("--force", action="store_true", help="run even when no run is due")
     curate_parser.add_argument("--detach", action="store_true", help="start the run in the background")
+    curate_parser.add_argument("--json", action="store_true", help="with --detach: answer the start as JSON")
     curate_parser.add_argument(
         "--refresh-all",
         action="store_true",

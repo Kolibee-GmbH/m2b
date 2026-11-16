@@ -4,17 +4,26 @@ import type { Engine } from 'claude-code/testing'
 
 import { bandLine, topicsGiven } from '../../hooks/band'
 import type { BandModel } from '../../hooks/band'
+import type { BandShows } from '../../types'
 import { tabKey } from '../../hooks/pane-tabs'
 import { glanceLines } from '../../hooks/session-view'
 import type { SessionModel } from '../../hooks/session-view'
 import {
   BAND,
+  BAND_ROW,
+  CALM_ROW,
+  CURATE_NOW_LINE,
   ENGINES_OWN_DRAWING,
   FakeM2b,
+  HOME,
+  NOW,
+  ONLY_WHILE_WAITING,
   OPEN,
   bandPieces,
+  buttonsAt,
   everyText,
   lookOf,
+  orderAt,
   pane,
   partLines,
   pressTab,
@@ -27,6 +36,7 @@ import {
   start,
   texts,
 } from './harness'
+import type { Files } from './harness'
 
 const PANE = 'm2b'
 const CLOSED_BY_HAND = 'paneClosedByHand'
@@ -124,8 +134,9 @@ function model(fields: Partial<BandModel> = {}): BandModel {
 }
 
 test('with nothing waiting, no task due and nothing wrong the band draws nothing of its own, whatever the session was given', async ($, on) => {
-  // Covers: B191
+  // Covers: B191, B213
   const fake = new FakeM2b()
+  fake.shows = ONLY_WHILE_WAITING
   fake.given = { topics: [{ name: 'Northwind', facts: 3, current: 0 }], atStart: 'whole', offUnder: null }
   const { clock } = await start($, on, fake)
 
@@ -135,6 +146,277 @@ test('with nothing waiting, no task due and nothing wrong the band draws nothing
   expect(await band.findAll({ type: 'Button' })).toEqual([])
   await band.unmount()
 })
+
+test('with nothing waiting, no task due and nothing wrong a band that is always there is calm: m2b and open alone, both stepped back, whatever the session was given', async ($, on) => {
+  // Covers: B191, B213
+  const fake = new FakeM2b()
+  fake.given = { topics: [{ name: 'Northwind', facts: 3, current: 0 }], atStart: 'whole', offUnder: null }
+  const { clock } = await start($, on, fake)
+
+  const band = await drawBand($, clock, MAIN_SCREEN)
+
+  expect(await shownBand(band)).toEqual(CALM_ROW)
+  // No text stands between the name and the button: a row with nothing to say holds no line for it.
+  expect(await orderAt(band, BAND_ROW)).toEqual(['m2b', `[${OPEN}]`])
+  expect(await lookOf(band, 'm2b')).toEqual({ color: undefined, dimColor: true, wrap: undefined })
+  expect(await buttonsAt(band, BAND_ROW)).toEqual([{ key: OPEN, label: 'open', variant: undefined, dimColor: true }])
+  expect((await band.findAll({ type: 'Button' })).map(button => button.key)).toEqual([OPEN])
+  await band.unmount()
+})
+
+test('a row that says something is drawn at full strength: m2b in its color, and open not stepped back', async ($, on) => {
+  // Covers: B191, B213
+  const { clock } = await start($, on, new FakeM2b().candidate('c1', 'Remember? Dana prefers tea'))
+
+  const band = await drawBand($, clock, MAIN_SCREEN)
+
+  expect(await orderAt(band, BAND_ROW)).toEqual(['m2b', '1 waits for you', `[${OPEN}]`])
+  expect(await lookOf(band, 'm2b')).toEqual({ color: 'remember', dimColor: undefined, wrap: undefined })
+  expect(await buttonsAt(band, BAND_ROW)).toEqual([{ key: OPEN, label: 'open', variant: undefined, dimColor: false }])
+  await band.unmount()
+})
+
+for (const [layout, viewport, opens] of [
+  ['on the main screen, as a dialog', MAIN_SCREEN, AS_A_DIALOG],
+  ['under the fullscreen layout from 110 columns, to stay', WIDE, TO_STAY],
+] as const) {
+  test(`open on the calm row opens the pane in the view it starts in, ${layout}, and writes nothing`, async ($, on) => {
+    // Covers: B213
+    const fake = new FakeM2b()
+    // Closed by hand before, so no pane opens by itself and the press is the one open.
+    fake.stored = { [CLOSED_BY_HAND]: true }
+    const { clock, opened } = await start($, on, fake)
+    const band = await drawBand($, clock, viewport)
+    expect(await shownBand(band)).toEqual(CALM_ROW)
+    expect(opened).toEqual([])
+    const looksBefore = fake.looks.length
+
+    await band.press({ key: OPEN })
+    await clock.advance(1)
+
+    expect(opened).toEqual([opens])
+    // As the row's open always does: it asks again what the session was given.
+    expect(fake.looks.length).toBe(looksBefore + 1)
+    const shown = await drawPane($, clock, viewport.isFullscreen ? 'dock' : 'inline', 100)
+    expect(await shownTab(shown)).toBe('overview')
+    expect(await partLines(shown, 'waits')).toEqual(['Nothing waits for you.'])
+    expect(fake.writes()).toEqual([])
+    expect(fake.answers()).toEqual([])
+    expect(await shownBand(band)).toEqual(CALM_ROW)
+    await shown.unmount()
+    await band.unmount()
+  })
+}
+
+test('where the pane cannot be shown, open on the calm row says so in the band, and the row is calm again after the next prompt', async ($, on) => {
+  // Covers: B191, B213
+  on('prompt.submit', (_, e) => ({ text: e.text }))
+  const fake = new FakeM2b()
+  fake.paneWaits = 'no surface attached places panes'
+  const { clock, openPanes } = await start($, on, fake)
+  const band = await drawBand($, clock, MAIN_SCREEN)
+  expect(await shownBand(band)).toEqual(CALM_ROW)
+
+  await band.press({ key: OPEN })
+
+  expect(openPanes.has(PANE)).toBe(false)
+  const notShown = 'the m2b pane cannot be shown here: no surface attached places panes; /m2b-pane answers with the lines'
+  expect(await shownBand(band)).toEqual(rowSaying(notShown))
+  // A row that says something: its name and its button are back at full strength.
+  expect(await lookOf(band, 'm2b')).toEqual({ color: 'remember', dimColor: undefined, wrap: undefined })
+  expect(await buttonsAt(band, BAND_ROW)).toEqual([{ key: OPEN, label: 'open', variant: undefined, dimColor: false }])
+
+  await $.prompt.submit({ text: 'go on', origin: { kind: 'composer' }, wait: false })
+  expect(await shownBand(band)).toEqual(CALM_ROW)
+  await band.unmount()
+})
+
+/** What m2b draws above the prompt once it has answered that nothing waits, by where the machine has the band. */
+const WITH_NOTHING_TO_SAY = [
+  ['above', CALM_ROW],
+  ['below', null],
+  ['waiting', null],
+] as const
+
+for (const [place, onceAnswered] of WITH_NOTHING_TO_SAY) {
+  test(`before m2b's first answer the band draws nothing above the prompt, on a machine whose band is ${place} too`, async ($, on) => {
+    // Covers: B213
+    const fake = new FakeM2b()
+    fake.shows = { place, dueTasks: 'count', topics: false }
+    fake.delayMs = args => (args[0] === 'band' && !args.includes('--session-only') ? 5_000 : 0)
+    const { clock } = await start($, on, fake)
+
+    const band = await drawBand($, clock, MAIN_SCREEN)
+
+    expect(await everyText(band)).toEqual([ENGINES_OWN_DRAWING])
+    expect(await band.findAll({ type: 'Button' })).toEqual([])
+
+    await clock.advance(5_000)
+    expect(await shownBand(band)).toEqual(onceAnswered)
+    await band.unmount()
+  })
+}
+
+test('before m2b is set up there is no calm row: the band draws nothing', async ($, on) => {
+  // Covers: B213
+  const fake = new FakeM2b()
+  fake.isSetUp = false
+  const { clock } = await start($, on, fake)
+
+  const band = await drawBand($, clock, MAIN_SCREEN)
+
+  expect(await everyText(band)).toEqual([ENGINES_OWN_DRAWING])
+  expect(fake.calls).toEqual([])
+  await band.unmount()
+})
+
+test('a core that names no place has the band above the prompt: calm with nothing to say, and with the settings it does name', async ($, on) => {
+  // Covers: B213
+  const fake = new FakeM2b()
+  fake.knowsPlace = false
+  fake.shows = { place: 'waiting', dueTasks: 'list', topics: false }
+  const { clock } = await start($, on, fake)
+  const band = await drawBand($, clock, MAIN_SCREEN)
+  expect(fake.calls).toEqual([['band', '--json']])
+  expect(await shownBand(band)).toEqual(CALM_ROW)
+
+  // The rest of the part is read as it stands: the tasks are listed below the row.
+  fake.dueTasks = [{ id: 'd1', title: 'Send the offer to Acme', due: '2026-03-14', overdue: false }]
+  await clock.advance(60_000)
+  expect(await shownBand(band)).toEqual({ isNamed: true, says: '', below: ['due today Send the offer to Acme'], buttons: [OPEN] })
+  await band.unmount()
+})
+
+test('a place this band does not know leaves the band as a machine without an entry has it: above, the tasks counted, no topics', async ($, on) => {
+  // Covers: B213
+  const fake = busyFake()
+  fake.shows = { place: 'above', dueTasks: 'list', topics: true }
+  fake.bandPart = { place: 'beside', due_tasks: 'list', topics: true }
+  const { clock } = await start($, on, fake)
+
+  const band = await drawBand($, clock, MAIN_SCREEN)
+
+  expect(await shownBand(band)).toEqual(ROW)
+
+  // With nothing to say it is the calm row, not nothing: above is what a machine without an entry has.
+  fake.tasks = []
+  fake.proposals = []
+  fake.dueTasks = []
+  await clock.advance(60_000)
+  expect(await shownBand(band)).toEqual(CALM_ROW)
+  await band.unmount()
+})
+
+const SHARED_ANSWER = `${HOME}/.local/state/m2b/band-answer.json`
+
+/** The answer another session shared a second ago, with nothing waiting and these settings of the band. */
+function sharedAnswer(shows: unknown): Files {
+  const snapshot = { candidates: [], review: null, error: null, due: [], shows }
+  return new Map([[SHARED_ANSWER, JSON.stringify({ writtenAtMs: NOW - 1_000, value: { snapshot, status: null, version: '0.3.0' } })]])
+}
+
+test('a shared answer whose settings name no place, as of a band from before it, is not taken: m2b is asked, and the band stands where the machine has it', async ($, on) => {
+  // Covers: B213
+  const fake = new FakeM2b().candidate('c1', 'Remember? Dana prefers tea')
+  fake.shows = ONLY_WHILE_WAITING
+  const files = sharedAnswer({ dueTasks: 'count', topics: false })
+  const { clock } = await start($, on, fake, {}, files)
+
+  const band = await drawBand($, clock, MAIN_SCREEN)
+
+  expect(fake.calls).toEqual([['band', '--json']])
+  expect(await shownBand(band)).toEqual(rowSaying('1 waits for you'))
+  // What this band shares in its place names the place.
+  expect(JSON.parse(files.get(SHARED_ANSWER) ?? '{}').value.snapshot.shows).toEqual(ONLY_WHILE_WAITING)
+
+  // The place m2b answered holds: with nothing waiting there is no row, where the older band's answer had a calm one drawn.
+  fake.tasks = []
+  await clock.advance(60_000)
+  expect(await everyText(band)).toEqual([ENGINES_OWN_DRAWING])
+  await band.unmount()
+})
+
+for (const [place, drawn] of WITH_NOTHING_TO_SAY) {
+  test(`a shared answer whose settings name the place ${place} is taken without asking m2b, and the band stands there`, async ($, on) => {
+    // Covers: B213
+    const fake = new FakeM2b().candidate('c1', 'Remember? Dana prefers tea')
+    const { clock } = await start($, on, fake, {}, sharedAnswer({ place, dueTasks: 'count', topics: false }))
+
+    const band = await drawBand($, clock, MAIN_SCREEN)
+
+    expect(fake.calls).toEqual([])
+    expect(await shownBand(band)).toEqual(drawn)
+    await band.unmount()
+  })
+}
+
+/** What m2b draws above the prompt with nothing to say, where the band is above it. */
+const ABOVE_THE_PROMPT = [
+  ['above', CALM_ROW],
+  ['waiting', null],
+] as const
+
+for (const [place, withNothingToSay] of ABOVE_THE_PROMPT) {
+  test(`a look that fails keeps the settings the band holds, with the band ${place}: its sentence is the row, and the tasks are listed and the topics counted again once m2b answers, though it names no settings then`, async ($, on) => {
+    // Covers: B213
+    const fake = new FakeM2b()
+    fake.shows = { place, dueTasks: 'list', topics: true }
+    fake.given = { topics: [{ name: 'Northwind', facts: 3, current: 0 }], atStart: 'whole', offUnder: null }
+    fake.dueTasks = [{ id: 'd1', title: 'Send the offer to Acme', due: '2026-03-14', overdue: false }]
+    const { clock } = await start($, on, fake)
+    const band = await drawBand($, clock, MAIN_SCREEN)
+    const listed = { isNamed: true, says: '1 topic', below: ['due today Send the offer to Acme'], buttons: [OPEN] }
+    expect(await shownBand(band)).toEqual(listed)
+
+    fake.statusFails = true
+    await clock.advance(60_000)
+    expect(await shownBand(band)).toEqual(sentenceOfM2b('m2b could not read the tasks: could not read the machine config'))
+
+    // A machine without an entry counts the tasks and no topics: listed and counted, the settings were kept.
+    fake.statusFails = false
+    fake.shows = null
+    await clock.advance(60_000)
+    expect(await shownBand(band)).toEqual(listed)
+
+    // The place was kept with them: it shows once there is nothing to say.
+    fake.dueTasks = []
+    fake.given = { topics: [], atStart: 'whole', offUnder: null }
+    await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 't1', reason: 'answer' })
+    await clock.advance(1)
+    expect(await shownBand(band)).toEqual(withNothingToSay)
+    await band.unmount()
+  })
+
+  test(`a row that lists tasks by name and counts nothing keeps its line between m2b and open, empty, with the band ${place}`, async ($, on) => {
+    // Covers: B191, B213
+    const fake = new FakeM2b()
+    fake.shows = { place, dueTasks: 'list', topics: false }
+    fake.dueTasks = [{ id: 'd1', title: 'Send the offer to Acme', due: '2026-03-14', overdue: false }]
+    const { clock } = await start($, on, fake)
+
+    const band = await drawBand($, clock, MAIN_SCREEN)
+
+    expect(await shownBand(band)).toEqual({ isNamed: true, says: '', below: ['due today Send the offer to Acme'], buttons: [OPEN] })
+    expect(await orderAt(band, BAND_ROW)).toEqual(['m2b', '', `[${OPEN}]`])
+    // It says something, below it: its name and its button are at full strength.
+    expect(await lookOf(band, 'm2b')).toEqual({ color: 'remember', dimColor: undefined, wrap: undefined })
+    expect(await buttonsAt(band, BAND_ROW)).toEqual([{ key: OPEN, label: 'open', variant: undefined, dimColor: false }])
+    await band.unmount()
+  })
+}
+
+test('a shared answer whose settings name a place this band does not know is not taken either', async ($, on) => {
+  // Covers: B213
+  const fake = new FakeM2b().candidate('c1', 'Remember? Dana prefers tea')
+  const { clock } = await start($, on, fake, {}, sharedAnswer({ place: 'beside', dueTasks: 'count', topics: false }))
+
+  const band = await drawBand($, clock, MAIN_SCREEN)
+
+  expect(fake.calls).toEqual([['band', '--json']])
+  expect(await shownBand(band)).toEqual(rowSaying('1 waits for you'))
+  await band.unmount()
+})
+
 
 test('while a survey is up the band draws nothing of its own', async ($, on) => {
   await start($, on, busyFake())
@@ -166,7 +448,7 @@ test('four things wait and five tasks are due, with count: one row of m2b, what 
 test('four things wait and five tasks are due, with list: the row counts what waits, and three tasks stand below it with "and 2 more"', async ($, on) => {
   // Covers: B191, B102
   const fake = fullFake()
-  fake.shows = { dueTasks: 'list', topics: false }
+  fake.shows = { place: 'above', dueTasks: 'list', topics: false }
   const { clock } = await start($, on, fake)
 
   const band = await drawBand($, clock, MAIN_SCREEN)
@@ -191,7 +473,7 @@ test('four things wait and five tasks are due, with list: the row counts what wa
 test('four things wait and five tasks are due, with off: the row counts what waits and says nothing of the tasks', async ($, on) => {
   // Covers: B191, B102
   const fake = fullFake()
-  fake.shows = { dueTasks: 'off', topics: false }
+  fake.shows = { place: 'above', dueTasks: 'off', topics: false }
   const { clock } = await start($, on, fake)
 
   const band = await drawBand($, clock, MAIN_SCREEN)
@@ -227,19 +509,26 @@ test('the row counts the topics only with the setting on and for a session that 
   // Off, which a machine without an entry is.
   expect(await shownBand(band)).toEqual(ROW)
 
-  fake.shows = { dueTasks: 'count', topics: true }
+  fake.shows = { place: 'above', dueTasks: 'count', topics: true }
   await clock.advance(60_000)
   expect(await shownBand(band)).toEqual(WITH_TOPICS)
   // After what waits and the tasks due, and quiet: it needs no answer.
   expect((await bandPieces(band)).at(-1)).toEqual({ text: '  2 topics', color: undefined, dimColor: true })
 
-  fake.shows = { dueTasks: 'off', topics: true }
+  fake.shows = { place: 'above', dueTasks: 'off', topics: true }
   await clock.advance(60_000)
   expect(await shownBand(band)).toEqual(rowSaying('4 wait for you  2 topics'))
+  await band.unmount()
+})
 
-  // A core before the setting names none: off.
+test('a core before the setting names none, and the row counts no topics', async ($, on) => {
+  // Covers: B192
+  const fake = busyFake()
   fake.shows = null
-  await clock.advance(60_000)
+  const { clock } = await start($, on, fake)
+
+  const band = await drawBand($, clock, MAIN_SCREEN)
+
   expect(await shownBand(band)).toEqual(ROW)
   await band.unmount()
 })
@@ -247,7 +536,7 @@ test('the row counts the topics only with the setting on and for a session that 
 test('with the setting on, a session given no topic gets no count, and topics alone draw the band', async ($, on) => {
   // Covers: B192
   const fake = new FakeM2b()
-  fake.shows = { dueTasks: 'count', topics: true }
+  fake.shows = { place: 'waiting', dueTasks: 'count', topics: true }
   fake.given = { topics: [], atStart: 'whole', offUnder: null }
   on('prompt.submit', (_, e) => ({ text: e.text }))
   const { clock } = await start($, on, fake)
@@ -255,6 +544,24 @@ test('with the setting on, a session given no topic gets no count, and topics al
   expect(await everyText(band)).toEqual([ENGINES_OWN_DRAWING])
 
   // A topic that comes in with a prompt is counted once m2b has looked again.
+  fake.given = { topics: [{ name: 'Northwind', facts: 3, current: 0 }], atStart: 'whole', offUnder: null }
+  await $.prompt.submit({ text: 'what did Northwind order?', origin: { kind: 'composer' }, wait: false })
+  await clock.advance(3_000)
+
+  expect(await shownBand(band)).toEqual(rowSaying('1 topic'))
+  await band.unmount()
+})
+
+test('with the setting on, a session given no topic leaves a band that is always there calm, and a topic that comes in is counted', async ($, on) => {
+  // Covers: B192, B213
+  const fake = new FakeM2b()
+  fake.shows = { place: 'above', dueTasks: 'count', topics: true }
+  fake.given = { topics: [], atStart: 'whole', offUnder: null }
+  on('prompt.submit', (_, e) => ({ text: e.text }))
+  const { clock } = await start($, on, fake)
+  const band = await drawBand($, clock, MAIN_SCREEN)
+  expect(await shownBand(band)).toEqual(CALM_ROW)
+
   fake.given = { topics: [{ name: 'Northwind', facts: 3, current: 0 }], atStart: 'whole', offUnder: null }
   await $.prompt.submit({ text: 'what did Northwind order?', origin: { kind: 'composer' }, wait: false })
   await clock.advance(3_000)
@@ -376,7 +683,7 @@ test('that this session runs an older m2b is said in the pane, in the part about
   expect(await shownBand(band)).toEqual(ROW)
   expect((await everyText(band)).join('\n')).not.toContain('/reload-plugins')
   // Above the line about curation, and in the color of what waits: it asks for a command.
-  expect(await partLines(beside, 'm2b')).toEqual([OLDER_M2B, '2 in inbox · curated 18:02'])
+  expect(await partLines(beside, 'm2b')).toEqual([OLDER_M2B, '2 in inbox · curated 18:02', CURATE_NOW_LINE])
   expect(await lookOf(beside, OLDER_M2B)).toEqual({ color: 'warning', dimColor: undefined, wrap: 'wrap' })
   await beside.unmount()
   await band.unmount()
@@ -493,13 +800,15 @@ test('the row is a sentence where there is one: why open showed no pane, then th
   }
   const unread = { snapshot: { candidates: [], review: null, error: 'm2b could not read the tasks: no answer' } }
   const noStore = { proposals: { waiting: [], answered: 0, error: 'the store is not downloaded' } }
-  const counts = (text: string) => ({ parts: [{ text, tone: 'waits' }], isNamed: true, listed: [], more: 0 })
-  const sentence = (text: string, tone: string, isNamed: boolean) => ({ parts: [{ text, tone }], isNamed, listed: [], more: 0 })
+  const counts = (text: string) => ({ parts: [{ text, tone: 'waits' }], isNamed: true, isCalm: false, listed: [], more: 0 })
+  const sentence = (text: string, tone: string, isNamed: boolean) => ({ parts: [{ text, tone }], isNamed, isCalm: false, listed: [], more: 0 })
+  const idle = { candidates: [], review: null, error: null, shows: ONLY_WHILE_WAITING }
 
   expect(bandLine(model())).toBeNull()
-  expect(bandLine(model({ snapshot: { candidates: [], review: null, error: null } }))).toBeNull()
+  expect(bandLine(model({ snapshot: idle }))).toBeNull()
   // A session's topics alone are nothing to draw where the machine does not show them.
-  expect(bandLine(model({ snapshot: { candidates: [], review: null, error: null }, topics: 0 }))).toBeNull()
+  expect(bandLine(model({ snapshot: idle, topics: 0 }))).toBeNull()
+  expect(bandLine(model({ snapshot: idle, topics: 2 }))).toBeNull()
   expect(bandLine(model(waits))).toEqual(counts('2 wait for you'))
   expect(bandLine(model(unread))).toEqual(sentence('m2b could not read the tasks: no answer', 'trouble', false))
   expect(bandLine(model({ ...waits, ...noStore }))).toEqual(
@@ -528,33 +837,65 @@ test('the counts of the row: what waits, then the tasks due as the machine shows
   ]
   const snapshot = { candidates: [{ id: 'c1', title: 'Remember? Dana prefers tea' }], review: null, error: null, due }
   const showing = (dueTasks: 'off' | 'count' | 'list', topics: boolean) =>
-    bandLine(model({ snapshot: { ...snapshot, shows: { dueTasks, topics } }, topics: 2 }))
+    bandLine(model({ snapshot: { ...snapshot, shows: { place: 'above', dueTasks, topics } }, topics: 2 }))
   const waits = { text: '1 waits for you', tone: 'waits' }
   const topics = { text: '2 topics', tone: 'quiet' }
 
   expect(showing('count', true)).toEqual({
     parts: [waits, { text: '2 overdue', tone: 'overdue' }, { text: '3 due today', tone: 'dueToday' }, topics],
     isNamed: true,
+    isCalm: false,
     listed: [],
     more: 0,
   })
   // Today's first, then the overdue ones, the most recent first.
-  expect(showing('list', true)).toEqual({ parts: [waits, topics], isNamed: true, listed: [due[2], due[3], due[4]], more: 2 })
-  expect(showing('off', false)).toEqual({ parts: [waits], isNamed: true, listed: [], more: 0 })
+  expect(showing('list', true)).toEqual({ parts: [waits, topics], isNamed: true, isCalm: false, listed: [due[2], due[3], due[4]], more: 2 })
+  expect(showing('off', false)).toEqual({ parts: [waits], isNamed: true, isCalm: false, listed: [], more: 0 })
   // An answer that names no settings is drawn as a machine without an entry shows it.
   expect(bandLine(model({ snapshot, topics: 2 }))).toEqual(showing('count', false))
   // Tasks to list, or topics, draw the band where nothing waits; with off and no topics there is nothing to draw.
   const idle = { candidates: [], review: null, error: null, due: due.slice(0, 1) }
-  expect(bandLine(model({ snapshot: { ...idle, shows: { dueTasks: 'list', topics: false } } }))).toEqual({
-    parts: [],
+  for (const place of ['above', 'waiting'] as const) {
+    expect(bandLine(model({ snapshot: { ...idle, shows: { place, dueTasks: 'list', topics: false } } }))).toEqual({
+      parts: [],
+      isNamed: true,
+      isCalm: false,
+      listed: [due[0]],
+      more: 0,
+    })
+    expect(bandLine(model({ snapshot: { ...idle, shows: { place, dueTasks: 'off', topics: true } }, topics: 1 }))?.parts).toEqual([
+      { text: '1 topic', tone: 'quiet' },
+    ])
+  }
+  expect(bandLine(model({ snapshot: { ...idle, shows: { place: 'waiting', dueTasks: 'off', topics: true } } }))).toBeNull()
+})
+
+test('with nothing to say the row is calm where the band is always there, and there is none where it is there only while something waits or before the first answer', () => {
+  // Covers: B213
+  const idle = { candidates: [], review: null, error: null, due: [{ id: 'd1', title: 'Call Dana', overdue: false }] }
+  const showing = (shows: BandShows, topics = 0) => bandLine(model({ snapshot: { ...idle, shows }, topics }))
+  const calm = { parts: [], isNamed: true, isCalm: true, listed: [], more: 0 }
+
+  expect(showing({ place: 'above', dueTasks: 'off', topics: false })).toEqual(calm)
+  expect(showing({ place: 'waiting', dueTasks: 'off', topics: false })).toBeNull()
+  // The session's topics do not draw the row where the machine does not count them.
+  expect(showing({ place: 'above', dueTasks: 'off', topics: false }, 2)).toEqual(calm)
+  // An answer that names no settings is a machine without an entry: above.
+  expect(bandLine(model({ snapshot: { candidates: [], review: null, error: null } }))).toEqual(calm)
+  expect(bandLine(model({ snapshot: { candidates: [], review: null, error: null, due: [] } }))).toEqual(calm)
+  // No answer yet is not an answer that nothing waits: no row, though the band is above until m2b says where.
+  expect(bandLine(model())).toBeNull()
+  expect(bandLine(model({ proposals: { waiting: [], answered: 0, error: null } }))).toBeNull()
+  // Anything to say takes the calm away, also a sentence.
+  expect(showing({ place: 'above', dueTasks: 'count', topics: false })?.isCalm).toBe(false)
+  expect(showing({ place: 'above', dueTasks: 'off', topics: true }, 1)?.isCalm).toBe(false)
+  expect(bandLine(model({ snapshot: { ...idle, shows: { place: 'above', dueTasks: 'off', topics: false } }, notice: 'the m2b pane cannot be shown here' }))).toEqual({
+    parts: [{ text: 'the m2b pane cannot be shown here', tone: 'trouble' }],
     isNamed: true,
-    listed: [due[0]],
+    isCalm: false,
+    listed: [],
     more: 0,
   })
-  expect(bandLine(model({ snapshot: { ...idle, shows: { dueTasks: 'off', topics: true } }, topics: 1 }))?.parts).toEqual([
-    { text: '1 topic', tone: 'quiet' },
-  ])
-  expect(bandLine(model({ snapshot: { ...idle, shows: { dueTasks: 'off', topics: true } } }))).toBeNull()
 })
 
 test('while the docked pane is turned to another view, and after the tab Overview, the band is the same row', async ($, on) => {
@@ -693,7 +1034,7 @@ test('the bands of two surfaces are the same row, whichever of them the pane is 
 test('not fullscreen: no pane opens by itself, and the band is the one row, with the count of topics where the machine shows it', async ($, on) => {
   // Covers: B192
   const fake = busyFake()
-  fake.shows = { dueTasks: 'count', topics: true }
+  fake.shows = { place: 'above', dueTasks: 'count', topics: true }
   const { clock, opened } = await start($, on, fake)
 
   const band = await drawBand($, clock, MAIN_SCREEN)
@@ -706,7 +1047,7 @@ test('not fullscreen: no pane opens by itself, and the band is the one row, with
 test('not fullscreen: open opens the pane as a dialog in the view it starts in, and the row stays as it is while the block shows', async ($, on) => {
   // Covers: B191
   const fake = busyFake()
-  fake.shows = { dueTasks: 'count', topics: true }
+  fake.shows = { place: 'above', dueTasks: 'count', topics: true }
   const { clock, opened } = await start($, on, fake)
   const band = await drawBand($, clock, MAIN_SCREEN)
 
@@ -762,7 +1103,7 @@ test('fullscreen, too narrow to dock: open opens the pane as a dialog', async ($
 test('the row names one topic as one, and open asks again what the session was given', async ($, on) => {
   // Covers: B192
   const fake = new FakeM2b()
-  fake.shows = { dueTasks: 'count', topics: true }
+  fake.shows = { place: 'above', dueTasks: 'count', topics: true }
   fake.given = { topics: [{ name: 'Northwind', facts: 3, current: 0 }], atStart: 'whole', offUnder: null }
   const { clock } = await start($, on, fake)
   const band = await drawBand($, clock, MAIN_SCREEN)
@@ -798,7 +1139,7 @@ const OPEN_IS_THE_ONE_BUTTON: [string, (fake: FakeM2b) => void][] = [
   [
     'tasks are listed below the row',
     fake => {
-      fake.shows = { dueTasks: 'list', topics: true }
+      fake.shows = { place: 'above', dueTasks: 'list', topics: true }
     },
   ],
   [
@@ -857,7 +1198,7 @@ test('a session given no topic, not known, not looked at or not readable gets no
   expect(topicsGiven({ ...known, topics: [topic], error: 'm2b did not answer' })).toBe(0)
 
   const fake = new FakeM2b()
-  fake.shows = { dueTasks: 'count', topics: true }
+  fake.shows = { place: 'waiting', dueTasks: 'count', topics: true }
   fake.given = { topics: [], atStart: 'whole', offUnder: null }
   const { clock } = await start($, on, fake)
   const band = await drawBand($, clock, MAIN_SCREEN)
@@ -873,6 +1214,33 @@ test('a session given no topic, not known, not looked at or not readable gets no
   await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 't2', reason: 'answer' })
   await clock.advance(1)
   expect(await everyText(band)).toEqual([ENGINES_OWN_DRAWING])
+
+  fake.lookFails = null
+  await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 't3', reason: 'answer' })
+  await clock.advance(1)
+  expect(await shownBand(band)).toEqual(rowSaying('1 topic'))
+  await band.unmount()
+})
+
+test('a session given no topic, not known or not readable leaves a band that is always there calm, with no count of topics', async ($, on) => {
+  // Covers: B192, B213
+  const topic = { name: 'Northwind', facts: 3, current: 0 }
+  const fake = new FakeM2b()
+  fake.shows = { place: 'above', dueTasks: 'count', topics: true }
+  fake.given = { topics: [], atStart: 'whole', offUnder: null }
+  const { clock } = await start($, on, fake)
+  const band = await drawBand($, clock, MAIN_SCREEN)
+  expect(await shownBand(band)).toEqual(CALM_ROW)
+
+  fake.given = null
+  await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 't1', reason: 'answer' })
+  await clock.advance(1)
+  expect(await shownBand(band)).toEqual(CALM_ROW)
+  fake.given = { topics: [topic], atStart: 'whole', offUnder: null }
+  fake.lookFails = 'the machine state cannot be read'
+  await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 't2', reason: 'answer' })
+  await clock.advance(1)
+  expect(await shownBand(band)).toEqual(CALM_ROW)
 
   fake.lookFails = null
   await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 't3', reason: 'answer' })
@@ -937,7 +1305,7 @@ test('an open that Claude Code refuses says so in the band', async ($, on) => {
 test('a session that was not looked at under its id gets no count of topics', async ($, on) => {
   // Covers: B192
   const fake = busyFake()
-  fake.shows = { dueTasks: 'count', topics: true }
+  fake.shows = { place: 'above', dueTasks: 'count', topics: true }
   const { clock } = await start($, on, fake)
   const band = await drawBand($, clock, MAIN_SCREEN)
   expect(await shownBand(band)).toEqual(WITH_TOPICS)
@@ -1009,10 +1377,12 @@ test('the small form is in the order of the overview: what waits, the tasks due,
       notes: 0,
       rowNotice: null,
       folderNotice: null,
+      curateNotice: null,
       snapshot: null,
       proposals: null,
       presses: {},
       health: null,
+      curatingMachine: null,
       versionLine: null,
       ...fields,
     })

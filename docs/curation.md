@@ -15,8 +15,15 @@ schedule can start it too, for days without a session ([On a schedule](#on-a-sch
 Started in front of you it answers in two lines: how the run ended, and what it did to the inbox,
 such as `inbox: 3 captures filed, 0 waiting`, with a pointer to the review task when a run that
 ended well left something there for you.
+With `--detach` it answers at once, in one line, whether a run started and, where none did, why.
+`--json` beside `--detach` gives that answer as data and exits 0: `message` is the line, and
+`kind` is `started`, `running` (a run is under way on this machine), `not-curating` (another
+machine curates the store), `not-downloaded` (`store.json` is not on this machine) or, without
+`--force`, `paused` or `not-due`.
+In a session, the button `curate now` in the m2b pane starts a run in the background on the
+curating machine ([The band](band.md#this-session-what-waits-and-today-in-the-pane)).
 On a machine you paused, a run starts only when you ask for one, with `--force`, `--refresh-all`
-or `--sort-facts` ([Pausing](#pausing)).
+or `--sort-facts`, or with `curate now` ([Pausing](#pausing)).
 
 ## The steps
 
@@ -293,7 +300,7 @@ m2b proposals drop <id>...
 pasted can try to lead the model, also to a proposal that quotes words you typed, so read each
 proposal's text before you keep it.
 
-With the band, the row above the prompt counts them among what waits for you, and
+With the band, its row counts them among what waits for you, and
 `/m2b-proposals` or the tab `Proposals` shows them in the m2b pane, where keep, drop and keep all
 are buttons ([the band](band.md#the-proposals-from-your-sessions-in-the-pane));
 they add the same answers as the commands.
@@ -445,8 +452,8 @@ m2b config set curation.paused true
 
 From then on no session start on this machine starts a run, and a scheduled `m2b curate` does
 nothing and exits 0. Everything else goes on: captures reach the inbox, sessions get the
-distillate, and `m2b curate --force` files the inbox when you ask for it, as do the one-off runs
-`--refresh-all` and `--sort-facts`. `m2b status` has a line
+distillate, and `m2b curate --force` files the inbox when you ask for it, as do `curate now` in
+the m2b pane and the one-off runs `--refresh-all` and `--sort-facts`. `m2b status` has a line
 `paused` while the setting is on, and shows a scheduled attempt as `last attempt: paused at ...`.
 `m2b config set curation.paused false` ends the pause; the next session start then starts the run
 that is due.
@@ -507,8 +514,8 @@ command is still needed for the model steps), name the checkout in the line:
 as `last attempt: not due at ...`, so you can see the schedule reached m2b. The machine's run log
 is `~/.local/state/m2b/run.log`; a run that could not even write its record leaves its cause there.
 
-A run m2b starts in the background, at a session start or with `m2b curate --detach`, has no
-terminal and no log of yours to print to. What it writes on standard error is kept in
+A run m2b starts in the background, at a session start, with `m2b curate --detach` or with
+`curate now` in the m2b pane, has no terminal and no log of yours to print to. What it writes on standard error is kept in
 `~/.local/state/m2b/detached-run.err`, replaced each time such a run starts; look there when a
 run left neither a record nor a line in the run log.
 

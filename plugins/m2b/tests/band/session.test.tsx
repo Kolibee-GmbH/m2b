@@ -3,6 +3,8 @@ import type { CommandRunResult, SessionMessage } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
 import {
+  CURATE_NOW,
+  CURATE_NOW_LINE,
   FakeM2b,
   HOME,
   SESSION_ID,
@@ -135,7 +137,7 @@ test('/m2b-pane opens the pane on what waits, what is due today, what this sessi
       count: null,
       lines: ['[Northwind] 3 facts, 1 current', '[Acme Ltd] 1 fact', PRINTED_WHOLE],
     },
-    { key: 'm2b', title: 'm2b', count: null, lines: ['2 in inbox · curated 18:02'] },
+    { key: 'm2b', title: 'm2b', count: null, lines: ['2 in inbox · curated 18:02', CURATE_NOW_LINE] },
   ])
   await ui.unmount()
 })
@@ -181,9 +183,9 @@ test('what one session was given never reaches the answer the sessions share', a
   expect(shared).toContain('Remember? Dana prefers tea')
   expect(shared).not.toContain('"name":"Northwind"')
   // The one word on topics there is the machine's setting, whether the band counts them: no session's topics.
-  expect(JSON.parse(shared).value.snapshot.shows).toEqual({ dueTasks: 'count', topics: false })
+  expect(JSON.parse(shared).value.snapshot.shows).toEqual({ place: 'above', dueTasks: 'count', topics: false })
   expect(shared.split('"topics"')).toHaveLength(2)
-  expect(Object.keys(JSON.parse(shared).value).sort()).toEqual(['health', 'proposals', 'run', 'snapshot', 'status', 'version'])
+  expect(Object.keys(JSON.parse(shared).value).sort()).toEqual(['curatingMachine', 'health', 'proposals', 'run', 'snapshot', 'status', 'version'])
   expect([...files.values()].join('\n')).not.toContain('Acme Ltd')
 })
 
@@ -575,7 +577,7 @@ test('keep, drop and ok in the start view wait for undo and then write', async (
   const fake = busyFake()
   const { clock } = await start($, on, fake)
   const ui = await startView($)
-  expect(await viewButtons(ui)).toEqual(['keep:c1', 'drop:c1', 'keep:q1', 'drop:q1', 'ok:r1', 'topic:0', 'topic:1'])
+  expect(await viewButtons(ui)).toEqual(['keep:c1', 'drop:c1', 'keep:q1', 'drop:q1', 'ok:r1', 'topic:0', 'topic:1', CURATE_NOW])
 
   await ui.press({ key: 'drop:c1' })
   expect(await linesAt(ui, 'row:c1')).toEqual(['Remember? Dana prefers tea', '[undo] dropping'])
@@ -700,7 +702,7 @@ for (const dueTasks of ['off', 'count', 'list'] as const) {
   test(`the part Today lists the tasks due whatever the band shows of them, with ${dueTasks} too: today's first, each word in its color and the title at full strength`, async ($, on) => {
     // Covers: B102
     const fake = busyFake()
-    fake.shows = { dueTasks, topics: false }
+    fake.shows = { place: 'above', dueTasks, topics: false }
     await start($, on, fake)
 
     const ui = await startView($)
