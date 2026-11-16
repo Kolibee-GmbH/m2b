@@ -132,6 +132,15 @@ export type FakeGiven = { topics: FakeTopic[]; atStart: string | null; offUnder:
 /** A topic's lines as `m2b distillate topic --json` answers them. */
 export type FakeTopicLines = { facts: string[]; current: string[] }
 
+/** A fact every session starts with, as `m2b distillate topics --json` names it: its line, and the fact file it names or null. */
+export type FakeStartFact = { statement: string; file: string | null }
+
+/** A topic of the distillate with how many facts and current items it holds now. */
+export type FakeTopicCount = { name: string; facts: number; current: number }
+
+/** The answer of `m2b distillate topics --json`: what every session starts with, and the topics. */
+export type FakeDistillate = { facts: FakeStartFact[]; current: string[]; topics: FakeTopicCount[] }
+
 /**
  * The `m2b` launcher, answered from memory; every call is recorded, the looks at what the session
  * was given apart from the rest, in `looks`.
@@ -162,6 +171,14 @@ export class FakeM2b {
   topicFails: string | null = null
   /** Unset, the installed core is one from before `distillate topic`: it refuses the action. */
   knowsTopics = true
+  /** What `m2b distillate topics --json` answers. */
+  distillate: FakeDistillate = { facts: [], current: [], topics: [] }
+  /** When set, `m2b distillate topics --json` prints this in place of its answer, whatever its shape. */
+  distillatePrints: string | null = null
+  /** When set, `m2b distillate topics` fails with this as its message. */
+  distillateTopicsFails: string | null = null
+  /** Set, `m2b distillate topics` is refused as a core from before the command refuses it. */
+  distillateTopicsOlder = false
   tasks: FakeTask[] = []
   /** What `m2b todos --json` answers: the owner's open tasks, which hold none of the curator tasks. */
   todos: FakeTodos = { today: TODAY, overdue: [], due_within_7_days: [], later: [], without_date: [] }
@@ -400,6 +417,9 @@ export class FakeM2b {
     if (args[0] === 'distillate' && args[1] === 'topic') {
       return this.topicAnswer(args.at(-1) ?? '')
     }
+    if (args[0] === 'distillate' && args[1] === 'topics') {
+      return this.distillateAnswer()
+    }
     if (args[0] === 'settings') {
       const stderr = "usage: m2b [-h] [--version]\nm2b: error: argument command: invalid choice: 'settings'\n"
       return this.onSettings === null ? { ...fail(''), exitCode: 2, stderr } : this.onSettings(args.slice(1), env)
@@ -477,9 +497,31 @@ export class FakeM2b {
     return ok(JSON.stringify({ name, found: held !== undefined, facts: held?.facts ?? [], current: held?.current ?? [] }))
   }
 
+  /** As `m2b distillate topics --json` answers: what every session starts with, and each topic with its counts. */
+  distillateAnswer(): ProcessRunResult {
+    if (this.distillateTopicsOlder) {
+      const stderr = "usage: m2b distillate [-h] {off,on,topic} ...\nm2b distillate: error: argument action: invalid choice: 'topics'\n"
+      return { exitCode: 2, stdout: '', stderr, isStdoutTruncated: false, isStderrTruncated: false }
+    }
+    if (this.distillateTopicsFails !== null) {
+      return fail(this.distillateTopicsFails)
+    }
+    return ok(this.distillatePrints ?? `${JSON.stringify(this.distillate)}\n`)
+  }
+
+  /** The calls that read what every session starts with and the topics. */
+  factsCalls(): string[][] {
+    return this.calls.filter(call => call[0] === 'distillate' && call[1] === 'topics')
+  }
+
+  /** The calls that read a fact file or a note by its name. */
+  sourceCalls(): string[][] {
+    return this.calls.filter(call => call[0] === 'source')
+  }
+
   /** The calls that turned the distillate off or on for a folder. */
   folderCalls(): string[][] {
-    return this.calls.filter(call => call[0] === 'distillate' && call[1] !== 'topic')
+    return this.calls.filter(call => call[0] === 'distillate' && call[1] !== 'topic' && call[1] !== 'topics')
   }
 
   /** The calls that read a topic's lines. */
@@ -1123,7 +1165,7 @@ export async function answerKeys(ui: { findAll: (q: { type: string }) => Promise
 
 /** The key of the box that holds the pane's row of tabs. */
 const TABS = 'tabs'
-const TAB_IDS: readonly TabId[] = ['overview', 'proposals', 'review', 'tasks', 'settings']
+const TAB_IDS: readonly TabId[] = ['overview', 'proposals', 'review', 'tasks', 'facts', 'settings']
 
 /**
  * A tab of the pane's row as drawn: its label, and the key of its button; `key` is null for the
@@ -1144,7 +1186,7 @@ export async function shownTabs(ui: Drawn): Promise<ShownTab[]> {
   })
 }
 
-/** Which tab the row marks as the one shown: one of the five by its place, or the sixth beside them. */
+/** Which tab the row marks as the one shown: one of the six by its place, or the seventh beside them. */
 export async function shownTab(ui: Drawn): Promise<Shown> {
   const at = (await shownTabs(ui)).findIndex(tab => tab.key === null)
   if (at === -1) {
@@ -1226,10 +1268,23 @@ export async function linesAt(ui: Drawn, key: string): Promise<string[] | null> 
 export const PARTS = { waits: 'Waits for you', today: 'Today', session: 'This session', m2b: 'm2b' } as const
 /**
  * The key a part is drawn under, in whichever view: the overview's four, the one part of the
- * proposals, of a search and of a topic, the review's `run` beside its own `waits`, and the
- * settings' four, named like the core's groups.
+ * proposals, of a search and of a topic, the review's `run` beside its own `waits`, the
+ * settings' four, named like the core's groups, the two of the facts and the two of a fact's file.
  */
-export type PartKey = keyof typeof PARTS | 'proposals' | 'run' | 'search' | 'topic' | 'shows' | 'reads' | 'curation' | 'about'
+export type PartKey =
+  | keyof typeof PARTS
+  | 'proposals'
+  | 'run'
+  | 'search'
+  | 'topic'
+  | 'shows'
+  | 'reads'
+  | 'curation'
+  | 'about'
+  | 'facts:start'
+  | 'facts:topics'
+  | 'fact'
+  | 'fact:evidence'
 
 const PART_KEY = /^part:/
 

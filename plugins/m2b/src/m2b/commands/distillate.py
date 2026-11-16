@@ -1,5 +1,8 @@
 """``distillate off / on``: projects whose sessions get no distillate, for work the owner keeps apart.
 
+``distillate topics`` prints what every session starts with and each topic with its counts, for the
+pane's tab of what m2b knows.
+
 ``distillate topic <name>`` prints one topic's facts and current items as the distillate holds them
 at the call: the owner asks what stands behind a topic a session was given, and what the session
 got at its moment of giving is kept nowhere. A name the distillate holds no topic of is said, also
@@ -20,7 +23,15 @@ from m2b.commands.output import print_json
 from m2b.config.machine import DistillateSettings, load_machine_config, set_machine_config_value
 from m2b.notes.characters import without_hidden
 from m2b.notes.layout import MEMORY, MEMORY_INDEX
-from m2b.notes.memory_index import split_topics, topic_items
+from m2b.notes.memory_index import (
+    CURRENT_HEADING,
+    FACTS_HEADING,
+    is_section_heading,
+    item_counts,
+    parse_fact_line,
+    split_topics,
+    topic_items,
+)
 from m2b.paths import expand
 from m2b.store.base import Store
 
@@ -72,6 +83,52 @@ def distillate_topic(arguments: argparse.Namespace, context: Context) -> int:
     for item in current:
         print(f"- {item}")
     return 0
+
+
+def distillate_topics(arguments: argparse.Namespace, context: Context) -> int:
+    """What every session starts with, the facts and current items outside any topic, and each
+    topic with how many facts and current items a session that a prompt names it to is given."""
+    split = split_topics(_distillate(configured_store(load_machine_config(context.machine), context.machine)))
+    facts, current = _start_items(split.general)
+    topics = [(block.topic.name, *item_counts(block)) for block in split.blocks]
+    if arguments.json:
+        print_json(
+            {
+                "facts": [{"statement": statement, "file": file} for statement, file in facts],
+                "current": current,
+                "topics": [{"name": name, "facts": count, "current": now} for name, count, now in topics],
+            }
+        )
+        return 0
+    print("Every session starts with")
+    for statement, file in facts:
+        print(f"- {statement} ({file})" if file is not None else f"- {statement}")
+    if current:
+        print("Current")
+    for item in current:
+        print(f"- {item}")
+    if topics:
+        print("Topics, given to a session when a prompt names them")
+    for name, count, now in topics:
+        print(f"- {name}: {count} {'fact' if count == 1 else 'facts'}, {now} current")
+    return 0
+
+
+def _start_items(general: str) -> tuple[list[tuple[str, str | None]], list[str]]:
+    """The list items of the distillate outside its topics: the facts with their fact file, where the
+    line names one, and the current items as they stand."""
+    facts: list[tuple[str, str | None]] = []
+    current: list[str] = []
+    section = ""
+    for line in (line.rstrip("\r") for line in general.split("\n")):
+        if is_section_heading(line):
+            section = line.strip()
+        elif line.startswith("- ") and section == FACTS_HEADING:
+            parsed = parse_fact_line(line)
+            facts.append((parsed.statement, parsed.file_name) if parsed is not None else (line[2:].strip(), None))
+        elif line.startswith("- ") and section == CURRENT_HEADING:
+            current.append(line[2:].strip())
+    return facts, current
 
 
 def _distillate(store: Store) -> str:

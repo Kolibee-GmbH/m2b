@@ -423,6 +423,7 @@ for (const [to, label] of [
   ['overview', 'Overview'],
   ['proposals', 'Proposals'],
   ['review', 'Review'],
+  ['facts', 'Facts'],
   ['settings', 'Settings'],
 ] as const) {
   test(`an answer that comes after the tab ${label} was pressed is dropped, and draws no task there`, async ($, on) => {
@@ -442,7 +443,7 @@ for (const [to, label] of [
     await clock.advance(1)
 
     expect(await shownTab(ui)).toBe(to)
-    expect(await shownTabs(ui)).toHaveLength(5)
+    expect(await shownTabs(ui)).toHaveLength(6)
     expect(await everyText(ui)).not.toContain(LADDER)
     await ui.unmount()
   })
@@ -581,8 +582,10 @@ test('the titles are kept for the opening that read them, and turning the pane t
     { kind: 'proposals' },
     { kind: 'review' },
     { kind: 'settings', press: 'p1', aside: null, drawn: 0 },
-    { kind: 'topic', name: 'Acme Ltd', press: 'p1', isRead: true },
+    { kind: 'topic', press: 'p1', isRead: true },
     { kind: 'tasks', press: 'p2', drawn: 0 },
+    { kind: 'facts', press: 'p1', drawn: 0 },
+    { kind: 'fact', press: 'p1', drawn: 0 },
   ] as const) {
     beginTasks('p1')
     fillTasks('p1', READ_LIST)

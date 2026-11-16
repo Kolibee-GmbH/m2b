@@ -1,27 +1,30 @@
 import type { PaneView } from '../types'
+import { factFileNameOf, factTabLabel } from './facts-tab'
 import { topicLabel } from './look'
 import type { Tab } from './look'
 import { topicShowKey } from './session-view'
+import { topicNameOf } from './topic'
 import type { SessionModel } from './session-view'
 
 /*
- * The tabs above every view of the m2b pane: five that stay, always in one order, and a sixth for
- * a topic's lines, a search or the settings that only inform, which stands there only while it is
+ * The tabs above every view of the m2b pane: six that stay, always in one order, and a seventh for
+ * a topic's lines, a fact's file, a search or the settings that only inform, which stands there only while it is
  * shown. A tab is the one way from a view to another, so no view has a button that leads back.
  */
 
 /** A tab that stays, named like the view it turns the pane to. */
-export type TabId = 'overview' | 'proposals' | 'review' | 'tasks' | 'settings'
+export type TabId = 'overview' | 'proposals' | 'review' | 'tasks' | 'facts' | 'settings'
 
-/** What the pane shows, as its row of tabs has it: one of the five, or the sixth beside them. */
+/** What the pane shows, as its row of tabs has it: one of the six, or the seventh beside them. */
 export type Shown = TabId | 'aside'
 
-const TAB_IDS: readonly TabId[] = ['overview', 'proposals', 'review', 'tasks', 'settings']
+const TAB_IDS: readonly TabId[] = ['overview', 'proposals', 'review', 'tasks', 'facts', 'settings']
 const LABELS: Readonly<Record<TabId, string>> = {
   overview: 'Overview',
   proposals: 'Proposals',
   review: 'Review',
   tasks: 'Tasks',
+  facts: 'Facts',
   settings: 'Settings',
 }
 const SEARCH = 'Search'
@@ -30,7 +33,7 @@ export function shownOf(view: PaneView | null): Shown {
   if (view === null) {
     return 'overview'
   }
-  if (view.kind === 'topic' || view.kind === 'search') {
+  if (view.kind === 'topic' || view.kind === 'search' || view.kind === 'fact') {
     return 'aside'
   }
   return view.kind === 'settings' && view.aside !== null ? 'aside' : view.kind
@@ -49,7 +52,7 @@ export function tabKey(to: TabId, shown: Shown): string {
 /**
  * The key of the tab the focus is asked for once a press turned the pane from `left` to `to`: the
  * tab that leads back to the view that was left. The same key pressed again returns there, and the
- * focus never stands on a button that writes. The sixth tab is gone once it is left: `Overview`
+ * focus never stands on a button that writes. The seventh tab is gone once it is left: `Overview`
  * stands in for it, and on the overview itself the tab beside it.
  */
 export function tabKeyAfterTurn(left: Shown, to: Shown): string {
@@ -66,13 +69,16 @@ export function tabKeyAfterTurn(left: Shown, to: Shown): string {
  * tabs' rule.
  */
 export function focusKeyAfterTab(left: PaneView | null, to: TabId, model: SessionModel): string {
-  const show = to === 'overview' && left?.kind === 'topic' ? topicShowKey(model, left.name) : null
+  const show = to === 'overview' && left?.kind === 'topic' ? topicShowKey(model, topicNameOf(left.press)) : null
   return show ?? tabKeyAfterTurn(shownOf(left), to)
 }
 
 function asideLabel(view: PaneView | null): string | null {
   if (view?.kind === 'topic') {
-    return topicLabel(view.name)
+    return topicLabel(topicNameOf(view.press))
+  }
+  if (view?.kind === 'fact') {
+    return factTabLabel(factFileNameOf(view.press))
   }
   if (view?.kind === 'settings' && view.aside !== null) {
     return topicLabel(view.aside.title)

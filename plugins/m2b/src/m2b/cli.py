@@ -268,6 +268,13 @@ def _parser() -> argparse.ArgumentParser:
         "the facts and current items of one topic, as the distillate holds them now",
         json_flag=True,
     ).add_argument("name", help="the topic's name, as its heading in the distillate has it")
+    _command(
+        distillate_group,
+        "topics",
+        distillate_commands.distillate_topics,
+        "what every session starts with, and each topic with its counts",
+        json_flag=True,
+    )
 
     addons_group = _group(commands, "addons", "the add-ons of m2b on this machine")
     _command(addons_group, "list", addons_commands.addons_list, "each add-on and whether it is on", json_flag=True)

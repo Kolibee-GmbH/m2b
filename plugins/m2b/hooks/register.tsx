@@ -112,9 +112,22 @@ import {
   waits,
 } from './settings'
 import type { SettingsActions } from './settings'
+import {
+  beginFactFile,
+  beginFacts,
+  factFilePane,
+  factsOf,
+  factsPane,
+  fillFactFile,
+  fillFacts,
+  forgetFactsUnless,
+  readFactFile,
+  readFacts,
+} from './facts-tab'
+import type { FactsActions } from './facts-tab'
 import { NO_LONGER_OPEN, beginTasks, fillTasks, forgetTasksUnless, heldTasks, isOpenIn, noteRefusal, readTasks, taskPressKey, tasksPane } from './tasks-tab'
 import type { OpenTask, TaskActions } from './tasks-tab'
-import { beginTopic, fillTopic, forgetTopicUnless, heldTopic, readTopic, topicPane } from './topic'
+import { beginTopic, fillTopic, forgetTopicUnless, heldTopic, readTopic, topicNameOf, topicPane } from './topic'
 import {
   NOTE_COMMAND_LINE,
   NOTE_TOOL,
@@ -643,6 +656,10 @@ async function turnByTab($: EngineInterface, to: TabId): Promise<void> {
     await showTasks($, focusKey)
     return
   }
+  if (to === 'facts') {
+    await showFacts($, focusKey)
+    return
+  }
   await asDialog($, { kind: to })
   const focusMoved = focusInPane($, focusKey)
   $.clock.after(0, inBackground($, () => refresh($, true)))
@@ -682,6 +699,7 @@ async function turnTo($: EngineInterface, view: PaneView | null): Promise<void> 
   forgetTopicUnless(view)
   forgetSettingsUnless(view)
   forgetTasksUnless(view)
+  forgetFactsUnless(view)
   await update($, paneViewAtom, () => view)
 }
 
@@ -691,12 +709,12 @@ async function turnTo($: EngineInterface, view: PaneView | null): Promise<void> 
  * asked: after a tab, a close, another view or a press on another topic nothing is kept for this
  * one, and an answer that arrives then is dropped. The focus goes to the tab that leads back.
  */
-async function showTopic($: EngineInterface, name: string): Promise<void> {
+async function showTopic($: EngineInterface, name: string, from: TabId = 'overview'): Promise<void> {
   const press = await newPressToken($)
-  beginTopic(press)
-  await asDialog($, { kind: 'topic', name, press, isRead: false })
+  beginTopic(press, name)
+  await asDialog($, { kind: 'topic', press, isRead: false })
   // The read does not wait for the focus.
-  const focusMoved = focusInPane($, tabKeyAfterTurn('overview', 'aside'))
+  const focusMoved = focusInPane($, tabKeyAfterTurn(from, 'aside'))
   if (fillTopic(press, await readTopic($, name))) {
     // The lines are the module's; this write is what draws the pane again.
     await update($, paneViewAtom, view => (view !== null && view.kind === 'topic' && view.press === press ? { ...view, isRead: true } : view))
@@ -783,6 +801,48 @@ async function whyNotOpen($: EngineInterface, task: OpenTask): Promise<string | 
     return null
   }
   return NO_LONGER_OPEN
+}
+
+/**
+ * Turns the pane to the tab `Facts` and reads what every session starts with and the topics, as
+ * the distillate holds them now. Like a topic's lines, they are kept by the module that draws
+ * them, for this opening alone.
+ */
+async function showFacts($: EngineInterface, focusKey: string | null): Promise<void> {
+  const opening = await newPressToken($)
+  beginFacts(opening)
+  await asDialog($, { kind: 'facts', press: opening, drawn: 0 })
+  const focusMoved = focusInPane($, focusKey)
+  if (fillFacts(opening, await readFacts($))) {
+    await redrawn($, 'facts', opening)
+  }
+  await focusMoved
+}
+
+/** `details` on a fact: its file under a tab of its own, read with `m2b source --json`; the focus on the tab that leads back. */
+async function showFactFile($: EngineInterface, file: string): Promise<void> {
+  const opening = await newPressToken($)
+  beginFactFile(opening, file)
+  await asDialog($, { kind: 'fact', press: opening, drawn: 0 })
+  const focusMoved = focusInPane($, tabKeyAfterTurn('facts', 'aside'))
+  if (fillFactFile(opening, await readFactFile($, file))) {
+    await redrawn($, 'fact', opening)
+  }
+  await focusMoved
+}
+
+/** Draws the view of the opening `opening` names again, where it is still shown: what its module holds changed. */
+async function redrawn($: EngineInterface, kind: 'facts' | 'fact', opening: string): Promise<void> {
+  await update($, paneViewAtom, view =>
+    view !== null && view.kind === kind && view.press === opening ? { ...view, drawn: view.drawn + 1 } : view,
+  )
+}
+
+function factsActions($: EngineInterface): FactsActions {
+  return {
+    details: file => showFactFile($, file),
+    showTopic: name => showTopic($, name, 'facts'),
+  }
 }
 
 type SettingsView = Extract<PaneView, { kind: 'settings' }>
@@ -986,11 +1046,15 @@ async function viewOfPane(
     case 'proposals':
       return proposalsPane($, e, proposals, presses, await read($, proposalsNoticeAtom), proposalActions($), bodyColumns)
     case 'topic':
-      return topicPane($, e, view.name, heldTopic(view.press), bodyColumns)
+      return topicPane($, e, topicNameOf(view.press), heldTopic(view.press), bodyColumns)
     case 'search':
       return searchPane($, e, view.search, bodyColumns)
     case 'tasks':
       return tasksPane($, e, heldTasks(view.press), presses, taskActions($, view.press), bodyColumns)
+    case 'facts':
+      return factsPane($, e, factsOf(view.press), factsActions($), bodyColumns)
+    case 'fact':
+      return factFilePane($, e, view.press, bodyColumns)
     case 'review': {
       const model = {
         snapshot: await read($, snapshotAtom),
@@ -1591,9 +1655,9 @@ export const register: Register = on => {
     lookTimers.clear()
     isOpeningDue = true
     await carryPressesOver($)
-    // A reload of the mod took the lines of a topic, the values of the settings and the open tasks
-    // with the old module: the pane starts over.
-    if (['topic', 'settings', 'tasks'].includes((await read($, paneViewAtom))?.kind ?? '')) {
+    // A reload of the mod took the lines of a topic, the values of the settings, the open tasks and
+    // the facts with the old module: the pane starts over.
+    if (['topic', 'settings', 'tasks', 'facts', 'fact'].includes((await read($, paneViewAtom))?.kind ?? '')) {
       await turnTo($, null)
     }
     loadedVersion = await readLoadedVersion($)
@@ -1867,6 +1931,7 @@ export const register: Register = on => {
     forgetTopicUnless(null)
     forgetSettingsUnless(null)
     forgetTasksUnless(null)
+    forgetFactsUnless(null)
     paneSeats.clear()
     return next(e)
   })

@@ -26,6 +26,10 @@ All notable changes to this project are documented here. The format follows
   (overdue, today, the next seven days, later, without a date), each with `done`, which ticks it
   after five seconds of `undo` ([All your open tasks](docs/band.md#all-your-open-tasks)). The tab
   stands between `Review` and `Settings`.
+- The pane has a tab `Facts`: what every session starts with, each fact with `details`, and every
+  topic with its counts. `details` opens the fact's file, with what it rests on: the notes and
+  documents behind it ([What m2b knows](docs/band.md#what-m2b-knows)). Behind it is a new command,
+  `m2b distillate topics [--json]`.
 
 ## [0.7.0] - 2026-11-16
 

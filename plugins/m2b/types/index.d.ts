@@ -153,8 +153,10 @@ export type PaneView =
   | { kind: 'review' }
   | { kind: 'search'; search: PaneSearch }
   | { kind: 'proposals' }
-  | { kind: 'topic'; name: string; press: string; isRead: boolean }
+  | { kind: 'topic'; press: string; isRead: boolean }
   | { kind: 'tasks'; press: string; drawn: number }
+  | { kind: 'facts'; press: string; drawn: number }
+  | { kind: 'fact'; press: string; drawn: number }
   | { kind: 'settings'; press: string; aside: { name: string; title: string } | null; drawn: number }
 
 /**

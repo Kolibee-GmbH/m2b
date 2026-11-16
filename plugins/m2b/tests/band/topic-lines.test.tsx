@@ -80,7 +80,7 @@ test('a press on a topic shows its lines as the distillate holds them now, and s
   expect(await texts(ui)).toEqual(['Acme Ltd', AS_IT_IS_NOW, KIM, PAYS, 'Current', AUDIT])
   // Opened anew as a dialog, so Escape leads back to the view the pane starts in.
   expect(opened.slice(opensBefore)).toEqual([AS_A_DIALOG])
-  // The lines are read, never pressed: the tabs above them are the one way on, the topic's own beside the five.
+  // The lines are read, never pressed: the tabs above them are the one way on, the topic's own beside the six.
   expect(await viewButtons(ui)).toEqual([])
   expect((await shownTabs(ui)).at(-1)).toEqual({ label: 'Acme Ltd', key: null })
   await ui.unmount()
@@ -173,6 +173,7 @@ for (const [to, label] of [
   ['proposals', 'Proposals'],
   ['review', 'Review'],
   ['tasks', 'Tasks'],
+  ['facts', 'Facts'],
   ['settings', 'Settings'],
 ] as const) {
   test(`the tab ${label} forgets the lines too: back on the start view, the next press reads them again`, async ($, on) => {
@@ -285,7 +286,7 @@ test('while m2b reads, the view says so, and an answer that comes after the tab 
   await ui.unmount()
 })
 
-test('an answer that comes after another tab was pressed is dropped too, and draws no sixth tab again', async ($, on) => {
+test('an answer that comes after another tab was pressed is dropped too, and draws no seventh tab again', async ($, on) => {
   // Covers: B190
   const fake = givenAcme()
   fake.delayMs = args => (args[1] === 'topic' ? 2_000 : 0)
@@ -301,7 +302,7 @@ test('an answer that comes after another tab was pressed is dropped too, and dra
   await pressed
 
   expect(await shownTab(ui)).toBe('review')
-  expect(await shownTabs(ui)).toHaveLength(5)
+  expect(await shownTabs(ui)).toHaveLength(6)
   expect(await texts(ui)).not.toContain(KIM)
   await pressTab(ui, 'overview')
   expect(await texts(ui)).not.toContain(KIM)
@@ -447,13 +448,13 @@ test('a launcher that cannot be started says could not read', async ($, on) => {
 test('the lines are kept for the press that asked, and turning the pane away drops them', () => {
   // Covers: B190
   const lines: TopicLook = { state: 'read', facts: [KIM], current: [] }
-  beginTopic('p1')
+  beginTopic('p1', 'Acme Ltd')
   expect(heldTopic('p1')).toEqual({ state: 'reading' })
   expect(fillTopic('p1', lines)).toBe(true)
   expect(heldTopic('p1')).toEqual(lines)
 
   // The view of that very press keeps them; a redraw or a second write of the view changes nothing.
-  forgetTopicUnless({ kind: 'topic', name: 'Acme Ltd', press: 'p1', isRead: true })
+  forgetTopicUnless({ kind: 'topic', press: 'p1', isRead: true })
   expect(heldTopic('p1')).toEqual(lines)
 
   for (const other of [
@@ -461,9 +462,11 @@ test('the lines are kept for the press that asked, and turning the pane away dro
     { kind: 'review' },
     { kind: 'proposals' },
     { kind: 'tasks', press: 'p1', drawn: 1 },
-    { kind: 'topic', name: 'Acme Ltd', press: 'p2', isRead: false },
+    { kind: 'facts', press: 'p1', drawn: 1 },
+    { kind: 'fact', press: 'p1', drawn: 1 },
+    { kind: 'topic', press: 'p2', isRead: false },
   ] as const) {
-    beginTopic('p1')
+    beginTopic('p1', 'Acme Ltd')
     fillTopic('p1', lines)
     forgetTopicUnless(other)
     expect(holdsTopic()).toBe(false)
@@ -474,14 +477,14 @@ test('the lines are kept for the press that asked, and turning the pane away dro
 test('an answer for a press the pane turned away from is not kept', () => {
   // Covers: B190
   const lines: TopicLook = { state: 'read', facts: [KIM], current: [] }
-  beginTopic('p1')
+  beginTopic('p1', 'Acme Ltd')
   forgetTopicUnless(null)
   expect(fillTopic('p1', lines)).toBe(false)
   expect(holdsTopic()).toBe(false)
 
   // Nor for an earlier press on the same topic, once a later one asked.
-  beginTopic('p1')
-  beginTopic('p2')
+  beginTopic('p1', 'Acme Ltd')
+  beginTopic('p2', 'Acme Ltd')
   expect(fillTopic('p1', lines)).toBe(false)
   expect(heldTopic('p2')).toEqual({ state: 'reading' })
   expect(heldTopic('p1')).toEqual({ state: 'reading' })
