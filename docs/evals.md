@@ -13,8 +13,8 @@ yourself.
 
 | | |
 |---|---|
-| Day | 2026-11-15 |
-| m2b | 0.5.0 |
+| Day | 2026-11-16 |
+| m2b | 0.6.0 |
 | Claude Code | 2.1.325 |
 | Model | `claude-opus-5-5` |
 | Runs | 84 |
