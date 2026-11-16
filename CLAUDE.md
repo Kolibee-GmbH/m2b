@@ -3,8 +3,8 @@
 ## About
 
 An open-source second brain for Claude Code: capture notes, curate them into an archive and a
-small distillate every session sees, tasks in Apple Reminders or Markdown files, add-ons
-(the band mod and the worklog), all in one plugin. [Architecture](docs/architecture.md)
+small distillate every session sees, tasks in Apple Reminders or Markdown files, the band (a
+mod that draws in the session) and the worklog add-on, all in one plugin. [Architecture](docs/architecture.md)
 is the tour of the code; [Behavior](docs/behavior.md) lists the rules the tests cover.
 
 ## Tech Stack

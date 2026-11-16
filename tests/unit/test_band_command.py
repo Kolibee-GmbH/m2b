@@ -83,20 +83,47 @@ class BandCommandTest(test_runner.RunnerTest):
         done = tasks.add("Water the plants", due=today)
         tasks.complete(done)
 
-        due = self.band()["tasks"]["due"]
+        due = self.band()["tasks"]["due_by_today"]
 
         self.assertEqual([task["title"] for task in due], ["Return the drill", "Call Dana"])
         self.assertEqual([task["overdue"] for task in due], [True, False])
 
-    def test_the_due_tasks_are_left_out_when_band_due_tasks_is_off(self) -> None:
+    def test_the_tasks_due_are_named_however_the_band_shows_them_and_the_answer_says_how(self) -> None:
         """Covers: B102"""
         self.curating()
         self.tasks().add("Call Dana", due=datetime.date.today())
-        config = json.loads(self.machine.config_file.read_text(encoding="utf-8"))
-        config["band"] = {"due_tasks": False}
-        self.machine.config_file.write_text(json.dumps(config), encoding="utf-8")
+
+        self.assertEqual(self.band()["band"]["due_tasks"], "count")
+        for written, shown in (("off", "off"), ("count", "count"), ("list", "list"), (True, "list"), (False, "off")):
+            with self.subTest(written=written):
+                self.write_band_settings(due_tasks=written)
+                answer = self.band()
+                self.assertEqual(answer["band"]["due_tasks"], shown)
+                self.assertEqual([task["title"] for task in answer["tasks"]["due_by_today"]], ["Call Dana"])
+
+    def test_the_answer_names_what_the_band_shows_as_the_config_says(self) -> None:
+        """Covers: B202"""
+        self.curating()
+
+        self.assertEqual(self.band()["band"], {"due_tasks": "count", "topics": False})
+        self.write_band_settings(due_tasks="list", topics=True)
+        self.assertEqual(self.band()["band"], {"due_tasks": "list", "topics": True})
+
+    def test_a_band_from_before_the_three_values_is_handed_the_tasks_only_where_they_are_listed(self) -> None:
+        """Covers: B102"""
+        self.curating()
+        self.tasks().add("Call Dana", due=datetime.date.today())
 
         self.assertNotIn("due", self.band()["tasks"])
+        self.write_band_settings(due_tasks="off")
+        self.assertNotIn("due", self.band()["tasks"])
+        self.write_band_settings(due_tasks="list")
+        self.assertEqual([task["title"] for task in self.band()["tasks"]["due"]], ["Call Dana"])
+
+    def write_band_settings(self, **band: object) -> None:
+        config = json.loads(self.machine.config_file.read_text(encoding="utf-8"))
+        config["band"] = band
+        self.machine.config_file.write_text(json.dumps(config), encoding="utf-8")
 
     def test_tasks_only_leaves_the_status_out(self) -> None:
         """Covers: B93"""

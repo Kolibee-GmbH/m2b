@@ -449,7 +449,7 @@ Three pictures move. `scripts/readme-demo` records all of them, `--only <name>` 
 scripts/readme-demo                        # all three
 scripts/readme-demo --only demo            # the README's, two model turns and a curation run
 scripts/readme-demo --only pane-answers    # no model
-scripts/readme-demo --only settings-walk   # no model
+scripts/readme-demo --only pane-settings   # no model
 ```
 
 The one at the top of the README, `docs/images/demo.gif`, follows one sentence from a prompt into
@@ -457,22 +457,23 @@ a later session. Record it again after a change it shows.
 
 It needs `claude` logged in, [`agg`](https://docs.asciinema.org/manual/agg/) and `git`. It builds
 the same demo machine with an empty store and records three acts in a hidden terminal: a Claude
-Code session that is told to remember the sentence, a second session in which nobody types and
-whose start begins the curation run in the background, and a session in a second project that is
-asked for it. That run uses a real model, not `scripts/no-model`, so the fact the last session
-answers with is one a curation run filed: two model turns and one run on your Claude Code login,
-about five minutes, two of them in the second act, because the status line looks at the store once
-a minute. What the picture changes against the recording: a session's start is cut, the model's
+Code session that is told to remember the sentence, a second session whose start begins the
+curation run in the background, in which nobody types until the run had its time and `/m2b-review`
+then shows it in the pane, and a session in a second project that is asked for it. That run uses
+a real model, not `scripts/no-model`, so the fact the last session answers with is one a curation
+run filed: two model turns and one run on your Claude Code login, about five minutes, two of them
+in the second act, which gives the run time to end. What the picture changes against the recording: a session's start is cut, the model's
 answer and the wait for the run are shortened to a few seconds, and a line of words stands before
 each act.
 
-The other two, `pane-answers.gif` and `settings-walk.gif` in [The band](docs/band.md), show the
+The other two, `pane-answers.gif` and `pane-settings.gif` in [The band](docs/band.md), show the
 pane driven with the keyboard and ask no model: one session each, under the fullscreen layout on
 the store after a curation run, that types a command of the band and then only Tab, Shift+Tab and
-Enter. One keeps a proposal, takes that back, keeps it again and lets it be written; the other
-walks through the settings with Enter on `next` and presses the switch of `curation.model` the
-same way. The five seconds a press waits with its `undo` pass as recorded. Record them again
-after a change to a view they pass through: a button added before another moves what Tab reaches.
+Enter. One goes to the proposals by their tab, keeps one, takes that back, keeps it again and
+lets it be written; the other sets `curation.model` in the settings with a press on its other
+value the same way and then opens `About this setup`. The five seconds a press waits with its
+`undo` pass as recorded. Record them again after a change to a view they pass through: a button
+added before another moves what Tab reaches.
 
 The script writes no picture when the demo machine does not hold what the picture shows: the run
 left the note in the inbox, the first proposal was not the one kept, or `curation.model` was not

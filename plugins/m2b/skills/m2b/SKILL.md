@@ -67,9 +67,11 @@ allows and set `store.path` to it), `does not answer` (the prompt hook: no topic
 prompt, for the reason the line gives) or `cannot commit` (the store folder is a git repository, and a
 curation run on this machine cannot commit into it, for the reason the line gives), with what to do. Report `not recorded`
 too, and say that it matters only on the machine that curates, where the model steps need that program. Report
-`band: not seen` with the reason its line gives: the band above the prompt and the status line are
-missing because Claude Code loads no mods, or no plugin hooks at all, in the latest session. When all
-are fine, say so in one line.
+`band: not seen` with the reason its line gives: the band does not run because Claude Code loads no
+mods, or no plugin hooks at all, in the latest session. A band that shows nothing and an empty
+status line are no fault: the band draws a row only while something waits for an answer or a task
+is due, the status line speaks only when something is wrong, and `/m2b-pane` opens the pane
+whenever the band runs. When all are fine, say so in one line.
 
 ## Any other argument
 

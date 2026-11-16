@@ -26,15 +26,19 @@ class BeatsTest(unittest.TestCase):
             (beats[-1].seconds, beats[-1].shown, beats[-1].settles), (30, readme_demo.ANSWER_SECONDS, True)
         )
 
-    def test_the_session_whose_start_begins_the_run_types_nothing_and_waits_past_two_looks_of_the_status_line(
+    def test_the_session_whose_start_begins_the_run_types_nothing_until_the_run_had_its_time_then_shows_it(
         self,
     ) -> None:
         beats = readme_demo.start_beats()
 
         self.assertEqual(beats[:3], readme_demo.session_beats("hi!", 30)[:3])
-        self.assertEqual("".join(beat.keys for beat in beats[3:]), "")
-        self.assertGreater(sum(beat.seconds for beat in beats), 2 * 60)
-        self.assertEqual((beats[-1].shown, beats[-1].settles), (readme_demo.RUN_SECONDS, False))
+        # Nothing is typed before the wait for the run is over: the run starts with the session alone.
+        waited = next(index for index, beat in enumerate(beats) if beat.seconds == readme_demo.RUN_WAIT_SECONDS)
+        self.assertEqual("".join(beat.keys for beat in beats[3:waited]), "")
+        self.assertEqual((beats[waited].shown, beats[waited].settles), (readme_demo.RUN_SECONDS, False))
+        self.assertGreater(sum(beat.seconds for beat in beats[: waited + 1]), 2 * 60)
+        self.assertEqual("".join(beat.keys for beat in beats[waited:]), "/m2b-review" + readme_images.ENTER)
+        self.assertEqual(beats[-1], readme_demo.Beat(readme_demo.SHOWN_RUN_SECONDS))
 
 
 def keys_of(picture: Picture) -> str:
@@ -46,9 +50,9 @@ class PicturesTest(unittest.TestCase):
     def test_the_readme_s_picture_comes_first_and_the_two_of_the_pane_are_wide_enough_to_dock_it(self) -> None:
         sizes = {picture.name: (picture.columns, picture.rows) for picture in readme_demo.PICTURES}
 
-        self.assertEqual(list(sizes), ["demo", "pane-answers", "settings-walk"])
+        self.assertEqual(list(sizes), ["demo", "pane-answers", "pane-settings"])
         self.assertEqual(sizes["demo"], (readme_demo.COLUMNS, readme_demo.ROWS))
-        self.assertEqual({sizes["pane-answers"][0], sizes["settings-walk"][0]}, {readme_images.WIDE})
+        self.assertEqual({sizes["pane-answers"][0], sizes["pane-settings"][0]}, {readme_images.WIDE})
 
     def test_a_picture_of_the_pane_is_one_session_in_the_full_screen_layout_that_asks_no_model(self) -> None:
         demo = readme_images.demo_environment({"PATH": "/usr/bin"})
@@ -74,13 +78,14 @@ class PicturesTest(unittest.TestCase):
                 set(presses.replace(readme_demo.SHIFT_TAB, "")), {readme_demo.TAB, readme_images.ENTER}, picture.name
             )
 
-        self.assertEqual(commands, {"pane-answers": "/m2b-pane", "settings-walk": "/m2b-settings"})
+        self.assertEqual(commands, {"pane-answers": "/m2b-pane", "pane-settings": "/m2b-settings"})
 
     def test_only_the_second_press_is_given_the_five_seconds_after_which_it_is_written(self) -> None:
-        # The key after the press that is written: the first step back to the start view, and to the list.
+        # The key after the press that is written: the first step back to the start view, and Enter on the row
+        # that opens what only informs.
         after_the_write = {
             "pane-answers": (readme_demo.answering_beats(), readme_demo.SHIFT_TAB, 0),
-            "settings-walk": (readme_demo.settings_beats(), readme_demo.TAB, -1),
+            "pane-settings": (readme_demo.settings_beats(), readme_images.ENTER, -1),
         }
         for name, (beats, key, which) in after_the_write.items():
             with self.subTest(picture=name):
@@ -91,13 +96,32 @@ class PicturesTest(unittest.TestCase):
                 others = [beat.seconds for beat in beats[3:] if beat is not waited]
                 self.assertLess(max(others), 5.0)
 
-    def test_the_walk_presses_enter_on_next_as_often_as_settings_stand_before_the_model_of_curation(self) -> None:
+    def test_the_way_to_the_model_of_curation_is_the_buttons_the_settings_draw_around_its_other_value(self) -> None:
         presses = keys_of(readme_demo.PICTURES[2]).partition("/m2b-settings" + readme_images.ENTER)[2]
-        before = [setting.key for setting in catalog.settings()].index("curation.model")
+        model = (catalog.MACHINE, "curation.model")
+        in_sight = [held for group in catalog.groups() if not group.folded for held in group.holds]
+        choices = {(setting.scope, setting.key): setting.choices for setting in catalog.settings()}
 
-        # Two tabs to the first row, Enter opens its card, then Enter on next once per setting before.
-        opened_and_walked = readme_images.ENTER * (1 + before)
-        self.assertTrue(presses.startswith(readme_demo.TAB * 2 + opened_and_walked + readme_demo.TAB))
+        def values_to_press(settings: list[tuple[str, str]]) -> int:
+            """A switch draws a button for every value but the one in force; a setting that is no switch draws none."""
+            return sum(max(len(choices[held]) - 1, 0) for held in settings)
+
+        at = in_sight.index(model)
+        tabs_of_the_pane = 3
+        to_the_model = tabs_of_the_pane + values_to_press(in_sight[:at]) + 1
+        # From the row of the folded group, the button after the last value.
+        back_to_the_model = values_to_press(in_sight[at + 1 :]) + 1
+
+        self.assertEqual(readme_demo.TABS_TO_THE_MODEL, to_the_model)
+        self.assertEqual(readme_demo.BACK_TO_THE_MODEL, back_to_the_model)
+        self.assertEqual(choices[model], ("haiku", readme_demo.KEPT_MODEL))
+        self.assertTrue(catalog.groups()[-1].folded)
+        # The model stands nearer to that row than to the tabs, so the focus rests on the row after undo.
+        self.assertLess(len(in_sight) - at, at + 1)
+        pressed_and_undone = readme_demo.TAB * to_the_model + readme_images.ENTER * 2
+        pressed_again = readme_demo.SHIFT_TAB * back_to_the_model + readme_images.ENTER
+        opened_the_rest = readme_images.ENTER
+        self.assertEqual(presses, pressed_and_undone + pressed_again + opened_the_rest)
 
     def test_the_proposal_the_picture_keeps_is_one_of_the_demo_store(self) -> None:
         self.assertIn(readme_demo.KEPT_PROPOSAL, [text for _, text, _, _ in readme_images.PROPOSALS])
@@ -350,7 +374,7 @@ class RenderTest(unittest.TestCase):
         self.assertEqual([entry[1].name for entry in seen], ["invoice-tool", "invoice-tool", "garden-site"])
         self.assertEqual({entry[0] for entry in seen}, {tuple(readme_images.claude_command())})
         self.assertIn(readme_demo.SENTENCE, seen[0][4])
-        self.assertEqual(seen[1][4], readme_images.DOWN + readme_images.ENTER)
+        self.assertEqual(seen[1][4], readme_images.DOWN + readme_images.ENTER + "/m2b-review" + readme_images.ENTER)
         self.assertIn(readme_demo.QUESTION, seen[2][4])
         self.assertEqual(["M2B_MODEL_RUNNER" in act.environ for act in acts], [True, False, True])
         self.assertEqual({entry[2:4] for entry in seen}, {(readme_demo.ROWS, readme_demo.COLUMNS)})

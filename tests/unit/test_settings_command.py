@@ -25,6 +25,8 @@ ENTRY_KEYS = {
     "key",
     "file",
     "scope",
+    "group",
+    "place",
     "kind",
     "title",
     "does",
@@ -102,7 +104,44 @@ class SettingsListTest(SettingsFixture):
         scopes = [entry["scope"] for entry in answer["settings"]]
         self.assertEqual(sorted(scopes, key=["machine", "store", "owner"].index), scopes)
         self.assertEqual(answer["settings"][0]["key"], "version")
-        self.assertEqual(len(scopes), 31)
+        self.assertEqual(len(scopes), 32)
+
+    def test_as_json_every_setting_names_its_group_and_its_place_and_the_groups_come_in_their_order(self) -> None:
+        """Covers: B210"""
+        answer = self.listed()
+
+        self.assertEqual(
+            answer["groups"],
+            [
+                {"name": "shows", "title": "What m2b shows", "folded": False},
+                {"name": "reads", "title": "What m2b reads", "folded": False},
+                {"name": "curation", "title": "Curation", "folded": False},
+                {"name": "about", "title": "About this setup", "folded": True},
+            ],
+        )
+        placed = {(entry["scope"], entry["key"]): (entry["group"], entry["place"]) for entry in answer["settings"]}
+        self.assertEqual(placed, catalog.places())
+        self.assertEqual(placed[("machine", "band.due_tasks")], ("shows", 1))
+        self.assertEqual(placed[("machine", "sessions.propose")], ("reads", 2))
+        self.assertEqual(placed[("owner", "language")], ("curation", 5))
+        self.assertEqual(placed[("machine", "store.path")], ("about", 1))
+        for group in answer["groups"]:
+            with self.subTest(group=group["name"]):
+                held = sorted(place for name, place in placed.values() if name == group["name"])
+                self.assertEqual(held, list(range(1, len(held) + 1)))
+
+    def test_a_file_that_cannot_be_read_keeps_its_settings_in_their_groups(self) -> None:
+        """Covers: B210"""
+        (self.store_root / STORE_SETTINGS_FILE_NAME).write_text("{ no json", encoding="utf-8")
+
+        answer = self.listed()
+
+        machine_that_curates = self.entry("curating_machine", catalog.STORE)
+        self.assertEqual(
+            (machine_that_curates["read"], machine_that_curates["group"], machine_that_curates["place"]),
+            (False, "curation", 2),
+        )
+        self.assertEqual(len(answer["groups"]), 4)
 
     def test_a_switch_comes_with_its_value_its_default_and_its_few_values(self) -> None:
         """Covers: B194"""
@@ -112,6 +151,8 @@ class SettingsListTest(SettingsFixture):
                 "key": "curation.paused",
                 "file": "config.json",
                 "scope": "machine",
+                "group": "curation",
+                "place": 3,
                 "kind": "switch",
                 "title": "Curation paused",
                 "does": catalog.named("curation.paused")[0].does,
@@ -346,7 +387,7 @@ class SettingsSetTest(SettingsFixture):
             ("curation.paused", True),
             ("curation.read_sessions", True),
             ("curation.git_commit", False),
-            ("band.due_tasks", False),
+            ("band.topics", True),
         ):
             with self.subTest(key=key):
                 section, _, name = key.partition(".")
@@ -369,6 +410,12 @@ class SettingsSetTest(SettingsFixture):
         self.assertEqual(self.run_command("settings", "set", "curation.model", "sonnet")[0], cli.EXIT_OK)
         self.assertEqual(load_machine_config(self.machine).curation.model, "sonnet")
 
+        for way in ("list", "off", "count"):
+            with self.subTest(way=way):
+                self.assertEqual(self.run_command("settings", "set", "band.due_tasks", way)[0], cli.EXIT_OK)
+                self.assertEqual(load_machine_config(self.machine).band.due_tasks, way)
+                self.assertEqual(self.entry("band.due_tasks")["value"], way)
+
         self.assertEqual(self.run_command("settings", "set", "language", "de")[0], cli.EXIT_OK)
         loaded = load_profile(self.store)
         assert loaded is not None
@@ -380,7 +427,9 @@ class SettingsSetTest(SettingsFixture):
             ("curation.paused", "1", "curation.paused is true or false, not 1"),
             ("curation.paused", "yes", "curation.paused is true or false, not yes"),
             ("curation.paused", '"true"', 'curation.paused is true or false, not "true"'),
-            ("band.due_tasks", "0", "band.due_tasks is true or false, not 0"),
+            ("band.topics", "0", "band.topics is true or false, not 0"),
+            ("band.due_tasks", "true", "band.due_tasks is off or count or list, not true"),
+            ("band.due_tasks", "all", "band.due_tasks is off or count or list, not all"),
             ("curation.model", "opus", "curation.model is haiku or sonnet here, not opus"),
             ("curation.model", "true", "curation.model is haiku or sonnet here, not true"),
             ("language", "fr", "language is de or en, not fr"),
@@ -388,6 +437,7 @@ class SettingsSetTest(SettingsFixture):
             with self.subTest(key=key, value=value):
                 self.assertIn(expected, self.refused(key, value))
         self.assertIn("m2b config set curation.model", self.refused("curation.model", "opus"))
+        self.assertNotIn("m2b config set", self.refused("band.due_tasks", "all"))
 
     def test_a_refusal_stays_one_line_whatever_was_typed(self) -> None:
         """Covers: B195"""
@@ -507,7 +557,7 @@ class RulesOfAChangeTest(SettingsFixture):
 class WhatAnotherDeviceWroteTest(SettingsFixture):
     """The store's files can be written from other devices; nothing in them forges a line or leaks a name."""
 
-    LINES = 31 * 3 + 3 + 2
+    LINES = 32 * 3 + 3 + 2
 
     def write_raw(self, name: str, raw: dict[str, Any]) -> None:
         (self.store_root / name).write_text(json.dumps(raw), encoding="utf-8")

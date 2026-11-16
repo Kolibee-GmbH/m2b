@@ -196,6 +196,7 @@ class CatalogTest(unittest.TestCase):
             sorted(switches),
             [
                 "band.due_tasks",
+                "band.topics",
                 "curation.git_commit",
                 "curation.model",
                 "curation.paused",
@@ -212,6 +213,9 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual(switches["curation.paused"].choices, (True, False))
         self.assertEqual(switches["curation.paused"].change, "m2b settings set curation.paused true|false")
         self.assertEqual(switches["curation.model"].choices, machine.CURATION_MODELS)
+        self.assertEqual(switches["band.due_tasks"].choices, ("off", "count", "list"))
+        self.assertEqual(switches["band.due_tasks"].change, "m2b settings set band.due_tasks off|count|list")
+        self.assertEqual([key for key, setting in switches.items() if setting.file_takes_more], ["curation.model"])
         self.assertEqual(switches["language"].choices, locale.available_languages())
         for setting in catalog.settings():
             if setting.kind != catalog.SWITCH:
@@ -237,6 +241,58 @@ class CatalogTest(unittest.TestCase):
                     self.assertIsNone(setting.default)
                 else:
                     self.assertEqual(read[(setting.scope, setting.key)].value, setting.default)
+
+    def test_every_setting_stands_in_one_group_at_one_place(self) -> None:
+        """Covers: B210"""
+        held = [setting for group in catalog.groups() for setting in group.holds]
+
+        self.assertEqual(sorted(held), sorted((setting.scope, setting.key) for setting in catalog.settings()))
+        self.assertEqual(len(held), len(set(held)))
+        for group in catalog.groups():
+            with self.subTest(group=group.name):
+                self.assertEqual(
+                    [catalog.places()[setting] for setting in group.holds],
+                    [(group.name, place) for place in range(1, len(group.holds) + 1)],
+                )
+
+    def test_the_groups_are_the_four_things_a_person_wants_and_the_few_choices_come_first(self) -> None:
+        """Covers: B210"""
+        self.assertEqual(
+            [(group.name, group.title, group.folded) for group in catalog.groups()],
+            [
+                ("shows", "What m2b shows", False),
+                ("reads", "What m2b reads", False),
+                ("curation", "Curation", False),
+                ("about", "About this setup", True),
+            ],
+        )
+        by_name = {group.name: group.holds for group in catalog.groups()}
+        self.assertEqual(by_name["shows"], ((catalog.MACHINE, "band.due_tasks"), (catalog.MACHINE, "band.topics")))
+        self.assertEqual(
+            by_name["reads"],
+            (
+                (catalog.MACHINE, "curation.read_sessions"),
+                (catalog.MACHINE, "sessions.propose"),
+                (catalog.MACHINE, "distillate.skip_under"),
+            ),
+        )
+        self.assertEqual(
+            by_name["curation"][:2], ((catalog.MACHINE, "curation.model"), (catalog.STORE, "curating_machine"))
+        )
+        self.assertEqual(by_name["about"][0], (catalog.MACHINE, "store.path"))
+
+    def test_a_group_kept_behind_one_row_holds_no_switch(self) -> None:
+        """Covers: B210"""
+        kinds = {(setting.scope, setting.key): setting.kind for setting in catalog.settings()}
+        folded = [setting for group in catalog.groups() if group.folded for setting in group.holds]
+        in_sight = [setting for group in catalog.groups() if not group.folded for setting in group.holds]
+
+        self.assertTrue(folded)
+        self.assertEqual([setting for setting in folded if kinds[setting] == catalog.SWITCH], [])
+        self.assertEqual(
+            sorted(key for scope, key in in_sight if kinds[(scope, key)] == catalog.SWITCH),
+            sorted(setting.key for setting in catalog.settings() if setting.kind == catalog.SWITCH),
+        )
 
     def test_a_setting_changed_by_a_skill_names_one_the_plugin_has(self) -> None:
         skills = {f"/m2b:{skill.parent.name}" for skill in (PLUGIN_ROOT / "skills").glob("*/SKILL.md")}

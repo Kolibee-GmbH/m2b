@@ -3,7 +3,9 @@ import type { CommandRunResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
 import { closeAnswer, docksFor, staysBesideChat } from '../../hooks/pane-seat'
-import { BAND, FakeM2b, SESSION_ID, pane, start, texts } from './harness'
+import { shownOf } from '../../hooks/pane-tabs'
+import type { PaneView } from '../../types'
+import { BAND, FakeM2b, SESSION_ID, pane, partLines, pressTab, shownTab, shownTabs, start, texts } from './harness'
 
 const PANE = 'm2b'
 const CLOSED_BY_HAND = 'paneClosedByHand'
@@ -46,8 +48,8 @@ test('under the fullscreen layout the pane opens by itself with the band, withou
   expect(opened).toEqual([BY_ITSELF])
   expect(openPanes.has(PANE)).toBe(true)
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
-  expect(await texts(ui)).toContain('In this session')
-  expect(await texts(ui)).toContain('Northwind: 3 facts')
+  expect(await texts(ui)).toContain('Waits for you')
+  expect(await partLines(ui, 'session')).toContain('[Northwind] 3 facts')
   await ui.unmount()
   await band.unmount()
 })
@@ -249,7 +251,9 @@ test('a pane the mod closed itself opens again in the next session, in the view 
 
   expect(opened.at(-1)).toEqual(BY_ITSELF)
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
-  expect(await texts(ui)).toContain('In this session')
+  // The review has a part "Waits for you" too: the tab tells the two views apart.
+  expect(await shownTab(ui)).toBe('overview')
+  expect(await texts(ui)).toContain('Waits for you')
   await ui.unmount()
   await band.unmount()
 })
@@ -277,7 +281,7 @@ for (const [command, shows] of [
   ['m2b-search', 'memory/dana.md:3'],
   ['m2b-proposals', 'said on 2026-03-12: "Dana runs IT at Northwind"'],
 ] as const) {
-  test(`back in the view of /${command} returns to the view the pane starts in, and the pane stays`, async ($, on) => {
+  test(`the tab Overview in the view of /${command} returns to the view the pane starts in, and the pane stays`, async ($, on) => {
     // Covers: B187
     const fake = searchedFake()
     const { openPanes } = await start($, on, fake)
@@ -285,53 +289,84 @@ for (const [command, shows] of [
     const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
     expect(await texts(ui)).toContain(shows)
 
-    await ui.press({ key: 'back' })
+    await pressTab(ui, 'overview')
 
     expect(openPanes.has(PANE)).toBe(true)
-    expect(await texts(ui)).toContain('In this session')
+    expect(await shownTab(ui)).toBe('overview')
+    expect(await texts(ui)).toContain('Waits for you')
     expect(await texts(ui)).not.toContain(shows)
     await ui.unmount()
   })
 }
 
-test('the view the pane starts in has no way back to itself', async ($, on) => {
-  // Covers: B187
+test('the view the pane starts in has no way back to itself: Overview is the tab shown, and no button', async ($, on) => {
+  // Covers: B187, B204
   await start($, on, searchedFake())
   await typed($, 'm2b-pane')
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
 
-  expect(await ui.find({ key: 'back' })).toBeUndefined()
+  expect((await shownTabs(ui))[0]).toEqual({ label: 'Overview', key: null })
+  const keys = (await ui.findAll({ type: 'Button' })).map(button => String(button.key))
+  expect(keys.filter(key => key.startsWith('tab:overview'))).toEqual([])
   await ui.unmount()
 })
 
-test('back in its start view beside the chat, the pane no longer closes on Escape', async ($, on) => {
+// A test cannot make the person's close: the kit's engine raises none. What the close hook asks is
+// held here on the functions it asks, for every view a tab or a command turns the pane to. All it
+// asks of the view is whether it is the one the pane starts in.
+test("the person's close leads from the view of every tab but Overview, and from the fifth, to the view the pane starts in, in one step from the settings and from their folded group too", () => {
+  // Covers: B187
+  const isOnStartView = (view: PaneView | null): boolean => view === null
+  const turned: PaneView[] = [
+    { kind: 'proposals' },
+    { kind: 'review' },
+    { kind: 'settings', press: 'p', aside: null, drawn: 0 },
+    // A folded group of the settings stands under a fifth tab: the close leads from it to the start view, not to the choices.
+    { kind: 'settings', press: 'p', aside: { name: 'about', title: 'About this setup' }, drawn: 1 },
+    { kind: 'topic', name: 'Northwind', press: 'p', isRead: true },
+    { kind: 'search', search: { query: 'tea', hits: [], total: 0, evicted: 0, unreadable: 0 } },
+  ]
+  for (const view of turned) {
+    expect(shownOf(view)).not.toBe('overview')
+    // Off the start view the close is no close and leads back, wherever the pane sits.
+    expect(closeAnswer('person', isOnStartView(view), true, false)).toBe('back')
+    expect(closeAnswer('person', isOnStartView(view), false, false)).toBe('back')
+  }
+  expect(turned.map(shownOf)).toEqual(['proposals', 'review', 'settings', 'aside', 'aside', 'aside'])
+  // On Overview there is nowhere to lead back to: the close closes.
+  expect(shownOf(null)).toBe('overview')
+  expect(closeAnswer('person', isOnStartView(null), true, false)).toBe('by hand')
+  expect(closeAnswer('person', isOnStartView(null), false, false)).toBe('close')
+})
+
+test('the tab Overview beside the chat opens the pane once more without the manners of a dialog, so it no longer closes on Escape', async ($, on) => {
   // Covers: B187
   const { opened, openPanes } = await start($, on, searchedFake())
   await typed($, 'm2b-review', { isFullscreen: true, columns: 160 })
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
   expect(opened).toEqual([AS_A_DIALOG])
 
-  await ui.press({ key: 'back' })
+  await pressTab(ui, 'overview')
 
   expect(opened).toEqual([AS_A_DIALOG, BY_ITSELF])
   expect(openPanes.has(PANE)).toBe(true)
   await ui.unmount()
 })
 
-test('back in its start view above the prompt, the pane stays the dialog it was, so Escape closes the block', async ($, on) => {
+test('after the tab Overview above the prompt, the pane stays the dialog it was, so Escape closes the block', async ($, on) => {
   // Covers: B187
   const { opened, openPanes } = await start($, on, searchedFake())
   await typed($, 'm2b-review')
   const ui = await $.ui.mount({ ...pane(PANE, 80, 'inline'), surface: 'terminal' })
 
-  await ui.press({ key: 'back' })
+  await pressTab(ui, 'overview')
 
   expect(opened).toEqual([AS_A_DIALOG])
   expect(openPanes.has(PANE)).toBe(true)
   await ui.unmount()
 })
 
-test('going back asks again what this session was given', async ($, on) => {
+test('the tab Overview asks again what this session was given', async ($, on) => {
   // Covers: B187
   const fake = searchedFake()
   const { clock } = await start($, on, fake)
@@ -339,29 +374,38 @@ test('going back asks again what this session was given', async ($, on) => {
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
   fake.given = { topics: [{ name: 'Northwind', facts: 3, current: 0 }], atStart: 'whole', offUnder: null }
 
-  await ui.press({ key: 'back' })
+  await pressTab(ui, 'overview')
   await clock.advance(1)
 
-  expect(await texts(ui)).toContain('Northwind: 3 facts')
+  expect(await partLines(ui, 'session')).toContain('[Northwind] 3 facts')
   await ui.unmount()
 })
 
-test('show in the start view turns the pane as a dialog, so Escape comes back from there too', async ($, on) => {
-  // Covers: B187
-  const { clock, opened } = await start($, on, searchedFake())
-  const band = await drawBand($, clock)
-  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+for (const [to, label, shows] of [
+  ['proposals', 'Proposals', 'said on 2026-03-12: "Dana runs IT at Northwind"'],
+  ['review', 'Review', 'lint: broken link in a.md'],
+  // The fake core of these tests knows no settings, and the view says so.
+  ['settings', 'Settings', 'm2b could not read its settings: the installed m2b is older than this band; update m2b, then run /reload-plugins'],
+] as const) {
+  test(`the tab ${label} pressed in the start view turns the pane as a dialog, so Escape comes back from there too`, async ($, on) => {
+    // Covers: B187
+    const { clock, opened } = await start($, on, searchedFake())
+    const band = await drawBand($, clock)
+    const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
 
-  await ui.press({ key: 'show:review' })
-  expect(opened).toEqual([BY_ITSELF, AS_A_DIALOG])
-  expect(await texts(ui)).toContain('lint: broken link in a.md')
+    await pressTab(ui, to)
+    await clock.advance(1)
+    expect(opened).toEqual([BY_ITSELF, AS_A_DIALOG])
+    expect(await texts(ui)).toContain(shows)
 
-  await ui.press({ key: 'back' })
-  expect(await texts(ui)).toContain('In this session')
-  expect(opened).toEqual([BY_ITSELF, AS_A_DIALOG, BY_ITSELF])
-  await ui.unmount()
-  await band.unmount()
-})
+    await pressTab(ui, 'overview')
+    expect(await shownTab(ui)).toBe('overview')
+    expect(await texts(ui)).toContain('Waits for you')
+    expect(opened).toEqual([BY_ITSELF, AS_A_DIALOG, BY_ITSELF])
+    await ui.unmount()
+    await band.unmount()
+  })
+}
 
 test('/m2b-pane opens the pane to stay where it sits beside the chat, and as a dialog elsewhere', async ($, on) => {
   // Covers: B187

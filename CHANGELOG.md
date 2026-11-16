@@ -7,6 +7,94 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-16
+
+The band above the prompt is one row that counts what waits for you, and the m2b pane is where
+you answer: keep, drop and `ok` are pressed there, under a row of tabs, and the settings are
+sorted by what you want from m2b. Nothing is to do after the update. A session that started
+before it keeps the band it has until `/reload-plugins`, and the pane's part "m2b" says so.
+
+### Changed
+
+- The band above the prompt is one row: `m2b`, how many things wait for your answer
+  (`4 wait for you`), your tasks due, and one button, `open`, which shows the m2b pane. keep,
+  drop and ok are pressed in the pane, where every candidate, question and the review stand
+  with their buttons; the band holds no button that writes. The row is the same whether the
+  pane is in view or not
+  ([#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
+- The pane's overview is four parts in one order, each in a frame: "Waits for you", in the
+  warning color with the number that waits while something does, "Today", "This session" and
+  "m2b". A row is its text and, below it, what you can press; keep and `ok` are the accent, drop
+  steps back. A task's title stands at full strength with `due today` or `overdue` in color
+  before it. A topic is a button that bears its name. m2b in the session's folder is `on` or
+  `off` with `turn off here` and `turn on here`, and the folder breaks only between its folders.
+  A count of none is not said, and a part with nothing in it is one dim line. In a pane narrower
+  than 36 columns a bar stands in for each frame
+  ([#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
+- The proposals, the review, a topic's lines and a search are drawn like the overview: parts in a
+  frame and rows with their buttons below. A proposal is its text, then keep and drop with what
+  it is beside them, then the words it stands on. The review is two parts, the last curation run
+  with what it changed, and what of it waits for you. No view has a heading that repeats its tab
+  ([#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
+- A time is said one way: the time of day for today, the date before. The review's line about
+  the last run reads `succeeded, 18:00 to 18:04`, and the note about a failed run names its start
+  the same way
+  ([#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
+- The part "m2b" says how m2b stands: when it last curated and what waits in the inbox while all
+  is well, and what is wrong with its reason. That a session runs an older m2b than the installed
+  one is said there, no longer in the band
+  ([#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
+- What m2b says to a press that wrote nothing stands where the press was made, in the error
+  color, until your next press there, no longer in the band
+  ([#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
+- The m2b pane has one row of tabs above every view: `Overview`, `Proposals` with the number
+  that wait, `Review` and `Settings`; a topic's lines and a search stand under a fifth tab while
+  the pane shows them. The tab you look at is marked, every other turns the pane with one press.
+  `back` above the views and `show` and `settings` on the start view are gone. After a press on
+  a tab the focus stands on the tab that leads back, and after keep, drop or `ok` on the row's
+  `undo`: after drop it stood on keep of the row below
+  ([#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
+- The settings in the pane are sorted by what you want from m2b, in four parts: "What m2b
+  shows", "What m2b reads", "Curation" and "About this setup". In the first three a setting is its
+  title, what it does and its values side by side: the value in force is marked (`● count`), and
+  a press on another value sets it, with the five seconds of `undo` as before. "About this setup"
+  is one row, `22 settings`: a press on it shows what only informs or is changed by a command
+  under a tab of its own, each with what changes it. The list by file with `open`, the card per
+  setting, `previous`, `next`, `list`, `turn on` and `set to …` are gone. After `undo` and once a
+  press is written the focus stands on the nearest button that sets nothing, the tab `Overview`
+  or the row of "About this setup", never on a value. `m2b settings --json` names the groups
+  under `groups`, and each setting's `group` and `place` in it; as text the list stays under the
+  three files
+  ([#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
+- The status line under the prompt says only what is wrong with m2b, such as `last curation run
+  failed` or `calendar not reachable`, and is gone while nothing is. Claude Code draws a plugin's
+  status line as a warning, so `0 in inbox · curated 18:02` warned in every session
+  ([#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
+- `band.due_tasks` takes three values in place of on and off: `off`, `count` and `list`, and is
+  `count` where the config names none. A config that holds `true` reads as `list`, `false` as
+  `off`. `m2b band --json` names the tasks due in `tasks.due_by_today` whatever the band shows
+  of them, and the machine's `band` settings in `band`. With `count` the band names how many
+  are overdue and due today, with `list` the first three by name below its row, each with
+  `overdue` or `due today` in color and its title at full strength; with `off` none. The pane
+  lists them whatever the setting says
+  ([#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
+
+### Added
+
+- `band.topics`, a switch that is off until you turn it on: whether the band's row says how
+  many topics m2b gave the session. Before, a row of its own said it in every such session
+  ([#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
+
+### Fixed
+
+- Asked about someone your notes do not know, Claude says so and no longer names a customer or a
+  topic of your notes as a possible connection: the search tool and the search skill say it
+  ([#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
+- The setup skill and `/m2b:m2b doctor` no longer call a band that shows nothing, or an empty
+  status line, a fault, and the todos skill names the m2b pane as the place where candidates and
+  questions are answered
+  ([#27](https://github.com/Kolibee-GmbH/m2b/pull/27)).
+
 ## [0.5.0] - 2026-11-15
 
 A session can hand in a proposal for your memory by itself. That is off until you turn it on.

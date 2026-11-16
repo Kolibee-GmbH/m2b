@@ -24,23 +24,26 @@ m2b profile merge '<JSON object>'
 ## Every setting in one list
 
 `m2b settings` lists every setting of the three files under its file: its value, what it does and
-what changes it, and its default where the value differs. `--json` gives the same for a program.
+what changes it, and its default where the value differs. `--json` gives the same for a program,
+and also names four `groups` by what a person wants from m2b and, for each setting, its `group`
+and its `place` there: the order [the pane's settings](band.md#every-setting-in-the-pane) are
+drawn in.
 
 ```text
 This machine (config.json)
-  curation.paused: off
-      This machine starts no curation run by itself, none at a session start and none from a schedule. m2b curate --force still runs one, and captures keep reaching the inbox.
-      switch: m2b settings set curation.paused true|false
   calendar.timeout_seconds: 45 (default 20)
       How many seconds a call to the calendar may take.
       change: m2b config set calendar.timeout_seconds <seconds>
+  curation.paused: off
+      This machine starts no curation run by itself, none at a session start and none from a schedule. m2b curate --force still runs one, and captures keep reaching the inbox.
+      switch: m2b settings set curation.paused true|false
 ```
 
 Each setting is one of three kinds:
 
 | Kind | What it is | How it changes |
 |---|---|---|
-| switch | on or off, or one of a few named values: `curation.read_sessions`, `curation.paused`, `curation.git_commit`, `band.due_tasks`, `sessions.propose`, `curation.model` (`haiku`, `sonnet`) and the profile's `language` | `m2b settings set <key> <value>` |
+| switch | on or off, or one of a few named values: `curation.read_sessions`, `curation.paused`, `curation.git_commit`, `band.topics`, `sessions.propose`, `band.due_tasks` (`off`, `count`, `list`), `curation.model` (`haiku`, `sonnet`) and the profile's `language` | `m2b settings set <key> <value>` |
 | shown | a value the list shows as it is: a path, a time limit, a name | the command or the setup skill the list names; `machine_id`, `format`, both `version`s and `journal_since` are never changed by hand, and `tasks.timeout_seconds`, which no command writes, only by hand in `store.json` |
 | named | a list, the paths of programs or an add-on: `executables`, `distillate.skip_under`, `addons.<add-on>`, `spheres`, `customers`, `worklog_leave_out` | the command or the setup skill the list names |
 
@@ -59,7 +62,7 @@ switches to press cannot write a path or a program through it. `m2b config set` 
 for every other key of the machine config, and for a `curation.model` other than the two the
 switch offers. Both refuse the same changes in the same words; `sessions.propose` is turned on by
 neither where `CLAUDECODE` is set, as it is in the shell of a Claude Code session. A press on that
-setting's card in the band's pane runs the command with the variable empty
+setting's `on` in the m2b pane runs the command with the variable empty
 ([The band](band.md#every-setting-in-the-pane)).
 
 A file that cannot be read, a store out of reach or one without a profile yet, leaves its settings
@@ -101,8 +104,9 @@ An example with invented values:
 | `curation.git_commit` | whether a curation run on this machine ends with a git commit of what it changed, and first commits the captures git does not know yet, when the store folder is the top of a git work tree ([A commit per run](curation.md#a-commit-per-run)); without a repository there the setting does nothing | `true` |
 | `curation.git_directory` | the git directory a curation run on this machine commits into when the store folder holds a `.git` file that points at one kept outside the folder (`git init --separate-git-dir`): a path, absolute or starting with `~/`. A run commits there only when the file points at this directory; pointed elsewhere, or with nothing named here, it commits nothing and says why ([A commit per run](curation.md#a-commit-per-run)). The directory lies outside the store folder; one inside it or reached through a link in it, other than the store's own `.git` folder, is refused. A `.git` folder in the store folder needs no entry | none |
 | `curation.paused` | whether this machine starts no curation run by itself: none at a session start, none from a schedule. `m2b curate --force` still runs one, captures keep reaching the inbox, and `m2b status` says `paused` ([Pausing](curation.md#pausing)) | `false` |
-| `band.due_tasks` | whether the band shows your tasks due today or overdue below the candidates | `true` |
-| `sessions.propose` | whether a session on this machine may hand in a proposal for your memory by itself, with words from what its agent read for the task: a mail, a document, a tool's result. A session that worked in a folder or repository the profile's `worklog_leave_out` names, or with the distillate off, hands nothing in. You turn it on yourself: with `m2b settings set sessions.propose true` or `m2b config set sessions.propose true` typed in a terminal of your own, or with a press on its card in the band's pane, where the pane is drawn in a terminal, the desktop app or VS Code. Setup never does, and in the shell of a Claude Code session either command refuses | `false` |
+| `band.due_tasks` | how the band shows your tasks due today or overdue: `off` shows none there, `count` says how many, `list` names the first three. The pane lists them whatever this says. A config that holds `true` reads as `list`, `false` as `off` | `count` |
+| `band.topics` | whether the band says how many topics m2b gave the session; the pane names them whatever this says | `false` |
+| `sessions.propose` | whether a session on this machine may hand in a proposal for your memory by itself, with words from what its agent read for the task: a mail, a document, a tool's result. A session that worked in a folder or repository the profile's `worklog_leave_out` names, or with the distillate off, hands nothing in. You turn it on yourself: with `m2b settings set sessions.propose true` or `m2b config set sessions.propose true` typed in a terminal of your own, or with a press on its `on` in the m2b pane's settings, where the pane is drawn in a terminal, the desktop app or VS Code. Setup never does, and in the shell of a Claude Code session either command refuses | `false` |
 | `distillate.skip_under` | folders, absolute or starting with `~/`, in and below which sessions get no distillate; `m2b distillate off` and `on` change it | none |
 | `addons.<add-on>.on` | whether an add-on runs on this machine: `worklog` | off |
 | `addons.<add-on>.*` | the add-on's own settings; kept when the add-on is turned off. An entry for `band`, `herdr` or `backup`, which are no longer add-ons, is ignored, and `m2b addons off <name>` removes it | |

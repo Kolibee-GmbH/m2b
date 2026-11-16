@@ -1,9 +1,10 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, Timer } from 'claude-code'
+import type { EngineInterface, Register, ResolveInput, Timer } from 'claude-code'
 
 import type {
   BandCandidate,
   BandDueTask,
+  BandHealth,
   BandPress,
   BandProposal,
   BandProposals,
@@ -11,13 +12,16 @@ import type {
   BandRun,
   BandSession,
   BandSettle,
+  BandShows,
   BandSnapshot,
   FolderSwitch,
   PaneView,
 } from '../types'
-import { bandRows, lineBesidePane, lineRow, topicsGiven } from './band'
-import type { BandActions, BandModel } from './band'
+import { bandLine, bandRow, topicsGiven } from './band'
+import type { BandModel } from './band'
+import { tabRow } from './look'
 import { launcherPath, m2bHome, machineConfigPath, runM2b } from './m2b'
+import { timeOrDay } from './moment'
 import { NOTE_COMMAND, note } from './note'
 import { isInOwnWords, isOwnPrompt, withPrompt } from './own-words'
 import {
@@ -27,18 +31,20 @@ import {
   REVIEW_COMMAND,
   SEARCH_COMMAND,
   isRun,
-  minute,
-  paneTree,
   reviewLines,
+  reviewPane,
   runOf,
   searchLines,
+  searchPane,
+  searchPlaced,
   searchStore,
   searchRequest,
   searchSummary,
   showPane,
 } from './pane'
-import { CLOSED_BY_HAND, closeAnswer, docksFor, paneSight, staysBesideChat } from './pane-seat'
-import type { PaneSight } from './pane-seat'
+import { CLOSED_BY_HAND, closeAnswer, docksFor, staysBesideChat } from './pane-seat'
+import { focusKeyAfterTab, paneTabs, tabKeyAfterTurn } from './pane-tabs'
+import type { TabId } from './pane-tabs'
 import { plainLine, wholePath } from './plain-text'
 import {
   askCoreAgain,
@@ -54,10 +60,8 @@ import {
 import {
   FOLDER_PRESS,
   SESSION_COMMAND,
+  UNDO_FOLDER,
   SESSION_PLACED,
-  BACK,
-  backRow,
-  focusKeyAfterBack,
   glancePane,
   sessionLines,
   sessionPane,
@@ -67,6 +71,7 @@ import {
   KEEP_ALL,
   PROPOSALS_COMMAND,
   PROPOSALS_PLACED,
+  UNDO_ALL,
   isProposals,
   refusedLine,
   parseProposals,
@@ -75,31 +80,29 @@ import {
   proposalsPane,
 } from './proposals'
 import type { ProposalActions } from './proposals'
+import { REVIEW, undoKey } from './rows'
 import type { RowActions } from './rows'
 import { shared } from './shared-cache'
-import { COULD_NOT_LOOK, statusLine } from './status-line'
-import { parseBandTasks } from './tasks'
+import { COULD_NOT_LOOK, healthOf, statusLine } from './status-line'
+import { parseBandShows, parseBandTasks } from './tasks'
 import {
   SETTINGS_COMMAND,
   SETTINGS_IN_A_TERMINAL,
   SETTINGS_PLACED,
   SETTINGS_UNDO,
-  afterBack,
   askSettings,
   beginChange,
   beginSettings,
   dropWaitingChange,
   endChange,
   fillSettings,
-  focusKeyOfHeldCard,
+  foldedTitle,
   forgetSettingsUnless,
   heldSettings,
-  listOf,
   openSettings,
   readSettings,
-  rowKey,
+  restKey,
   settingsPane,
-  showsCard,
   startWriting,
   undoChange,
   waits,
@@ -128,6 +131,8 @@ import {
 
 const snapshotAtom = atom({ plugin: 'm2b', key: 'bandSnapshot' } as const, null)
 const noticeAtom = atom({ plugin: 'm2b', key: 'bandNotice' } as const, null)
+const rowNoticeAtom = atom({ plugin: 'm2b', key: 'rowNotice' } as const, null)
+const healthAtom = atom({ plugin: 'm2b', key: 'bandHealth' } as const, null)
 const pressesAtom = atom({ plugin: 'm2b', key: 'bandPresses' } as const, {})
 const versionNoticeAtom = atom({ plugin: 'm2b', key: 'bandVersionNotice' } as const, null)
 const runAtom = atom({ plugin: 'm2b', key: 'bandRun' } as const, null)
@@ -135,7 +140,6 @@ const proposalsAtom = atom({ plugin: 'm2b', key: 'bandProposals' } as const, nul
 // Apart from the band's notice, which is about tasks: the proposals pane draws this one alone.
 const proposalsNoticeAtom = atom({ plugin: 'm2b', key: 'bandProposalsNotice' } as const, null)
 const paneViewAtom = atom({ plugin: 'm2b', key: 'paneView' } as const, null)
-const paneSeatsAtom = atom({ plugin: 'm2b', key: 'paneSeats' } as const, {})
 const toastedRunAtom = atom({ plugin: 'm2b', key: 'bandToastedRun' } as const, null)
 const ownPromptsAtom = atom({ plugin: 'm2b', key: 'ownPrompts' } as const, [])
 // `session.ts` names the same two values and writes them too: a module's reads and writes are
@@ -169,6 +173,10 @@ const SEEN_FILE = '.local/state/m2b/band-seen.json'
 const MANIFEST = '.claude-plugin/plugin.json'
 
 const BAND_ANSWER = ['band', '--json'] as const
+// The name the sessions share that answer under. A band from before the one row shares its own
+// under `view`, where the status is a line about the inbox and a task due is one to list: neither
+// takes the other's answer, while a session still runs the older band.
+const SHARED_ANSWER = 'answer'
 // The second look before a keep or drop needs the tasks alone, not the status and its probes.
 const TASKS_ANSWER = ['band', '--json', '--tasks-only'] as const
 
@@ -178,10 +186,13 @@ const TASKS_ANSWER = ['band', '--json', '--tasks-only'] as const
  */
 type BandView = {
   snapshot: BandSnapshot
-  status: string
+  /** What is wrong with m2b, for the status line; null while nothing is, which clears the line. */
+  status: string | null
   version: string | null
   run?: BandRun | null
   proposals?: BandProposals
+  /** How m2b itself stands, for the pane; absent where m2b gave no answer to read it from. */
+  health?: BandHealth
 }
 
 /** Runs jobs one after another, in the order they were queued. */
@@ -194,38 +205,45 @@ function serialQueue(): <T>(job: () => Promise<T>) => Promise<T> {
   }
 }
 
-/** One call for everything the band and the status line show; whatever fails, it answers a view. */
+// Where m2b gave no answer, the pane's part about m2b says nothing: what failed is said once, as the task list's error.
+const NO_HEALTH: BandHealth = { curation: null, troubles: [] }
+
+/** One call for everything the band, the pane and the status line show; whatever fails, it answers a view. */
 async function loadView($: EngineInterface, answer: readonly string[] = BAND_ANSWER): Promise<BandView> {
   const outcome = await runM2b($, answer, BAND_TIMEOUT_MS)
   if (!outcome.ok) {
-    return {
-      snapshot: failed(`m2b could not read the tasks: ${outcome.error}`),
-      status: COULD_NOT_LOOK,
-      version: null,
-    }
+    return { snapshot: failed(`m2b could not read the tasks: ${outcome.error}`), status: COULD_NOT_LOOK, version: null, health: NO_HEALTH }
   }
   let parsed: unknown
   try {
     parsed = JSON.parse(outcome.stdout)
   } catch {
-    return { snapshot: failed('m2b band answered something that is not JSON'), status: COULD_NOT_LOOK, version: null }
+    return { snapshot: failed('m2b band answered something that is not JSON'), status: COULD_NOT_LOOK, version: null, health: NO_HEALTH }
   }
   const fields = isObject(parsed) ? parsed : {}
   return {
-    snapshot: snapshotOf(fields['tasks']),
-    status: statusLine(fields['status'], await $.clock.now()),
+    snapshot: snapshotOf(fields['tasks'], parseBandShows(fields['band'])),
+    status: statusLine(fields['status']),
     version: typeof fields['version'] === 'string' ? fields['version'] : null,
     run: runOf(fields['status']),
     proposals: parseProposals(fields['proposals']),
+    health: healthOf(fields['status'], await $.clock.now()),
   }
 }
 
-function snapshotOf(part: unknown): BandSnapshot {
+function snapshotOf(part: unknown, shows: BandShows | undefined): BandSnapshot {
   try {
     const tasks = parseBandTasks(part)
-    return typeof tasks === 'string'
-      ? failed(`m2b could not read the tasks: ${tasks}`)
-      : { candidates: tasks.candidates, review: tasks.review, error: null, ...(tasks.due === undefined ? {} : { due: tasks.due }) }
+    if (typeof tasks === 'string') {
+      return failed(`m2b could not read the tasks: ${tasks}`)
+    }
+    return {
+      candidates: tasks.candidates,
+      review: tasks.review,
+      error: null,
+      ...(tasks.due === undefined ? {} : { due: tasks.due }),
+      ...(shows === undefined ? {} : { shows }),
+    }
   } catch (error) {
     return failed(String((error as Error).message))
   }
@@ -256,7 +274,7 @@ function reload($: EngineInterface, isForced = false): Promise<void> {
 }
 
 async function loadNow($: EngineInterface, isForced: boolean): Promise<void> {
-  const view = await shared($, 'view', () => loadView($), isView, isForced)
+  const view = await shared($, SHARED_ANSWER, () => loadView($), isView, isForced)
   // m2b can stop being set up while the call ran; its answer must not draw the band back.
   if (!(await isSetUp($))) {
     await clearBand($)
@@ -268,7 +286,8 @@ async function loadNow($: EngineInterface, isForced: boolean): Promise<void> {
   await update($, runAtom, current => (view.run === undefined ? current : view.run))
   // Nor has an answer a session without proposals stored, or one m2b could not give, a word on them.
   await update($, proposalsAtom, current => view.proposals ?? current)
-  $.ui.status(plainLine(view.status))
+  await update($, healthAtom, current => view.health ?? current)
+  $.ui.status(view.status === null ? undefined : plainLine(view.status))
   await toastFailedRun($, view.run ?? null)
 }
 
@@ -290,7 +309,8 @@ async function toastFailedRun($: EngineInterface, run: BandRun | null): Promise<
     return
   }
   try {
-    $.ui.toast(`m2b: the curation run of ${minute(startedAt)} failed; its review task says why, and /m2b-review shows it`, {
+    const started = plainLine(timeOrDay(startedAt, await $.clock.now()))
+    $.ui.toast(`m2b: the curation run of ${started} failed; its review task says why, and /m2b-review shows it`, {
       timeoutMs: 10_000,
     })
   } catch {
@@ -323,7 +343,7 @@ function versionNotice(installed: string | null): string | null {
   if (installed === null || loadedVersion === null || !isOlder(loadedVersion, installed)) {
     return null
   }
-  return `this session runs the band of m2b ${loadedVersion} while m2b ${installed} is installed: run /reload-plugins`
+  return `This session runs m2b ${loadedVersion} and m2b ${installed} is installed: run /reload-plugins.`
 }
 
 /** Whether release `a` comes before release `b`, by `MAJOR.MINOR.PATCH`; anything else compares as not older. */
@@ -349,11 +369,21 @@ function isView(value: unknown): value is BandView {
   return (
     isObject(value) &&
     isSnapshot(value['snapshot']) &&
-    typeof value['status'] === 'string' &&
+    (value['status'] === null || typeof value['status'] === 'string') &&
     (value['version'] === null || typeof value['version'] === 'string') &&
     // Absent in an answer a session without the pane stored: no run to show, like null.
     (value['run'] === undefined || value['run'] === null || isRun(value['run'])) &&
-    (value['proposals'] === undefined || isProposals(value['proposals']))
+    (value['proposals'] === undefined || isProposals(value['proposals'])) &&
+    (value['health'] === undefined || isHealth(value['health']))
+  )
+}
+
+function isHealth(value: unknown): value is BandHealth {
+  return (
+    isObject(value) &&
+    (value['curation'] === null || typeof value['curation'] === 'string') &&
+    Array.isArray(value['troubles']) &&
+    value['troubles'].every(trouble => typeof trouble === 'string')
   )
 }
 
@@ -365,7 +395,16 @@ function isSnapshot(value: unknown): value is BandSnapshot {
     value['candidates'].every(isCandidate) &&
     (value['review'] === null || isReview(value['review'])) &&
     (value['error'] === null || typeof value['error'] === 'string') &&
-    (value['due'] === undefined || (Array.isArray(value['due']) && value['due'].every(isDueTask)))
+    (value['due'] === undefined || (Array.isArray(value['due']) && value['due'].every(isDueTask))) &&
+    (value['shows'] === undefined || isShows(value['shows']))
+  )
+}
+
+function isShows(value: unknown): value is BandShows {
+  return (
+    isObject(value) &&
+    (value['dueTasks'] === 'off' || value['dueTasks'] === 'count' || value['dueTasks'] === 'list') &&
+    typeof value['topics'] === 'boolean'
   )
 }
 
@@ -405,7 +444,9 @@ function isFactChange(value: unknown): boolean {
 async function clearBand($: EngineInterface): Promise<void> {
   await update($, snapshotAtom, () => null)
   await update($, noticeAtom, () => null)
+  await update($, rowNoticeAtom, () => null)
   await update($, versionNoticeAtom, () => null)
+  await update($, healthAtom, () => null)
   await update($, runAtom, () => null)
   await update($, proposalsAtom, () => null)
   await update($, proposalsNoticeAtom, () => null)
@@ -515,7 +556,10 @@ async function sessionModel($: EngineInterface): Promise<SessionModel> {
   return {
     given: givenTo(await read($, sessionAtom), session),
     notes: notesOf(await read($, notesAtom), session),
-    notice: await read($, sessionNoticeAtom),
+    rowNotice: await read($, rowNoticeAtom),
+    folderNotice: await read($, sessionNoticeAtom),
+    health: await read($, healthAtom),
+    versionLine: await read($, versionNoticeAtom),
     snapshot: await read($, snapshotAtom),
     proposals: await read($, proposalsAtom),
     presses: await read($, pressesAtom),
@@ -523,23 +567,49 @@ async function sessionModel($: EngineInterface): Promise<SessionModel> {
 }
 
 /**
- * Turns the open pane to another of its views, as a dialog, and reads the band again behind it. A
- * pane that opened by itself does not close on Escape; opened anew it does, and Escape on the view
- * leads back to the one the pane starts in.
+ * A press on a tab: the pane turns to that tab's view, and the focus goes to the tab that leads
+ * back to the view that is left, which that view did not draw. Left at its place in the row of
+ * buttons, the focus could stand on a button of the new view that writes. Escape leads to the
+ * start view without it: it hands the keyboard back to the prompt.
  */
-async function turnPane($: EngineInterface, view: PaneView): Promise<void> {
-  await asDialog($, view)
-  const focusMoved = focusOnBack($)
+async function turnByTab($: EngineInterface, to: TabId): Promise<void> {
+  const focusKey = await focusKeyAfterPress($, to)
+  if (to === 'overview') {
+    await backToStart($)
+    await focusInPane($, focusKey)
+    return
+  }
+  if (to === 'settings') {
+    await showSettings($, focusKey)
+    return
+  }
+  await asDialog($, { kind: to })
+  const focusMoved = focusInPane($, focusKey)
   $.clock.after(0, inBackground($, () => refresh($, true)))
   await focusMoved
 }
 
+/** Where the focus goes after a press on the tab `to`, null where what the pane shows cannot be read. */
+async function focusKeyAfterPress($: EngineInterface, to: TabId): Promise<string | null> {
+  try {
+    return focusKeyAfterTab(await read($, paneViewAtom), to, await sessionModel($))
+  } catch {
+    // The pane turns all the same.
+    return null
+  }
+}
+
+/**
+ * Turns the open pane to another of its views, as a dialog. A pane that opened by itself does not
+ * close on Escape; opened anew it does, and Escape on the view leads back to the one the pane
+ * starts in.
+ */
 async function asDialog($: EngineInterface, view: PaneView): Promise<void> {
   await turnTo($, view)
   try {
     await $.ui.open(AS_A_DIALOG)
   } catch {
-    // The view is turned all the same; the button above it leads back.
+    // The view is turned all the same; the tabs above it lead on.
   }
 }
 
@@ -557,15 +627,15 @@ async function turnTo($: EngineInterface, view: PaneView | null): Promise<void> 
 /**
  * Turns the pane to one topic and reads its lines from the distillate as it is now. The lines are
  * kept by the module that draws them, never in the session's state, and only for the press that
- * asked: after `back`, a close, another view or a press on another topic nothing is kept for this
- * one, and an answer that arrives then is dropped.
+ * asked: after a tab, a close, another view or a press on another topic nothing is kept for this
+ * one, and an answer that arrives then is dropped. The focus goes to the tab that leads back.
  */
 async function showTopic($: EngineInterface, name: string): Promise<void> {
   const press = await newPressToken($)
   beginTopic(press)
   await asDialog($, { kind: 'topic', name, press, isRead: false })
   // The read does not wait for the focus.
-  const focusMoved = focusOnBack($)
+  const focusMoved = focusInPane($, tabKeyAfterTurn('overview', 'aside'))
   if (fillTopic(press, await readTopic($, name))) {
     // The lines are the module's; this write is what draws the pane again.
     await update($, paneViewAtom, view => (view !== null && view.kind === 'topic' && view.press === press ? { ...view, isRead: true } : view))
@@ -580,9 +650,15 @@ async function turnSettings($: EngineInterface, press: string, change: (view: Se
   await update($, paneViewAtom, view => (view !== null && view.kind === 'settings' && view.press === press ? change(view) : view))
 }
 
-/** Draws the settings again after what their module holds changed. */
+/**
+ * Draws the settings again after what their module holds changed. A view turned to a group the
+ * list no longer has is turned back to the choices, so the tabs name what is drawn below them.
+ */
 function drawSettings($: EngineInterface, press: string): Promise<void> {
-  return turnSettings($, press, view => ({ ...view, drawn: view.drawn + 1 }))
+  return turnSettings($, press, view => {
+    const isGone = view.aside !== null && foldedTitle(press, view.aside.name) === null
+    return { ...view, aside: isGone ? null : view.aside, drawn: view.drawn + 1 }
+  })
 }
 
 /** Reads the list of the settings for an opening of the view; an answer for a view that was left is dropped. */
@@ -594,15 +670,16 @@ async function loadSettings($: EngineInterface, press: string): Promise<void> {
 }
 
 /**
- * Turns the pane to the list of the settings and reads it. The values are kept by the module that
- * draws them, never in the session's state, and only for this opening of the view.
+ * Turns the pane to the settings and reads their list, with the focus on the button under
+ * `focusKey`. The values are kept by the module that draws them, never in the session's state, and
+ * only for this opening of the view.
  */
-async function showSettings($: EngineInterface): Promise<void> {
+async function showSettings($: EngineInterface, focusKey: string | null): Promise<void> {
   const press = await newPressToken($)
   beginSettings(press)
-  await asDialog($, { kind: 'settings', press, at: null, drawn: 0 })
+  await asDialog($, { kind: 'settings', press, aside: null, drawn: 0 })
   // The read does not wait for the focus.
-  const focusMoved = focusOnBack($)
+  const focusMoved = focusInPane($, focusKey)
   await loadSettings($, press)
   await focusMoved
 }
@@ -611,7 +688,7 @@ async function showSettings($: EngineInterface): Promise<void> {
 // Claude Code started the command, and it knows that by this variable. The mod names it itself,
 // so that refusal does not rest on what the child happens to inherit.
 const FROM_A_SESSION = { CLAUDECODE: '1' } as const
-// What the core is told for the one press that turns handing in on, on its card: an empty value,
+// What the core is told for the one press that turns handing in on, on its value: an empty value,
 // which the core reads as a terminal of the owner's own, set over whatever the mod inherited. No
 // other call of the mod carries it.
 const BY_THE_PERSONS_PRESS = { CLAUDECODE: '' } as const
@@ -626,11 +703,11 @@ async function settleSetting($: EngineInterface, token: string): Promise<void> {
   const stillWaited = waits(token)
   const write = startWriting(token)
   if (write === null) {
-    // Taken back, or dropped because the list no longer offers the value: the card says what is true.
+    // Taken back, or dropped because the list no longer offers the value: the view says what is true.
     await drawOpenSettings($)
     if (stillWaited) {
-      // Dropped: `undo` is gone from under the focus, and the switches stand again where it stood.
-      await focusOnOpenCard($)
+      // Dropped: `undo` is gone from under the focus, and the values stand again where it stood.
+      await focusOffTheValues($)
     }
     return
   }
@@ -638,9 +715,9 @@ async function settleSetting($: EngineInterface, token: string): Promise<void> {
   let focusMoved: Promise<void> = Promise.resolve()
   try {
     await drawOpenSettings($)
-    // `undo` is gone from under the focus: it goes to the button that leads on, never to the
-    // switch that comes back. The write does not wait for it.
-    focusMoved = focusOnOpenCard($)
+    // `undo` is gone from under the focus: it goes to a button that sets nothing, never to a value that comes back.
+    // The write does not wait for it.
+    focusMoved = focusOffTheValues($)
     // `--`: a key and a value are handed on as the core named them, whatever they begin with.
     const from = write.isTurningHandingInOn ? BY_THE_PERSONS_PRESS : FROM_A_SESSION
     const outcome = await runM2b($, ['settings', 'set', '--', write.key, write.argument], WRITE_TIMEOUT_MS, undefined, from)
@@ -652,8 +729,11 @@ async function settleSetting($: EngineInterface, token: string): Promise<void> {
     endChange(token, refused)
   }
   await focusMoved
-  // The change is over at once in the view; the list follows when it is read.
+  // The change is over at once in the view; the list follows when it is read. The values are
+  // buttons again, which moves every button below them: the focus is asked for once more, and
+  // the read does not wait for it.
   await drawOpenSettings($)
+  const rests = focusOffTheValues($)
   const open = openSettings()
   if (open !== null) {
     await loadSettings($, open)
@@ -661,6 +741,7 @@ async function settleSetting($: EngineInterface, token: string): Promise<void> {
   if (refused === null) {
     $.clock.after(0, inBackground($, () => refresh($, true)))
   }
+  await rests
 }
 
 /** Draws the settings again for the opening the pane shows now, if it shows them. */
@@ -675,8 +756,8 @@ async function drawOpenSettings($: EngineInterface): Promise<void> {
  * Asks Claude Code for the focus of the pane on the button drawn under `key`. Claude Code keeps
  * the focus at its place in the row of buttons when a view is drawn anew, not on its button: left
  * alone, Enter pressed again would land on whatever stands at that place of the new drawing. So
- * where a press turns the pane to another view or to another card of the settings, and around a
- * press on a switch, the mod says where the focus goes. Where the pane does not hold the
+ * where a press turns the pane to another view or changes which buttons the settings draw, the
+ * mod says where the focus goes. Where the pane does not hold the
  * keyboard, as after Escape, Claude Code refuses, and the view is as drawn. Never throws.
  */
 async function focusInPane($: EngineInterface, key: string | null): Promise<void> {
@@ -691,59 +772,34 @@ async function focusInPane($: EngineInterface, key: string | null): Promise<void
 }
 
 /**
- * After a press on the start view turned the pane to another view: the focus goes to `back`, the
- * first button of that view, which the start view does not draw. Left at its place in the row of
- * buttons it would stand on whatever the new view has there, `keep all` after `show` on the
- * proposals.
+ * Asks for the focus on a button that sets nothing, near the setting that was pressed, where the
+ * pane shows the settings to choose; nothing where it shows another view or a group under its own
+ * tab, which draws none of those buttons: Claude Code would wait for a key that is not drawn.
+ * Never throws: a press is written whatever becomes of the focus.
  */
-function focusOnBack($: EngineInterface): Promise<void> {
-  return focusInPane($, BACK)
-}
-
-/**
- * The pane's `back` button: back to the start view, with the focus on the button that leads to the
- * view that is left. Escape leads back without it: it hands the keyboard back to the prompt.
- */
-async function backByPress($: EngineInterface): Promise<void> {
-  let key: string | null = null
-  try {
-    key = focusKeyAfterBack(await read($, paneViewAtom), await sessionModel($))
-  } catch {
-    // The pane turns back all the same.
-  }
-  await backToStart($)
-  await focusInPane($, key)
-}
-
-/**
- * Asks for the focus on the button that leads on from the card the pane shows; nothing where it
- * shows no card. Never throws: a press is written whatever becomes of the focus.
- */
-async function focusOnOpenCard($: EngineInterface): Promise<void> {
+async function focusOffTheValues($: EngineInterface): Promise<void> {
   try {
     const view = await read($, paneViewAtom)
-    if (view !== null && view.kind === 'settings' && view.at !== null) {
-      await focusInPane($, focusKeyOfHeldCard(view.press, view.at, 'forward'))
+    if (view?.kind === 'settings' && view.aside === null) {
+      await focusInPane($, restKey())
     }
   } catch {
-    // The card is drawn all the same.
+    // The view is drawn all the same.
   }
 }
 
 function settingsActions($: EngineInterface, press: string): SettingsActions {
-  // Leaving a card takes back a press that still waits on it: from anywhere else nobody could.
-  const leaveFor = (at: number | null): Promise<void> => {
-    undoChange(press)
-    return turnSettings($, press, view => ({ ...view, at, drawn: view.drawn + 1 }))
-  }
   return {
-    open: async (at, reached) => {
-      await leaveFor(at)
-      await focusInPane($, focusKeyOfHeldCard(press, at, reached))
-    },
-    toList: async from => {
-      await leaveFor(null)
-      await focusInPane($, rowKey(from))
+    showGroup: async name => {
+      const title = foldedTitle(press, name)
+      if (title === null) {
+        return
+      }
+      // Leaving the values takes back a press that still waits on one: from the group's view nobody could.
+      undoChange(press)
+      await turnSettings($, press, view => ({ ...view, aside: { name, title }, drawn: view.drawn + 1 }))
+      // The group stands under a tab of its own, which holds no button: the focus goes to the tab that leads back.
+      await focusInPane($, tabKeyAfterTurn('settings', 'aside'))
     },
     choose: async (at, place, surface) => {
       const token = await newPressToken($)
@@ -754,68 +810,63 @@ function settingsActions($: EngineInterface, press: string): SettingsActions {
           inBackground($, () => settleSetting($, token)),
         )
         await drawSettings($, press)
-        // The one button that takes the press back: Enter once more is undo, whatever else the card offers.
+        // The one button that takes the press back: Enter once more is undo.
         await focusInPane($, SETTINGS_UNDO)
       }
     },
     undo: async () => {
       if (undoChange(press)) {
         await drawSettings($, press)
-        await focusOnOpenCard($)
+        await focusOffTheValues($)
       }
     },
   }
 }
 
-// Where the pane's last drawing sat on each surface, as that surface said. The module's own: after
-// a reload of the mod the pane is drawn anew before the person can act on it. The band draws by
-// the copy in the session's state, which draws it again when a seat changes.
-const paneSeats = new Map<string, string>()
-// How often the map changed, and the change the session's state is known to hold. They differ
-// while a write is under way or after one failed; of two writes that overlap, the later may fail
-// while the earlier lands, so each write counts for the change it started from.
-let seatsNoted = 0
-let seatsShared = 0
-
 /**
- * Keeps where the pane was just drawn on a surface, and hands a new seat to the band a moment
- * later: no state is written while a drawing is made. A write that failed is made again with the
- * pane's next drawing, so the band does not keep a seat the pane has left.
+ * What the pane draws below its tabs: the view it is turned to, null for the one it starts in.
+ * `bodyColumns` is the width of the pane's body.
  */
-function noteSeat($: EngineInterface, surface: string, placement: string): void {
-  if (paneSeats.get(surface) !== placement) {
-    paneSeats.set(surface, placement)
-    seatsNoted += 1
-  } else if (seatsShared === seatsNoted) {
-    return
+async function viewOfPane(
+  $: EngineInterface,
+  e: ResolveInput,
+  view: PaneView | null,
+  proposals: BandProposals | null,
+  bodyColumns: number,
+) {
+  if (view === null) {
+    return sessionPane($, e, await sessionModel($), sessionActions($), bodyColumns)
   }
-  try {
-    $.clock.after(0, () => {
-      shareSeats($).catch(() => undefined)
-    })
-  } catch {
-    // The pane's next drawing tries again.
+  const presses = await read($, pressesAtom)
+  switch (view.kind) {
+    case 'settings':
+      return settingsPane($, e, view, heldSettings(view.press), settingsActions($, view.press), bodyColumns)
+    case 'proposals':
+      return proposalsPane($, e, proposals, presses, await read($, proposalsNoticeAtom), proposalActions($), bodyColumns)
+    case 'topic':
+      return topicPane($, e, view.name, heldTopic(view.press), bodyColumns)
+    case 'search':
+      return searchPane($, e, view.search, bodyColumns)
+    case 'review': {
+      const model = {
+        snapshot: await read($, snapshotAtom),
+        run: await read($, runAtom),
+        presses,
+        notice: await read($, rowNoticeAtom),
+        nowMs: await $.clock.now(),
+      }
+      return reviewPane($, e, model, rowActions($), bodyColumns)
+    }
   }
 }
 
-async function shareSeats($: EngineInterface): Promise<void> {
-  const noted = seatsNoted
-  await update($, paneSeatsAtom, () => Object.fromEntries(paneSeats))
-  seatsShared = Math.max(seatsShared, noted)
-}
-
-/** The pane is gone: the seat of an earlier drawing no longer says where it sits. */
-async function forgetSeats($: EngineInterface): Promise<void> {
-  paneSeats.clear()
-  seatsNoted += 1
-  await shareSeats($)
-}
+// Where the pane's last drawing sat on each surface, as that surface said. The module's own: after
+// a reload of the mod the pane is drawn anew before the person can act on it.
+const paneSeats = new Map<string, string>()
 
 /**
  * After a close of the pane has settled. Gone, it sits nowhere. A hook beneath may have kept it
- * open: then its seats stand. Either way the state is written, which draws the band again, and the
- * band asks Claude Code itself what is open. Where Claude Code cannot say, the seats go: the band
- * then draws all it has.
+ * open: then its seats stand. Where Claude Code cannot say, the seats go.
  */
 async function seatsAfterClose($: EngineInterface): Promise<void> {
   let isStillOpen = false
@@ -824,7 +875,9 @@ async function seatsAfterClose($: EngineInterface): Promise<void> {
   } catch {
     // Counted as closed.
   }
-  await (isStillOpen ? shareSeats($) : forgetSeats($))
+  if (!isStillOpen) {
+    paneSeats.clear()
+  }
 }
 
 /**
@@ -847,42 +900,14 @@ async function showInPane(
   return answer
 }
 
-/**
- * Where the pane stands for the band of `surface`. Claude Code is asked only where the pane was
- * drawn on that surface and has not closed since, which is where the band may step back: the seat
- * says where the pane sat, Claude Code whether it is drawn and shown now, and the pane's view
- * whether it holds the band's rows. A call that fails counts as not in view.
- */
-async function sightOn($: EngineInterface, surface: string): Promise<PaneSight> {
-  const seat = (await read($, paneSeatsAtom))[surface]
-  if (seat === undefined) {
-    return 'away'
-  }
-  const isOnStartView = (await read($, paneViewAtom)) === null
-  try {
-    return paneSight(
-      seat,
-      (await $.ui.panes()).find(pane => pane.id === PANE_ID),
-      isOnStartView,
-    )
-  } catch {
-    return 'away'
-  }
-}
-
-/**
- * What the band draws from. How many topics the session was given is looked up only where the
- * pane is not in view, which is where the band has a row for it.
- */
-async function bandModel($: EngineInterface, sight: PaneSight): Promise<BandModel> {
+/** What the band draws from. How many topics the session was given is looked up only where the band shows it. */
+async function bandModel($: EngineInterface): Promise<BandModel> {
+  const snapshot = await read($, snapshotAtom)
   return {
-    snapshot: await read($, snapshotAtom),
+    snapshot,
     proposals: await read($, proposalsAtom),
     notice: await read($, noticeAtom),
-    proposalsNotice: await read($, proposalsNoticeAtom),
-    versionLine: await read($, versionNoticeAtom),
-    presses: await read($, pressesAtom),
-    topics: sight === 'away' ? topicsGiven(givenTo(await read($, sessionAtom), await sessionIdOf($))) : 0,
+    topics: snapshot?.shows?.topics === true ? topicsGiven(givenTo(await read($, sessionAtom), await sessionIdOf($))) : 0,
   }
 }
 
@@ -892,7 +917,7 @@ let wentBackAtMs: number | null = null
 const SAME_KEY_TWICE_MS = 500
 
 /**
- * Back to the view the pane starts in, for Escape and the button above the other views. Beside the
+ * Back to the view the pane starts in, for Escape and the tab `Overview`. Beside the
  * chat the pane is opened once more, without the manners of a dialog: each open sets them anew, and
  * a pane that stays must not close on an Escape at the empty prompt. That comes before the view is
  * turned, so a close that arrives meanwhile still meets the other view and leads back as well.
@@ -950,21 +975,18 @@ async function openByItself($: EngineInterface): Promise<void> {
     return
   }
   // A pane that closed left its start view behind, so there is no view to turn here. A command
-  // that opens the pane in this very moment is retitled without its Escape; `back` still leads out.
+  // that opens the pane in this very moment is retitled without its Escape; its tabs still lead out.
   await $.ui.open({ id: PANE_ID, title: PANE_TITLE })
 }
 
 function sessionActions($: EngineInterface): SessionActions {
   return {
     ...rowActions($),
-    showProposals: () => turnPane($, { kind: 'proposals' }),
-    showReview: () => turnPane($, { kind: 'review' }),
     showTopic: name => showTopic($, name),
-    showSettings: () => showSettings($),
     switchFolder: async (change, folder) => {
       // What the last press could not write is no longer what the button is about.
       await update($, sessionNoticeAtom, () => null)
-      await press($, FOLDER_PRESS, change, folderWrite($, change, folder))
+      await press($, FOLDER_PRESS, change, folderWrite($, change, folder), UNDO_FOLDER)
     },
     undoFolder: () => undo($, FOLDER_PRESS),
   }
@@ -980,8 +1002,8 @@ function folderWrite($: EngineInterface, change: FolderSwitch, folder: string): 
   return async () => {
     const failed = (reason: string): string =>
       change === 'off'
-        ? `m2b could not leave itself out of ${wholePath(folder)}: ${reason}`
-        : `m2b could not turn the distillate on under ${wholePath(folder)}: ${reason}`
+        ? `m2b could not be turned off in ${wholePath(folder)}: ${reason}`
+        : `m2b could not be turned on under ${wholePath(folder)}: ${reason}`
     try {
       // `--`: a folder is handed on as it is named, whatever it begins with.
       const outcome = await runM2b($, ['distillate', change, '--', folder], WRITE_TIMEOUT_MS)
@@ -1116,12 +1138,18 @@ type PressWrite = () => Promise<boolean>
  * so a crash, a closed session or a reload of the mod during those seconds leaves everything as it
  * was, and an item another session settles meanwhile is caught when the write comes. `ids` are the
  * proposals a press on keep all stands for.
+ *
+ * The focus goes to the row's `undo`, drawn under `undoKey` once the press waits: Enter pressed
+ * again takes the press back. Left at its place in the row of buttons, it would stand on `undo`
+ * after keep and, after drop, on keep of the row below, since the pressed row draws one button
+ * where it drew two.
  */
 async function press(
   $: EngineInterface,
   id: string,
   action: BandPress['action'],
   write: PressWrite,
+  undoKey: string,
   ids?: string[],
 ): Promise<void> {
   const token = await newPressToken($)
@@ -1139,6 +1167,7 @@ async function press(
         inBackground($, () => settle($, id, token, write)),
       ),
     )
+    await focusInPane($, undoKey)
   }
 }
 
@@ -1192,14 +1221,15 @@ function taskWrite($: EngineInterface, candidate: BandCandidate, action: BandSet
     try {
       return await settleNow($, candidate, action)
     } catch (error) {
-      await update($, snapshotAtom, () => failed(`m2b could not ${verbOf(action)} "${candidate.title}": ${String(error)}`))
+      await update($, snapshotAtom, () => failed(`m2b could not ${verbOf(action)} "${nameOf(candidate)}": ${String(error)}`))
       return false
     }
   }
 }
 
 async function settleNow($: EngineInterface, candidate: BandCandidate, action: BandSettle): Promise<boolean> {
-  await update($, noticeAtom, () => null)
+  // What the last press could not write is not cleared here: it stands until the next press, and
+  // a write may land seconds after a refusal that no press has followed.
   const { snapshot } = await loadView($, TASKS_ANSWER)
   if (snapshot.error !== null) {
     await update($, snapshotAtom, () => snapshot)
@@ -1209,24 +1239,29 @@ async function settleNow($: EngineInterface, candidate: BandCandidate, action: B
   const fresh = snapshot.review
   // `ok` on the review closes it the way keep closes a candidate.
   if (!current.some(open => open.id === candidate.id) && fresh?.id !== candidate.id) {
-    await update($, noticeAtom, () => `Already settled in another session, nothing written: ${candidate.title}`)
+    await update($, rowNoticeAtom, () => `Already settled in another session, nothing written: ${nameOf(candidate)}`)
     await update($, snapshotAtom, old => (old === null ? old : { ...old, candidates: current, review: fresh }))
     return false
   }
   // A run that ended since the review was drawn rewrote it under the same id: what was pressed on
   // is not what would be closed.
   if (fresh !== null && fresh.id === candidate.id && isOtherReview(candidate, fresh)) {
-    await update($, noticeAtom, () => `The review changed since it was drawn, nothing written: ${candidate.title}`)
+    await update($, rowNoticeAtom, () => `The review changed since it was drawn, nothing written: ${nameOf(candidate)}`)
     await update($, snapshotAtom, old => (old === null ? old : { ...old, candidates: current, review: fresh }))
     return false
   }
   // `--`: with the markdown backend a task id is a file name, and it may start with a dash.
   const outcome = await runM2b($, ['tasks', action, '--', candidate.id], WRITE_TIMEOUT_MS)
   if (!outcome.ok) {
-    await update($, snapshotAtom, () => failed(`m2b could not ${verbOf(action)} "${candidate.title}": ${outcome.error}`))
+    await update($, snapshotAtom, () => failed(`m2b could not ${verbOf(action)} "${nameOf(candidate)}": ${outcome.error}`))
     return false
   }
   return true
+}
+
+/** What a pressed row is called in what m2b says of it: the review as the pane calls it, a candidate or a question by its title. */
+function nameOf(pressed: BandCandidate): string {
+  return Array.isArray((pressed as Partial<BandReview>).findings) ? REVIEW : pressed.title
 }
 
 /** Whether the review pressed on holds other findings than the one read now; unknown counts as the same. */
@@ -1237,7 +1272,11 @@ function isOtherReview(pressed: BandCandidate, fresh: BandReview): boolean {
 
 function rowActions($: EngineInterface): RowActions {
   return {
-    press: (candidate, action) => press($, candidate.id, action, taskWrite($, candidate, action)),
+    press: async (candidate, action) => {
+      // What the last press could not write is said until the next press there.
+      await update($, rowNoticeAtom, () => null)
+      await press($, candidate.id, action, taskWrite($, candidate, action), undoKey(candidate.id))
+    },
     undo: id => undo($, id),
   }
 }
@@ -1266,15 +1305,22 @@ function proposalWrite($: EngineInterface, proposals: BandProposal[], action: Ba
 
 function proposalActions($: EngineInterface): ProposalActions {
   return {
-    answer: (proposal, action) => press($, pressKey(proposal.id), action, proposalWrite($, [proposal], action)),
-    keepAll: proposals =>
-      press(
+    answer: async (proposal, action) => {
+      // What the last answer could not write is said until the next press there.
+      await update($, proposalsNoticeAtom, () => null)
+      await press($, pressKey(proposal.id), action, proposalWrite($, [proposal], action), undoKey(proposal.id))
+    },
+    keepAll: async proposals => {
+      await update($, proposalsNoticeAtom, () => null)
+      await press(
         $,
         KEEP_ALL,
         'complete',
         proposalWrite($, proposals, 'complete'),
+        UNDO_ALL,
         proposals.map(proposal => proposal.id),
-      ),
+      )
+    },
     undo: key => undo($, key),
   }
 }
@@ -1288,22 +1334,14 @@ async function showProposals($: EngineInterface): Promise<string> {
   return showInPane($, PROPOSALS_PLACED, () => proposalLines(proposals))
 }
 
-/** `show` in the band: a button has no answer to put the proposals in, so the band says where they are listed. */
-async function showFromBand($: EngineInterface): Promise<void> {
-  const [answer] = (await showProposals($)).split('\n')
-  if (answer !== undefined && answer !== PROPOSALS_PLACED) {
-    await update($, noticeAtom, () => `${answer}; m2b proposals lists them in a shell`)
-  }
-}
-
 /**
- * `show` on the band's row for this session: the pane opens in the view it starts in, as the
- * person's own open, so it is placed at any width, and asks again what the session was given.
+ * `open` on the band's row: the pane opens in the view it starts in, as the person's own open, so
+ * it is placed at any width, and asks again what the session was given.
  * `staysOpen` where the band is drawn under the fullscreen layout at a width that docks a pane.
  * A button has no answer to put the lines in, so where no pane can be shown the band names the
  * command that answers with them.
  */
-async function showSessionFromBand($: EngineInterface, staysOpen: boolean): Promise<void> {
+async function openFromBand($: EngineInterface, staysOpen: boolean): Promise<void> {
   await turnTo($, null)
   $.clock.after(0, inBackground($, () => refresh($, true)))
   lookLater($, 0)
@@ -1320,14 +1358,6 @@ async function placedOrWhyNot($: EngineInterface, staysOpen: boolean): Promise<s
     return answer ?? SESSION_PLACED
   } catch (error) {
     return `the m2b pane could not be opened: ${plainLine(String(error))}`
-  }
-}
-
-function bandActions($: EngineInterface, staysOpen: boolean): BandActions {
-  return {
-    ...rowActions($),
-    showProposals: () => showFromBand($),
-    showSession: () => showSessionFromBand($, staysOpen),
   }
 }
 
@@ -1354,16 +1384,6 @@ export const register: Register = on => {
     lockTimers.clear()
     lookTimers.clear()
     isOpeningDue = true
-    // A reload starts this module over while the pane stays up: the seats in the session's state
-    // stand until the pane is drawn again, and the band asks Claude Code before it goes by one.
-    // Seats this module holds, of drawings before this start, are handed over once more.
-    if (paneSeats.size > 0) {
-      try {
-        await shareSeats($)
-      } catch {
-        // The session starts all the same, and the pane's next drawing tries again.
-      }
-    }
     await carryPressesOver($)
     // A reload of the mod took the lines of a topic, and the values of the settings, with the old
     // module: the pane starts over.
@@ -1480,7 +1500,8 @@ export const register: Register = on => {
     // Opens with what the band holds and reads the run again behind it.
     $.clock.after(0, inBackground($, () => refresh($, true)))
     const [snapshot, run] = [await read($, snapshotAtom), await read($, runAtom)]
-    const text = await showInPane($, 'the last curation run is in the m2b pane', () => reviewLines(snapshot, run))
+    const nowMs = await $.clock.now()
+    const text = await showInPane($, 'the last curation run is in the m2b pane', () => reviewLines(snapshot, run, nowMs))
     return { text }
   })
 
@@ -1504,7 +1525,7 @@ export const register: Register = on => {
     }
     const press = await newPressToken($)
     beginSettings(press)
-    await turnTo($, { kind: 'settings', press, at: null, drawn: 0 })
+    await turnTo($, { kind: 'settings', press, aside: null, drawn: 0 })
     const [answer] = (await showInPane($, SETTINGS_PLACED, () => [])).split('\n')
     if (answer !== SETTINGS_PLACED) {
       // No pane: nothing is read, and the list is where a terminal shows it.
@@ -1536,7 +1557,7 @@ export const register: Register = on => {
       return { text: summary }
     }
     await turnTo($, { kind: 'search', search })
-    return { text: await showInPane($, `${summary} in the m2b pane`, () => [summary, ...searchLines(search)]) }
+    return { text: await showInPane($, searchPlaced(search), () => [summary, ...searchLines(search)]) }
   })
 
   // Registered only outside a curation run; a call there is not this mod's to answer.
@@ -1607,19 +1628,6 @@ export const register: Register = on => {
     const isOnStartView = view === null
     const isRightAfterBack = wentBackAtMs !== null && nowMs - wentBackAtMs < SAME_KEY_TWICE_MS
     const answer = closeAnswer(e.origin.kind, isOnStartView, staysBesideChat(paneSeats.values()), isRightAfterBack)
-    const isCardShown = view !== null && view.kind === 'settings' && showsCard(view, heldSettings(view.press))
-    const turn = answer === 'back' ? afterBack(view, isCardShown, isRightAfterBack) : 'start'
-    if (turn === 'stay') {
-      return { value: undefined }
-    }
-    if (turn === 'list') {
-      // A setting's card is one step below the list: the close leads there, and the next one on.
-      // A press that waits on the card is taken back: from the list nobody could.
-      wentBackAtMs = nowMs
-      dropWaitingChange()
-      await turnTo($, listOf(view))
-      return { value: undefined }
-    }
     if (answer === 'back') {
       if (!isOnStartView) {
         wentBackAtMs = nowMs
@@ -1641,54 +1649,35 @@ export const register: Register = on => {
     // Whoever closes it, the pane starts in its start view when it opens next.
     await turnTo($, null)
     const result = await next(e)
-    // Once the close has settled, the seats go and the band draws its rows again. Not awaited:
+    // Once the close has settled, the seats go. Not awaited:
     // asked from inside the pane's own close, Claude Code may still list the pane.
     $.clock.after(0, () => {
       seatsAfterClose($).catch(() => undefined)
     })
     return result
-  }).catch(async ($, e, next) => {
+  }).catch(async (_, e, next) => {
     // The pane closes without its view being turned: a topic's lines and the settings' values go
     // all the same, and so do the seats, which the pane's next drawing notes anew.
     forgetTopicUnless(null)
     forgetSettingsUnless(null)
-    await forgetSeats($).catch(() => undefined)
+    paneSeats.clear()
     return next(e)
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
-    noteSeat($, e.surface, e.props.placement)
+    paneSeats.set(e.surface, e.props.placement)
     // The small form of the desktop app is read at a glance, whatever view the pane was turned to.
     if (e.props.placement === 'widget') {
       return glancePane($, e, await sessionModel($))
     }
     const view = await read($, paneViewAtom)
-    const presses = await read($, pressesAtom)
-    if (view === null) {
-      return sessionPane($, e, await sessionModel($), sessionActions($))
-    }
-    const { Box } = $.ui.resolve(e)
-    const snapshot = await read($, snapshotAtom)
-    const run = await read($, runAtom)
-    if (view.kind === 'settings') {
-      // A card has its own way on, to its neighbours and to the list; whatever else the view
-      // draws, the list or that m2b could not read it, leads back like every view.
-      const kept = heldSettings(view.press)
-      return (
-        <Box flexDirection="column">
-          {!showsCard(view, kept) && backRow($, e, () => backByPress($))}
-          {settingsPane($, e, view, kept, settingsActions($, view.press), e.props.bodyColumns)}
-        </Box>
-      )
-    }
+    const proposals = await read($, proposalsAtom)
+    const ui = $.ui.resolve(e)
+    const { Box } = ui
     return (
       <Box flexDirection="column">
-        {backRow($, e, () => backByPress($))}
-        {view.kind === 'proposals'
-          ? proposalsPane($, e, await read($, proposalsAtom), presses, await read($, proposalsNoticeAtom), proposalActions($))
-          : view.kind === 'topic'
-            ? topicPane($, e, view.name, heldTopic(view.press))
-            : paneTree($, e, view, snapshot, run, presses, rowActions($))}
+        <Box marginBottom={1}>{tabRow(ui, paneTabs(view, proposals?.waiting.length ?? 0, to => turnByTab($, to)))}</Box>
+        {await viewOfPane($, e, view, proposals, e.props.bodyColumns)}
       </Box>
     )
   })
@@ -1698,6 +1687,7 @@ export const register: Register = on => {
   // of an engine report naming m2b as the failed hook. A prompt not kept only makes a note ask.
   on('prompt.submit', async ($, e, next) => {
     await update($, noticeAtom, () => null)
+    await update($, rowNoticeAtom, () => null)
     await update($, proposalsNoticeAtom, () => null)
     await update($, sessionNoticeAtom, () => null)
     if (isOwnPrompt(e)) {
@@ -1722,15 +1712,11 @@ export const register: Register = on => {
     if (e.props.hasSurvey) {
       return next(e)
     }
-    // Beside the pane, which holds every row with its buttons, the band is one line at most. Where
-    // the pane is not in view, it draws all it has and a row for what this session was given.
-    const sight = await sightOn($, e.surface)
-    const model = await bandModel($, sight)
-    if (sight === 'beside') {
-      const line = lineBesidePane(model)
-      return line === null ? next(e) : lineRow($, e, line)
+    const line = bandLine(await bandModel($))
+    if (line === null) {
+      return next(e)
     }
     const staysOpen = docksFor({ isFullscreen: e.viewport?.isFullscreen === true, columns: e.viewport?.columns ?? 0 })
-    return bandRows($, e, model, bandActions($, staysOpen)) ?? next(e)
+    return bandRow($, e, line, () => openFromBand($, staysOpen))
   })
 }

@@ -1,181 +1,118 @@
 import type { EngineInterface, ResolveInput } from 'claude-code'
 
-import type { BandCandidate, BandPress, BandProposals, BandSession, BandSnapshot } from '../types'
+import type { BandDueTask, BandProposals, BandSession, BandShows, BandSnapshot } from '../types'
+import { M2B, button, dueCounts, styleOf, taskLine, topicsCount, waitForYou } from './look'
+import type { Tone } from './look'
 import { plainLine } from './plain-text'
-import { couldNotLookLine, countLine, errorBesideTasks, proposalsRow } from './proposals'
-import { candidateRow, reviewRow } from './rows'
-import type { RowActions } from './rows'
-import { WAITS_FOR_YOU, dueFirst, dueLine } from './session-view'
-import { untoldFindings } from './tasks'
+import { couldNotLookLine, errorBesideTasks } from './proposals'
+import { dueFirst, waitCount } from './session-view'
 
 /*
- * What the band above the prompt draws. On its own it is every row with its buttons. Beside the
- * m2b pane, which holds the same rows, it steps back to one line, so nothing stands twice. Where
- * the pane is not in view, it carries one row more: how many topics m2b gave this session, with
- * the button that shows the pane.
+ * What the band above the prompt draws: one row, in m2b's name, that says how many things wait for
+ * an answer and has one button, which shows the pane. Everything that is answered, and every row
+ * with a button that writes, is in the pane: the person can fold the band away, and nothing may
+ * stand only there. The tasks due are in the row as counts, below it by name, or not in the band at
+ * all, as the machine's `band.due_tasks` says, and the count of topics only with `band.topics` on.
  */
 
-const CANDIDATES_SHOWN = 3
-const FINDINGS_SHOWN = 3
 const DUE_SHOWN = 3
+// Cells between m2b's name, the pieces of the row and its button.
+const ROW_GAP = 2
+/** The key of the band's one button. */
+export const OPEN = 'open'
+
+/** What the band shows where the answer it draws from names no settings: what a machine without an entry shows. */
+export const SHOWS_BY_DEFAULT: BandShows = { dueTasks: 'count', topics: false }
 
 /**
- * Everything the band draws from. `topics` is the number of topics m2b gave this session where the
- * band has a row for it, and 0 where it has none.
+ * Everything the band draws from. `topics` is the number of topics m2b gave this session, `notice`
+ * why the band's own button showed no pane.
  */
 export type BandModel = {
   snapshot: BandSnapshot | null
   proposals: BandProposals | null
   notice: string | null
-  proposalsNotice: string | null
-  versionLine: string | null
-  presses: Record<string, BandPress>
   topics: number
 }
 
-/** What the band's buttons do: keep, drop and `ok`, and `show` for the proposals and for this session. */
-export type BandActions = RowActions & {
-  showProposals: () => Promise<void>
-  showSession: () => Promise<void>
-}
-
-/** The band's one line beside the pane, and how it is drawn. */
-export type BandLine = { text: string; tone: 'plain' | 'warning' | 'error' }
+/** A piece of the band's row, and what it is. */
+export type BandPart = { text: string; tone: Tone }
 
 /**
- * How many topics the band's row names. A session that was given none, that m2b has not looked at
- * or holds no note of, and a look that failed give no row: the row is a count, a count of nothing
- * would cost a line in every session, and `/m2b-pane` says which of these it is.
+ * The band's row: its pieces in the order drawn, and the tasks listed by name below it.
+ * `isNamed` is false where the row is a sentence that names m2b itself.
+ */
+export type BandLine = { parts: BandPart[]; isNamed: boolean; listed: BandDueTask[]; more: number }
+
+/**
+ * How many topics the band counts. A session that was given none, that m2b has not looked at or
+ * holds no note of, and a look that failed count none: the pane says which of these it is.
  */
 export function topicsGiven(given: BandSession | null): number {
   return given !== null && given.error === null && given.known ? given.topics.length : 0
 }
 
+function sentence(text: string, tone: Tone): BandLine {
+  const line = plainLine(text)
+  return { parts: [{ text: line, tone }], isNamed: !line.startsWith(`${M2B} `), listed: [], more: 0 }
+}
+
 /**
- * The band's one line beside the pane, or null for none. First what the pane's start view does not
- * show, so it would be said nowhere: why a press wrote nothing, then that this session runs an
- * older band. Then an error: without the task list there is nothing to count, and it stays where
- * it has always been said, though the start view says it too. Else what needs an answer, as
- * counts: the rows and their buttons are in the pane. The tasks due need no answer and stay there.
- * A row that was pressed counts until its write has landed, as it stays a row until then.
+ * What the band's row says, or null where the band draws nothing. First why its own button showed
+ * no pane: a press that did nothing is said where it was pressed. Then what keeps m2b from
+ * counting, the task list or the store it could not read. Else the counts: what waits for an
+ * answer, the tasks due as the machine shows them, the topics where it shows them.
  */
-export function lineBesidePane(model: BandModel): BandLine | null {
+export function bandLine(model: BandModel): BandLine | null {
   const { snapshot, proposals } = model
-  const unsaid = model.notice ?? model.proposalsNotice ?? model.versionLine
-  if (unsaid !== null) {
-    return { text: plainLine(unsaid), tone: 'warning' }
+  if (model.notice !== null) {
+    return sentence(model.notice, 'trouble')
   }
-  const error = snapshot?.error ?? null
-  if (error !== null) {
-    return { text: plainLine(error), tone: 'error' }
+  const tasksError = snapshot?.error ?? null
+  if (tasksError !== null) {
+    return sentence(tasksError, 'trouble')
   }
-  const storeError = errorBesideTasks(error, proposals)
+  const storeError = errorBesideTasks(tasksError, proposals)
   if (storeError !== null) {
-    return { text: couldNotLookLine(storeError), tone: 'error' }
+    return sentence(couldNotLookLine(storeError), 'trouble')
   }
-  const candidates = snapshot?.candidates.length ?? 0
-  const waiting = proposals?.waiting.length ?? 0
-  const waits = [
-    ...(candidates > 0 ? [`${candidates} to keep or drop`] : []),
-    ...(waiting > 0 ? [countLine(waiting)] : []),
-    ...(snapshot?.review ? ['the review'] : []),
-  ]
-  return waits.length === 0 ? null : { text: `${WAITS_FOR_YOU}: ${waits.join(', ')}`, tone: 'plain' }
-}
-
-export function lineRow($: EngineInterface, e: ResolveInput, line: BandLine) {
-  const { Text } = $.ui.resolve(e)
-  return line.tone === 'plain' ? (
-    <Text wrap="truncate-end">{line.text}</Text>
-  ) : (
-    <Text color={line.tone} wrap="truncate-end">
-      {line.text}
-    </Text>
-  )
-}
-
-function andMore(hidden: number, what: string): string | null {
-  return hidden > 0 ? `and ${hidden} more ${what}` : null
-}
-
-function topicsLine(topics: number): string {
-  return `${topics} ${topics === 1 ? 'topic' : 'topics'} given to this session`
-}
-
-/** The band on its own: every row with its buttons, or null where there is nothing to draw. */
-export function bandRows($: EngineInterface, e: ResolveInput, model: BandModel, actions: BandActions) {
-  const { snapshot, proposals, notice, proposalsNotice, versionLine, presses, topics } = model
-  const candidates = snapshot?.candidates ?? []
-  const review = snapshot?.review ?? null
-  const error = snapshot?.error ?? null
+  const shows = snapshot?.shows ?? SHOWS_BY_DEFAULT
   const due = snapshot?.due ?? []
-  const waiting = proposals?.waiting.length ?? 0
-  const proposalsError = errorBesideTasks(error, proposals)
-  const hasRows =
-    candidates.length > 0 || due.length > 0 || review !== null || error !== null || waiting > 0 || proposalsError !== null || topics > 0
-  if (!hasRows && notice === null && proposalsNotice === null && versionLine === null) {
+  const waiting = waitCount(snapshot, proposals)
+  const parts: BandPart[] = [
+    ...(waiting > 0 ? [{ text: waitForYou(waiting), tone: 'waits' as const }] : []),
+    ...(shows.dueTasks === 'count' ? dueCounts(due) : []),
+    ...(shows.topics && model.topics > 0 ? [{ text: topicsCount(model.topics), tone: 'quiet' as const }] : []),
+  ]
+  const listed = shows.dueTasks === 'list' ? dueFirst(due).slice(0, DUE_SHOWN) : []
+  if (parts.length === 0 && listed.length === 0) {
     return null
   }
+  return { parts, isNamed: true, listed, more: shows.dueTasks === 'list' ? due.length - listed.length : 0 }
+}
 
-  const { Box, Button, Text } = $.ui.resolve(e)
-  const moreCandidates = andMore(candidates.length - CANDIDATES_SHOWN, 'candidates')
-  const moreDue = andMore(due.length - DUE_SHOWN, 'due')
-  const findings = review === null ? [] : untoldFindings(review)
-  const moreFindings = andMore(findings.length - FINDINGS_SHOWN, 'findings')
-  const isWriting = Object.values(presses).some(pressed => pressed.phase === 'writing')
-  const row = (candidate: BandCandidate) => candidateRow($, e, candidate, presses[candidate.id], actions)
-
+/** The band's drawing: the row with its one button, and below it the tasks the machine lists by name. */
+export function bandRow($: EngineInterface, e: ResolveInput, line: BandLine, onOpen: () => void) {
+  const ui = $.ui.resolve(e)
+  const { Box, Text } = ui
+  // Under the pieces of the row, past m2b's name.
+  const indent = line.isNamed ? M2B.length + ROW_GAP : 0
   return (
     <Box flexDirection="column">
-      {error !== null && (
-        <Text color="error" wrap="truncate-end">
-          {plainLine(error)}
-        </Text>
-      )}
-      {candidates.slice(0, CANDIDATES_SHOWN).map(row)}
-      {moreCandidates !== null && <Text dimColor>{moreCandidates}</Text>}
-      {waiting > 0 && proposalsRow($, e, waiting, actions.showProposals)}
-      {proposalsError !== null && (
-        <Text color="error" wrap="truncate-end">
-          {couldNotLookLine(proposalsError)}
-        </Text>
-      )}
-      {dueFirst(due).slice(0, DUE_SHOWN).map(task => (
-        <Text dimColor wrap="truncate-end">
-          {dueLine(task)}
-        </Text>
-      ))}
-      {moreDue !== null && <Text dimColor>{moreDue}</Text>}
-      {review !== null && reviewRow($, e, review, presses[review.id], actions)}
-      {findings.slice(0, FINDINGS_SHOWN).map(finding => (
+      <Box key="row:m2b" flexDirection="row" columnGap={ROW_GAP}>
+        {line.isNamed && <Text {...styleOf('brand')}>{M2B}</Text>}
         <Text wrap="truncate-end">
-          {'  '}
-          {plainLine(finding)}
+          {line.parts.map((part, place) => (
+            <Text {...styleOf(part.tone)}>{`${place === 0 ? '' : '  '}${part.text}`}</Text>
+          ))}
         </Text>
-      ))}
-      {moreFindings !== null && <Text dimColor>{`  ${moreFindings}`}</Text>}
-      {(review?.changes?.length ?? 0) > 0 && <Text dimColor>  the whole review: /m2b-review</Text>}
-      {topics > 0 && (
-        <Box key="row:session" flexDirection="row">
-          <Button key="show:session" label="show" onPress={actions.showSession} />
-          <Text wrap="truncate-end"> {topicsLine(topics)}</Text>
+        {button(ui, { key: OPEN, label: 'open', kind: 'default', onPress: onOpen })}
+      </Box>
+      {line.listed.length > 0 && (
+        <Box key="tasks" flexDirection="column" paddingLeft={indent}>
+          {line.listed.map(task => taskLine(ui, task, 'truncate-end'))}
+          {line.more > 0 && <Text {...styleOf('quiet')}>{`and ${line.more} more`}</Text>}
         </Box>
-      )}
-      {isWriting && <Text dimColor>working…</Text>}
-      {notice !== null && (
-        <Text color="warning" wrap="truncate-end">
-          {plainLine(notice)}
-        </Text>
-      )}
-      {proposalsNotice !== null && (
-        <Text color="warning" wrap="truncate-end">
-          {plainLine(proposalsNotice)}
-        </Text>
-      )}
-      {versionLine !== null && (
-        <Text color="warning" wrap="truncate-end">
-          {plainLine(versionLine)}
-        </Text>
       )}
     </Box>
   )

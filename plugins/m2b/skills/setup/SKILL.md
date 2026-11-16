@@ -110,9 +110,10 @@ prompt, for the reason the line gives) or `cannot commit` (the store folder is a
 curation run on this machine cannot commit into it, for the reason the line gives), with what to do; `not recorded` only on
 the curating machine, where the model steps need that program. The line `band` says whether the
 latest session that ran m2b's hooks also started the band above the prompt. Right after setup it
-can say `not seen`, because m2b's hooks only begin with the next session. Say that the band appears
-in the next session, and that if `m2b doctor` still says `not seen` after one, pass on the reason
-its line gives.
+can say `not seen`, because m2b's hooks only begin with the next session. Say that the band runs
+from the next session on and shows a row above the prompt once something waits for an answer or a
+task is due, and that if `m2b doctor` still says `not seen` after one, pass on the reason its line
+gives.
 
 ## 5. What the owner does by hand
 

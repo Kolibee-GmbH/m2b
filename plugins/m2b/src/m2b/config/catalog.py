@@ -13,6 +13,11 @@ character that draws nothing or steers a terminal written out, as a value and in
 
 The catalog is held to the keys the three parsers take (``setting_keys`` of each file's module),
 and each default here to what a file without the key reads as.
+
+A setting lives in a file, and a person looks for it by what they want from m2b. So the catalog
+also sorts every setting into one of four groups (``groups``), the few choices first: what m2b
+shows, what it reads, curation, and last what only informs or is changed by a command. A list by
+file (``settings``) and a view by intent read the same entries.
 """
 
 from __future__ import annotations
@@ -36,6 +41,7 @@ COMMAND, SETUP, HAND, NEVER = "command", "setup", "by hand", "never by hand"
 ON_OFF = (True, False)
 SETUP_SKILL = "/m2b:setup"
 CURATION_SECTION = "curation."
+SHOWS, READS, CURATION, ABOUT = "shows", "reads", "curation", "about"
 
 
 @dataclass(frozen=True)
@@ -54,6 +60,8 @@ class Setting:
     default: Any = None
     # A switch's values, the ones ``m2b settings set`` takes.
     choices: tuple[Any, ...] = ()
+    # Whether its file takes values beyond the choices, written by the command of the file.
+    file_takes_more: bool = False
 
     @property
     def file(self) -> str:
@@ -66,6 +74,19 @@ class Setting:
 
 
 @dataclass(frozen=True)
+class Group:
+    """Settings a person looks for together, whatever file each lives in."""
+
+    name: str
+    title: str
+    # Its settings by scope and key, in the order a view shows them.
+    holds: tuple[tuple[str, str], ...]
+    # Whether it holds what only informs or is changed by a command, so a view may keep it behind
+    # one row. A switch is in no such group: whatever can be pressed is in sight.
+    folded: bool = False
+
+
+@dataclass(frozen=True)
 class Shown:
     # The value as JSON data, a text as ``shows`` has it; None for a named setting, whose content
     # stays in its file.
@@ -74,9 +95,17 @@ class Shown:
     shows: str
 
 
-def _switch(scope: str, key: str, title: str, does: str, default: Any, choices: tuple[Any, ...] = ON_OFF) -> Setting:
+def _switch(
+    scope: str,
+    key: str,
+    title: str,
+    does: str,
+    default: Any,
+    choices: tuple[Any, ...] = ON_OFF,
+    file_takes_more: bool = False,
+) -> Setting:
     change = f"m2b settings set {key} {'|'.join(as_argument(choice) for choice in choices)}"
-    return Setting(key, scope, SWITCH, title, does, COMMAND, change, default, tuple(choices))
+    return Setting(key, scope, SWITCH, title, does, COMMAND, change, default, tuple(choices), file_takes_more)
 
 
 def _by_command(scope: str, key: str, title: str, does: str, change: str, default: Any = None) -> Setting:
@@ -164,6 +193,7 @@ def _of_this_machine() -> tuple[Setting, ...]:
             "claude --model takes.",
             machine.DEFAULT_CURATION_MODEL,
             machine.CURATION_MODELS,
+            file_takes_more=True,
         ),
         _by_command(
             MACHINE,
@@ -226,9 +256,18 @@ def _of_this_machine() -> tuple[Setting, ...]:
         _switch(
             MACHINE,
             "band.due_tasks",
-            "Due tasks in the band",
-            "The band shows your tasks due today or overdue below the candidates.",
-            True,
+            "Tasks in the band",
+            "Your tasks due today or overdue in the band above the prompt: off shows none there, count says how "
+            "many, list names the first three. The pane lists them whatever this says.",
+            machine.DEFAULT_DUE_TASKS,
+            machine.DUE_TASKS_CHOICES,
+        ),
+        _switch(
+            MACHINE,
+            "band.topics",
+            "Topics in the band",
+            "The band says how many topics m2b gave the session. The pane names them whatever this says.",
+            False,
         ),
         _switch(
             MACHINE,
@@ -353,6 +392,64 @@ def settings() -> tuple[Setting, ...]:
     return (*_of_this_machine(), *_of_the_store(), *_of_the_owner())
 
 
+def groups() -> tuple[Group, ...]:
+    """Every setting once, by what a person wants from m2b, in the order a view shows the groups."""
+    add_ons = tuple((MACHINE, f"{machine.ADDONS_KEY}.{name}") for name in addons.addon_names())
+    return (
+        Group(SHOWS, "What m2b shows", ((MACHINE, "band.due_tasks"), (MACHINE, "band.topics"))),
+        Group(
+            READS,
+            "What m2b reads",
+            ((MACHINE, "curation.read_sessions"), (MACHINE, "sessions.propose"), (MACHINE, "distillate.skip_under")),
+        ),
+        Group(
+            CURATION,
+            "Curation",
+            (
+                (MACHINE, "curation.model"),
+                (STORE, "curating_machine"),
+                (MACHINE, "curation.paused"),
+                (MACHINE, "curation.git_commit"),
+                (OWNER, "language"),
+            ),
+        ),
+        Group(
+            ABOUT,
+            "About this setup",
+            (
+                (MACHINE, "store.path"),
+                (MACHINE, "store.backend"),
+                (STORE, "format"),
+                (STORE, "journal_since"),
+                (OWNER, "owner"),
+                (MACHINE, "machine_id"),
+                (STORE, "tasks.backend"),
+                (STORE, "tasks.list"),
+                (STORE, "tasks.timeout_seconds"),
+                (MACHINE, "calendar.backend"),
+                (MACHINE, "calendar.timeout_seconds"),
+                (MACHINE, "curation.model_timeout_minutes"),
+                (MACHINE, "curation.max_turns"),
+                (MACHINE, "curation.max_budget_usd"),
+                (MACHINE, "curation.git_directory"),
+                (MACHINE, "executables"),
+                *add_ons,
+                (OWNER, "spheres"),
+                (OWNER, "customers"),
+                (OWNER, "worklog_leave_out"),
+                (MACHINE, "version"),
+                (OWNER, "version"),
+            ),
+            folded=True,
+        ),
+    )
+
+
+def places() -> dict[tuple[str, str], tuple[str, int]]:
+    """Each setting's group and its place in it, counted from one, by scope and key."""
+    return {held: (group.name, place) for group in groups() for place, held in enumerate(group.holds, start=1)}
+
+
 def named(key: str) -> tuple[Setting, ...]:
     """The settings with this key: one, none, or one per file for a key two files have (``version``)."""
     return tuple(setting for setting in settings() if setting.key == key)
@@ -388,6 +485,7 @@ def _machine_values(config: MachineConfig) -> dict[str, Shown]:
         "curation.paused": _plain(curation.paused),
         "distillate.skip_under": _counted(len(config.distillate.skip_under), "no folders", "{} folder", "{} folders"),
         "band.due_tasks": _plain(config.band.due_tasks),
+        "band.topics": _plain(config.band.topics),
         "sessions.propose": _plain(config.sessions.propose),
         **{
             f"{machine.ADDONS_KEY}.{name}": Shown(None, "on" if addons.is_on(config.addons, name) else "off")
@@ -447,12 +545,18 @@ def _number(count: int, one: str, several: str) -> str:
     return (one if count == 1 else several).format(count)
 
 
-def entry(setting: Setting, shown: Shown | None) -> dict[str, Any]:
-    """One setting as ``m2b settings --json`` answers it; ``shown`` None: its file was not read."""
+def entry(setting: Setting, shown: Shown | None, placed: tuple[str, int]) -> dict[str, Any]:
+    """One setting as ``m2b settings --json`` answers it; ``shown`` None: its file was not read.
+
+    ``placed`` is its group and its place there (``places``).
+    """
+    group, place = placed
     return {
         "key": setting.key,
         "file": setting.file,
         "scope": setting.scope,
+        "group": group,
+        "place": place,
         "kind": setting.kind,
         "title": setting.title,
         "does": setting.does,
@@ -468,4 +572,15 @@ def entry(setting: Setting, shown: Shown | None) -> dict[str, Any]:
 
 
 def entries(read: Mapping[tuple[str, str], Shown]) -> list[dict[str, Any]]:
-    return [entry(setting, read.get((setting.scope, setting.key))) for setting in settings()]
+    """Every setting in the order of ``settings``, each with its group and its place there."""
+    placed = places()
+    return [
+        entry(setting, read.get((setting.scope, setting.key)), placed[(setting.scope, setting.key)])
+        for setting in settings()
+    ]
+
+
+def group_entries() -> list[dict[str, Any]]:
+    """The groups as ``m2b settings --json`` answers them, in their order, without what each holds:
+    a setting's entry names its group."""
+    return [{"name": group.name, "title": group.title, "folded": group.folded} for group in groups()]

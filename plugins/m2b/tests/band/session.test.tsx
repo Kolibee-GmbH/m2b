@@ -2,17 +2,33 @@ import { expect, test } from 'claude-code/testing'
 import type { CommandRunResult, SessionMessage } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { BACK, focusKeyAfterBack } from '../../hooks/session-view'
-import type { SessionModel } from '../../hooks/session-view'
-import type { BandProposals, BandSession, BandSnapshot, PaneView } from '../../types'
-import { FakeM2b, HOME, SESSION_ID, STATUS, pane, start, texts } from './harness'
+import {
+  FakeM2b,
+  HOME,
+  SESSION_ID,
+  STATUS,
+  linesAt,
+  listedTask,
+  lookOf,
+  pane,
+  partLines,
+  pressTab,
+  shownParts,
+  shownTab,
+  start,
+  texts,
+  viewButtons,
+} from './harness'
 import type { Files } from './harness'
 
 const PANE = 'm2b'
 const UNDO_MS = 5_000
 const LOOK = ['band', '--json', '--session', SESSION_ID, '--session-only']
 const NOTE = 'mcp__m2b__note'
-const PLACED = 'this session and what waits for you are in the m2b pane'
+const PLACED = 'what waits for you and this session are in the m2b pane'
+const PRINTED_WHOLE = 'The distillate was printed whole at the start.'
+const NOT_LOOKED = 'm2b has not looked yet.'
+const NOT_KNOWN = 'm2b holds no note of what it gave this session; that does not say it gave nothing.'
 const DANA = 'a1a1a1a1a1a1'
 const NEXT_SESSION = '7c9e6679-7425-40de-944b-e07fc1f90ae7'
 const NORTHWIND = { topics: [{ name: 'Northwind', facts: 3, current: 0 }], atStart: 'whole', offUnder: null }
@@ -39,7 +55,10 @@ function called($: Engine, tool: string, args: Record<string, unknown>) {
   return $.tool.call({ tool, ...args } as Parameters<Engine['tool']['call']>[0])
 }
 
-type On = Parameters<typeof start>[1]
+/** The lines of the part "This session" of the overview; none where the part is left out. */
+async function given(ui: Parameters<typeof partLines>[0]): Promise<string[]> {
+  return (await partLines(ui, 'session')) ?? []
+}
 
 /** The start view as the pane draws it after `/m2b-pane`. */
 async function startView($: Engine) {
@@ -81,8 +100,8 @@ test('no command of the band is named m2b, like the skill: each begins with m2b-
   expect(names).toContain('m2b-pane')
 })
 
-test('/m2b-pane opens the pane on what this session was given, what waits and what is due', async ($, on) => {
-  // Covers: B185
+test('/m2b-pane opens the pane on what waits, what is due today, what this session was given and how m2b stands', async ($, on) => {
+  // Covers: B185, B205
   const fake = busyFake()
   const { opened, commands } = await start($, on, fake)
   expect(commands.map(command => command.name)).toContain('m2b-pane')
@@ -92,20 +111,31 @@ test('/m2b-pane opens the pane on what this session was given, what waits and wh
   expect(opened.map(one => one.id)).toContain(PANE)
   expect(answer.text).toBe(PLACED)
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
-  expect(await texts(ui)).toEqual([
-    'In this session',
-    'Northwind: 3 facts, 1 current',
-    'Acme Ltd: 1 fact',
-    'The distillate was printed whole at the start.',
-    'Waits for you',
-    '1 proposal from your sessions',
-    'Remember? Dana prefers tea',
-    'Still current? Planning the trip to Porto',
-    'm2b: review',
-    'the whole review',
-    'Today',
-    'due today: Buy screws',
-    'overdue: Return the ladder',
+  expect(await shownParts(ui)).toEqual([
+    {
+      key: 'waits',
+      title: 'Waits for you',
+      count: '4',
+      lines: [
+        '1 proposal from your sessions',
+        'in the tab Proposals',
+        'Remember? Dana prefers tea',
+        '[keep] [drop]',
+        'Still current? Planning the trip to Porto',
+        '[keep] [drop]',
+        'Review of the last curation run',
+        '[ok]',
+        'The whole review is in the tab Review.',
+      ],
+    },
+    { key: 'today', title: 'Today', count: null, lines: ['due today Buy screws', 'overdue Return the ladder'] },
+    {
+      key: 'session',
+      title: 'This session',
+      count: null,
+      lines: ['[Northwind] 3 facts, 1 current', '[Acme Ltd] 1 fact', PRINTED_WHOLE],
+    },
+    { key: 'm2b', title: 'm2b', count: null, lines: ['2 in inbox · curated 18:02'] },
   ])
   await ui.unmount()
 })
@@ -138,7 +168,7 @@ test('a session that cannot name its project root is asked about the folder the 
   expect(fake.looks).toEqual([LOOK])
   expect(fake.lookProjects).toEqual([undefined])
   const ui = await startView($)
-  expect(await texts(ui)).toContain('Northwind: 3 facts, 1 current')
+  expect(await given(ui)).toContain('[Northwind] 3 facts, 1 current')
   await ui.unmount()
 })
 
@@ -147,10 +177,13 @@ test('what one session was given never reaches the answer the sessions share', a
   const files: Files = new Map()
   await start($, on, busyFake(), {}, files)
 
-  const shared = files.get(`${HOME}/.local/state/m2b/band-view.json`) ?? ''
+  const shared = files.get(`${HOME}/.local/state/m2b/band-answer.json`) ?? ''
   expect(shared).toContain('Remember? Dana prefers tea')
-  expect(shared).not.toContain('Northwind: ')
-  expect(shared).not.toContain('"topics"')
+  expect(shared).not.toContain('"name":"Northwind"')
+  // The one word on topics there is the machine's setting, whether the band counts them: no session's topics.
+  expect(JSON.parse(shared).value.snapshot.shows).toEqual({ dueTasks: 'count', topics: false })
+  expect(shared.split('"topics"')).toHaveLength(2)
+  expect(Object.keys(JSON.parse(shared).value).sort()).toEqual(['health', 'proposals', 'run', 'snapshot', 'status', 'version'])
   expect([...files.values()].join('\n')).not.toContain('Acme Ltd')
 })
 
@@ -161,37 +194,40 @@ test('a session m2b holds no note of is not known, which is not given nothing', 
   await start($, on, fake)
 
   const ui = await startView($)
-  const shown = await texts(ui)
-  expect(shown).toContain('m2b holds no note of what it gave this session; that does not say it gave nothing.')
-  expect(shown).not.toContain('No topic was given.')
+  // The one line of the part, and one that may be skipped: nothing is wrong.
+  expect(await given(ui)).toEqual([NOT_KNOWN])
+  expect(await lookOf(ui, NOT_KNOWN)).toEqual({ color: undefined, dimColor: true, wrap: 'wrap' })
   await ui.unmount()
 })
 
-test('a session given no topic says so, apart from one that is not known', async ($, on) => {
+test('a session given no topic lists none and says no word on topics, apart from one that is not known', async ($, on) => {
   // Covers: B185
   const fake = new FakeM2b()
   fake.given = { topics: [], atStart: 'cut', offUnder: null }
   await start($, on, fake)
 
   const ui = await startView($)
-  const shown = await texts(ui)
-  expect(shown).toContain('No topic was given.')
-  expect(shown).toContain('The distillate was printed at the start, cut to fit.')
-  expect(shown).toContain('Nothing waits for you.')
-  expect(shown).toContain('Nothing due today.')
+  expect(await given(ui)).toEqual(['The distillate was printed at the start, cut to fit.'])
+  expect(await partLines(ui, 'waits')).toEqual(['Nothing waits for you.'])
+  expect(await partLines(ui, 'today')).toEqual(['Nothing due today.'])
+  expect((await texts(ui)).some(line => /topic/i.test(line))).toBe(false)
   await ui.unmount()
 })
 
-test('a start without a distillate and a folder left out are named', async ($, on) => {
+test('a start without a distillate and a folder m2b is off under are named', async ($, on) => {
   // Covers: B185
   const fake = new FakeM2b()
   fake.given = { topics: [], atStart: 'none', offUnder: '/home/alex/code/acme' }
   await start($, on, fake)
 
   const ui = await startView($)
-  const shown = await texts(ui)
-  expect(shown).toContain('There was no distillate to print at the start.')
-  expect(shown).toContain('The distillate is off under /home/alex/code/acme: a session that starts there gets none.')
+  expect(await given(ui)).toEqual([
+    'There was no distillate to print at the start.',
+    'm2b is off under this folder.',
+    '/home/alex/code/acme',
+    '[turn on here]',
+    'This session keeps what it was given and gets no more topics.',
+  ])
   await ui.unmount()
 })
 
@@ -202,9 +238,8 @@ test('a topic noted before the counts were kept comes by its name, cleaned of wh
   await start($, on, fake)
 
   const ui = await startView($)
-  const shown = await texts(ui)
-  expect(shown).toContain('Northwind')
-  expect(shown.some(line => line.includes('distillate'))).toBe(false)
+  // Its button alone: no count stands beside it, and nothing of a start that named no distillate.
+  expect(await given(ui)).toEqual(['[Northwind]'])
   await ui.unmount()
 })
 
@@ -271,18 +306,18 @@ test('a topic that comes in with a prompt shows while the turn still works, and 
   on('prompt.submit', (_, e) => ({ text: e.text }))
   const { clock } = await start($, on, fake)
   const ui = await startView($)
-  expect(await texts(ui)).toContain('No topic was given.')
+  expect(await given(ui)).toEqual([PRINTED_WHOLE])
 
   fake.given = { topics: [{ name: 'Northwind', facts: 3, current: 0 }], atStart: 'whole', offUnder: null }
   await $.prompt.submit({ text: 'what did Northwind order?', origin: { kind: 'composer' }, wait: false })
-  expect(await texts(ui)).toContain('No topic was given.')
+  expect(await given(ui)).toEqual([PRINTED_WHOLE])
   await clock.advance(3_000)
-  expect(await texts(ui)).toContain('Northwind: 3 facts')
+  expect(await given(ui)).toEqual(['[Northwind] 3 facts', PRINTED_WHOLE])
 
   fake.given = { topics: [{ name: 'Northwind', facts: 4, current: 0 }], atStart: 'whole', offUnder: null }
   await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 't1', reason: 'answer' })
   await clock.advance(1)
-  expect(await texts(ui)).toContain('Northwind: 4 facts')
+  expect(await given(ui)).toEqual(['[Northwind] 4 facts', PRINTED_WHOLE])
   await ui.unmount()
 })
 
@@ -300,7 +335,7 @@ test('a session not known at its start is looked at once more, since its start m
   expect(fake.looks).toHaveLength(2)
 
   const ui = await startView($)
-  expect(await texts(ui)).toContain('Northwind: 3 facts')
+  expect(await given(ui)).toContain('[Northwind] 3 facts')
   await ui.unmount()
 })
 
@@ -336,11 +371,10 @@ test('a look that answers after a later one does not take its place', async ($, 
   lookTakesMs = 0
   await $.turn.complete({ ...TURN_ENDED, turnId: 't1' })
   await clock.advance(1)
-  expect(await texts(ui)).toContain('Northwind: 3 facts')
+  expect(await given(ui)).toContain('[Northwind] 3 facts')
 
   await clock.advance(10_000)
-  expect(await texts(ui)).toContain('Northwind: 3 facts')
-  expect(await texts(ui)).not.toContain('No topic was given.')
+  expect(await given(ui)).toEqual(['[Northwind] 3 facts', PRINTED_WHOLE])
   await ui.unmount()
 })
 
@@ -350,23 +384,23 @@ test('after /clear the session goes on under another id, and what the ended one 
   fake.given = NORTHWIND
   const { clock } = await start($, on, fake)
   const first = await startView($)
-  expect(await texts(first)).toContain('Northwind: 3 facts')
+  expect(await given(first)).toContain('[Northwind] 3 facts')
   await first.unmount()
 
   // Under another id, what is kept is not drawn, also before anything was told of the end.
   fake.sessionId = NEXT_SESSION
   fake.given = NO_TOPICS
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
-  expect(await texts(ui)).not.toContain('Northwind: 3 facts')
-  expect((await texts(ui))[1]).toBe('m2b has not looked yet.')
+  expect(await given(ui)).not.toContain('[Northwind] 3 facts')
+  expect(await given(ui)).toEqual([NOT_LOOKED])
 
   await $.session.end({ reason: 'clear', sessionId: SESSION_ID, resume: { id: SESSION_ID } })
-  expect(await texts(ui)).not.toContain('Northwind: 3 facts')
-  expect((await texts(ui))[1]).toBe('m2b has not looked yet.')
+  expect(await given(ui)).not.toContain('[Northwind] 3 facts')
+  expect(await given(ui)).toEqual([NOT_LOOKED])
 
   await clock.advance(1_000)
   expect(fake.looks.at(-1)).toEqual(['band', '--json', '--session', NEXT_SESSION, '--session-only'])
-  expect(await texts(ui)).toContain('No topic was given.')
+  expect(await given(ui)).toEqual([PRINTED_WHOLE])
   await ui.unmount()
 })
 
@@ -386,11 +420,11 @@ test('a look under way when the session is resumed into another does not write o
   fake.given = NO_TOPICS
   await $.session.end({ reason: 'resume', sessionId: SESSION_ID, resume: { id: SESSION_ID } })
   await clock.advance(1_000)
-  expect(await texts(ui)).toContain('No topic was given.')
+  expect(await given(ui)).toEqual([PRINTED_WHOLE])
 
   await clock.advance(4_000)
-  expect(await texts(ui)).toContain('No topic was given.')
-  expect(await texts(ui)).not.toContain('Northwind: 3 facts')
+  expect(await given(ui)).toEqual([PRINTED_WHOLE])
+  expect(await given(ui)).not.toContain('[Northwind] 3 facts')
   await ui.unmount()
 })
 
@@ -405,13 +439,13 @@ test('while the session still answers with the ended id, the look waits for the 
   await $.session.end({ reason: 'clear', sessionId: SESSION_ID, resume: { id: SESSION_ID } })
   await clock.advance(2_000)
   expect(fake.looks).toHaveLength(before)
-  expect((await texts(ui))[1]).toBe('m2b has not looked yet.')
+  expect(await given(ui)).toEqual([NOT_LOOKED])
 
   fake.sessionId = NEXT_SESSION
   fake.given = NO_TOPICS
   await clock.advance(1_000)
   expect(fake.looks.at(-1)).toEqual(['band', '--json', '--session', NEXT_SESSION, '--session-only'])
-  expect(await texts(ui)).toContain('No topic was given.')
+  expect(await given(ui)).toEqual([PRINTED_WHOLE])
   await ui.unmount()
 })
 
@@ -427,7 +461,7 @@ test('a session resumed under the id it had is looked at all the same, after the
   await clock.advance(6_000)
 
   expect(fake.looks).toHaveLength(before + 1)
-  expect(await texts(ui)).toContain('Northwind: 3 facts')
+  expect(await given(ui)).toContain('[Northwind] 3 facts')
   await ui.unmount()
 })
 
@@ -460,7 +494,7 @@ test('a session that only ends, and the end of another reason, keep what was loo
   await $.session.end({ reason: 'other', sessionId: SESSION_ID, resume: { id: SESSION_ID } })
   await clock.advance(1_000)
 
-  expect(await texts(ui)).toContain('Northwind: 3 facts')
+  expect(await given(ui)).toContain('[Northwind] 3 facts')
   expect(fake.looks).toHaveLength(before)
   await ui.unmount()
 })
@@ -481,10 +515,10 @@ test('after a compaction of the conversation the pane asks again, and not for a 
   expect(fake.looks).toHaveLength(before)
 
   await $.session.compact({ trigger: 'manual', messages: MESSAGES })
-  expect(await texts(ui)).toContain('Northwind: 3 facts')
+  expect(await given(ui)).toContain('[Northwind] 3 facts')
   await clock.advance(3_000)
   expect(fake.looks).toHaveLength(before + 1)
-  expect(await texts(ui)).toContain('No topic was given.')
+  expect(await given(ui)).toEqual([PRINTED_WHOLE])
   await ui.unmount()
 })
 
@@ -509,9 +543,11 @@ test('a look that cannot even start says could not look instead of not looked ye
   await start($, on, fake)
 
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
-  const [heading, first] = await texts(ui)
-  expect(heading).toBe('In this session')
+  const [first, ...rest] = await given(ui)
   expect(first?.startsWith('m2b could not look up what it gave this session: ')).toBe(true)
+  expect(rest).toEqual([])
+  // The band could not start either, which the first part says of what waits; the session's part says its own.
+  expect(await partLines(ui, 'waits')).toEqual([NOT_LOOKED])
   await ui.unmount()
 })
 
@@ -534,16 +570,15 @@ test('the notes this session wrote through the command and the tool are counted,
   await ui.unmount()
 })
 
-test('keep and drop in the start view wait for undo and write like the band', async ($, on) => {
+test('keep, drop and ok in the start view wait for undo and then write', async ($, on) => {
   // Covers: B185
   const fake = busyFake()
   const { clock } = await start($, on, fake)
   const ui = await startView($)
-  const keys = (await ui.findAll({ type: 'Button' })).map(button => button.key)
-  expect(keys).toEqual(['topic:0', 'topic:1', 'show:proposals', 'keep:c1', 'drop:c1', 'keep:q1', 'drop:q1', 'ok:r1', 'show:review', 'show:settings'])
+  expect(await viewButtons(ui)).toEqual(['keep:c1', 'drop:c1', 'keep:q1', 'drop:q1', 'ok:r1', 'topic:0', 'topic:1'])
 
   await ui.press({ key: 'drop:c1' })
-  expect(await texts(ui)).toContain('dropping: Remember? Dana prefers tea')
+  expect(await linesAt(ui, 'row:c1')).toEqual(['Remember? Dana prefers tea', '[undo] dropping'])
   await ui.press({ key: 'undo:c1' })
   await ui.press({ key: 'keep:q1' })
   await clock.advance(UNDO_MS)
@@ -552,13 +587,19 @@ test('keep and drop in the start view wait for undo and write like the band', as
   expect(await texts(ui)).not.toContain('Still current? Planning the trip to Porto')
 
   await ui.press({ key: 'ok:r1' })
-  expect(await texts(ui)).toContain('closing: m2b: review')
+  expect(await linesAt(ui, 'review:r1')).toEqual(['Review of the last curation run', '[undo] closing'])
   await clock.advance(UNDO_MS)
   expect(fake.writes().at(-1)).toEqual(['tasks', 'complete', '--', 'r1'])
+  expect(await partLines(ui, 'waits')).toEqual([
+    '1 proposal from your sessions',
+    'in the tab Proposals',
+    'Remember? Dana prefers tea',
+    '[keep] [drop]',
+  ])
   await ui.unmount()
 })
 
-test('every candidate and question stands in the start view, where the band shows three', async ($, on) => {
+test('every candidate and question stands in the start view, however many there are', async ($, on) => {
   // Covers: B185
   const fake = new FakeM2b()
   for (const n of [1, 2, 3, 4, 5]) {
@@ -571,45 +612,55 @@ test('every candidate and question stands in the start view, where the band show
   for (const n of [1, 2, 3, 4, 5]) {
     expect(shown).toContain(`Remember? Dana prefers tea ${n}`)
   }
-  expect(shown.some(line => line.includes('more candidates'))).toBe(false)
+  expect(shown.some(line => /^and \d+ more/.test(line))).toBe(false)
   await ui.unmount()
 })
 
-test('show on the proposals and on the review turns the pane to them, and /m2b-pane turns it back', async ($, on) => {
-  // Covers: B185
+test('the tabs Proposals and Review turn the pane to them, and /m2b-pane turns it back', async ($, on) => {
+  // Covers: B185, B204
   const fake = busyFake()
   fake.status = { ...STATUS, run: { state: 'succeeded', started_at: '2026-03-14T18:00:05+01:00' } }
   await start($, on, fake)
   const ui = await startView($)
 
-  await ui.press({ key: 'show:proposals' })
-  expect(await texts(ui)).toContain('said on 2026-03-12: "Dana runs IT at Northwind"')
-  expect(await texts(ui)).not.toContain('In this session')
+  const parts = async (): Promise<string[]> => (await shownParts(ui)).map(part => part.key)
+  const overview = ['waits', 'today', 'session', 'm2b']
+  expect(await parts()).toEqual(overview)
+
+  await pressTab(ui, 'proposals')
+  expect(await parts()).toEqual(['proposals'])
+  expect(await partLines(ui, 'proposals')).toContain('said on 2026-03-12: "Dana runs IT at Northwind"')
 
   await typed($, 'm2b-pane')
-  expect(await texts(ui)).toContain('In this session')
-  await ui.press({ key: 'show:review' })
-  expect(await texts(ui)).toContain('Last curation run: succeeded, started 2026-03-14 18:00')
-  expect(await texts(ui)).toContain('lint: broken link in a.md')
+  expect(await shownTab(ui)).toBe('overview')
+  expect(await parts()).toEqual(overview)
+  await pressTab(ui, 'review')
+  expect(await parts()).toEqual(['run', 'waits'])
+  expect(await partLines(ui, 'run')).toEqual(['succeeded, started 18:00', 'lint: broken link in a.md'])
 
   await typed($, 'm2b-pane')
-  expect(await texts(ui)).toContain('In this session')
+  expect(await shownTab(ui)).toBe('overview')
+  expect(await parts()).toEqual(overview)
   await ui.unmount()
 })
 
-test('a task list that cannot be read is one error line, and the session part still answers', async ($, on) => {
+test('a task list that cannot be read is one error line in the part that waits, the part Today is left out, and the session part still answers', async ($, on) => {
   // Covers: B185
   const fake = busyFake()
   fake.failure = 'Reminders did not answer'
   await start($, on, fake)
 
   const ui = await startView($)
+  const unread = 'm2b could not read the tasks: Reminders did not answer'
+  // The proposals come from the store, which m2b could read.
+  expect(await partLines(ui, 'waits')).toEqual([unread, '1 proposal from your sessions', 'in the tab Proposals'])
+  expect(await lookOf(ui, unread)).toEqual({ color: 'error', dimColor: undefined, wrap: 'wrap' })
+  expect(await partLines(ui, 'today')).toBeNull()
+  expect(await given(ui)).toContain('[Northwind] 3 facts, 1 current')
   const shown = await texts(ui)
-  expect(shown).toContain('m2b could not read the tasks: Reminders did not answer')
-  expect(shown).toContain('Northwind: 3 facts, 1 current')
+  expect(shown.filter(line => line.includes('could not'))).toEqual([unread])
   expect(shown).not.toContain('Nothing waits for you.')
   expect(shown).not.toContain('Nothing due today.')
-  expect(shown.at(-1)).toBe('The task list could not be read.')
   await ui.unmount()
 })
 
@@ -632,19 +683,43 @@ test('beside a task list that cannot be read, the proposals that could not be lo
   await again.unmount()
 })
 
-test('with the tasks due turned off, the third part says they are not shown', async ($, on) => {
-  // Covers: B185
+test('where the core names no tasks due, as one from before the settings of the band does with them turned off, the part Today says they are not shown', async ($, on) => {
+  // Covers: B102
   const fake = new FakeM2b()
+  fake.shows = null
   fake.dueTasks = null
   await start($, on, fake)
 
   const ui = await startView($)
-  expect((await texts(ui)).slice(-2)).toEqual(['Today', 'Tasks due are not shown.'])
+  expect(await partLines(ui, 'today')).toEqual(['Tasks due are not shown.'])
+  expect(await lookOf(ui, 'Tasks due are not shown.')).toEqual({ color: undefined, dimColor: true, wrap: 'wrap' })
   await ui.unmount()
 })
 
-test('where the pane cannot be shown, /m2b-pane answers with the same lines', async ($, on) => {
-  // Covers: B185
+for (const dueTasks of ['off', 'count', 'list'] as const) {
+  test(`the part Today lists the tasks due whatever the band shows of them, with ${dueTasks} too: today's first, each word in its color and the title at full strength`, async ($, on) => {
+    // Covers: B102
+    const fake = busyFake()
+    fake.shows = { dueTasks, topics: false }
+    await start($, on, fake)
+
+    const ui = await startView($)
+    expect(await partLines(ui, 'today')).toEqual(['due today Buy screws', 'overdue Return the ladder'])
+    // The two words are padded to one width, so the titles start in one column.
+    expect(await listedTask(ui, 't2')).toEqual({
+      due: { text: 'due today', color: 'warning', dimColor: undefined },
+      title: { text: 'Buy screws', color: undefined, dimColor: undefined, wrap: 'wrap' },
+    })
+    expect(await listedTask(ui, 't1')).toEqual({
+      due: { text: 'overdue  ', color: 'error', dimColor: undefined },
+      title: { text: 'Return the ladder', color: undefined, dimColor: undefined, wrap: 'wrap' },
+    })
+    await ui.unmount()
+  })
+}
+
+test('where the pane cannot be shown, /m2b-pane answers with the same parts in the same order and words', async ($, on) => {
+  // Covers: B185, B205
   const fake = busyFake()
   fake.paneWaits = 'no surface attached places panes'
   await start($, on, fake)
@@ -653,18 +728,20 @@ test('where the pane cannot be shown, /m2b-pane answers with the same lines', as
 
   expect(answer.split('\n')).toEqual([
     'the m2b pane cannot be shown here: no surface attached places panes',
-    'In this session',
-    '  Northwind: 3 facts, 1 current',
-    '  Acme Ltd: 1 fact',
-    '  The distillate was printed whole at the start.',
     'Waits for you',
     '  1 proposal from your sessions: /m2b-proposals',
     '  Remember? Dana prefers tea',
     '  Still current? Planning the trip to Porto',
-    '  m2b: review: /m2b-review',
+    '  Review of the last curation run: /m2b-review',
     'Today',
     '  due today: Buy screws',
     '  overdue: Return the ladder',
+    'This session',
+    '  Northwind: 3 facts, 1 current',
+    '  Acme Ltd: 1 fact',
+    '  The distillate was printed whole at the start.',
+    'm2b',
+    '  2 in inbox · curated 18:02',
   ])
 })
 
@@ -697,7 +774,7 @@ test('a look that fails once does not hide that a later one answered', async ($,
   // Drawn without the command, which would look by itself.
   expect(fake.looks).toHaveLength(2)
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
-  expect(await texts(ui)).toContain('Northwind: 3 facts')
+  expect(await given(ui)).toContain('[Northwind] 3 facts')
   await ui.unmount()
 })
 
@@ -720,76 +797,8 @@ test('the start view wraps its lines in a pane as narrow as a dock gets', async 
   const ui = await $.ui.mount({ ...pane(PANE, 24), surface: 'terminal' })
   const wraps = (await ui.findAll({ type: 'Text' })).filter(found => found.text.trim() !== '').map(found => found.props['wrap'])
   expect(wraps.every(wrap => wrap === 'wrap' || wrap === undefined)).toBe(true)
-  expect((await ui.findAll({ type: 'Text', text: 'Northwind: 3 facts, 1 current' }))[0]?.props['wrap']).toBe('wrap')
-  await ui.unmount()
-})
-
-// What the kit shows of the focus: which button the mod asks it for, and that the button is drawn.
-// A move the mod asks for fails in the kit and reaches no hook of a test, so every press below that
-// turns the pane runs with a move that failed, as where the pane does not hold the keyboard.
-
-/** What the start view draws from, with what a test sets and nothing else. */
-function modelWith(parts: Partial<SessionModel>): SessionModel {
-  return { given: null, notes: 0, notice: null, snapshot: null, proposals: null, presses: {}, ...parts }
-}
-
-const GIVEN_TWO: BandSession = {
-  id: SESSION_ID,
-  known: true,
-  topics: [
-    { name: 'Northwind', facts: 3, current: 1 },
-    { name: 'Acme Ltd', facts: 1, current: 0 },
-  ],
-  atStart: 'whole',
-  offUnder: null,
-  error: null,
-}
-
-test('back puts the focus on the button that led to the view it leaves, where the start view draws it, else on settings', () => {
-  // Covers: B201
-  const waiting = { waiting: [{}], answered: 0, error: null } as unknown as BandProposals
-  const reviewed = { candidates: [], review: {}, error: null } as unknown as BandSnapshot
-  const full = modelWith({ given: GIVEN_TWO, proposals: waiting, snapshot: reviewed })
-  const topic = (name: string): PaneView => ({ kind: 'topic', name, press: 'p', isRead: true })
-
-  expect(focusKeyAfterBack({ kind: 'proposals' }, full)).toBe('show:proposals')
-  expect(focusKeyAfterBack({ kind: 'review' }, full)).toBe('show:review')
-  expect(focusKeyAfterBack(topic('Northwind'), full)).toBe('topic:0')
-  expect(focusKeyAfterBack(topic('Acme Ltd'), full)).toBe('topic:1')
-  // Every other view falls to settings: the list of the settings, one of its cards, a search.
-  expect(focusKeyAfterBack({ kind: 'settings', press: 'p', at: null, drawn: 0 }, full)).toBe('show:settings')
-  expect(focusKeyAfterBack({ kind: 'settings', press: 'p', at: 0, drawn: 0 }, full)).toBe('show:settings')
-  expect(focusKeyAfterBack({ kind: 'search' } as PaneView, full)).toBe('show:settings')
-  expect(focusKeyAfterBack(null, full)).toBe('show:settings')
-  // What led there is gone from the start view: the last proposal was answered, the review settled, the topic no longer given.
-  const bare = modelWith({ given: { ...GIVEN_TWO, topics: [] } })
-  expect(focusKeyAfterBack({ kind: 'proposals' }, bare)).toBe('show:settings')
-  expect(focusKeyAfterBack({ kind: 'proposals' }, modelWith({ proposals: { ...waiting, waiting: [] } }))).toBe('show:settings')
-  expect(focusKeyAfterBack({ kind: 'review' }, bare)).toBe('show:settings')
-  expect(focusKeyAfterBack({ kind: 'review' }, modelWith({ snapshot: { ...reviewed, review: null } }))).toBe('show:settings')
-  expect(focusKeyAfterBack(topic('Northwind'), bare)).toBe('show:settings')
-  expect(focusKeyAfterBack(topic('Lumen'), full)).toBe('show:settings')
-  expect(focusKeyAfterBack(topic('Northwind'), modelWith({}))).toBe('show:settings')
-})
-
-test('the buttons the focus is asked for are drawn: back first on every view a press turns to, and on the start view the button that led there', async ($, on) => {
-  // Covers: B201
-  const fake = busyFake()
-  await start($, on, fake)
-  const ui = await startView($)
-  const keys = async () => (await ui.findAll({ type: 'Button' })).map(button => String(button.key))
-
-  expect(await keys()).not.toContain(BACK)
-  const all = ['show:proposals', 'show:review', 'topic:0', 'topic:1', 'show:settings']
-  for (const leads of all) {
-    expect(await keys()).toEqual(expect.arrayContaining(all))
-    await ui.press({ key: leads })
-    expect((await keys())[0]).toBe(BACK)
-    // None of the start view's keys is drawn here: asked for from here, each is one not drawn yet.
-    expect((await keys()).filter(key => all.includes(key))).toEqual([])
-    await ui.press({ key: BACK })
-    expect(await texts(ui)).toContain('In this session')
-    expect(await keys()).not.toContain(BACK)
+  for (const line of ['Remember? Dana prefers tea', '3 facts, 1 current', PRINTED_WHOLE, 'Buy screws', '2 in inbox · curated 18:02']) {
+    expect((await lookOf(ui, line))?.wrap).toBe('wrap')
   }
   await ui.unmount()
 })

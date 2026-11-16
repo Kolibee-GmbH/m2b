@@ -3,6 +3,10 @@ import { expect, mock } from 'claude-code/testing'
 import type { Engine, MockClock } from 'claude-code/testing'
 import type { EngineResultOf, On, ProcessRunResult } from 'claude-code'
 
+import { tabKey } from '../../hooks/pane-tabs'
+import type { Shown, TabId } from '../../hooks/pane-tabs'
+import type { BandShows } from '../../types'
+
 export const HOME = '/home/alex'
 export const NOW = Date.parse('2026-03-14T17:30:00Z')
 export const SESSION_ID = '0f6a3c1e-5b7d-4e2a-9c48-1d2e3f4a5b6c'
@@ -50,11 +54,16 @@ export type FakeProposal = {
   answer?: 'keep' | 'drop'
 }
 
+/** A status with nothing wrong, which clears the status line. */
 export const STATUS = {
   inbox: { count: 2, evicted: 0 },
   run: { state: 'succeeded', last_succeeded_at: '2026-03-14T18:02:00+01:00' },
   backends: { tasks: { state: 'reachable', detail: '' } },
 }
+
+/** A status with something wrong, and what the status line says to it: a line that was written, not cleared. */
+export const TROUBLED_STATUS = { ...STATUS, backends: { tasks: { state: 'not reachable', detail: 'no grant' } } }
+export const TROUBLE_LINE = 'tasks not reachable'
 
 /** A topic whose facts the core gave a session, with what its block held then. */
 export type FakeTopic = { name: string; facts: number | null; current: number | null }
@@ -153,7 +162,17 @@ export class FakeM2b {
   searchCut = false
   /** When set, `m2b search` fails with this as its message. */
   searchFails: string | null = null
-  /** The tasks due today or overdue as `m2b band --json` answers them; null when `band.due_tasks` is off. */
+  /**
+   * The machine's `band` settings as `m2b band --json` names them: how the band shows the tasks
+   * due, and whether it counts the topics. Null as a core before these settings answers: no `band`
+   * part, and the tasks due under `due` alone.
+   */
+  shows: BandShows | null = { dueTasks: 'count', topics: false }
+  /**
+   * The tasks due today or overdue. `m2b band --json` names them under `due_by_today` whatever the
+   * band shows, and under `due` too while it lists them. Null where the answer names none under
+   * either key, as a core before the `band` settings answers with `band.due_tasks` off.
+   */
   dueTasks: { id: string; title: string; due: string; overdue: boolean }[] | null = []
   /** The changes of the facts `m2b band --json` names for an open review; null as a core before 0.3.3 answers. */
   reviewDetails: { changes: unknown[]; copies: unknown[]; paragraphs: string[] } | null = null
@@ -368,7 +387,19 @@ export class FakeM2b {
     return ok(JSON.stringify({ version: this.version, session }))
   }
 
-  /** As `m2b band --json` answers: the open curator tasks by marker, or the error, and the status. */
+  /** The tasks due as the tasks part names them: by the key of the core that answers, and by what the band shows. */
+  duePart(): Record<string, unknown> {
+    if (this.dueTasks === null) {
+      return {}
+    }
+    const due = this.dueTasks.map(task => ({ ...task, notes: '', completed: false, dropped: false, marker: null }))
+    if (this.shows === null) {
+      return { due }
+    }
+    return { due_by_today: due, ...(this.shows.dueTasks === 'list' ? { due } : {}) }
+  }
+
+  /** As `m2b band --json` answers: the band's settings, the open curator tasks by marker, or the error, and the status. */
   bandAnswer(): ProcessRunResult {
     if (this.statusFails) {
       return fail('could not read the machine config')
@@ -387,12 +418,13 @@ export class FakeM2b {
             candidates: open('candidate'),
             questions: open('current'),
             reviews: open('review'),
-            ...(this.dueTasks === null ? {} : { due: this.dueTasks.map(task => ({ ...task, notes: '', completed: false, dropped: false, marker: null })) }),
+            ...this.duePart(),
             ...(this.reviewDetails !== null && open('review').length > 0 ? { review: this.reviewDetails } : {}),
           }
         : { error }
     const proposals = this.proposalsPart ?? this.waitingProposals()
-    return ok(JSON.stringify({ version: this.version, tasks, ...(proposals === null ? {} : { proposals }), status: this.status }))
+    const band = this.shows === null ? {} : { band: { due_tasks: this.shows.dueTasks, topics: this.shows.topics } }
+    return ok(JSON.stringify({ version: this.version, ...band, tasks, ...(proposals === null ? {} : { proposals }), status: this.status }))
   }
 
   waitingProposals(): unknown {
@@ -432,6 +464,191 @@ export function ok(stdout: string): ProcessRunResult {
 
 export function fail(message: string): ProcessRunResult {
   return { exitCode: 1, stdout: '', stderr: `m2b: ${message}\n`, isStdoutTruncated: false, isStderrTruncated: false }
+}
+
+/** A group of the settings as `m2b settings --json` names it: `folded` marks the one a view keeps behind one row. */
+export type FakeGroup = { name: string; title: string; folded: boolean }
+
+/** The core's four groups, in its order: three of choices, and what only informs or is changed by a command. */
+export const SETTING_GROUPS: readonly FakeGroup[] = [
+  { name: 'shows', title: 'What m2b shows', folded: false },
+  { name: 'reads', title: 'What m2b reads', folded: false },
+  { name: 'curation', title: 'Curation', folded: false },
+  { name: 'about', title: 'About this setup', folded: true },
+]
+
+/** A setting as `m2b settings --json` lists it: `group` is the name of its group, `place` its place there, counted from one. */
+export type FakeSetting = {
+  key: string
+  file: string
+  scope: string
+  group: string
+  place: number
+  kind: string
+  title: string
+  does: string
+  read: boolean
+  value: unknown
+  shows: string | null
+  default: unknown
+  choices: unknown[]
+  changed_by: string
+  change: string | null
+  curation: boolean
+}
+
+/** A setting of this machine that shows a value a command changes, at `place` of `group`, with whatever `fields` say otherwise. */
+export function fakeSetting(key: string, title: string, group: string, place: number, fields: Partial<FakeSetting> = {}): FakeSetting {
+  return {
+    key,
+    file: 'config.json',
+    scope: 'machine',
+    group,
+    place,
+    kind: 'shown',
+    title,
+    does: `What ${key} does.`,
+    read: true,
+    value: null,
+    shows: 'not set',
+    default: null,
+    choices: [],
+    changed_by: 'command',
+    change: `m2b config set ${key} <value>`,
+    curation: false,
+    ...fields,
+  }
+}
+
+/** The fields of a switch of on and off. */
+export function onOff(key: string, isOn: boolean): Partial<FakeSetting> {
+  return {
+    kind: 'switch',
+    value: isOn,
+    shows: isOn ? 'on' : 'off',
+    default: false,
+    choices: [true, false],
+    change: `m2b settings set ${key} true|false`,
+  }
+}
+
+/** The fields of a switch of a few names, with the one that is set. */
+export function oneOf(key: string, choices: string[], value: string): Partial<FakeSetting> {
+  return { kind: 'switch', value, shows: value, default: value, choices, change: `m2b settings set ${key} ${choices.join('|')}` }
+}
+
+/** The fields that put a setting into the store's file, and into the owner's. */
+export const IN_STORE: Partial<FakeSetting> = { file: 'store.json', scope: 'store' }
+export const OF_OWNER: Partial<FakeSetting> = { file: 'profile.json', scope: 'owner' }
+
+export const NOTES = '/home/alex/Notes'
+
+/** Where each setting of `settingsCatalog` stands in the list, which is by file: the place a press names. */
+export const SETTING_AT = {
+  MACHINE_ID: 0,
+  PATH: 1,
+  DUE: 2,
+  MODEL: 3,
+  PAUSED: 4,
+  PROPOSE: 5,
+  SKIP: 6,
+  EXECUTABLES: 7,
+  CURATING: 8,
+  BACKEND: 9,
+  TIMEOUT: 10,
+  LANGUAGE: 11,
+  CUSTOMERS: 12,
+} as const
+
+/**
+ * Thirteen settings as `m2b settings --json` lists them, by file: each kind, each file and each
+ * way a setting changes, in every group. The order in a group is not the order of the list: the
+ * curating machine, of the store's file, stands between two settings of this machine, and the
+ * store folder before this machine's name.
+ */
+export function settingsCatalog(): FakeSetting[] {
+  return [
+    fakeSetting('machine_id', "This machine's name", 'about', 2, { value: 'tower-1', shows: 'tower-1', changed_by: 'never by hand', change: null }),
+    fakeSetting('store.path', 'Store folder', 'about', 1, { value: NOTES, shows: NOTES, change: 'm2b config set store.path <folder>' }),
+    fakeSetting('band.due_tasks', 'Tasks in the band', 'shows', 1, oneOf('band.due_tasks', ['off', 'count', 'list'], 'count')),
+    fakeSetting('curation.model', 'Model of curation', 'curation', 1, { ...oneOf('curation.model', ['haiku', 'sonnet'], 'haiku'), curation: true }),
+    fakeSetting('curation.paused', 'Curation paused', 'curation', 3, { ...onOff('curation.paused', false), curation: true }),
+    fakeSetting('sessions.propose', 'Sessions hand in proposals', 'reads', 1, onOff('sessions.propose', false)),
+    fakeSetting('distillate.skip_under', 'Folders m2b is left out of', 'reads', 2, {
+      kind: 'named',
+      shows: '2 folders',
+      change: 'm2b distillate off|on [<folder>]',
+    }),
+    fakeSetting('executables', 'Programs m2b starts', 'about', 5, { kind: 'named', shows: '3 named', change: 'm2b config set executables.<program> <path>' }),
+    fakeSetting('curating_machine', 'Curating machine', 'curation', 2, { ...IN_STORE, value: 'tower-1', shows: 'tower-1', change: 'm2b curate take-over' }),
+    fakeSetting('tasks.backend', 'Task list', 'about', 3, { ...IN_STORE, value: 'markdown', shows: 'markdown', changed_by: 'setup', change: '/m2b:setup' }),
+    fakeSetting('tasks.timeout_seconds', 'Time limit of a tasks call', 'about', 4, {
+      ...IN_STORE,
+      value: 20,
+      shows: '20',
+      default: 20,
+      changed_by: 'by hand',
+      change: 'edit tasks.timeout_seconds in store.json, in the store folder',
+    }),
+    fakeSetting('language', 'Language', 'curation', 4, { ...OF_OWNER, ...oneOf('language', ['de', 'en'], 'en') }),
+    fakeSetting('customers', 'Customers', 'about', 6, { ...OF_OWNER, kind: 'named', shows: '2 customers', changed_by: 'setup', change: '/m2b:worklog-setup' }),
+  ]
+}
+
+/** What the core says to a session that turns handing in on, in short. */
+export const NO_SESSION_TURNS_IT_ON = 'sessions.propose is turned on in a terminal of your own, outside Claude Code'
+
+/** The core's two commands for the settings, `m2b settings --json` and `m2b settings set`, answered from memory. */
+export class FakeSettings {
+  entries: FakeSetting[]
+  /** The groups the answer names; null as a core from before it sorted the settings answers, without the key. */
+  groups: FakeGroup[] | null = SETTING_GROUPS.map(group => ({ ...group }))
+  curates: boolean | null = true
+  notRead: Record<string, string> = {}
+  /** When set, `m2b settings set` refuses with this line and changes nothing. */
+  refuses: string | null = null
+  /** When set, `m2b settings` fails with this as its message. */
+  listFails: string | null = null
+  /** When set, `m2b settings --json` answers this instead, whatever its shape. */
+  part: unknown = undefined
+  /** The variables each `m2b settings set` was handed, one entry per call. */
+  readonly changedWith: (Record<string, string> | undefined)[] = []
+
+  constructor(entries: FakeSetting[] = settingsCatalog()) {
+    this.entries = entries
+  }
+
+  /** The answer of `m2b settings --json` as it is now. */
+  answer(): unknown {
+    const groups = this.groups === null ? {} : { groups: this.groups }
+    return this.part ?? { curates: this.curates, not_read: this.notRead, ...groups, settings: this.entries }
+  }
+
+  handle = (args: readonly string[], env?: Record<string, string>): ProcessRunResult => {
+    if (args[0] !== 'set') {
+      return this.listFails === null ? ok(JSON.stringify(this.answer())) : fail(this.listFails)
+    }
+    this.changedWith.push(env)
+    const [key, value] = args[1] === '--' ? args.slice(2) : args.slice(1)
+    // As the core: no call that carries a `CLAUDECODE` with a value turns handing in on.
+    if (key === 'sessions.propose' && value === 'true' && env?.['CLAUDECODE']) {
+      return { ...fail(NO_SESSION_TURNS_IT_ON), exitCode: 2 }
+    }
+    const found = this.entries.find(one => one.key === key && one.kind === 'switch')
+    if (this.refuses !== null || found === undefined) {
+      return { ...fail(this.refuses ?? `${key} is no switch`), exitCode: 2 }
+    }
+    found.value = value === 'true' ? true : value === 'false' ? false : value
+    found.shows = found.value === true ? 'on' : found.value === false ? 'off' : String(found.value)
+    return ok('')
+  }
+}
+
+/** A fake launcher whose core knows the settings, with those settings to set a test up. */
+export function settingsWorld(entries: FakeSetting[] = settingsCatalog()): { fake: FakeM2b; settings: FakeSettings } {
+  const [fake, settings] = [new FakeM2b(), new FakeSettings(entries)]
+  fake.onSettings = settings.handle
+  return { fake, settings }
 }
 
 /** A slash command the mod registered, as `$.command.register` was handed it. */
@@ -609,18 +826,441 @@ export async function start(
   return { clock, statuses, commands, tools, opened, toasts, openPanes }
 }
 
-type Mounted = { findAll: (q: { type: string }) => Promise<{ text: string }[]> }
+/** An element inside a drawing: its tag, its props and what it holds. */
+type Element = { type: string; props: Record<string, unknown>; children?: unknown[] }
+
+/** An element as the kit hands it on: one drawn without a prop, as a text to be read plainly is, comes without `props`. */
+type HandedOn = Omit<Element, 'props'> & { props?: Record<string, unknown> }
+
+/** An element a drawing was asked for: its tag, its key, its props, the text it shows and what it holds. */
+type Found = { type: string; key: string | undefined; props: Record<string, unknown>; text: string; children: unknown[] }
+
+/** A drawing of the band or of the pane, as far as these helpers read it. */
+type Drawn = {
+  find: (q: { key: string }) => Promise<Found | undefined>
+  findAll: (q: { type?: string; text?: string }) => Promise<Found[]>
+}
+
+function isElement(value: unknown): value is HandedOn {
+  return typeof value === 'object' && value !== null && 'type' in value
+}
+
+function elementsIn(children: unknown[] | undefined, type?: string): Element[] {
+  return (children ?? [])
+    .filter(isElement)
+    .filter(child => type === undefined || child.type === type)
+    .map(child => ({ ...child, props: child.props ?? {} }))
+}
+
+/** The text an element shows: its own strings and those of the texts inside it, in the order drawn. */
+function shownText(element: HandedOn): string {
+  return (element.children ?? []).map(child => (isElement(child) ? shownText(child) : String(child))).join('')
+}
+
+/** The key of the band's row, of the tasks listed below it, and of its one button. */
+const BAND_ROW = 'row:m2b'
+const BAND_TASKS = 'tasks'
+export const OPEN = 'open'
+
+/** The line of the band's row: the one text that is cut where the row is too narrow, with its pieces inside. */
+async function bandLineOf(ui: Drawn): Promise<{ texts: Element[]; line: Element | undefined } | null> {
+  const row = await ui.find({ key: BAND_ROW })
+  if (row === undefined) {
+    return null
+  }
+  const texts = elementsIn(row.children, 'Text')
+  return { texts, line: texts.find(text => text.props['wrap'] === 'truncate-end') }
+}
 
 /**
- * The texts m2b drew, without the engine's own drawing. Whether the engine draws beside a band that
- * shows something depends on the Claude Code version: up to 2.1.322 the band stands in its place,
- * from 2.1.323 the engine draws below it.
+ * The band as m2b drew it. `isNamed`: `m2b` stands before the row as a text of its own. `says`:
+ * the row's pieces as the one line they are drawn in. `below`: the lines under the row, a task as
+ * its word and its title. `buttons`: the keys of every button of the band.
  */
-export async function texts(ui: Mounted): Promise<string[]> {
-  return (await everyText(ui)).filter(text => text !== ENGINES_OWN_DRAWING)
+export type ShownBand = { isNamed: boolean; says: string; below: string[]; buttons: (string | undefined)[] }
+
+/** The band's row and what stands below it; null where m2b drew no band. */
+export async function shownBand(ui: Drawn): Promise<ShownBand | null> {
+  const row = await bandLineOf(ui)
+  if (row === null) {
+    return null
+  }
+  const below = elementsIn((await ui.find({ key: BAND_TASKS }))?.children)
+  return {
+    isNamed: row.texts.some(text => text !== row.line && shownText(text) === 'm2b'),
+    says: row.line === undefined ? '' : shownText(row.line),
+    below: below.map(under =>
+      under.type === 'Box'
+        ? elementsIn(under.children, 'Text')
+            .map(text => shownText(text).trim())
+            .join(' ')
+        : shownText(under),
+    ),
+    buttons: (await ui.findAll({ type: 'Button' })).map(button => button.key),
+  }
+}
+
+/** A band of one row: what it says after `m2b`, and `open`. */
+export function rowSaying(says: string): ShownBand {
+  return { isNamed: true, says, below: [], buttons: [OPEN] }
+}
+
+/** A band whose row is a sentence that names m2b itself, so no `m2b` stands before it. */
+export function sentenceOfM2b(says: string): ShownBand {
+  return { isNamed: false, says, below: [], buttons: [OPEN] }
+}
+
+/** A piece of text in the band with the props it is drawn by. */
+export type BandPiece = { text: string; color: unknown; dimColor: unknown }
+
+function pieceOf(text: Element): BandPiece {
+  return { text: shownText(text), color: text.props['color'], dimColor: text.props['dimColor'] }
+}
+
+/** The pieces of the band's row in the order drawn, each with its color and whether it is dimmed. */
+export async function bandPieces(ui: Drawn): Promise<BandPiece[]> {
+  return elementsIn((await bandLineOf(ui))?.line?.children, 'Text').map(pieceOf)
+}
+
+/** The two texts of a task listed below the band's row: when it is due, as wide as drawn, and its title. */
+export async function listedTask(ui: Drawn, id: string): Promise<{ due: BandPiece; title: BandPiece & { wrap: unknown } } | null> {
+  const [due, title] = elementsIn((await ui.find({ key: `task:${id}` }))?.children, 'Text')
+  return due === undefined || title === undefined ? null : { due: pieceOf(due), title: { ...pieceOf(title), wrap: title.props['wrap'] } }
+}
+
+/** The view the pane starts in, drawn beside the chat: every row that is answered stands there with its buttons. */
+export function startView($: Engine, surface: 'terminal' | 'desktop' = 'terminal') {
+  return $.ui.mount({ ...pane('m2b'), surface })
+}
+
+const ANSWERS = /^(keep|drop|undo|ok):/
+
+/** The keys of the buttons that answer a row: keep, drop, ok and undo, without those that turn the pane. */
+export async function answerKeys(ui: { findAll: (q: { type: string }) => Promise<{ key?: string | undefined }[]> }): Promise<string[]> {
+  return (await ui.findAll({ type: 'Button' })).map(button => button.key ?? '').filter(key => ANSWERS.test(key))
+}
+
+/** The key of the box that holds the pane's row of tabs. */
+const TABS = 'tabs'
+const TAB_IDS: readonly TabId[] = ['overview', 'proposals', 'review', 'settings']
+
+/**
+ * A tab of the pane's row as drawn: its label, and the key of its button; `key` is null for the
+ * tab whose view is shown, which is a text and no button.
+ */
+export type ShownTab = { label: string; key: string | null }
+
+/** The pane's row of tabs in the order drawn; empty where the pane draws none. */
+export async function shownTabs(ui: Drawn): Promise<ShownTab[]> {
+  return elementsIn((await ui.find({ key: TABS }))?.children).map(tab => {
+    if (tab.type === 'Button') {
+      return { label: String(tab.props['label']), key: String(tab.props['key']) }
+    }
+    if (tab.type !== 'Text') {
+      throw new Error(`the row of tabs holds a ${tab.type}`)
+    }
+    return { label: shownText(tab), key: null }
+  })
+}
+
+/** Which tab the row marks as the one shown: one of the four by its place, or the fifth beside them. */
+export async function shownTab(ui: Drawn): Promise<Shown> {
+  const at = (await shownTabs(ui)).findIndex(tab => tab.key === null)
+  if (at === -1) {
+    throw new Error('the pane marks no tab as the one shown')
+  }
+  return TAB_IDS[at] ?? 'aside'
+}
+
+/** Presses the tab that turns the pane to `to`, under the key it has above the view drawn now. */
+export async function pressTab(ui: Drawn & { press: (target: { key: string }) => Promise<unknown> }, to: TabId): Promise<void> {
+  await ui.press({ key: tabKey(to, await shownTab(ui)) })
+}
+
+/**
+ * What the pane's view draws of the given tags, in the order drawn: everything but the row of
+ * tabs above it. The row is the first thing the pane draws, which is checked here.
+ */
+export async function inView(ui: Drawn, ...types: string[]): Promise<Found[]> {
+  const drawn = (await ui.findAll({})).filter(found => types.includes(found.type))
+  const inRow = elementsIn((await ui.find({ key: TABS }))?.children).filter(tab => types.includes(tab.type))
+  expect(drawn.slice(0, inRow.length).map(found => found.key ?? found.text)).toEqual(
+    inRow.map(tab => (tab.type === 'Button' ? String(tab.props['key']) : shownText(tab))),
+  )
+  return drawn.slice(inRow.length)
+}
+
+/** The keys of the buttons of the pane's view, without the tabs above it. */
+export async function viewButtons(ui: Drawn): Promise<string[]> {
+  return (await inView(ui, 'Button')).map(button => button.key ?? '')
+}
+
+/**
+ * The texts m2b drew, without the engine's own drawing and without the pane's row of tabs, which
+ * `shownTabs` reads. Whether the engine draws beside a band that shows something depends on the
+ * Claude Code version: up to 2.1.322 the band stands in its place, from 2.1.323 the engine draws
+ * below it.
+ */
+export async function texts(ui: Drawn): Promise<string[]> {
+  return (await inView(ui, 'Text')).map(found => found.text.trim()).filter(text => text !== '' && text !== ENGINES_OWN_DRAWING)
 }
 
 /** Every text on the surface, the engine's own drawing included: `[ENGINES_OWN_DRAWING]` when m2b drew nothing. */
-export async function everyText(ui: Mounted): Promise<string[]> {
+export async function everyText(ui: Drawn): Promise<string[]> {
   return (await ui.findAll({ type: 'Text' })).map(found => found.text.trim()).filter(text => text !== '')
+}
+
+/**
+ * What an element draws, as the lines it stands on: a text is a line, a button its label in
+ * brackets, a row its pieces side by side, a column the lines of what it holds. A text padded to a
+ * column of its own is read without the padding.
+ */
+function linesOf(element: Element): string[] {
+  if (element.type === 'Text') {
+    return [shownText(element).trim()]
+  }
+  if (element.type === 'Button') {
+    return [`[${String(element.props['label'])}]`]
+  }
+  const inside = elementsIn(element.children).flatMap(linesOf)
+  if (element.props['flexDirection'] !== 'row') {
+    return inside
+  }
+  return [inside.join(Number(element.props['columnGap'] ?? 0) > 0 ? ' ' : '')]
+}
+
+/** Every element of a tag under an element, itself included, in the order drawn. */
+function allIn(element: Element, type: string): Element[] {
+  const inside = elementsIn(element.children).flatMap(child => allIn(child, type))
+  return element.type === type ? [element, ...inside] : inside
+}
+
+/** The lines of the element drawn under `key`, read as `linesOf` reads them; null where the drawing holds none. */
+export async function linesAt(ui: Drawn, key: string): Promise<string[] | null> {
+  const found = await ui.find({ key })
+  return found === undefined ? null : linesOf(found)
+}
+
+/** The title of each part of the overview, by the key the part is drawn under. */
+export const PARTS = { waits: 'Waits for you', today: 'Today', session: 'This session', m2b: 'm2b' } as const
+/**
+ * The key a part is drawn under, in whichever view: the overview's four, the one part of the
+ * proposals, of a search and of a topic, the review's `run` beside its own `waits`, and the
+ * settings' four, named like the core's groups.
+ */
+export type PartKey = keyof typeof PARTS | 'proposals' | 'run' | 'search' | 'topic' | 'shows' | 'reads' | 'curation' | 'about'
+
+const PART_KEY = /^part:/
+
+/**
+ * A part of a view as drawn: its key without `part:`, its title, the count at the end of the
+ * title's line, null where there is none, and the lines below.
+ */
+export type ShownPart = { key: string; title: string; count: string | null; lines: string[] }
+
+function shownPart(part: Found): ShownPart {
+  const [heading, ...body] = elementsIn(part.children)
+  const [title, count] = elementsIn(heading?.children, 'Text')
+  return {
+    key: (part.key ?? '').replace(PART_KEY, ''),
+    title: title === undefined ? '' : shownText(title),
+    count: count === undefined ? null : shownText(count),
+    lines: body.flatMap(linesOf),
+  }
+}
+
+/** The parts of the view the pane shows, in the order drawn; empty where it draws none. */
+export async function shownParts(ui: Drawn): Promise<ShownPart[]> {
+  return (await ui.findAll({ type: 'Box' })).filter(box => PART_KEY.test(box.key ?? '')).map(shownPart)
+}
+
+/** The lines of one part of the view shown, below its title; null where the part is left out. */
+export async function partLines(ui: Drawn, key: PartKey): Promise<string[] | null> {
+  const part = await ui.find({ key: `part:${key}` })
+  return part === undefined ? null : shownPart(part).lines
+}
+
+/**
+ * How a part is framed and headed: the style, color and padding of its frame, the color and weight
+ * of its title, and the color of its count, undefined where it has none.
+ */
+export type PartLook = {
+  borderStyle: unknown
+  borderColor: unknown
+  paddingX: unknown
+  titleColor: unknown
+  titleWeight: unknown
+  countColor: unknown
+}
+
+export async function partLook(ui: Drawn, key: PartKey): Promise<PartLook | null> {
+  const part = await ui.find({ key: `part:${key}` })
+  if (part === undefined) {
+    return null
+  }
+  const [heading] = elementsIn(part.children)
+  const [title, count] = elementsIn(heading?.children, 'Text')
+  return {
+    borderStyle: part.props['borderStyle'],
+    borderColor: part.props['borderColor'],
+    paddingX: part.props['paddingX'],
+    titleColor: title?.props['color'],
+    titleWeight: title?.props['weight'],
+    countColor: count?.props['color'],
+  }
+}
+
+/** How a text is drawn: its color, whether it is dimmed, and how it wraps. */
+export type TextLook = { color: unknown; dimColor: unknown; wrap: unknown }
+
+/** How the text that reads exactly `text` is drawn, the first where several do; null where none does. */
+export async function lookOf(ui: Drawn, text: string): Promise<TextLook | null> {
+  const found = (await ui.findAll({ type: 'Text', text })).find(one => one.text.trim() === text)
+  return found === undefined ? null : { color: found.props['color'], dimColor: found.props['dimColor'], wrap: found.props['wrap'] }
+}
+
+/** A button as drawn: its key, its label, and what marks it as the one accent of its row or as one beside the point. */
+export type ShownButton = { key: string; label: string; variant: unknown; dimColor: unknown }
+
+/** The buttons of the element drawn under `key`, in the order drawn; empty where the drawing holds none. */
+export async function buttonsAt(ui: Drawn, key: string): Promise<ShownButton[]> {
+  const found = await ui.find({ key })
+  return (found === undefined ? [] : allIn(found, 'Button')).map(button => ({
+    key: String(button.props['key']),
+    label: String(button.props['label']),
+    variant: button.props['variant'],
+    dimColor: button.props['dimColor'],
+  }))
+}
+
+/**
+ * The pieces of the path drawn inside the element under `key`, in the order drawn: the path is a
+ * row that breaks between its pieces and nowhere else.
+ */
+export async function pathPieces(ui: Drawn, key: string): Promise<string[]> {
+  const found = await ui.find({ key })
+  const path = found === undefined ? undefined : allIn(found, 'Box').find(box => box.props['flexWrap'] === 'wrap')
+  return elementsIn(path?.children, 'Text').map(shownText)
+}
+
+/** A piece of text as drawn: what it says, and every prop that sets how it reads. */
+export type ShownPiece = { text: string; color: unknown; dimColor: unknown; weight: unknown; strikethrough: unknown }
+
+/**
+ * The innermost texts of the element drawn under `key`, in the order drawn: a line drawn in
+ * pieces, as a changed fact is, comes as its pieces and not as the line that holds them.
+ */
+export async function piecesAt(ui: Drawn, key: string): Promise<ShownPiece[]> {
+  const found = await ui.find({ key })
+  return (found === undefined ? [] : allIn(found, 'Text'))
+    .filter(text => elementsIn(text.children, 'Text').length === 0)
+    .map(text => ({
+      text: shownText(text),
+      color: text.props['color'],
+      dimColor: text.props['dimColor'],
+      weight: text.props['weight'],
+      strikethrough: text.props['strikethrough'],
+    }))
+}
+
+/** What stands indented inside the element drawn under `key`: how far, and the lines that stand in whole. */
+export type ShownInset = { paddingLeft: unknown; lines: string[] }
+
+/** Every box under `key` that stands in from the left, in the order drawn. */
+export async function insetsAt(ui: Drawn, key: string): Promise<ShownInset[]> {
+  const found = await ui.find({ key })
+  return (found === undefined ? [] : allIn(found, 'Box'))
+    .filter(box => box.props['paddingLeft'] !== undefined)
+    .map(box => ({ paddingLeft: box.props['paddingLeft'], lines: linesOf(box) }))
+}
+
+/** What is drawn inside the element under `key`, in the order of its tree: a button as its key in brackets, a text as it reads. */
+export async function orderAt(ui: Drawn, key: string): Promise<string[]> {
+  const found = await ui.find({ key })
+  const inOrder = (element: Element): string[] => {
+    if (element.type === 'Button') {
+      return [`[${String(element.props['key'])}]`]
+    }
+    return element.type === 'Text' ? [shownText(element).trim()] : elementsIn(element.children).flatMap(inOrder)
+  }
+  return found === undefined ? [] : inOrder(found)
+}
+
+/** The mark that stands before the value of a setting that is in force. */
+const IN_FORCE = '● '
+
+/**
+ * A value of a setting's row as drawn: its label, and whether it is the one in force (marked, a
+ * text), one to press (a button, with its key) or one that cannot be pressed now (a dim text).
+ */
+export type ShownValue = { label: string; is: 'in force' | 'to press' | 'stepped back' | 'plain'; key: string | null }
+
+/**
+ * The row of values of the setting at `at` of the list, in the order drawn; null where the
+ * setting draws none, as one whose file was not read or one in a group kept behind one row.
+ * While a press on the setting waits the row holds `undo` and what the press does instead.
+ */
+export async function shownValues(ui: Drawn, at: number): Promise<ShownValue[] | null> {
+  const row = await ui.find({ key: `values:${at}` })
+  if (row === undefined) {
+    return null
+  }
+  return elementsIn(row.children).map(value => {
+    if (value.type === 'Button') {
+      return { label: String(value.props['label']), is: 'to press', key: String(value.props['key']) }
+    }
+    const text = shownText(value)
+    if (text.startsWith(IN_FORCE)) {
+      return { label: text.slice(IN_FORCE.length), is: 'in force', key: null }
+    }
+    return { label: text, is: value.props['dimColor'] === true ? 'stepped back' : 'plain', key: null }
+  })
+}
+
+/**
+ * The row of values of the setting at `at` as the one line it stands on, a button as its label in
+ * brackets and the value in force behind its mark; null where the setting draws no row.
+ */
+export async function valuesLine(ui: Drawn, at: number): Promise<string | null> {
+  return (await linesAt(ui, `values:${at}`))?.join(' ') ?? null
+}
+
+/** What the setting at `at` of the list draws, as the lines it stands on; null where the view does not draw it. */
+export function settingLines(ui: Drawn, at: number): Promise<string[] | null> {
+  return linesAt(ui, `setting:${at}`)
+}
+
+const SETS_A_VALUE = /^set:\d+:\d+$/
+
+/** The keys of the buttons of the view that set a value of a setting, in the order drawn. */
+export async function valueKeys(ui: Drawn): Promise<string[]> {
+  return (await viewButtons(ui)).filter(key => SETS_A_VALUE.test(key))
+}
+
+/** The places in the list of the settings the view draws, in the order drawn. */
+export async function drawnSettings(ui: Drawn): Promise<number[]> {
+  return (await ui.findAll({ type: 'Box' }))
+    .map(box => /^setting:(\d+)$/.exec(box.key ?? '')?.[1])
+    .filter((at): at is string => at !== undefined)
+    .map(Number)
+}
+
+/** A box as drawn: its key, how it lays out what it holds, and the boxes directly inside it. */
+export type ShownBox = { key: string | null; flexDirection: unknown; rowGap: unknown; columnGap: unknown; flexWrap: unknown; holds: ShownBox[] }
+
+function shownBox(box: Element): ShownBox {
+  return {
+    key: box.props['key'] === undefined ? null : String(box.props['key']),
+    flexDirection: box.props['flexDirection'],
+    rowGap: box.props['rowGap'],
+    columnGap: box.props['columnGap'],
+    flexWrap: box.props['flexWrap'],
+    holds: elementsIn(box.children, 'Box').map(shownBox),
+  }
+}
+
+/** The boxes directly inside the element drawn under `key`, each with the boxes it holds, in the order drawn. */
+export async function boxesAt(ui: Drawn, key: string): Promise<ShownBox[]> {
+  const found = await ui.find({ key })
+  return found === undefined ? [] : elementsIn(found.children, 'Box').map(shownBox)
 }

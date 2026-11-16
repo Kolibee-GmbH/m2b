@@ -3,7 +3,7 @@ import { expect, test } from 'claude-code/testing'
 import type { CommandRunResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { FakeM2b, HOME, start } from './harness'
+import { FakeM2b, HOME, TROUBLED_STATUS, TROUBLE_LINE, start } from './harness'
 import type { Files } from './harness'
 
 const NOTE = 'm2b-note'
@@ -83,20 +83,26 @@ test('before m2b is set up the note command writes nothing and says how to set i
   expect(answer.text).toBe('not noted: m2b is not set up on this machine; /m2b:m2b sets it up')
 })
 
-test('after a note the status line counts it, whatever another session stored a moment before', async ($, on) => {
+test('after a note the status line is read again, whatever another session stored a moment before', async ($, on) => {
   // Covers: B100
   const files: Files = new Map()
   const fake = new FakeM2b()
   const { clock, statuses } = await start($, on, fake, {}, files)
+  expect(statuses.at(-1)).toBeUndefined()
   const snapshot = { candidates: [], review: null, error: null }
-  const other = { writtenAtMs: clock.now(), value: { snapshot, status: '2 in inbox', version: '0.3.0' } }
-  files.set(`${HOME}/.local/state/m2b/band-view.json`, JSON.stringify(other))
-  fake.status = { ...(fake.status as object), inbox: { count: 3, evicted: 0 } }
+  const other = { writtenAtMs: clock.now(), value: { snapshot, status: null, version: '0.3.0' } }
+  files.set(`${HOME}/.local/state/m2b/band-answer.json`, JSON.stringify(other))
+  fake.status = TROUBLED_STATUS
+  const before = fake.calls.length
 
   await typed($, 'Sam brings the plywood')
   await clock.advance(1)
 
-  expect(statuses.at(-1)).toBe('3 in inbox · curated 18:02')
+  expect(fake.calls.slice(before).map(call => call.slice(0, 2))).toEqual([
+    ['capture', '--source'],
+    ['band', '--json'],
+  ])
+  expect(statuses.at(-1)).toBe(TROUBLE_LINE)
 })
 
 test('a setup check that cannot look is one line too', async ($, on) => {

@@ -66,8 +66,8 @@ nor a model. Both end with a first capture, a curation run and a first search.
    ```
 
    **You should see** a short confirmation; its words are the model's. What does not vary: the
-   note is one new file in the store's `inbox/`, `!m2b status` begins with `inbox: 1`, and with
-   the band the status line below the prompt reads `1 in inbox`. Nothing is filed yet.
+   note is one new file in the store's `inbox/`, and `!m2b status` begins with `inbox: 1`.
+   Nothing is filed yet.
    **If not:** when Claude answered without noting anything, say that you want it kept
    ("remember ...", "note ..."), or type `/m2b-note the spare key is under the blue pot`, which
    asks no model. When the answer is that m2b is not set up, go back to step 2.
@@ -77,8 +77,8 @@ nor a model. Both end with a first capture, a curation run and a first search.
    three (2026-11-12, with the model `haiku`).
 
    **You should see** nothing in the conversation: the run is silent. `!m2b status` says
-   `run: running ...` while it goes on, then `run: succeeded ...` and `inbox: 0`; the status line
-   reads `curating`, then `0 in inbox · curated 17:26` with the time the run ended. The note has
+   `run: running ...` while it goes on, then `run: succeeded ...` and `inbox: 0`, with the time the
+   run ended. The note has
    moved from `inbox/` to `corpus/YYYY/MM/`, and `memory/MEMORY.md` has a line with the fact.
 
    This session started before the run ended, so the fact is not among what it was given at its
@@ -116,13 +116,13 @@ nor a model. Both end with a first capture, a curation run and a first search.
    know it, `m2b doctor` says in its line `band` whether the latest session ran m2b's hooks, and
    `m2b distillate on` turns the distillate back on in a folder where it was turned off.
 
-From the next session on, [the band](band.md) above the prompt shows what curation asks you to
-keep or drop. It is a mod, a module Claude Code loads with the plugin, and runs only while mods are
+From the next session on, [the band](band.md) above the prompt counts what curation asks you to
+keep or drop, and its `open` shows the m2b pane, where you answer. It is a mod, a module Claude Code loads with the plugin, and runs only while mods are
 on in Claude Code: `m2b doctor` says in its line `band` whether it ran, and
 [What it needs](band.md#what-it-needs) what to do when it did not. With it come
 `/m2b-note <text>`, which notes a text at once without a model turn, `/m2b-pane`, `/m2b-review`,
-`/m2b-proposals`, `/m2b-search <text>` and `/m2b-settings`, which show in a pane what m2b gave
-this session, what waits for you and what is due today, the last curation run, the proposals from
+`/m2b-proposals`, `/m2b-search <text>` and `/m2b-settings`, which show in a pane what waits for
+you, what is due today and what m2b gave this session, the last curation run, the proposals from
 your sessions, search hits and every setting of m2b, and two tools through which the model notes
 and searches without a shell call; a third, with which a session hands in proposals by itself, is off until you
 turn it on ([The band](band.md#handing-in-a-proposal-a-tool-you-turn-on)). The worklog add-on is off until its own setup skill turns it on;

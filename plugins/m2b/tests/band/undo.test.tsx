@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { BAND, FakeM2b, start, texts } from './harness'
+import { BAND, FakeM2b, answerKeys, linesAt, lookOf, partLines, rowSaying, shownBand, start, startView } from './harness'
 
 const UNDO_MS = 5_000
 
@@ -8,10 +8,10 @@ test('drop, then undo within the window, leaves the task open and writes nothing
   // Covers: B94
   const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
   const { clock } = await start($, on, fake)
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const ui = await startView($)
 
   await ui.press({ key: 'drop:c1' })
-  expect(await texts(ui)).toContain('dropping: Remember? Acme moved')
+  expect(await linesAt(ui, 'row:c1')).toEqual(['Remember? Acme moved', '[undo] dropping'])
   await clock.advance(UNDO_MS - 1_000)
   await ui.press({ key: 'undo:c1' })
   await clock.advance(UNDO_MS * 2)
@@ -20,7 +20,8 @@ test('drop, then undo within the window, leaves the task open and writes nothing
   const task = fake.tasks[0]
   expect(task?.completed).toBe(false)
   expect(task?.dropped).toBe(false)
-  expect(await ui.findAll({ type: 'Button' })).toHaveLength(2)
+  expect(await linesAt(ui, 'row:c1')).toEqual(['Remember? Acme moved', '[keep] [drop]'])
+  expect(await answerKeys(ui)).toEqual(['keep:c1', 'drop:c1'])
   await ui.unmount()
 })
 
@@ -28,7 +29,7 @@ test('drop without undo is written once the window is over', async ($, on) => {
   // Covers: B94
   const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
   const { clock } = await start($, on, fake)
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const ui = await startView($)
 
   await ui.press({ key: 'drop:c1' })
   await clock.advance(UNDO_MS - 1)
@@ -37,7 +38,7 @@ test('drop without undo is written once the window is over', async ($, on) => {
 
   expect(fake.writes()).toEqual([['tasks', 'drop', '--', 'c1']])
   expect(fake.tasks[0]?.dropped).toBe(true)
-  expect(await ui.findAll({ type: 'Button' })).toHaveLength(0)
+  expect(await answerKeys(ui)).toEqual([])
   await ui.unmount()
 })
 
@@ -45,12 +46,14 @@ test('while a press waits, its row offers only undo and the other rows stay pres
   // Covers: B94
   const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved').candidate('c2', 'Remember? Dana likes tea')
   const { clock } = await start($, on, fake)
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const ui = await startView($)
 
   await ui.press({ key: 'keep:c1' })
-  const keys = (await ui.findAll({ type: 'Button' })).map(button => button.key)
-  expect(keys).toEqual(['undo:c1', 'keep:c2', 'drop:c2'])
-  expect(await texts(ui)).toContain('keeping: Remember? Acme moved')
+  expect(await answerKeys(ui)).toEqual(['undo:c1', 'keep:c2', 'drop:c2'])
+  expect(await linesAt(ui, 'row:c1')).toEqual(['Remember? Acme moved', '[undo] keeping'])
+  // A row that was pressed counts until its write has landed.
+  expect(await shownBand(band)).toEqual(rowSaying('2 wait for you'))
 
   await ui.press({ key: 'drop:c2' })
   await clock.advance(UNDO_MS)
@@ -59,13 +62,15 @@ test('while a press waits, its row offers only undo and the other rows stay pres
     ['tasks', 'drop', '--', 'c2'],
   ])
   await ui.unmount()
+  await band.unmount()
 })
 
-test('a press another session settled during the window writes nothing and says so', async ($, on) => {
-  // Covers: B30
+test('a press another session settled during the window writes nothing and says so in the pane, where it was pressed', async ($, on) => {
+  // Covers: B30, B207
   const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
   const { clock } = await start($, on, fake)
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const ui = await startView($)
 
   await ui.press({ key: 'drop:c1' })
   const task = fake.tasks[0]
@@ -74,7 +79,12 @@ test('a press another session settled during the window writes nothing and says 
   }
   await clock.advance(UNDO_MS)
 
+  const refused = 'Already settled in another session, nothing written: Remember? Acme moved'
   expect(fake.writes()).toEqual([])
-  expect(await texts(ui)).toContain('Already settled in another session, nothing written: Remember? Acme moved')
+  // The row is gone, and with it the one thing that waited: the band draws nothing of its own.
+  expect(await partLines(ui, 'waits')).toEqual([refused, 'Nothing waits for you.'])
+  expect(await lookOf(ui, refused)).toEqual({ color: 'error', dimColor: undefined, wrap: 'wrap' })
+  expect(await shownBand(band)).toBeNull()
   await ui.unmount()
+  await band.unmount()
 })

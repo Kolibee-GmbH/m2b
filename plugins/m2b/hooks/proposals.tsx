@@ -2,13 +2,14 @@ import type { CommandSpec, EngineInterface, ResolveInput } from 'claude-code'
 
 import type { BandPress, BandProposal, BandProposals, BandSettle } from '../types'
 import { plainLine, writtenOut } from './plain-text'
+import { NOT_LOOKED, button, part, pressLine, said, under } from './look'
 import { candidateRow } from './rows'
 
 /*
- * What a reading of the sessions proposed for the memory and still waits for an answer: one row in
- * the band with their number, and the m2b pane with each proposal, the words it stands on beside
- * it, said or pasted, to keep or drop. Every text of a proposal is drawn written out, never cleaned: what the
- * person keeps is what they were shown.
+ * What a reading of the sessions proposed for the memory and still waits for an answer: one row
+ * with their number in the pane's start view, and under their tab each proposal, what it is and
+ * the words it stands on, said or pasted, to keep or drop. Every text of a proposal is drawn
+ * written out, never cleaned: what the person keeps is what they were shown.
  */
 
 export const PROPOSALS_COMMAND: CommandSpec = {
@@ -21,6 +22,8 @@ export const PROPOSALS_PLACED = 'the proposals from your sessions are in the m2b
 
 /** The key of the press on keep all, beside the keys of the presses on single proposals. */
 export const KEEP_ALL = 'proposals:all'
+/** The key of `undo` beside keep all, drawn only while that press waits. */
+export const UNDO_ALL = 'undo:all'
 
 const NO_PROPOSALS: BandProposals = { waiting: [], answered: 0, error: null }
 // Where a quote stands when it was typed, as the core names it.
@@ -28,8 +31,9 @@ const TYPED = 'typed'
 
 const OTHER_SHAPE = 'm2b answered something other than the proposals that wait'
 const NONE_WAITS = 'No proposal waits for an answer.'
-// Until the band's first answer about proposals has landed: not known is never "none wait".
-const NOT_LOOKED = 'm2b has not looked for proposals yet; m2b proposals lists them in a shell'
+const FROM_YOUR_SESSIONS = 'Proposals from your sessions'
+// Until the band's first answer about proposals has landed: not known is never "none wait". For a text, which has no pane to wait in.
+const NOT_LOOKED_SAYS_HOW = 'm2b has not looked for proposals yet; m2b proposals lists them in a shell'
 const LIST_AND_ANSWER =
   'list with: m2b proposals; keep with: m2b proposals keep <id>... (or keep --all); drop with: m2b proposals drop <id>...'
 // As the core makes it. An id goes to `m2b proposals keep` as an argument, so nothing else is one.
@@ -200,7 +204,7 @@ export function refusedLine(proposals: BandProposal[], verb: string, reason: str
  */
 export function proposalLines(proposals: BandProposals | null): string[] {
   if (proposals === null) {
-    return [NOT_LOOKED]
+    return [NOT_LOOKED_SAYS_HOW]
   }
   const { waiting, answered, error } = proposals
   if (error !== null) {
@@ -222,31 +226,12 @@ export function proposalLines(proposals: BandProposals | null): string[] {
   ]
 }
 
-/** The key of `show` in the row for all of them. */
-export const SHOW_PROPOSALS = 'show:proposals'
-
-/** One row for all of them: the number, and `show`, which opens them in the pane. Cut in the band, wrapped in the pane. */
-export function proposalsRow(
-  $: EngineInterface,
-  e: ResolveInput,
-  count: number,
-  onShow: () => Promise<void>,
-  wrap: 'truncate-end' | 'wrap' = 'truncate-end',
-) {
-  const { Box, Button, Text } = $.ui.resolve(e)
-  return (
-    <Box key="row:proposals" flexDirection="row">
-      <Button key={SHOW_PROPOSALS} label="show" onPress={onShow} />
-      <Text wrap={wrap}> {countLine(count)}</Text>
-    </Box>
-  )
-}
-
 /**
- * The pane's drawing: each proposal with what it is, the person's words and the day, to keep or
- * drop, and keep all for those not pressed on their own. `notice` is what m2b said to the last
- * answer it refused. Before the band's first answer about proposals, it says that it has not
- * looked.
+ * The view's drawing, one part: keep all for the proposals not pressed on their own, then each
+ * proposal as a row, its text, keep and drop with what it is beside them, and below them the
+ * words it stands on, indented whole. `notice` is what m2b said to the last answer it refused,
+ * said here, where it was pressed. Before the band's first answer about proposals the part says
+ * that m2b has not looked. `columns` is the width of the pane's body.
  */
 export function proposalsPane(
   $: EngineInterface,
@@ -255,59 +240,45 @@ export function proposalsPane(
   presses: Record<string, BandPress>,
   notice: string | null,
   actions: ProposalActions,
+  columns: number,
 ) {
-  const { Box, Text } = $.ui.resolve(e)
+  const ui = $.ui.resolve(e)
+  const { Box } = ui
+  const waiting = proposals?.waiting ?? []
+  const spec = { key: 'proposals', title: FROM_YOUR_SESSIONS, waits: waiting.length > 0, count: waiting.length > 0 ? String(waiting.length) : null, columns }
   if (proposals === null) {
-    return <Text wrap="wrap">{NOT_LOOKED}</Text>
+    return part(ui, spec, [said(ui, NOT_LOOKED, 'quiet')])
   }
-  const { waiting, answered, error } = proposals
+  const { answered, error } = proposals
   const all = presses[KEEP_ALL]
   const inAll = new Set(all?.ids ?? [])
   const pressOf = (proposal: BandProposal): BandPress | undefined =>
     presses[pressKey(proposal.id)] ?? (all !== undefined && inAll.has(proposal.id) ? { ...all, phase: 'writing' } : undefined)
   // What no reading proposed is answered one by one: keep all leaves it, as `m2b proposals keep --all` does.
   const unpressed = waiting.filter(proposal => pressOf(proposal) === undefined && !proposal.by)
-  return (
-    <Box flexDirection="column">
-      {error === null ? (
-        <Text weight="semibold" wrap="wrap">
-          {waiting.length === 0 ? NONE_WAITS : countLine(waiting.length)}
-        </Text>
-      ) : (
-        <Text color="error" wrap="wrap">
-          {couldNotLookLine(error)}
-        </Text>
-      )}
-      {notice !== null && (
-        <Text color="warning" wrap="wrap">
-          {plainLine(notice)}
-        </Text>
-      )}
-      {keepAllRow($, e, all, unpressed, actions)}
-      {waiting.map(proposal => (
-        <Box key={`proposal:${proposal.id}`} flexDirection="column">
-          {candidateRow(
-            $,
-            e,
-            { id: proposal.id, title: writtenOut(proposal.text) },
-            pressOf(proposal),
-            {
-              press: (_, action) => actions.answer(proposal, action),
-              undo: () => actions.undo(pressKey(proposal.id)),
-            },
-            'wrap',
-          )}
-          <Text dimColor wrap="wrap">{`  ${heading(proposal)}`}</Text>
-          <Text dimColor wrap="wrap">{`  ${saidLine(proposal)}`}</Text>
-        </Box>
-      ))}
-      {answered > 0 && (
-        <Text dimColor wrap="wrap">
-          {answeredLine(answered)}
-        </Text>
-      )}
-    </Box>
-  )
+  return part(ui, spec, [
+    error !== null && said(ui, couldNotLookLine(error), 'trouble'),
+    notice !== null && said(ui, plainLine(notice), 'trouble'),
+    keepAllRow($, e, all, unpressed, actions),
+    ...waiting.map(proposal => (
+      <Box key={`proposal:${proposal.id}`} flexDirection="column">
+        {candidateRow(
+          $,
+          e,
+          { id: proposal.id, title: writtenOut(proposal.text) },
+          pressOf(proposal),
+          {
+            press: (_, action) => actions.answer(proposal, action),
+            undo: () => actions.undo(pressKey(proposal.id)),
+          },
+          heading(proposal),
+        )}
+        {under(ui, saidLine(proposal))}
+      </Box>
+    )),
+    error === null && waiting.length === 0 && said(ui, NONE_WAITS, 'quiet'),
+    answered > 0 && said(ui, answeredLine(answered), 'quiet'),
+  ])
 }
 
 /** Keep all while two or more can still be pressed; once pressed, what it will keep, with undo while it waits. */
@@ -318,24 +289,13 @@ function keepAllRow(
   unpressed: BandProposal[],
   actions: ProposalActions,
 ) {
-  const { Box, Button, Text } = $.ui.resolve(e)
+  const ui = $.ui.resolve(e)
   if (pressed === undefined) {
-    return unpressed.length < 2 ? null : (
-      <Button key="keep-all" label="keep all" onPress={() => actions.keepAll(unpressed)} />
-    )
+    return unpressed.length < 2 ? null : button(ui, { key: 'keep-all', label: 'keep all', kind: 'default', onPress: () => actions.keepAll(unpressed) })
   }
-  const line = `keeping all ${pressed.ids?.length ?? 0} proposals`
+  const doing = `keeping all ${pressed.ids?.length ?? 0} proposals`
   if (pressed.phase === 'waiting') {
-    return (
-      <Box key="row:keep-all" flexDirection="row">
-        <Button key="undo:all" label="undo" onPress={() => actions.undo(KEEP_ALL)} />
-        <Text dimColor> {line}</Text>
-      </Box>
-    )
+    return pressLine(ui, [{ key: UNDO_ALL, label: 'undo', kind: 'default', onPress: () => actions.undo(KEEP_ALL) }], doing, 'row:keep-all')
   }
-  return (
-    <Text key="row:keep-all" dimColor>
-      {line}
-    </Text>
-  )
+  return said(ui, `${doing}…`, 'quiet')
 }

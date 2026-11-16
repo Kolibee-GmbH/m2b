@@ -24,13 +24,25 @@ export type BandReview = {
 /** One of the owner's own tasks due today or overdue. */
 export type BandDueTask = { id: string; title: string; overdue: boolean }
 
+/** What the band shows of the tasks due and of the topics, as the machine's `band` settings say. */
+export type BandShows = { dueTasks: 'off' | 'count' | 'list'; topics: boolean }
+
 export type BandSnapshot = {
   candidates: BandCandidate[]
   review: BandReview | null
   error: string | null
-  /** Absent in an answer of a band before due tasks, and with `band.due_tasks` off: none to show. */
+  /** The tasks due today or overdue, whatever the band shows of them. Absent where the core named none: not known, which is not none due. */
   due?: BandDueTask[]
+  /** Absent in an answer a band before these settings shared: the band then shows what a machine without an entry shows. */
+  shows?: BandShows
 }
+
+/**
+ * How m2b itself stands, from the status part of the band's answer: `curation` is the line about
+ * the inbox and the last curation run while nothing is wrong with them, null where there is nothing
+ * to say; `troubles` are the things that are wrong, each a sentence with its reason.
+ */
+export type BandHealth = { curation: string | null; troubles: string[] }
 
 /** What a press on keep or drop asks the task list for. */
 export type BandSettle = 'complete' | 'drop'
@@ -108,16 +120,17 @@ export type PaneSearch = {
  * part of this value: the session's state is one every plugin can read, so the module that draws
  * the lines holds them. `press` tells this opening of the topic from an earlier one, and `isRead`
  * turns true when m2b has answered, which draws the pane again. The settings are held the same
- * way: this value says where the view is, `at` a place in the list for a setting's card and null
- * for the list, and never what a setting holds; `drawn` counts up when what the module holds
- * changed, which draws the pane again.
+ * way: this value never says what a setting holds. `aside` is the group the view shows in place of
+ * the choices, one the view keeps behind one row, by the name and the title the core gave it, and
+ * null for the choices; `drawn` counts up when what the module holds changed, which draws the pane
+ * again.
  */
 export type PaneView =
   | { kind: 'review' }
   | { kind: 'search'; search: PaneSearch }
   | { kind: 'proposals' }
   | { kind: 'topic'; name: string; press: string; isRead: boolean }
-  | { kind: 'settings'; press: string; at: number | null; drawn: number }
+  | { kind: 'settings'; press: string; aside: { name: string; title: string } | null; drawn: number }
 
 /**
  * A topic whose facts m2b gave this session, with the facts lines and current items its block held
@@ -163,7 +176,12 @@ declare module 'claude-code' {
   interface PluginState {
     m2b: {
       bandSnapshot: BandSnapshot | null
+      /** Why the band's `open` showed no pane; cleared by the next prompt. */
       bandNotice: string | null
+      /** What m2b said to the last press on a candidate, a question or the review that wrote nothing; cleared by the next such press and the next prompt. */
+      rowNotice: string | null
+      /** How m2b itself stands, from the same answer as the band; null until it is read. */
+      bandHealth: BandHealth | null
       /** The rows pressed in this session, by task id. */
       bandPresses: Record<string, BandPress>
       /** Set while this session runs the band of another m2b version than the one installed. */
@@ -176,8 +194,6 @@ declare module 'claude-code' {
       bandProposalsNotice: string | null
       /** What the m2b pane shows; null for the view it starts in. */
       paneView: PaneView | null
-      /** Where the pane's last drawing sat on each surface, by the surface's name; empty once the pane closed. */
-      paneSeats: Record<string, string>
       /** What m2b gave this session, from this session's own question; null until it is answered. */
       bandSession: BandSession | null
       /** The notes this session wrote through the mod; null before the first. */

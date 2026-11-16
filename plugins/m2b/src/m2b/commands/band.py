@@ -9,8 +9,13 @@ configured timeout, so a hanging calendar costs the band a few seconds and is ca
 reachable instead of making the band's answer run past the band's own time limit.
 
 A task list that cannot be read is named in ``tasks.error``; the status part still answers.
-``tasks.due`` holds the owner's own tasks due today or overdue, from the same look at the list,
-unless ``band.due_tasks`` in the machine config is off.
+``tasks.due_by_today`` holds the owner's own tasks due today or overdue, from the same look at the
+list, whatever the band shows of them. ``tasks.due`` holds the same tasks only while
+``band.due_tasks`` is ``list``: a band from before the three values draws every task this key
+names, so it stays what such a band may list.
+``band`` is the machine config's section of that name as it reads, so the band need not ask for
+the config: ``due_tasks``, how the band shows the tasks due (``off``, ``count`` or ``list``), and
+``topics``, whether it names how many topics the session was given.
 ``tasks.review`` holds, while a review task is open, the changes of the facts it names as data:
 each with its fact file, a short topic, the whole lines before and after and the words that
 differ, each copy of ``memory/`` from before a run, and the review's paragraphs these stand for,
@@ -53,7 +58,7 @@ from m2b.commands.output import print_json
 from m2b.commands.proposals import waiting_answer
 from m2b.commands.status import status_answer
 from m2b.commands.tasks import task_json
-from m2b.config.machine import MachineConfig, load_machine_config
+from m2b.config.machine import DUE_TASKS_LIST, MachineConfig, load_machine_config
 from m2b.curate import machine_state, memory_guard
 from m2b.curate.report import one_line
 from m2b.hook_input import project_folder
@@ -86,7 +91,13 @@ def band_command(arguments: argparse.Namespace, context: Context) -> int:
         return 0
     status = status_answer(_short_calendar(config), context, tasks_check)
     waiting = _proposals_part(config, context)
-    answer = {"version": core_version(), "tasks": tasks, "proposals": waiting, "status": status}
+    answer = {
+        "version": core_version(),
+        "band": dataclasses.asdict(config.band),
+        "tasks": tasks,
+        "proposals": waiting,
+        "status": status,
+    }
     if arguments.session is not None:
         answer["session"] = _session_part(config, context, arguments.session)
     print_json(answer)
@@ -162,8 +173,10 @@ def _tasks_part(config: MachineConfig, context: Context, moment: datetime.dateti
         "questions": marked(markers.CURRENT),
         "reviews": marked(markers.REVIEW),
     }
-    if config.band.due_tasks:
-        part["due"] = _due(open_tasks, moment)
+    due = _due(open_tasks, moment)
+    part["due_by_today"] = due
+    if config.band.due_tasks == DUE_TASKS_LIST:
+        part["due"] = due
     if part["reviews"]:
         part["review"] = _review_changes(context, _paragraphs(part["reviews"][0].get("notes")))
     return part, Check("tasks", REACHABLE)
