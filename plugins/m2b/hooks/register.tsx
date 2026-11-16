@@ -4,6 +4,7 @@ import type { EngineInterface, Register, ResolveInput, Timer } from 'claude-code
 import type {
   BandCandidate,
   BandDueTask,
+  BandHealth,
   BandPress,
   BandProposal,
   BandProposals,
@@ -77,10 +78,10 @@ import {
   proposalsPane,
 } from './proposals'
 import type { ProposalActions } from './proposals'
-import { undoKey } from './rows'
+import { REVIEW, undoKey } from './rows'
 import type { RowActions } from './rows'
 import { shared } from './shared-cache'
-import { COULD_NOT_LOOK, statusLine } from './status-line'
+import { COULD_NOT_LOOK, healthOf, statusLine } from './status-line'
 import { parseBandShows, parseBandTasks } from './tasks'
 import {
   SETTINGS_COMMAND,
@@ -131,6 +132,8 @@ import {
 
 const snapshotAtom = atom({ plugin: 'm2b', key: 'bandSnapshot' } as const, null)
 const noticeAtom = atom({ plugin: 'm2b', key: 'bandNotice' } as const, null)
+const rowNoticeAtom = atom({ plugin: 'm2b', key: 'rowNotice' } as const, null)
+const healthAtom = atom({ plugin: 'm2b', key: 'bandHealth' } as const, null)
 const pressesAtom = atom({ plugin: 'm2b', key: 'bandPresses' } as const, {})
 const versionNoticeAtom = atom({ plugin: 'm2b', key: 'bandVersionNotice' } as const, null)
 const runAtom = atom({ plugin: 'm2b', key: 'bandRun' } as const, null)
@@ -189,6 +192,8 @@ type BandView = {
   version: string | null
   run?: BandRun | null
   proposals?: BandProposals
+  /** How m2b itself stands, for the pane; absent where m2b gave no answer to read it from. */
+  health?: BandHealth
 }
 
 /** Runs jobs one after another, in the order they were queued. */
@@ -201,21 +206,20 @@ function serialQueue(): <T>(job: () => Promise<T>) => Promise<T> {
   }
 }
 
-/** One call for everything the band and the status line show; whatever fails, it answers a view. */
+// Where m2b gave no answer, the pane's part about m2b says nothing: what failed is said once, as the task list's error.
+const NO_HEALTH: BandHealth = { curation: null, troubles: [] }
+
+/** One call for everything the band, the pane and the status line show; whatever fails, it answers a view. */
 async function loadView($: EngineInterface, answer: readonly string[] = BAND_ANSWER): Promise<BandView> {
   const outcome = await runM2b($, answer, BAND_TIMEOUT_MS)
   if (!outcome.ok) {
-    return {
-      snapshot: failed(`m2b could not read the tasks: ${outcome.error}`),
-      status: COULD_NOT_LOOK,
-      version: null,
-    }
+    return { snapshot: failed(`m2b could not read the tasks: ${outcome.error}`), status: COULD_NOT_LOOK, version: null, health: NO_HEALTH }
   }
   let parsed: unknown
   try {
     parsed = JSON.parse(outcome.stdout)
   } catch {
-    return { snapshot: failed('m2b band answered something that is not JSON'), status: COULD_NOT_LOOK, version: null }
+    return { snapshot: failed('m2b band answered something that is not JSON'), status: COULD_NOT_LOOK, version: null, health: NO_HEALTH }
   }
   const fields = isObject(parsed) ? parsed : {}
   return {
@@ -224,6 +228,7 @@ async function loadView($: EngineInterface, answer: readonly string[] = BAND_ANS
     version: typeof fields['version'] === 'string' ? fields['version'] : null,
     run: runOf(fields['status']),
     proposals: parseProposals(fields['proposals']),
+    health: healthOf(fields['status'], await $.clock.now()),
   }
 }
 
@@ -282,6 +287,7 @@ async function loadNow($: EngineInterface, isForced: boolean): Promise<void> {
   await update($, runAtom, current => (view.run === undefined ? current : view.run))
   // Nor has an answer a session without proposals stored, or one m2b could not give, a word on them.
   await update($, proposalsAtom, current => view.proposals ?? current)
+  await update($, healthAtom, current => view.health ?? current)
   $.ui.status(view.status === null ? undefined : plainLine(view.status))
   await toastFailedRun($, view.run ?? null)
 }
@@ -337,7 +343,7 @@ function versionNotice(installed: string | null): string | null {
   if (installed === null || loadedVersion === null || !isOlder(loadedVersion, installed)) {
     return null
   }
-  return `this session runs the band of m2b ${loadedVersion} while m2b ${installed} is installed: run /reload-plugins`
+  return `This session runs m2b ${loadedVersion} and m2b ${installed} is installed: run /reload-plugins.`
 }
 
 /** Whether release `a` comes before release `b`, by `MAJOR.MINOR.PATCH`; anything else compares as not older. */
@@ -367,7 +373,17 @@ function isView(value: unknown): value is BandView {
     (value['version'] === null || typeof value['version'] === 'string') &&
     // Absent in an answer a session without the pane stored: no run to show, like null.
     (value['run'] === undefined || value['run'] === null || isRun(value['run'])) &&
-    (value['proposals'] === undefined || isProposals(value['proposals']))
+    (value['proposals'] === undefined || isProposals(value['proposals'])) &&
+    (value['health'] === undefined || isHealth(value['health']))
+  )
+}
+
+function isHealth(value: unknown): value is BandHealth {
+  return (
+    isObject(value) &&
+    (value['curation'] === null || typeof value['curation'] === 'string') &&
+    Array.isArray(value['troubles']) &&
+    value['troubles'].every(trouble => typeof trouble === 'string')
   )
 }
 
@@ -428,7 +444,9 @@ function isFactChange(value: unknown): boolean {
 async function clearBand($: EngineInterface): Promise<void> {
   await update($, snapshotAtom, () => null)
   await update($, noticeAtom, () => null)
+  await update($, rowNoticeAtom, () => null)
   await update($, versionNoticeAtom, () => null)
+  await update($, healthAtom, () => null)
   await update($, runAtom, () => null)
   await update($, proposalsAtom, () => null)
   await update($, proposalsNoticeAtom, () => null)
@@ -538,7 +556,10 @@ async function sessionModel($: EngineInterface): Promise<SessionModel> {
   return {
     given: givenTo(await read($, sessionAtom), session),
     notes: notesOf(await read($, notesAtom), session),
-    notice: await read($, sessionNoticeAtom),
+    rowNotice: await read($, rowNoticeAtom),
+    folderNotice: await read($, sessionNoticeAtom),
+    health: await read($, healthAtom),
+    versionLine: await read($, versionNoticeAtom),
     snapshot: await read($, snapshotAtom),
     proposals: await read($, proposalsAtom),
     presses: await read($, pressesAtom),
@@ -804,7 +825,7 @@ async function viewOfPane(
   bodyColumns: number,
 ) {
   if (view === null) {
-    return sessionPane($, e, await sessionModel($), sessionActions($))
+    return sessionPane($, e, await sessionModel($), sessionActions($), bodyColumns)
   }
   const presses = await read($, pressesAtom)
   switch (view.kind) {
@@ -815,7 +836,7 @@ async function viewOfPane(
     case 'topic':
       return topicPane($, e, view.name, heldTopic(view.press))
     default:
-      return paneTree($, e, view, await read($, snapshotAtom), await read($, runAtom), presses, rowActions($))
+      return paneTree($, e, view, await read($, snapshotAtom), await read($, runAtom), presses, await read($, rowNoticeAtom), rowActions($))
   }
 }
 
@@ -866,8 +887,6 @@ async function bandModel($: EngineInterface): Promise<BandModel> {
     snapshot,
     proposals: await read($, proposalsAtom),
     notice: await read($, noticeAtom),
-    proposalsNotice: await read($, proposalsNoticeAtom),
-    versionLine: await read($, versionNoticeAtom),
     topics: snapshot?.shows?.topics === true ? topicsGiven(givenTo(await read($, sessionAtom), await sessionIdOf($))) : 0,
   }
 }
@@ -963,8 +982,8 @@ function folderWrite($: EngineInterface, change: FolderSwitch, folder: string): 
   return async () => {
     const failed = (reason: string): string =>
       change === 'off'
-        ? `m2b could not leave itself out of ${wholePath(folder)}: ${reason}`
-        : `m2b could not turn the distillate on under ${wholePath(folder)}: ${reason}`
+        ? `m2b could not be turned off in ${wholePath(folder)}: ${reason}`
+        : `m2b could not be turned on under ${wholePath(folder)}: ${reason}`
     try {
       // `--`: a folder is handed on as it is named, whatever it begins with.
       const outcome = await runM2b($, ['distillate', change, '--', folder], WRITE_TIMEOUT_MS)
@@ -1182,14 +1201,14 @@ function taskWrite($: EngineInterface, candidate: BandCandidate, action: BandSet
     try {
       return await settleNow($, candidate, action)
     } catch (error) {
-      await update($, snapshotAtom, () => failed(`m2b could not ${verbOf(action)} "${candidate.title}": ${String(error)}`))
+      await update($, snapshotAtom, () => failed(`m2b could not ${verbOf(action)} "${nameOf(candidate)}": ${String(error)}`))
       return false
     }
   }
 }
 
 async function settleNow($: EngineInterface, candidate: BandCandidate, action: BandSettle): Promise<boolean> {
-  await update($, noticeAtom, () => null)
+  await update($, rowNoticeAtom, () => null)
   const { snapshot } = await loadView($, TASKS_ANSWER)
   if (snapshot.error !== null) {
     await update($, snapshotAtom, () => snapshot)
@@ -1199,24 +1218,29 @@ async function settleNow($: EngineInterface, candidate: BandCandidate, action: B
   const fresh = snapshot.review
   // `ok` on the review closes it the way keep closes a candidate.
   if (!current.some(open => open.id === candidate.id) && fresh?.id !== candidate.id) {
-    await update($, noticeAtom, () => `Already settled in another session, nothing written: ${candidate.title}`)
+    await update($, rowNoticeAtom, () => `Already settled in another session, nothing written: ${nameOf(candidate)}`)
     await update($, snapshotAtom, old => (old === null ? old : { ...old, candidates: current, review: fresh }))
     return false
   }
   // A run that ended since the review was drawn rewrote it under the same id: what was pressed on
   // is not what would be closed.
   if (fresh !== null && fresh.id === candidate.id && isOtherReview(candidate, fresh)) {
-    await update($, noticeAtom, () => `The review changed since it was drawn, nothing written: ${candidate.title}`)
+    await update($, rowNoticeAtom, () => `The review changed since it was drawn, nothing written: ${nameOf(candidate)}`)
     await update($, snapshotAtom, old => (old === null ? old : { ...old, candidates: current, review: fresh }))
     return false
   }
   // `--`: with the markdown backend a task id is a file name, and it may start with a dash.
   const outcome = await runM2b($, ['tasks', action, '--', candidate.id], WRITE_TIMEOUT_MS)
   if (!outcome.ok) {
-    await update($, snapshotAtom, () => failed(`m2b could not ${verbOf(action)} "${candidate.title}": ${outcome.error}`))
+    await update($, snapshotAtom, () => failed(`m2b could not ${verbOf(action)} "${nameOf(candidate)}": ${outcome.error}`))
     return false
   }
   return true
+}
+
+/** What a pressed row is called in what m2b says of it: the review as the pane calls it, a candidate or a question by its title. */
+function nameOf(pressed: BandCandidate): string {
+  return Array.isArray((pressed as Partial<BandReview>).findings) ? REVIEW : pressed.title
 }
 
 /** Whether the review pressed on holds other findings than the one read now; unknown counts as the same. */
@@ -1645,6 +1669,7 @@ export const register: Register = on => {
   // of an engine report naming m2b as the failed hook. A prompt not kept only makes a note ask.
   on('prompt.submit', async ($, e, next) => {
     await update($, noticeAtom, () => null)
+    await update($, rowNoticeAtom, () => null)
     await update($, proposalsNoticeAtom, () => null)
     await update($, sessionNoticeAtom, () => null)
     if (isOwnPrompt(e)) {

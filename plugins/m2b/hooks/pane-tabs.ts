@@ -1,6 +1,6 @@
 import type { PaneView } from '../types'
+import { topicLabel } from './look'
 import type { Tab } from './look'
-import { plainLine } from './plain-text'
 import { topicShowKey } from './session-view'
 import type { SessionModel } from './session-view'
 
@@ -24,8 +24,6 @@ const LABELS: Readonly<Record<TabId, string>> = {
   settings: 'Settings',
 }
 const SEARCH = 'Search'
-// A topic's name is the fifth tab's label; its view names it whole in its heading.
-const TOPIC_LABEL_LENGTH = 20
 
 export function shownOf(view: PaneView | null): Shown {
   if (view === null) {
@@ -67,14 +65,9 @@ export function focusKeyAfterTab(left: PaneView | null, to: TabId, model: Sessio
   return show ?? tabKeyAfterTurn(shownOf(left), to)
 }
 
-function cut(text: string, length: number): string {
-  const characters = Array.from(text)
-  return characters.length <= length ? text : `${characters.slice(0, length - 1).join('')}…`
-}
-
 function asideLabel(view: PaneView | null): string | null {
   if (view?.kind === 'topic') {
-    return cut(plainLine(view.name), TOPIC_LABEL_LENGTH)
+    return topicLabel(view.name)
   }
   return view?.kind === 'search' ? SEARCH : null
 }

@@ -1,7 +1,7 @@
-import type { ElementTable, ThemeKey } from 'claude-code'
+import type { ElementTable, RenderChildren, ThemeKey } from 'claude-code'
 
 import type { BandDueTask } from '../types'
-import { plainLine } from './plain-text'
+import { plainLine, wholePath } from './plain-text'
 
 /*
  * How m2b looks and what it calls things, for every surface it draws on: one table from what a
@@ -49,6 +49,16 @@ export function styleOf(tone: Tone): Style {
   return STYLES[tone]
 }
 
+/** A line of text in its tone, wrapped: every view of the pane can be as narrow as 24 columns. */
+export function said(ui: Pick<ElementTable, 'Text'>, text: string, tone: Tone = 'plain') {
+  const { Text } = ui
+  return (
+    <Text {...styleOf(tone)} wrap="wrap">
+      {text}
+    </Text>
+  )
+}
+
 export const M2B = 'm2b'
 export const DUE_TODAY = 'due today'
 export const OVERDUE = 'overdue'
@@ -60,6 +70,16 @@ function counted(number: number, one: string, several: string): string {
 /** `1 waits for you`, `4 wait for you`: how every surface counts what needs an answer. */
 export function waitForYou(count: number): string {
   return `${counted(count, 'waits', 'wait')} for you`
+}
+
+// As long as a button and a tab can be in the narrowest pane; the topic's view names it whole in its heading.
+const TOPIC_LABEL_LENGTH = 20
+
+/** A topic's name as the label of its button and of its tab: one line, cut where it is longer than a label may be. */
+export function topicLabel(name: string): string {
+  const line = plainLine(name)
+  const characters = Array.from(line)
+  return characters.length <= TOPIC_LABEL_LENGTH ? line : `${characters.slice(0, TOPIC_LABEL_LENGTH - 1).join('')}…`
 }
 
 /** `1 topic`, `4 topics`. */
@@ -130,6 +150,89 @@ export function tabRow(ui: Pick<ElementTable, 'Box' | 'Button' | 'Text'>, tabs: 
           button(ui, { key: tab.turn.key, label: tab.label, kind: 'quiet', onPress: tab.turn.onPress })
         ),
       )}
+    </Box>
+  )
+}
+
+// Below this width of the pane's body a frame and its padding, four columns, are too large a share: a bar down the left, two columns, stands in.
+const FRAME_FROM_COLUMNS = 36
+
+// A part's title and frame: m2b's own color and a frame that steps back, and both in the color of what waits while something in the part does.
+const PART_COLORS = {
+  calm: { title: 'remember', frame: 'subtle' },
+  waits: { title: 'warning', frame: 'warning' },
+} as const satisfies Record<string, { title: ThemeKey; frame: ThemeKey }>
+
+/**
+ * What heads a part: `waits` while something in it needs an answer, `count` how many, said at the
+ * end of the title's line. `columns` is the width of the pane's body.
+ */
+export type PartSpec = { key: string; title: string; waits: boolean; count?: string | null; columns: number }
+
+/**
+ * A part of a view: a frame around its title and what stands in it, in the color of what waits
+ * while something in it does. In a narrow pane the frame is a bar down the left.
+ */
+export function part(ui: Pick<ElementTable, 'Box' | 'Text'>, spec: PartSpec, body: readonly RenderChildren[]) {
+  const { Box, Text } = ui
+  const isFramed = spec.columns >= FRAME_FROM_COLUMNS
+  const colors = PART_COLORS[spec.waits ? 'waits' : 'calm']
+  return (
+    <Box
+      key={`part:${spec.key}`}
+      flexDirection="column"
+      borderStyle={isFramed ? 'round' : 'quote'}
+      borderColor={colors.frame}
+      paddingX={isFramed ? 1 : 0}
+    >
+      <Box flexDirection="row" justifyContent="space-between" columnGap={1}>
+        <Text weight="bold" color={colors.title}>
+          {spec.title}
+        </Text>
+        {spec.count ? <Text {...styleOf('waits')}>{spec.count}</Text> : null}
+      </Box>
+      {body}
+    </Box>
+  )
+}
+
+/**
+ * A row: its text, and on the line below its buttons with a detail beside them. `tone` is how the
+ * text is drawn, plain where none is named.
+ */
+export type RowSpec = { key: string; text: string; tone?: Tone; buttons: readonly ButtonSpec[]; detail?: string | null }
+
+/** A row of a part: the text first, at full width, then what can be pressed, so a long text never pushes a button aside. */
+export function row(ui: Pick<ElementTable, 'Box' | 'Button' | 'Text'>, spec: RowSpec) {
+  const { Box } = ui
+  const hasSecondLine = spec.buttons.length > 0 || Boolean(spec.detail)
+  return (
+    <Box key={spec.key} flexDirection="column">
+      {said(ui, spec.text, spec.tone)}
+      {hasSecondLine && (
+        <Box flexDirection="row" columnGap={1}>
+          {spec.buttons.map(one => button(ui, one))}
+          {spec.detail ? said(ui, spec.detail, 'quiet') : null}
+        </Box>
+      )}
+    </Box>
+  )
+}
+
+/**
+ * A path, whole, on as many lines as it needs: it breaks before a folder's slash and never inside
+ * a name, and every character is drawn as `wholePath` writes it, so two paths read alike only when
+ * they are the same.
+ */
+export function pathLine(ui: Pick<ElementTable, 'Box' | 'Text'>, path: string, tone: Tone = 'quiet') {
+  const { Box, Text } = ui
+  return (
+    <Box flexDirection="row" flexWrap="wrap">
+      {wholePath(path)
+        .split(/(?=\/)/)
+        .map(piece => (
+          <Text {...styleOf(tone)}>{piece}</Text>
+        ))}
     </Box>
   )
 }

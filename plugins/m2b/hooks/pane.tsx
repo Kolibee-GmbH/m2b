@@ -5,6 +5,7 @@ import { runM2b } from './m2b'
 import { CLOSED_BY_HAND } from './pane-seat'
 import { untoldFindings } from './tasks'
 import { plainLine, withoutHidden } from './plain-text'
+import { said } from './look'
 import { candidateRow, changesSummary, reviewRow } from './rows'
 import type { RowActions } from './rows'
 
@@ -141,7 +142,8 @@ export function reviewLines(snapshot: BandSnapshot | null, run: BandRun | null):
   }
   const review = snapshot?.review ?? null
   if (review !== null) {
-    lines.push(`${plainLine(review.title)}${changesSummary(review)}`)
+    const changed = changesSummary(review)
+    lines.push(`${plainLine(review.title)}${changed === null ? '' : `  ${changed}`}`)
     for (const change of review.changes ?? []) {
       lines.push(`  ${plainLine(change.topic)} (${plainLine(change.file)}): ${changeText(change.parts)}`)
     }
@@ -272,7 +274,10 @@ function fallback(lines: string[]): string[] {
   return lines.length > FALLBACK_LINES ? [...cut, `and ${lines.length - FALLBACK_LINES} more lines`] : cut
 }
 
-/** The pane's drawing: the search, or the run with its findings whole and every row to keep or drop. */
+/**
+ * The pane's drawing: the search, or the run with its findings whole and every row to keep or
+ * drop. `notice` is what m2b said to the last press on a row that wrote nothing.
+ */
 export function paneTree(
   $: EngineInterface,
   e: ResolveInput,
@@ -280,9 +285,11 @@ export function paneTree(
   snapshot: BandSnapshot | null,
   run: BandRun | null,
   presses: Record<string, BandPress>,
+  notice: string | null,
   actions: RowActions,
 ) {
-  const { Box, Text } = $.ui.resolve(e)
+  const ui = $.ui.resolve(e)
+  const { Box, Text } = ui
   if (view.kind === 'search') {
     return (
       <Box flexDirection="column">
@@ -305,7 +312,8 @@ export function paneTree(
           {plainLine(snapshot.error)}
         </Text>
       ) : null}
-      {review !== null && reviewRow($, e, review, presses[review.id], actions, 'wrap')}
+      {notice !== null && said(ui, plainLine(notice), 'trouble')}
+      {review !== null && reviewRow($, e, review, presses[review.id], actions)}
       {(review?.changes ?? []).map(change => (
         <Box flexDirection="column">
           <Text wrap="wrap">
@@ -340,7 +348,7 @@ export function paneTree(
       {candidates.length === 0 ? (
         <Text dimColor>Nothing to keep or drop.</Text>
       ) : (
-        candidates.map(candidate => candidateRow($, e, candidate, presses[candidate.id], actions, 'wrap'))
+        candidates.map(candidate => candidateRow($, e, candidate, presses[candidate.id], actions))
       )}
     </Box>
   )

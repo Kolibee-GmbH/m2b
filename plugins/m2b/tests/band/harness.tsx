@@ -650,7 +650,7 @@ type Found = { type: string; key: string | undefined; props: Record<string, unkn
 /** A drawing of the band or of the pane, as far as these helpers read it. */
 type Drawn = {
   find: (q: { key: string }) => Promise<Found | undefined>
-  findAll: (q: { type?: string }) => Promise<Found[]>
+  findAll: (q: { type?: string; text?: string }) => Promise<Found[]>
 }
 
 function isElement(value: unknown): value is Element {
@@ -817,4 +817,132 @@ export async function texts(ui: Drawn): Promise<string[]> {
 /** Every text on the surface, the engine's own drawing included: `[ENGINES_OWN_DRAWING]` when m2b drew nothing. */
 export async function everyText(ui: Drawn): Promise<string[]> {
   return (await ui.findAll({ type: 'Text' })).map(found => found.text.trim()).filter(text => text !== '')
+}
+
+/**
+ * What an element draws, as the lines it stands on: a text is a line, a button its label in
+ * brackets, a row its pieces side by side, a column the lines of what it holds. A text padded to a
+ * column of its own is read without the padding.
+ */
+function linesOf(element: Element): string[] {
+  if (element.type === 'Text') {
+    return [shownText(element).trim()]
+  }
+  if (element.type === 'Button') {
+    return [`[${String(element.props['label'])}]`]
+  }
+  const inside = elementsIn(element.children).flatMap(linesOf)
+  if (element.props['flexDirection'] !== 'row') {
+    return inside
+  }
+  return [inside.join(Number(element.props['columnGap'] ?? 0) > 0 ? ' ' : '')]
+}
+
+/** Every element of a tag under an element, itself included, in the order drawn. */
+function allIn(element: Element, type: string): Element[] {
+  const inside = elementsIn(element.children).flatMap(child => allIn(child, type))
+  return element.type === type ? [element, ...inside] : inside
+}
+
+/** The lines of the element drawn under `key`, read as `linesOf` reads them; null where the drawing holds none. */
+export async function linesAt(ui: Drawn, key: string): Promise<string[] | null> {
+  const found = await ui.find({ key })
+  return found === undefined ? null : linesOf(found)
+}
+
+/** The title of each part of the overview, by the key the part is drawn under. */
+export const PARTS = { waits: 'Waits for you', today: 'Today', session: 'This session', m2b: 'm2b' } as const
+export type PartKey = keyof typeof PARTS
+
+const PART_KEY = /^part:/
+
+/**
+ * A part of the overview as drawn: its key without `part:`, its title, the count at the end of the
+ * title's line, null where there is none, and the lines below.
+ */
+export type ShownPart = { key: string; title: string; count: string | null; lines: string[] }
+
+function shownPart(part: Found): ShownPart {
+  const [heading, ...body] = elementsIn(part.children)
+  const [title, count] = elementsIn(heading?.children, 'Text')
+  return {
+    key: (part.key ?? '').replace(PART_KEY, ''),
+    title: title === undefined ? '' : shownText(title),
+    count: count === undefined ? null : shownText(count),
+    lines: body.flatMap(linesOf),
+  }
+}
+
+/** The parts of the overview in the order drawn; empty where the pane shows another view. */
+export async function shownParts(ui: Drawn): Promise<ShownPart[]> {
+  return (await ui.findAll({ type: 'Box' })).filter(box => PART_KEY.test(box.key ?? '')).map(shownPart)
+}
+
+/** The lines of one part of the overview, below its title; null where the part is left out. */
+export async function partLines(ui: Drawn, key: PartKey): Promise<string[] | null> {
+  const part = await ui.find({ key: `part:${key}` })
+  return part === undefined ? null : shownPart(part).lines
+}
+
+/**
+ * How a part is framed and headed: the style, color and padding of its frame, the color and weight
+ * of its title, and the color of its count, undefined where it has none.
+ */
+export type PartLook = {
+  borderStyle: unknown
+  borderColor: unknown
+  paddingX: unknown
+  titleColor: unknown
+  titleWeight: unknown
+  countColor: unknown
+}
+
+export async function partLook(ui: Drawn, key: PartKey): Promise<PartLook | null> {
+  const part = await ui.find({ key: `part:${key}` })
+  if (part === undefined) {
+    return null
+  }
+  const [heading] = elementsIn(part.children)
+  const [title, count] = elementsIn(heading?.children, 'Text')
+  return {
+    borderStyle: part.props['borderStyle'],
+    borderColor: part.props['borderColor'],
+    paddingX: part.props['paddingX'],
+    titleColor: title?.props['color'],
+    titleWeight: title?.props['weight'],
+    countColor: count?.props['color'],
+  }
+}
+
+/** How a text is drawn: its color, whether it is dimmed, and how it wraps. */
+export type TextLook = { color: unknown; dimColor: unknown; wrap: unknown }
+
+/** How the text that reads exactly `text` is drawn, the first where several do; null where none does. */
+export async function lookOf(ui: Drawn, text: string): Promise<TextLook | null> {
+  const found = (await ui.findAll({ type: 'Text', text })).find(one => one.text.trim() === text)
+  return found === undefined ? null : { color: found.props['color'], dimColor: found.props['dimColor'], wrap: found.props['wrap'] }
+}
+
+/** A button as drawn: its key, its label, and what marks it as the one accent of its row or as one beside the point. */
+export type ShownButton = { key: string; label: string; variant: unknown; dimColor: unknown }
+
+/** The buttons of the element drawn under `key`, in the order drawn; empty where the drawing holds none. */
+export async function buttonsAt(ui: Drawn, key: string): Promise<ShownButton[]> {
+  const found = await ui.find({ key })
+  return (found === undefined ? [] : allIn(found, 'Button')).map(button => ({
+    key: String(button.props['key']),
+    label: String(button.props['label']),
+    variant: button.props['variant'],
+    dimColor: button.props['dimColor'],
+  }))
+}
+
+/**
+ * The pieces of the path drawn inside the element under `key`, in the order drawn: the path is a
+ * row that breaks between its pieces and nowhere else.
+ */
+export async function pathPieces(ui: Drawn, key: string): Promise<string[]> {
+  const found = await ui.find({ key })
+  const path = found === undefined ? undefined : allIn(found, 'Box').find(box => box.props['flexWrap'] === 'wrap')
+  return elementsIn(path?.children, 'Text').map(shownText)
 }

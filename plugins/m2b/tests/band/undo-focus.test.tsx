@@ -5,7 +5,7 @@ import type { Engine } from 'claude-code/testing'
 import { UNDO_ALL } from '../../hooks/proposals'
 import { undoKey } from '../../hooks/rows'
 import { UNDO_FOLDER } from '../../hooks/session-view'
-import { FakeM2b, pane, start, texts } from './harness'
+import { FakeM2b, buttonsAt, linesAt, pane, start } from './harness'
 
 // After a press on keep, drop, ok, keep all or the folder's button the mod asks for the focus on
 // that row's undo. A move it asks for fails in the kit and reaches no hook of a test, so what
@@ -33,32 +33,31 @@ function busyFake(): FakeM2b {
   return fake
 }
 
-/** A press that waits for undo: what it is, the command of the view it is made in, its key, and the key of its row's undo. */
-type Press = { what: string; command: string; key: string; undo: string; says: string; arrange?: (fake: FakeM2b) => void }
+/**
+ * A press that waits for undo: what it is, the command of the view it is made in, its key, the key
+ * of the row it stands in, the key of that row's undo, and what the row says beside undo while the
+ * press waits.
+ */
+type Press = { what: string; command: string; key: string; row: string; undo: string; says: string; arrange?: (fake: FakeM2b) => void }
 
 const PRESSES: readonly Press[] = [
-  { what: 'keep on a candidate in the start view', command: 'm2b-pane', key: 'keep:c1', undo: undoKey('c1'), says: 'keeping: Remember? Dana prefers tea' },
-  { what: 'drop on a candidate in the start view', command: 'm2b-pane', key: 'drop:c1', undo: undoKey('c1'), says: 'dropping: Remember? Dana prefers tea' },
+  { what: 'keep on a candidate in the start view', command: 'm2b-pane', key: 'keep:c1', row: 'row:c1', undo: undoKey('c1'), says: 'keeping' },
+  { what: 'drop on a candidate in the start view', command: 'm2b-pane', key: 'drop:c1', row: 'row:c1', undo: undoKey('c1'), says: 'dropping' },
+  { what: 'drop on a question in the start view', command: 'm2b-pane', key: 'drop:q1', row: 'row:q1', undo: undoKey('q1'), says: 'dropping' },
+  { what: 'ok on the review in the start view', command: 'm2b-pane', key: 'ok:r1', row: 'review:r1', undo: undoKey('r1'), says: 'closing' },
+  { what: 'drop on a candidate in the view of the review', command: 'm2b-review', key: 'drop:c1', row: 'row:c1', undo: undoKey('c1'), says: 'dropping' },
+  { what: 'ok on the review in its own view', command: 'm2b-review', key: 'ok:r1', row: 'review:r1', undo: undoKey('r1'), says: 'closing' },
+  { what: 'keep on a proposal', command: 'm2b-proposals', key: `keep:${DANA}`, row: `row:${DANA}`, undo: undoKey(DANA), says: 'keeping' },
+  { what: 'drop on a proposal', command: 'm2b-proposals', key: `drop:${LADDER}`, row: `row:${LADDER}`, undo: undoKey(LADDER), says: 'dropping' },
+  { what: 'keep all', command: 'm2b-proposals', key: 'keep-all', row: 'row:keep-all', undo: UNDO_ALL, says: 'keeping all 2 proposals' },
+  { what: 'the button that turns m2b off in the folder', command: 'm2b-pane', key: 'folder:off', row: 'row:folder', undo: UNDO_FOLDER, says: 'turning m2b off here' },
   {
-    what: 'drop on a question in the start view',
-    command: 'm2b-pane',
-    key: 'drop:q1',
-    undo: undoKey('q1'),
-    says: 'dropping: Still current? Planning the trip to Porto',
-  },
-  { what: 'ok on the review in the start view', command: 'm2b-pane', key: 'ok:r1', undo: undoKey('r1'), says: 'closing: m2b: review' },
-  { what: 'drop on a candidate in the view of the review', command: 'm2b-review', key: 'drop:c1', undo: undoKey('c1'), says: 'dropping: Remember? Dana prefers tea' },
-  { what: 'ok on the review in its own view', command: 'm2b-review', key: 'ok:r1', undo: undoKey('r1'), says: 'closing: m2b: review' },
-  { what: 'keep on a proposal', command: 'm2b-proposals', key: `keep:${DANA}`, undo: undoKey(DANA), says: 'keeping: Dana is head of IT at Northwind.' },
-  { what: 'drop on a proposal', command: 'm2b-proposals', key: `drop:${LADDER}`, undo: undoKey(LADDER), says: 'dropping: Call Sam about the ladder.' },
-  { what: 'keep all', command: 'm2b-proposals', key: 'keep-all', undo: UNDO_ALL, says: 'keeping all 2 proposals' },
-  { what: 'the button that leaves m2b out of the folder', command: 'm2b-pane', key: 'folder:off', undo: UNDO_FOLDER, says: `leaving m2b out of ${ACME}` },
-  {
-    what: 'the button that turns the distillate on again',
+    what: 'the button that turns m2b on again in the folder',
     command: 'm2b-pane',
     key: 'folder:on',
+    row: 'row:folder',
     undo: UNDO_FOLDER,
-    says: `turning the distillate on under ${ACME}`,
+    says: 'turning m2b on here',
     arrange: fake => {
       fake.given = { topics: [], atStart: 'whole', offUnder: ACME, folder: ACME }
     },
@@ -75,7 +74,7 @@ test('the key of undo names its row: a task or a proposal by its id, keep all an
   expect(new Set([undoKey('c1'), undoKey('q1'), undoKey('r1'), undoKey(DANA), UNDO_ALL, UNDO_FOLDER]).size).toBe(6)
 })
 
-for (const { what, command, key, undo, says, arrange } of PRESSES) {
+for (const { what, command, key, row, undo, says, arrange } of PRESSES) {
   test(`after ${what}, undo of that row is a button the view draws once the press waits, and was none before the press`, async ($, on) => {
     // Covers: B201
     const fake = busyFake()
@@ -95,7 +94,9 @@ for (const { what, command, key, undo, says, arrange } of PRESSES) {
     expect(waiting.filter(drawn => drawn === undo)).toHaveLength(1)
     // The row draws undo in place of what was pressed.
     expect(waiting).not.toContain(key)
-    expect((await texts(ui)).some(line => line.includes(says))).toBe(true)
+    // Undo is the one button of the row, and beside it stands what the press will do.
+    expect((await buttonsAt(ui, row)).map(button => button.key)).toEqual([undo])
+    expect((await linesAt(ui, row))?.at(-1)).toMatch(new RegExp(`^\\[undo\\] ?${says}$`))
 
     // Undo takes the press back and writes nothing: Enter pressed twice leaves everything as it was.
     await ui.press({ key: undo })
@@ -125,6 +126,6 @@ test('a press that waits leaves the other rows as they were: only its own row dr
 
   await ui.press({ key: 'ok:r1' })
   await ui.press({ key: 'folder:off' })
-  expect(await undos()).toEqual([UNDO_FOLDER, undoKey('c1'), undoKey('r1')])
+  expect(await undos()).toEqual([undoKey('c1'), undoKey('r1'), UNDO_FOLDER])
   await ui.unmount()
 })

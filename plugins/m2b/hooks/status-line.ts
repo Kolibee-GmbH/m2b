@@ -1,4 +1,9 @@
+import type { BandHealth } from '../types'
+import { plainLine } from './plain-text'
+
 export const COULD_NOT_LOOK = 'could not look'
+// The same in the pane, where a line is a sentence: the band's answer came without a part about m2b itself.
+const COULD_NOT_LOOK_AT_ITSELF = 'm2b could not look at how it stands.'
 
 const MAX_LENGTH = 79
 const NOT_REACHABLE = 'not reachable'
@@ -20,8 +25,23 @@ export function statusLine(answer: unknown): string | null {
   if (!isObject(answer)) {
     return COULD_NOT_LOOK
   }
-  const parts = [...runTrouble(answer['run']), ...inboxTrouble(answer['inbox']), ...problemParts(answer)]
+  const parts = troublesOf(answer).map(trouble => trouble.status)
   return parts.length === 0 ? null : fit(parts.join(' · '))
+}
+
+/**
+ * How m2b stands, for the pane's part about m2b itself: `curationLine`, and each thing that is
+ * wrong as a sentence with its reason, where the answer names one. The status line has room for
+ * what is wrong alone; why stands here.
+ */
+export function healthOf(answer: unknown, nowMs: number): BandHealth {
+  if (!isObject(answer)) {
+    return { curation: null, troubles: [COULD_NOT_LOOK_AT_ITSELF] }
+  }
+  return {
+    curation: curationLine(answer, nowMs),
+    troubles: troublesOf(answer).map(({ sentence, reason }) => (reason === null ? `${sentence}.` : `${sentence}: ${plainLine(reason)}`)),
+  }
 }
 
 /**
@@ -43,18 +63,36 @@ export function curationLine(answer: unknown, nowMs: number): string | null {
   return parts.length === 0 ? null : fit(parts.join(' · '))
 }
 
-function runTrouble(run: unknown): string[] {
-  if (!isObject(run) || 'error' in run) {
-    return ['could not read the last curation run']
-  }
-  if (run['state'] === 'failed') {
-    return ['last curation run failed']
-  }
-  return run['state'] === 'interrupted' ? ['last curation run interrupted'] : []
+/** One thing wrong with m2b: in the status line's few words, as a sentence of the pane, and why, where the answer says. */
+type Trouble = { status: string; sentence: string; reason: string | null }
+
+function textOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value !== '' ? value : null
 }
 
-function inboxTrouble(inbox: unknown): string[] {
-  return isObject(inbox) && typeof inbox['count'] === 'number' ? [] : ['could not read the inbox']
+function troublesOf(answer: JsonObject): Trouble[] {
+  return [...runTrouble(answer['run']), ...inboxTrouble(answer['inbox']), ...storeTrouble(answer), ...backendTroubles(answer)]
+}
+
+function runTrouble(run: unknown): Trouble[] {
+  if (!isObject(run) || 'error' in run) {
+    const reason = isObject(run) ? textOrNull(run['error']) : null
+    return [{ status: 'could not read the last curation run', sentence: 'm2b could not read the last curation run', reason }]
+  }
+  if (run['state'] === 'failed') {
+    return [{ status: 'last curation run failed', sentence: 'The last curation run failed', reason: textOrNull(run['message']) }]
+  }
+  return run['state'] === 'interrupted'
+    ? [{ status: 'last curation run interrupted', sentence: 'The last curation run was interrupted', reason: textOrNull(run['message']) }]
+    : []
+}
+
+function inboxTrouble(inbox: unknown): Trouble[] {
+  if (isObject(inbox) && typeof inbox['count'] === 'number') {
+    return []
+  }
+  const reason = isObject(inbox) ? textOrNull(inbox['error']) : null
+  return [{ status: 'could not read the inbox', sentence: 'm2b could not read the inbox', reason }]
 }
 
 function inboxCount(inbox: unknown): string[] {
@@ -98,20 +136,23 @@ function offsetMinutes(offset: string): number {
   return sign * (hours * 60 + minutes)
 }
 
-function problemParts(answer: JsonObject): string[] {
-  const parts: string[] = []
-  if (typeof answer['store_error'] === 'string') {
-    parts.push('could not read store.json')
-  }
+function storeTrouble(answer: JsonObject): Trouble[] {
+  const reason = answer['store_error']
+  return typeof reason === 'string'
+    ? [{ status: 'could not read store.json', sentence: 'm2b could not read store.json', reason: textOrNull(reason) }]
+    : []
+}
+
+function backendTroubles(answer: JsonObject): Trouble[] {
   const backends = answer['backends']
-  if (isObject(backends)) {
-    for (const [name, check] of Object.entries(backends)) {
-      if (isObject(check) && check['state'] === NOT_REACHABLE) {
-        parts.push(`${name} not reachable`)
-      }
-    }
+  if (!isObject(backends)) {
+    return []
   }
-  return parts
+  return Object.entries(backends).flatMap(([name, check]) =>
+    isObject(check) && check['state'] === NOT_REACHABLE
+      ? [{ status: `${name} not reachable`, sentence: `m2b could not reach the ${plainLine(name)}`, reason: textOrNull(check['detail']) }]
+      : [],
+  )
 }
 
 function fit(line: string): string {

@@ -6,7 +6,7 @@ import { closeAnswer, docksFor, staysBesideChat } from '../../hooks/pane-seat'
 import { shownOf } from '../../hooks/pane-tabs'
 import { afterBack } from '../../hooks/settings'
 import type { PaneView } from '../../types'
-import { BAND, FakeM2b, SESSION_ID, pane, pressTab, shownTab, shownTabs, start, texts } from './harness'
+import { BAND, FakeM2b, SESSION_ID, pane, partLines, pressTab, shownTab, shownTabs, start, texts } from './harness'
 
 const PANE = 'm2b'
 const CLOSED_BY_HAND = 'paneClosedByHand'
@@ -49,8 +49,8 @@ test('under the fullscreen layout the pane opens by itself with the band, withou
   expect(opened).toEqual([BY_ITSELF])
   expect(openPanes.has(PANE)).toBe(true)
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
-  expect(await texts(ui)).toContain('In this session')
-  expect(await texts(ui)).toContain('Northwind: 3 facts')
+  expect(await texts(ui)).toContain('Waits for you')
+  expect(await partLines(ui, 'session')).toContain('[Northwind] 3 facts')
   await ui.unmount()
   await band.unmount()
 })
@@ -252,7 +252,7 @@ test('a pane the mod closed itself opens again in the next session, in the view 
 
   expect(opened.at(-1)).toEqual(BY_ITSELF)
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
-  expect(await texts(ui)).toContain('In this session')
+  expect(await texts(ui)).toContain('Waits for you')
   await ui.unmount()
   await band.unmount()
 })
@@ -292,7 +292,7 @@ for (const [command, shows] of [
 
     expect(openPanes.has(PANE)).toBe(true)
     expect(await shownTab(ui)).toBe('overview')
-    expect(await texts(ui)).toContain('In this session')
+    expect(await texts(ui)).toContain('Waits for you')
     expect(await texts(ui)).not.toContain(shows)
     await ui.unmount()
   })
@@ -376,7 +376,7 @@ test('the tab Overview asks again what this session was given', async ($, on) =>
   await pressTab(ui, 'overview')
   await clock.advance(1)
 
-  expect(await texts(ui)).toContain('Northwind: 3 facts')
+  expect(await partLines(ui, 'session')).toContain('[Northwind] 3 facts')
   await ui.unmount()
 })
 
@@ -398,7 +398,7 @@ for (const [to, label, shows] of [
     expect(await texts(ui)).toContain(shows)
 
     await pressTab(ui, 'overview')
-    expect(await texts(ui)).toContain('In this session')
+    expect(await texts(ui)).toContain('Waits for you')
     expect(opened).toEqual([BY_ITSELF, AS_A_DIALOG, BY_ITSELF])
     await ui.unmount()
     await band.unmount()

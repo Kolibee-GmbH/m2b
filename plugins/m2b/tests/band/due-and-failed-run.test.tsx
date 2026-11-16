@@ -12,11 +12,11 @@ import {
   bandPieces,
   everyText,
   listedTask,
+  partLines,
   rowSaying,
   shownBand,
   start,
   startView,
-  texts,
 } from './harness'
 import type { Files } from './harness'
 
@@ -100,12 +100,12 @@ test('with off the band says nothing of the tasks due, and the pane lists them a
   expect(await shownBand(ui)).toEqual(rowSaying('1 waits for you'))
   await ui.unmount()
   const inPane = await startView($)
-  expect((await texts(inPane)).slice(-5)).toEqual([
-    'Today',
-    'due today: Call Dana',
-    'due today: Water the plants',
-    'overdue: Pay the invoice',
-    'overdue: Return the drill',
+  // Today's first, then the overdue ones, the most recent first.
+  expect(await partLines(inPane, 'today')).toEqual([
+    'due today Call Dana',
+    'due today Water the plants',
+    'overdue Pay the invoice',
+    'overdue Return the drill',
   ])
   await inPane.unmount()
 })
@@ -155,7 +155,7 @@ test('an answer without the band part, as of a core before it, shows the tasks i
   expect(await shownBand(ui)).toEqual(rowSaying('1 waits for you'))
   await ui.unmount()
   const inPane = await startView($)
-  expect((await texts(inPane)).slice(-2)).toEqual(['Today', 'Tasks due are not shown.'])
+  expect(await partLines(inPane, 'today')).toEqual(['Tasks due are not shown.'])
   await inPane.unmount()
 })
 

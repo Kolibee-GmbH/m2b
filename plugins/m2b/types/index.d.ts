@@ -37,6 +37,13 @@ export type BandSnapshot = {
   shows?: BandShows
 }
 
+/**
+ * How m2b itself stands, from the status part of the band's answer: `curation` is the line about
+ * the inbox and the last curation run while nothing is wrong with them, null where there is nothing
+ * to say; `troubles` are the things that are wrong, each a sentence with its reason.
+ */
+export type BandHealth = { curation: string | null; troubles: string[] }
+
 /** What a press on keep or drop asks the task list for. */
 export type BandSettle = 'complete' | 'drop'
 
@@ -168,7 +175,12 @@ declare module 'claude-code' {
   interface PluginState {
     m2b: {
       bandSnapshot: BandSnapshot | null
+      /** Why the band's `open` showed no pane; cleared by the next prompt. */
       bandNotice: string | null
+      /** What m2b said to the last press on a candidate, a question or the review that wrote nothing; cleared by the next such press and the next prompt. */
+      rowNotice: string | null
+      /** How m2b itself stands, from the same answer as the band; null until it is read. */
+      bandHealth: BandHealth | null
       /** The rows pressed in this session, by task id. */
       bandPresses: Record<string, BandPress>
       /** Set while this session runs the band of another m2b version than the one installed. */

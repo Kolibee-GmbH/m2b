@@ -288,7 +288,7 @@ test('the tab Settings opens the list too, as a dialog, and the tab Overview lea
   expect(fake.settingCalls()).toEqual([LIST])
   expect(await texts(ui)).toContain('Curation paused: off')
   await pressTab(ui, 'overview')
-  expect(await texts(ui)).toContain('In this session')
+  expect(await texts(ui)).toContain('Waits for you')
   await ui.unmount()
 })
 
@@ -980,7 +980,7 @@ test('leaving the settings within the five seconds takes the press back', async 
   await pressTab(ui, 'overview')
   await clock.advance(10_000)
 
-  expect(await texts(ui)).toContain('In this session')
+  expect(await texts(ui)).toContain('Waits for you')
   expect(fake.settingCalls()).toEqual([LIST])
   await ui.unmount()
 })
@@ -1162,7 +1162,7 @@ test('a reload of the mod, which starts the session again, leaves the pane on it
   await clock.advance(1)
 
   const shown = await texts(ui)
-  expect(shown).toContain('In this session')
+  expect(shown).toContain('Waits for you')
   expect(shown).not.toContain(`now: ${NOTES}`)
   await ui.unmount()
 })

@@ -11,6 +11,8 @@ import {
   answerKeys,
   everyText,
   fail,
+  lookOf,
+  partLines,
   pressTab,
   rowSaying,
   sentenceOfM2b,
@@ -44,7 +46,7 @@ test('five candidates and the review are one count in the band, and each a row w
       expect(shown).toContain(`Remember? Dana prefers tea ${n}`)
     }
     expect(shown.some(line => /^and \d+ more/.test(line))).toBe(false)
-    expect(shown).toContain('m2b: review')
+    expect(shown).toContain('Review of the last curation run')
     expect(await answerKeys(inPane)).toEqual([
       ...[1, 2, 3, 4, 5].flatMap(n => [`keep:c${n}`, `drop:c${n}`]),
       'ok:r1',
@@ -287,8 +289,8 @@ test('after keep the tasks are read from m2b itself, not from the answer stored 
   await ui.unmount()
 })
 
-test('a candidate settled in another session is not written and the band says so', async ($, on) => {
-  // Covers: B30
+test('a candidate settled in another session is not written, and the pane says so where it was pressed', async ($, on) => {
+  // Covers: B30, B207
   const fake = new FakeM2b().candidate('c1', 'Remember? Alex runs on Tuesdays')
   const { clock } = await start($, on, fake)
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -303,10 +305,12 @@ test('a candidate settled in another session is not written and the band says so
   await ui.press({ key: 'drop:c1' })
   await clock.advance(UNDO_MS)
 
+  const refused = 'Already settled in another session, nothing written: Remember? Alex runs on Tuesdays'
   expect(fake.writes()).toEqual([])
-  expect(await shownBand(band)).toEqual(
-    rowSaying('Already settled in another session, nothing written: Remember? Alex runs on Tuesdays'),
-  )
+  expect(await partLines(ui, 'waits')).toEqual([refused, 'Nothing waits for you.'])
+  expect(await lookOf(ui, refused)).toEqual({ color: 'error', dimColor: undefined, wrap: 'wrap' })
+  // Nothing waits any more, and the band says nothing of the press.
+  expect(await everyText(band)).toEqual([ENGINES_OWN_DRAWING])
   expect(await answerKeys(ui)).toEqual([])
   await ui.unmount()
   await band.unmount()
@@ -496,7 +500,8 @@ test('two quick presses on the same candidate write once', async ($, on) => {
   await ui.unmount()
 })
 
-test('a prompt enters as typed and clears the band notice', async ($, on) => {
+test('a prompt enters as typed and clears what m2b said to the last press that wrote nothing', async ($, on) => {
+  // Covers: B207
   on('prompt.submit', (_, e) => ({ text: e.text, context: e.context }))
   const fake = new FakeM2b().candidate('c1', 'Remember? Alex runs on Tuesdays').candidate('c2', 'Remember? Acme moved')
   const { clock } = await start($, on, fake)
@@ -511,7 +516,8 @@ test('a prompt enters as typed and clears the band notice', async ($, on) => {
   await ui.press({ key: 'drop:c1' })
   await clock.advance(UNDO_MS)
   const notice = 'Already settled in another session, nothing written: Remember? Alex runs on Tuesdays'
-  expect(await shownBand(band)).toEqual(rowSaying(notice))
+  expect(await partLines(ui, 'waits')).toEqual([notice, 'Remember? Acme moved', '[keep] [drop]'])
+  expect(await shownBand(band)).toEqual(rowSaying('1 waits for you'))
 
   const entered = await $.prompt.submit({
     text: 'what is on today?',
@@ -521,6 +527,7 @@ test('a prompt enters as typed and clears the band notice', async ($, on) => {
   })
 
   expect(entered).toEqual({ text: 'what is on today?', context: ['from another plugin'] })
+  expect(await partLines(ui, 'waits')).toEqual(['Remember? Acme moved', '[keep] [drop]'])
   expect(await shownBand(band)).toEqual(rowSaying('1 waits for you'))
   await ui.unmount()
   await band.unmount()

@@ -11,7 +11,10 @@ import {
   OPEN,
   answerKeys,
   everyText,
+  linesAt,
+  lookOf,
   pane,
+  partLines,
   pressTab,
   rowSaying,
   sentenceOfM2b,
@@ -59,13 +62,12 @@ function proposedFake(): FakeM2b {
 /** The buttons of the view itself: the tabs, which stand above every view, are left out. */
 const buttons = viewButtons
 
-/** The lines of the start view's part "Waits for you", between its heading and the next. */
-async function waits(ui: Parameters<typeof texts>[0]): Promise<string[]> {
-  const shown = await texts(ui)
-  return shown.slice(shown.indexOf('Waits for you') + 1, shown.indexOf('Today'))
+/** The lines of the overview's part "Waits for you", below its title. */
+function waits(ui: Parameters<typeof partLines>[0]): Promise<string[] | null> {
+  return partLines(ui, 'waits')
 }
 
-test('while proposals wait the band counts each, and the pane has one line with their number and counts them on their tab, whatever the number', async ($, on) => {
+test('while proposals wait the band counts each, and the pane has one row with their number that names their tab, and counts them on that tab, whatever the number', async ($, on) => {
   // Covers: B127
   const fake = proposedFake()
   const { clock } = await start($, on, fake)
@@ -73,15 +75,15 @@ test('while proposals wait the band counts each, and the pane has one line with 
   const ui = await startView($)
 
   expect(await shownBand(band)).toEqual(rowSaying('3 wait for you'))
-  // One line for all of them, never one per proposal, and nothing to press: their tab leads to them.
-  expect(await waits(ui)).toEqual(['3 proposals from your sessions, in the tab Proposals'])
+  // One row for all of them, never one per proposal, and nothing to press: their tab leads to them.
+  expect(await waits(ui)).toEqual(['3 proposals from your sessions', 'in the tab Proposals'])
   expect(await buttons(ui)).toEqual([])
   expect((await shownTabs(ui)).map(tab => tab.label)).toEqual(['Overview', 'Proposals 3', 'Review', 'Settings'])
 
   fake.proposals = fake.proposals?.slice(0, 1) ?? null
   await clock.advance(60_000)
   expect(await shownBand(band)).toEqual(rowSaying('1 waits for you'))
-  expect(await waits(ui)).toEqual(['1 proposal from your sessions, in the tab Proposals'])
+  expect(await waits(ui)).toEqual(['1 proposal from your sessions', 'in the tab Proposals'])
   expect(await buttons(ui)).toEqual([])
   expect((await shownTabs(ui)).map(tab => tab.label)).toEqual(['Overview', 'Proposals 1', 'Review', 'Settings'])
   await ui.unmount()
@@ -124,7 +126,7 @@ test('the task that tells a phone proposals wait is not counted in the band and 
   await band.unmount()
 
   const ui = await startView($)
-  expect(await waits(ui)).toEqual(['3 proposals from your sessions, in the tab Proposals', 'Remember? Acme moved'])
+  expect(await waits(ui)).toEqual(['3 proposals from your sessions', 'in the tab Proposals', 'Remember? Acme moved', '[keep] [drop]'])
   expect(await buttons(ui)).toEqual(['keep:c1', 'drop:c1'])
   await ui.unmount()
 })
@@ -140,7 +142,7 @@ test('open in the band, then the tab Proposals, lead to every proposal: its kind
 
   expect(opened.map(one => one.id)).toEqual([PANE])
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
-  expect(await texts(ui)).toContain('In this session')
+  expect(await texts(ui)).toContain('Waits for you')
   await pressTab(ui, 'proposals')
   expect(await texts(ui)).toEqual([
     '3 proposals from your sessions',
@@ -330,7 +332,7 @@ test('keep is written once the undo window is over, and the pane and the band fo
   expect(await shownBand(band)).toEqual(rowSaying('3 wait for you'))
 
   await ui.press({ key: `keep:${DANA}` })
-  expect(await texts(ui)).toContain('keeping: Dana is head of IT at Northwind.')
+  expect(await linesAt(ui, `row:${DANA}`)).toEqual(['Dana is head of IT at Northwind.', '[undo] keeping'])
   expect(await buttons(ui)).toContain(`undo:${DANA}`)
   await clock.advance(UNDO_MS - 1)
   expect(fake.answers()).toEqual([])
@@ -354,7 +356,7 @@ test('drop, then undo within the window, answers nothing', async ($, on) => {
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
 
   await ui.press({ key: `drop:${LADDER}` })
-  expect(await texts(ui)).toContain('dropping: Call Sam about the ladder.')
+  expect(await linesAt(ui, `row:${LADDER}`)).toEqual(['Call Sam about the ladder.', '[undo] dropping'])
   await ui.press({ key: `undo:${LADDER}` })
   await ui.press({ key: `drop:${SHED}` })
   await clock.advance(UNDO_MS)
@@ -430,8 +432,8 @@ test('keep all leaves out a proposal pressed on its own, which keeps its own ans
   await ui.unmount()
 })
 
-test('an answer m2b refuses stands in the pane and in the band until the next prompt, and the rows are read again', async ($, on) => {
-  // Covers: B127
+test('an answer m2b refuses stands in the view of the proposals until the next prompt, the band keeps counting, and the rows are read again', async ($, on) => {
+  // Covers: B127, B207
   on('prompt.submit', (_, e) => ({ text: e.text, context: e.context }))
   const fake = proposedFake()
   const { clock } = await start($, on, fake)
@@ -449,15 +451,19 @@ test('an answer m2b refuses stands in the pane and in the band until the next pr
   const refused = `m2b could not keep "Dana is head of IT at Northwind.": ${DANA} is answered with drop already; that answer stands`
   const shown = await texts(ui)
   expect(shown).toContain(refused)
+  // Said where it was pressed, in the color of trouble.
+  expect((await lookOf(ui, refused))?.color).toBe('error')
   expect(shown[0]).toBe('2 proposals from your sessions')
   expect(await buttons(ui)).not.toContain(`keep:${DANA}`)
-  await ui.unmount()
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(await shownBand(band)).toEqual(sentenceOfM2b(refused))
+  expect(await shownBand(band)).toEqual(rowSaying('2 wait for you'))
 
   await $.prompt.submit({ text: 'what is on today?', context: [], wait: false, origin: { kind: 'composer' } })
+  expect(await texts(ui)).not.toContain(refused)
+  expect((await texts(ui))[0]).toBe('2 proposals from your sessions')
   expect(await shownBand(band)).toEqual(rowSaying('2 wait for you'))
   await band.unmount()
+  await ui.unmount()
 })
 
 test('a keep or drop m2b cannot run stands in the pane too, and the proposal stays to answer', async ($, on) => {
@@ -498,7 +504,7 @@ test('control characters and marks that reorder or hide text in a proposal are w
     'said on 2026-03-04\\x1b[2J: "\\u202egnitirw\\u202c in \\u200bone line\\ufeff"',
   ])
   await ui.press({ key: `keep:${DANA}` })
-  expect(await texts(ui)).toContain('keeping: Dana\\x1b]0;kept unseen\\x07 runs IT\\x9b2J\\ufeffand\\xadon')
+  expect(await linesAt(ui, `row:${DANA}`)).toEqual(['Dana\\x1b]0;kept unseen\\x07 runs IT\\x9b2J\\ufeffand\\xadon', '[undo] keeping'])
   await ui.unmount()
 })
 
@@ -515,7 +521,7 @@ test('proposals m2b could not look at say so in the band and the pane, beside th
   await band.unmount()
 
   const first = await startView($)
-  expect(await waits(first)).toEqual([line, 'Remember? Acme moved'])
+  expect(await waits(first)).toEqual([line, 'Remember? Acme moved', '[keep] [drop]'])
   expect(await buttons(first)).toEqual(['keep:c1', 'drop:c1'])
   await first.unmount()
 
@@ -551,7 +557,7 @@ test('a core that does not know proposals leaves the band counting none and the 
   await band.unmount()
 
   const ui = await startView($)
-  expect(await waits(ui)).toEqual(['Remember? Acme moved'])
+  expect(await waits(ui)).toEqual(['Remember? Acme moved', '[keep] [drop]'])
   expect(await buttons(ui)).toEqual(['keep:c1', 'drop:c1'])
   await ui.unmount()
 })
@@ -667,8 +673,8 @@ test('keep all that m2b refuses for one proposal names that one, not all of them
   await ui.unmount()
 })
 
-test('what the band says about a candidate is not drawn in the proposals pane as if an answer were refused', async ($, on) => {
-  // Covers: B127
+test('what m2b said to a press on a candidate stands in the overview, and is not drawn in the view of the proposals as if an answer were refused', async ($, on) => {
+  // Covers: B127, B207
   const fake = proposedFake().candidate('c1', 'Remember? Acme moved')
   const { clock } = await start($, on, fake)
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -680,7 +686,12 @@ test('what the band says about a candidate is not drawn in the proposals pane as
   }
   await clock.advance(UNDO_MS)
   expect(fake.writes()).toEqual([])
-  expect(await shownBand(band)).toEqual(rowSaying('Already settled in another session, nothing written: Remember? Acme moved'))
+  expect(await waits(first)).toEqual([
+    'Already settled in another session, nothing written: Remember? Acme moved',
+    '3 proposals from your sessions',
+    'in the tab Proposals',
+  ])
+  expect(await shownBand(band)).toEqual(rowSaying('3 wait for you'))
   expect(await answerKeys(first)).toEqual([])
   await first.unmount()
   await band.unmount()

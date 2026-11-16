@@ -2,6 +2,7 @@ import type { CommandSpec, EngineInterface, ResolveInput } from 'claude-code'
 
 import type { BandPress, BandProposal, BandProposals, BandSettle } from '../types'
 import { plainLine, writtenOut } from './plain-text'
+import { said } from './look'
 import { candidateRow } from './rows'
 
 /*
@@ -238,7 +239,8 @@ export function proposalsPane(
   notice: string | null,
   actions: ProposalActions,
 ) {
-  const { Box, Text } = $.ui.resolve(e)
+  const ui = $.ui.resolve(e)
+  const { Box, Text } = ui
   if (proposals === null) {
     return <Text wrap="wrap">{NOT_LOOKED}</Text>
   }
@@ -260,11 +262,7 @@ export function proposalsPane(
           {couldNotLookLine(error)}
         </Text>
       )}
-      {notice !== null && (
-        <Text color="warning" wrap="wrap">
-          {plainLine(notice)}
-        </Text>
-      )}
+      {notice !== null && said(ui, plainLine(notice), 'trouble')}
       {keepAllRow($, e, all, unpressed, actions)}
       {waiting.map(proposal => (
         <Box key={`proposal:${proposal.id}`} flexDirection="column">
@@ -277,7 +275,6 @@ export function proposalsPane(
               press: (_, action) => actions.answer(proposal, action),
               undo: () => actions.undo(pressKey(proposal.id)),
             },
-            'wrap',
           )}
           <Text dimColor wrap="wrap">{`  ${heading(proposal)}`}</Text>
           <Text dimColor wrap="wrap">{`  ${saidLine(proposal)}`}</Text>

@@ -2,6 +2,7 @@ import type { CommandSpec, EngineInterface, ResolveInput } from 'claude-code'
 
 import type {
   BandDueTask,
+  BandHealth,
   BandPress,
   BandProposals,
   BandSession,
@@ -9,47 +10,55 @@ import type {
   FolderSwitch,
   SessionTopic,
 } from '../types'
-import { dueCounts, waitForYou } from './look'
+import { button, dueCounts, part, pathLine, row, said, taskLine, topicLabel, topicsCount, waitForYou } from './look'
+import type { Tone } from './look'
 import { plainLine, wholePath } from './plain-text'
 import { couldNotLookLine, countLine, errorBesideTasks } from './proposals'
-import { candidateRow, reviewRow } from './rows'
+import { REVIEW, candidateRow, changesSummary, reviewRow } from './rows'
 import type { RowActions } from './rows'
 
 /*
- * The view the m2b pane starts in, its overview, in three parts: what m2b gave this session, so
- * the owner sees which topic's facts it holds without scrolling to its start; what waits for an
- * answer, each with its buttons, which the band only counts; and the tasks due today. The
- * proposals, the review, the settings, a topic's lines and a search are the pane's other views,
- * each under its tab.
+ * The view the m2b pane starts in, its overview: four parts in one order, what needs the person
+ * first. "Waits for you" holds what the band only counts, each with its buttons; "Today" the tasks
+ * due; "This session" what m2b gave this session, so the owner sees which topic's facts it holds
+ * without scrolling to its start, and whether m2b is on in its folder; "m2b" how m2b itself
+ * stands. The proposals, the review, the settings, a topic's lines and a search are the pane's
+ * other views, each under its tab.
+ *
+ * A part says nothing it has nothing to say about: a count of none is not said, an empty part is
+ * one line that steps back, and a part m2b has not looked at is left out, except the first, which
+ * says so once.
  */
 
 // Not `m2b`: Claude Code gives the plugin's skill of that name the short name `/m2b`. A command
 // named so does not appear in its menu, and the name typed starts the skill, with a model turn.
 export const SESSION_COMMAND: CommandSpec = {
   name: 'm2b-pane',
-  description: 'Show in a pane what m2b gave this session, what waits for you and what is due today',
+  description: 'Show in a pane what waits for you, what is due today, what m2b gave this session and how m2b stands',
   immediate: true,
 }
 
-export const SESSION_PLACED = 'this session and what waits for you are in the m2b pane'
+export const SESSION_PLACED = 'what waits for you and this session are in the m2b pane'
 
-const IN_THIS_SESSION = 'In this session'
-export const WAITS_FOR_YOU = 'Waits for you'
+const WAITS_FOR_YOU = 'Waits for you'
 const TODAY = 'Today'
+const THIS_SESSION = 'This session'
+const M2B_ITSELF = 'm2b'
 const NOT_LOOKED = 'm2b has not looked yet.'
 // Not known is a session this machine holds no note of: started under an earlier m2b, or without m2b's hooks.
 const NOT_KNOWN = 'm2b holds no note of what it gave this session; that does not say it gave nothing.'
-const NO_TOPIC = 'No topic was given.'
-// `m2b distillate off` reaches this session too: the prompt hook adds no topic where the distillate is off.
+// Turning m2b off reaches this session too: the prompt hook adds no topic where it is off.
 const KEEPS = 'This session keeps what it was given and gets no more topics.'
 const NOTHING_WAITS = 'Nothing waits for you.'
 const NOTHING_DUE = 'Nothing due today.'
 const TASKS_NOT_READ = 'The task list could not be read.'
-// Where the answer names no tasks due: from a core before it named them whatever the band shows, or one a session with an earlier band shared.
+// Where the answer names no tasks due: from a core before it named them whatever the band shows.
 const DUE_NOT_SHOWN = 'Tasks due are not shown.'
 // Where the things a row only counts or names are shown whole: under their tab, which a line cannot press.
 const IN_PROPOSALS = 'in the tab Proposals'
 const WHOLE_REVIEW = 'The whole review is in the tab Review.'
+const ON_HERE = 'm2b is on in this folder.'
+const OFF_HERE = 'm2b is off under this folder.'
 // The short forms of the small pane, where the long ones would be most of what it draws.
 const NO_NOTE = 'm2b holds no note of this session.'
 const SESSION_NOT_READ = 'm2b could not look at this session.'
@@ -67,21 +76,26 @@ export const FOLDER_PRESS = 'distillate:folder'
 export const UNDO_FOLDER = 'undo:folder'
 
 /**
- * Everything the start view draws. `notes` are the notes this session wrote through the mod,
- * `notice` why the last press on the folder's button wrote nothing.
+ * Everything the overview draws from. `notes` are the notes this session wrote through the mod.
+ * `rowNotice` is what m2b said to the last press on a candidate, a question or the review that
+ * wrote nothing, `folderNotice` the same for the folder's button. `versionLine` says that this
+ * session runs an older m2b than the one installed.
  */
 export type SessionModel = {
   given: BandSession | null
   notes: number
-  notice: string | null
+  rowNotice: string | null
+  folderNotice: string | null
   snapshot: BandSnapshot | null
   proposals: BandProposals | null
   presses: Record<string, BandPress>
+  health: BandHealth | null
+  versionLine: string | null
 }
 
 /**
- * What the start view's buttons do: keep, drop and `ok`; `show`, which turns the pane to the lines
- * of one topic; and the distillate off or on for a folder, with its undo.
+ * What the overview's buttons do: keep, drop and `ok`; a topic's button, which turns the pane to
+ * that topic's lines; and m2b off or on for a folder, with its undo.
  */
 export type SessionActions = RowActions & {
   showTopic: (name: string) => Promise<void>
@@ -89,55 +103,48 @@ export type SessionActions = RowActions & {
   undoFolder: () => Promise<void>
 }
 
+/** A line and what it is, by which it is drawn. */
+type Line = { text: string; tone: Tone }
+
+function line(text: string, tone: Tone = 'plain'): Line {
+  return { text, tone }
+}
+
 function count(number: number, one: string, many: string): string {
   return `${number} ${number === 1 ? one : many}`
 }
 
-/** `Northwind: 3 facts, 1 current`, or the name alone where its block's lines were not noted. */
-function topicLine(topic: SessionTopic): string {
-  const held = [
-    ...(topic.facts === null ? [] : [count(topic.facts, 'fact', 'facts')]),
-    ...(topic.current === null || topic.current === 0 ? [] : [`${topic.current} current`]),
-  ]
-  const name = plainLine(topic.name)
-  return held.length === 0 ? name : `${name}: ${held.join(', ')}`
+/**
+ * How many things wait for an answer, as every surface counts them: each candidate and question,
+ * each waiting proposal and the review one each. A row that was pressed counts until its write has
+ * landed.
+ */
+export function waitCount(snapshot: BandSnapshot | null, proposals: BandProposals | null): number {
+  return (snapshot?.candidates.length ?? 0) + (proposals?.waiting.length ?? 0) + (snapshot?.review ? 1 : 0)
+}
+
+function proposalsError(model: SessionModel): string | null {
+  return errorBesideTasks(model.snapshot?.error ?? null, model.proposals)
 }
 
 /**
- * A line of the first part and how it is drawn: as it is, dim for what is not known, or as an
- * error. `topic` on the line of a topic: its name as m2b gave it, and its place among the topics.
+ * What stands in "Waits for you" before its rows: that m2b has not looked, what it could not read,
+ * and what it said to a press that wrote nothing, which is said where it was pressed.
  */
-export type GivenLine = { text: string; tone: 'plain' | 'quiet' | 'error'; topic?: { name: string; index: number } }
-
-function plain(text: string): GivenLine {
-  return { text, tone: 'plain' }
-}
-
-/** What m2b gave this session, as lines: its topics, and the distillate at its start and now. */
-export function givenLines(given: BandSession | null): GivenLine[] {
-  if (given === null) {
-    return [{ text: NOT_LOOKED, tone: 'quiet' }]
-  }
-  if (given.error !== null) {
-    return [{ text: `m2b could not look up what it gave this session: ${plainLine(given.error)}`, tone: 'error' }]
-  }
-  const printed = given.atStart === null ? undefined : (PRINTED.get(given.atStart) ?? `The distillate at the start: ${plainLine(given.atStart)}`)
+function waitsNotes(model: SessionModel): Line[] {
+  const { snapshot, rowNotice } = model
+  const storeError = proposalsError(model)
   return [
-    ...(given.known ? (given.topics.length === 0 ? [plain(NO_TOPIC)] : []) : [{ text: NOT_KNOWN, tone: 'quiet' } as const]),
-    ...given.topics.map((topic, index) => ({ ...plain(topicLine(topic)), topic: { name: topic.name, index } })),
-    ...(printed === undefined ? [] : [plain(printed)]),
-    ...(given.offUnder === null
-      ? []
-      : [plain(`The distillate is off under ${wholePath(given.offUnder)}: a session that starts there gets none.`), plain(KEEPS)]),
+    ...(snapshot === null ? [line(NOT_LOOKED, 'quiet')] : []),
+    ...(snapshot?.error ? [line(plainLine(snapshot.error), 'trouble')] : []),
+    ...(storeError === null ? [] : [line(couldNotLookLine(storeError), 'trouble')]),
+    ...(rowNotice === null ? [] : [line(plainLine(rowNotice), 'trouble')]),
   ]
 }
 
-/** What the session did itself, below what it was given: why a press on the folder's button wrote nothing, and its notes. */
-export function ownLines(notes: number, notice: string | null): GivenLine[] {
-  return [
-    ...(notice === null ? [] : [{ text: plainLine(notice), tone: 'error' } as const]),
-    ...(notes > 0 ? [plain(`${count(notes, 'note', 'notes')} written in this session`)] : []),
-  ]
+function waitsNothing(model: SessionModel): boolean {
+  const { snapshot, proposals } = model
+  return snapshot !== null && snapshot.error === null && proposalsError(model) === null && waitCount(snapshot, proposals) === 0
 }
 
 /**
@@ -152,83 +159,134 @@ export function dueLine(task: BandDueTask): string {
   return `${task.overdue ? 'overdue' : 'due today'}: ${plainLine(task.title)}`
 }
 
-function proposalsError(model: SessionModel): string | null {
-  return errorBesideTasks(model.snapshot?.error ?? null, model.proposals)
-}
-
-function waitsNothing(model: SessionModel): boolean {
-  const { snapshot, proposals } = model
-  return (
-    snapshot !== null &&
-    snapshot.error === null &&
-    snapshot.candidates.length === 0 &&
-    snapshot.review === null &&
-    (proposals?.waiting.length ?? 0) === 0 &&
-    proposalsError(model) === null
-  )
-}
-
-/** What the third part says in place of tasks, or null where it lists them. */
-function noDueLine(snapshot: BandSnapshot | null): string | null {
-  if (snapshot === null) {
-    return NOT_LOOKED
-  }
-  if (snapshot.error !== null) {
-    return TASKS_NOT_READ
-  }
+/**
+ * What "Today" says in place of tasks, or null where it lists them. The part is left out where
+ * m2b has not looked or could not read the tasks: "Waits for you" says that once.
+ */
+function noDueLine(snapshot: BandSnapshot): string | null {
   if (snapshot.due === undefined) {
     return DUE_NOT_SHOWN
   }
   return snapshot.due.length === 0 ? NOTHING_DUE : null
 }
 
+function hasToday(snapshot: BandSnapshot | null): snapshot is BandSnapshot {
+  return snapshot !== null && snapshot.error === null
+}
+
+/** `3 facts, 1 current`, or null where the topic's block was not counted or holds none of either. */
+function topicCounts(topic: SessionTopic): string | null {
+  const held = [
+    ...(topic.facts === null || topic.facts === 0 ? [] : [count(topic.facts, 'fact', 'facts')]),
+    ...(topic.current === null || topic.current === 0 ? [] : [`${topic.current} current`]),
+  ]
+  return held.length === 0 ? null : held.join(', ')
+}
+
+/** What "This session" says before its topics: that m2b could not look, or holds no note of the session. */
+function givenNotes(given: BandSession): Line[] {
+  if (given.error !== null) {
+    return [line(`m2b could not look up what it gave this session: ${plainLine(given.error)}`, 'trouble')]
+  }
+  return given.known ? [] : [line(NOT_KNOWN, 'quiet')]
+}
+
+function printedLine(given: BandSession): string | null {
+  if (given.atStart === null) {
+    return null
+  }
+  return PRINTED.get(given.atStart) ?? `The distillate at the start: ${plainLine(given.atStart)}`
+}
+
 /**
- * The start view as lines of text, for a surface that cannot show the pane: what waits is named
- * with the command that shows it, since a line has no button.
+ * Whether m2b is on in the session's folder, and the folder a press acts on: the session's own
+ * where m2b is on, the one it is off under where it is off, which may lie above the session's.
+ */
+type FolderState = { isOn: boolean; folder: string }
+
+/** Null where m2b could not look, or named no folder: a look that failed names neither. */
+function folderState(given: BandSession): FolderState | null {
+  const folder = given.offUnder ?? given.folder ?? null
+  return folder === null ? null : { isOn: given.offUnder === null, folder }
+}
+
+/**
+ * That the session gets no more topics, said only where m2b is off and knows what the session was
+ * given: beside "holds no note of what it gave", "keeps what it was given" reads as its opposite.
+ */
+function keepsLine(given: BandSession): string | null {
+  return given.offUnder !== null && given.error === null && given.known ? KEEPS : null
+}
+
+function notesLine(notes: number): string | null {
+  return notes > 0 ? `${count(notes, 'note', 'notes')} written in this session` : null
+}
+
+/** How m2b itself stands, as lines: what is wrong first, then an older m2b in this session, then the line about curation, which steps back. */
+function healthLines(model: SessionModel): Line[] {
+  const { health, versionLine } = model
+  return [
+    ...(health?.troubles ?? []).map(trouble => line(plainLine(trouble), 'trouble')),
+    ...(versionLine === null ? [] : [line(plainLine(versionLine), 'waits')]),
+    ...(health?.curation ? [line(plainLine(health.curation), 'quiet')] : []),
+  ]
+}
+
+function present<T>(value: T | null | false): value is T {
+  return value !== null && value !== false
+}
+
+/**
+ * The overview as lines of text, for a surface that cannot show the pane: the same parts in the
+ * same order and words. What waits is named with the command that shows it, since a line has no
+ * button.
  */
 export function sessionLines(model: SessionModel): string[] {
   const { snapshot, proposals } = model
   const waiting = proposals?.waiting.length ?? 0
-  const storeError = proposalsError(model)
   const waits = [
-    ...(snapshot === null ? [NOT_LOOKED] : []),
-    ...(snapshot?.error ? [plainLine(snapshot.error)] : []),
-    ...(storeError === null ? [] : [couldNotLookLine(storeError)]),
+    ...waitsNotes(model).map(one => one.text),
     ...(waiting > 0 ? [`${countLine(waiting)}: /m2b-proposals`] : []),
     ...(snapshot?.candidates ?? []).map(candidate => plainLine(candidate.title)),
-    ...(snapshot?.review ? [`${plainLine(snapshot.review.title)}: /m2b-review`] : []),
+    ...(snapshot?.review ? [`${[REVIEW, changesSummary(snapshot.review)].filter(present).join(', ')}: /m2b-review`] : []),
     ...(waitsNothing(model) ? [NOTHING_WAITS] : []),
   ]
-  const nothingDue = noDueLine(snapshot)
-  const due = nothingDue === null ? dueFirst(snapshot?.due ?? []).map(dueLine) : [nothingDue]
-  const indented = (lines: string[]): string[] => lines.map(line => `  ${line}`)
-  return [
-    IN_THIS_SESSION,
-    ...indented([...givenLines(model.given), ...ownLines(model.notes, model.notice)].map(line => line.text)),
-    WAITS_FOR_YOU,
-    ...indented(waits),
-    TODAY,
-    ...indented(due),
+  const instead = hasToday(snapshot) ? noDueLine(snapshot) : null
+  const today = !hasToday(snapshot) ? null : instead === null ? dueFirst(snapshot.due ?? []).map(dueLine) : [instead]
+  const health = healthLines(model).map(one => one.text)
+  const parts: [string, string[] | null][] = [
+    [WAITS_FOR_YOU, waits],
+    [TODAY, today],
+    [THIS_SESSION, sessionTexts(model)],
+    [M2B_ITSELF, health.length === 0 ? null : health],
   ]
+  return parts.flatMap(([title, lines]) => (lines === null ? [] : [title, ...lines.map(one => `  ${one}`)]))
 }
 
-function sessionGlance(given: BandSession | null): string {
+/** The lines of "This session", null where the part is left out: m2b has looked at nothing yet, which the first part says, or has nothing to say of the session. */
+function sessionTexts(model: SessionModel): string[] | null {
+  const { given, snapshot } = model
   if (given === null) {
-    return NOT_LOOKED
+    return snapshot === null ? null : [NOT_LOOKED]
   }
-  if (given.error !== null) {
-    return SESSION_NOT_READ
-  }
-  if (!given.known) {
-    return NO_NOTE
-  }
-  return given.topics.length === 0 ? NO_TOPIC : `${count(given.topics.length, 'topic', 'topics')} in this session`
+  const folder = folderState(given)
+  const lines = [
+    ...givenNotes(given).map(one => one.text),
+    ...given.topics.map(topic => [plainLine(topic.name), topicCounts(topic)].filter(present).join(': ')),
+    printedLine(given),
+    folder === null ? null : folder.isOn ? `${ON_HERE.slice(0, -1)}: ${wholePath(folder.folder)}` : `m2b is off under ${wholePath(folder.folder)}`,
+    keepsLine(given),
+    model.folderNotice === null ? null : plainLine(model.folderNotice),
+    notesLine(model.notes),
+  ].filter(present)
+  // A session m2b knows and has nothing to say of: no part, as in the pane.
+  return lines.length === 0 ? null : lines
 }
 
-function waitsGlance(model: SessionModel): string | null {
+function waitsGlance(model: SessionModel): string {
   const { snapshot, proposals } = model
   if (snapshot === null) {
-    return null
+    return NOT_LOOKED
   }
   if (snapshot.error !== null) {
     return TASKS_NOT_READ
@@ -237,36 +295,43 @@ function waitsGlance(model: SessionModel): string | null {
   if (storeError !== null) {
     return couldNotLookLine(storeError)
   }
-  const waits = snapshot.candidates.length + (proposals?.waiting.length ?? 0) + (snapshot.review === null ? 0 : 1)
+  const waits = waitCount(snapshot, proposals)
   return waits === 0 ? NOTHING_WAITS : waitForYou(waits)
 }
 
 function dueGlance(snapshot: BandSnapshot | null): string | null {
-  const counts = dueCounts(snapshot?.due ?? []).map(count => count.text)
+  const counts = dueCounts(snapshot?.due ?? []).map(one => one.text)
   return counts.length === 0 ? null : counts.join(', ')
 }
 
+function sessionGlance(given: BandSession | null, snapshot: BandSnapshot | null): string | null {
+  if (given === null) {
+    return snapshot === null ? null : NOT_LOOKED
+  }
+  if (given.error !== null) {
+    return SESSION_NOT_READ
+  }
+  if (!given.known) {
+    return NO_NOTE
+  }
+  return given.topics.length === 0 ? null : `${topicsCount(given.topics.length)} in this session`
+}
+
 /**
- * The pane as counts, for the small form the desktop app gives a minimized pane: how many topics
- * this session was given, how many things wait, how many tasks are due. What could not be looked
- * at is said in place of its count.
+ * The pane as counts, for the small form the desktop app gives a minimized pane, in the order of
+ * the overview: how many things wait, how many tasks are due, how many topics this session was
+ * given. What could not be looked at is said in place of its count, and a count of none is not
+ * said, except that nothing waits.
  */
 export function glanceLines(model: SessionModel): string[] {
-  return [sessionGlance(model.given), waitsGlance(model), dueGlance(model.snapshot)].filter(
-    (line): line is string => line !== null,
-  )
+  return [waitsGlance(model), dueGlance(model.snapshot), sessionGlance(model.given, model.snapshot)].filter(present)
 }
 
 /** The small form's drawing: lines to read at a glance and no button, since a click may not reach it. */
 export function glancePane($: EngineInterface, e: ResolveInput, model: SessionModel) {
-  const { Box, Text } = $.ui.resolve(e)
-  return (
-    <Box flexDirection="column">
-      {glanceLines(model).map(line => (
-        <Text wrap="wrap">{line}</Text>
-      ))}
-    </Box>
-  )
+  const ui = $.ui.resolve(e)
+  const { Box } = ui
+  return <Box flexDirection="column">{glanceLines(model).map(one => said(ui, one))}</Box>
 }
 
 function topicKey(index: number): string {
@@ -274,124 +339,145 @@ function topicKey(index: number): string {
 }
 
 /**
- * The key of `show` on the row of the topic `name`, null where the start view draws no such row.
- * The pane's other views draw no button under it.
+ * The key of the button of the topic `name`, null where the overview draws none for it. The
+ * pane's other views draw no button under it.
  */
 export function topicShowKey(model: SessionModel, name: string): string | null {
-  const line = givenLines(model.given).find(one => one.topic?.name === name)
-  return line?.topic === undefined ? null : topicKey(line.topic.index)
+  const index = model.given === null || model.given.error !== null ? -1 : model.given.topics.findIndex(topic => topic.name === name)
+  return index === -1 ? null : topicKey(index)
+}
+
+/** "Waits for you": the proposals as a count that names their tab, every candidate and question, and the review, each with its buttons. */
+function waitsPart($: EngineInterface, e: ResolveInput, model: SessionModel, actions: SessionActions, columns: number) {
+  const ui = $.ui.resolve(e)
+  const { snapshot, proposals, presses } = model
+  const waiting = proposals?.waiting.length ?? 0
+  const review = snapshot?.review ?? null
+  const waits = waitCount(snapshot, proposals)
+  return part(ui, { key: 'waits', title: WAITS_FOR_YOU, waits: waits > 0, count: waits > 0 ? String(waits) : null, columns }, [
+    ...waitsNotes(model).map(one => said(ui, one.text, one.tone)),
+    waiting > 0 && row(ui, { key: 'row:proposals', text: countLine(waiting), buttons: [], detail: IN_PROPOSALS }),
+    ...(snapshot?.candidates ?? []).map(candidate => candidateRow($, e, candidate, presses[candidate.id], actions)),
+    review !== null && reviewRow($, e, review, presses[review.id], actions),
+    review !== null && said(ui, WHOLE_REVIEW, 'quiet'),
+    waitsNothing(model) && said(ui, NOTHING_WAITS, 'quiet'),
+  ])
+}
+
+/** "Today": the tasks due, each with when it is due in its color, whatever the band shows of them. */
+function todayPart($: EngineInterface, e: ResolveInput, snapshot: BandSnapshot | null, columns: number) {
+  if (!hasToday(snapshot)) {
+    return null
+  }
+  const ui = $.ui.resolve(e)
+  const instead = noDueLine(snapshot)
+  return part(
+    ui,
+    { key: 'today', title: TODAY, waits: false, columns },
+    instead === null ? dueFirst(snapshot.due ?? []).map(task => taskLine(ui, task, 'wrap')) : [said(ui, instead, 'quiet')],
+  )
 }
 
 /**
- * The button for the session's folder: where the distillate is on, it leaves m2b out of the folder
- * m2b looked at for this session; where it is off, it turns the distillate on again for the folder
- * it is off under, which may lie above the session's. Like keep and drop it waits for undo, and
- * while it writes the row offers nothing. No row where m2b could not look, or named no folder.
+ * m2b in the session's folder: on or off, the folder a press acts on, drawn whole, and the button
+ * that turns it off there or on again. Like keep and drop the press waits for undo, and while it
+ * writes the row offers nothing. No row where m2b could not look, or named no folder.
  */
 function folderRow(
   $: EngineInterface,
   e: ResolveInput,
-  given: BandSession | null,
+  given: BandSession,
   pressed: BandPress | undefined,
   actions: SessionActions,
 ) {
-  // A look that failed names neither folder.
-  const folder = given === null ? null : (given.offUnder ?? given.folder ?? null)
-  if (given === null || folder === null) {
+  const state = folderState(given)
+  if (state === null) {
     return null
   }
-  const { Box, Button, Text } = $.ui.resolve(e)
-  // The press hands the folder on as m2b named it, so it is drawn whole: a character the drawing
-  // left out or merged would name another folder than the one that is read.
-  const shown = wholePath(folder)
-  if (pressed !== undefined) {
-    const line = pressed.action === 'on' ? ` turning the distillate on under ${shown}` : ` leaving m2b out of ${shown}`
-    return pressed.phase === 'waiting' ? (
-      <Box key="row:folder" flexDirection="row">
-        <Button key={UNDO_FOLDER} label="undo" onPress={actions.undoFolder} />
-        <Text dimColor wrap="wrap">
-          {line}
-        </Text>
-      </Box>
-    ) : (
-      <Text key="row:folder" dimColor wrap="wrap">
-        {line}
-      </Text>
-    )
-  }
-  const change: FolderSwitch = given.offUnder === null ? 'off' : 'on'
+  const ui = $.ui.resolve(e)
+  const { Box } = ui
+  const { isOn, folder } = state
+  const change: FolderSwitch = isOn ? 'off' : 'on'
+  const doing = `turning m2b ${pressed?.action === 'on' ? 'on' : 'off'} here`
   return (
-    <Box key="row:folder" flexDirection="row">
-      <Button
-        key={`folder:${change}`}
-        label={change === 'off' ? 'leave m2b out' : 'turn on'}
-        onPress={() => actions.switchFolder(change, folder)}
-      />
-      <Text wrap="wrap">{change === 'off' ? ` of ${shown}` : ` the distillate under ${shown} again`}</Text>
+    <Box key="row:folder" flexDirection="column">
+      {said(ui, isOn ? ON_HERE : OFF_HERE)}
+      {/* The press hands the folder on as m2b named it, so every character of it is drawn. */}
+      {pathLine(ui, folder)}
+      {pressed === undefined &&
+        button(ui, {
+          key: `folder:${change}`,
+          label: isOn ? 'turn off here' : 'turn on here',
+          kind: isOn ? 'quiet' : 'default',
+          onPress: () => actions.switchFolder(change, folder),
+        })}
+      {pressed?.phase === 'waiting' && (
+        <Box flexDirection="row" columnGap={1}>
+          {button(ui, { key: UNDO_FOLDER, label: 'undo', kind: 'default', onPress: actions.undoFolder })}
+          {said(ui, doing, 'quiet')}
+        </Box>
+      )}
+      {pressed?.phase === 'writing' && said(ui, `${doing}…`, 'quiet')}
     </Box>
   )
 }
 
-/** The start view's drawing. Every line wraps: docked beside the chat, the pane can be 24 columns wide. */
-export function sessionPane($: EngineInterface, e: ResolveInput, model: SessionModel, actions: SessionActions) {
-  const { Box, Button, Text } = $.ui.resolve(e)
-  const { given, snapshot, proposals, presses } = model
-  const heading = (text: string) => (
-    <Text weight="semibold" wrap="wrap">
-      {text}
-    </Text>
+/** "This session": the topics m2b gave it, each a button to its lines, how its start printed the distillate, m2b in its folder, and its notes. */
+function sessionPart($: EngineInterface, e: ResolveInput, model: SessionModel, actions: SessionActions, columns: number) {
+  const { given, snapshot } = model
+  const ui = $.ui.resolve(e)
+  const { Box } = ui
+  const spec = { key: 'session', title: THIS_SESSION, waits: false, columns }
+  if (given === null) {
+    return snapshot === null ? null : part(ui, spec, [said(ui, NOT_LOOKED, 'quiet')])
+  }
+  const printed = printedLine(given)
+  const keeps = keepsLine(given)
+  const notes = notesLine(model.notes)
+  const body = [
+    ...givenNotes(given).map(one => said(ui, one.text, one.tone)),
+    ...given.topics.map((topic, index) => {
+      const counts = topicCounts(topic)
+      return (
+        <Box key={`row:topic:${index}`} flexDirection="row" columnGap={1}>
+          {button(ui, { key: topicKey(index), label: topicLabel(topic.name), kind: 'default', onPress: () => actions.showTopic(topic.name) })}
+          {counts !== null && said(ui, counts, 'quiet')}
+        </Box>
+      )
+    }),
+    printed !== null && said(ui, printed),
+    folderRow($, e, given, model.presses[FOLDER_PRESS], actions),
+    keeps !== null && said(ui, keeps, 'quiet'),
+    model.folderNotice !== null && said(ui, plainLine(model.folderNotice), 'trouble'),
+    notes !== null && said(ui, notes),
+  ].filter(present)
+  // A title with nothing below it says nothing: a session m2b knows and has nothing to say of gets no part.
+  return body.length === 0 ? null : part(ui, spec, body)
+}
+
+/** "m2b": what is wrong with m2b, each with its reason, and the line about curation, which is all the part holds while all is well. Left out where there is nothing to say. */
+function healthPart($: EngineInterface, e: ResolveInput, model: SessionModel, columns: number) {
+  const lines = healthLines(model)
+  if (lines.length === 0) {
+    return null
+  }
+  const ui = $.ui.resolve(e)
+  return part(
+    ui,
+    { key: 'm2b', title: M2B_ITSELF, waits: false, columns },
+    lines.map(one => said(ui, one.text, one.tone)),
   )
-  const quiet = (text: string) => (
-    <Text dimColor wrap="wrap">
-      {text}
-    </Text>
-  )
-  const failure = (text: string) => (
-    <Text color="error" wrap="wrap">
-      {text}
-    </Text>
-  )
-  // A topic's line has `show` before it, which turns the pane to the topic's lines.
-  const row = ({ text, tone, topic }: GivenLine) =>
-    topic !== undefined ? (
-      <Box key={`row:topic:${topic.index}`} flexDirection="row">
-        <Button key={topicKey(topic.index)} label="show" onPress={() => actions.showTopic(topic.name)} />
-        <Text wrap="wrap"> {text}</Text>
-      </Box>
-    ) : tone === 'error' ? (
-      failure(text)
-    ) : tone === 'quiet' ? (
-      quiet(text)
-    ) : (
-      <Text wrap="wrap">{text}</Text>
-    )
-  const review = snapshot?.review ?? null
-  const waiting = proposals?.waiting.length ?? 0
-  const storeError = proposalsError(model)
-  const nothingDue = noDueLine(snapshot)
+}
+
+/** The overview's drawing. `columns` is the width of the pane's body: docked beside the chat it can be 24. */
+export function sessionPane($: EngineInterface, e: ResolveInput, model: SessionModel, actions: SessionActions, columns: number) {
+  const { Box } = $.ui.resolve(e)
   return (
     <Box flexDirection="column">
-      {heading(IN_THIS_SESSION)}
-      {givenLines(given).map(row)}
-      {folderRow($, e, given, presses[FOLDER_PRESS], actions)}
-      {ownLines(model.notes, model.notice).map(row)}
-      {heading(WAITS_FOR_YOU)}
-      {snapshot === null && quiet(NOT_LOOKED)}
-      {snapshot?.error ? failure(plainLine(snapshot.error)) : null}
-      {storeError !== null && failure(couldNotLookLine(storeError))}
-      {waiting > 0 && <Text wrap="wrap">{`${countLine(waiting)}, ${IN_PROPOSALS}`}</Text>}
-      {(snapshot?.candidates ?? []).map(candidate => candidateRow($, e, candidate, presses[candidate.id], actions, 'wrap'))}
-      {review !== null && reviewRow($, e, review, presses[review.id], actions, 'wrap')}
-      {review !== null && (
-        <Text dimColor wrap="wrap">
-          {WHOLE_REVIEW}
-        </Text>
-      )}
-      {waitsNothing(model) && quiet(NOTHING_WAITS)}
-      {heading(TODAY)}
-      {nothingDue === null
-        ? dueFirst(snapshot?.due ?? []).map(task => <Text wrap="wrap">{dueLine(task)}</Text>)
-        : quiet(nothingDue)}
+      {waitsPart($, e, model, actions, columns)}
+      {todayPart($, e, model.snapshot, columns)}
+      {sessionPart($, e, model, actions, columns)}
+      {healthPart($, e, model, columns)}
     </Box>
   )
 }

@@ -7,7 +7,22 @@ import type { Shown, TabId } from '../../hooks/pane-tabs'
 import { topicShowKey } from '../../hooks/session-view'
 import type { SessionModel } from '../../hooks/session-view'
 import type { BandSession } from '../../types'
-import { FakeM2b, SESSION_ID, inView, ok, pane, pressTab, shownTab, shownTabs, start, texts, viewButtons } from './harness'
+import {
+  FakeM2b,
+  SESSION_ID,
+  buttonsAt,
+  inView,
+  lookOf,
+  ok,
+  pane,
+  partLines,
+  pressTab,
+  shownTab,
+  shownTabs,
+  start,
+  texts,
+  viewButtons,
+} from './harness'
 import type { ShownTab } from './harness'
 
 const PANE = 'm2b'
@@ -16,7 +31,7 @@ const DANA = 'a1a1a1a1a1a1'
 const LADDER = 'b2b2b2b2b2b2'
 const SHED = 'c3c3c3c3c3c3'
 const KIM = "Kim Lee leads Northwind's IT"
-/** A topic's name of 25 characters, and the 20 its tab shows of it. */
+/** A topic's name of 25 characters, and the 20 its tab and its button show of it. */
 const LONG_NAME = 'Riverside Community Choir'
 const LONG_NAME_CUT = 'Riverside Community…'
 const LIST = ['settings', '--json']
@@ -43,7 +58,7 @@ const SHOWN: Readonly<Record<View, Shown>> = {
 const ASIDE: Readonly<Partial<Record<View, string>>> = { topic: 'Northwind', search: 'Search' }
 /** A line each view draws and no other does. */
 const SAYS: Readonly<Record<View, string>> = {
-  overview: 'In this session',
+  overview: 'Waits for you',
   proposals: 'said on 2026-03-12: "Dana runs IT at Northwind"',
   review: 'lint: broken link in a.md',
   settings: 'Curation paused: off',
@@ -160,7 +175,7 @@ test('above the view the pane starts in stand Overview, Proposals with the numbe
   ])
   // The row is the first thing drawn: the view stands below it.
   expect((await ui.findAll({ type: 'Text' }))[0]?.text).toBe('Overview')
-  expect((await texts(ui))[0]).toBe('In this session')
+  expect((await texts(ui))[0]).toBe('Waits for you')
   await ui.unmount()
 })
 
@@ -274,6 +289,8 @@ test("a topic's lines stand under a fifth tab with the topic's name, cut to 20 c
 
   for (const [at, label] of ['Northwind', LONG_NAME_CUT, 'Northwind Trading Co', 'Acme Ltd'].entries()) {
     await arrive($, clock, ui, 'overview')
+    // The topic's button on the overview is labelled as its tab will be.
+    expect((await ui.find({ key: `topic:${at}` }))?.props['label']).toBe(label)
     await ui.press({ key: `topic:${at}` })
     expect(await shownTabs(ui)).toEqual(rowAbove('aside', label))
   }
@@ -307,8 +324,8 @@ test('the fifth tab stands there only while its view is shown: a press on any of
   await ui.unmount()
 })
 
-test('no view has a button labelled back or settings, and show stands only beside a topic on the start view', async ($, on) => {
-  // Covers: B204
+test("no view has a button labelled back, settings or show: a topic's button on the overview is labelled with the topic's name", async ($, on) => {
+  // Covers: B204, B190
   const { clock } = await start($, on, fullFake())
   const ui = await mounted($)
 
@@ -319,8 +336,16 @@ test('no view has a button labelled back or settings, and show stands only besid
 
     expect(labels).not.toContain('back')
     expect(labels).not.toContain('settings')
-    const shows = drawn.filter(button => button.props['label'] === 'show').map(button => button.key)
-    expect(shows).toEqual(view === 'overview' ? ['topic:0', 'topic:1'] : [])
+    expect(labels).not.toContain('show')
+    const topics = drawn.filter(button => (button.key ?? '').startsWith('topic:')).map(button => [button.key, button.props['label']])
+    expect(topics).toEqual(
+      view === 'overview'
+        ? [
+            ['topic:0', 'Northwind'],
+            ['topic:1', LONG_NAME_CUT],
+          ]
+        : [],
+    )
     // Whatever its label, no button is keyed as one that leads back or shows another view.
     expect((await everyButton(ui)).filter(key => key === 'back' || key.startsWith('show:'))).toEqual([])
   }
@@ -332,15 +357,16 @@ test('the start view says under which tab the proposals and the whole review are
   await start($, on, fullFake())
   const ui = await mounted($)
 
-  const waits = await texts(ui)
-  const lines = waits.slice(waits.indexOf('Waits for you') + 1, waits.indexOf('Today'))
+  const lines = (await partLines(ui, 'waits')) ?? []
 
-  expect(lines[0]).toBe('3 proposals from your sessions, in the tab Proposals')
+  expect(lines.slice(0, 2)).toEqual(['3 proposals from your sessions', 'in the tab Proposals'])
   expect(lines.at(-1)).toBe('The whole review is in the tab Review.')
-  // The line about the review is one that may be skipped: the review's own row stands above it.
-  const [review] = await ui.findAll({ type: 'Text', text: 'The whole review is in the tab Review.' })
-  expect(review?.props['dimColor']).toBe(true)
-  expect(await viewButtons(ui)).toEqual(['topic:0', 'topic:1', 'keep:c1', 'drop:c1', 'keep:q1', 'drop:q1', 'ok:r1'])
+  expect(await buttonsAt(ui, 'row:proposals')).toEqual([])
+  // Both may be skipped: the count stands above the one, the review's own row above the other.
+  for (const line of ['in the tab Proposals', 'The whole review is in the tab Review.']) {
+    expect((await lookOf(ui, line))?.dimColor).toBe(true)
+  }
+  expect(await viewButtons(ui)).toEqual(['keep:c1', 'drop:c1', 'keep:q1', 'drop:q1', 'ok:r1', 'topic:0', 'topic:1'])
   await ui.unmount()
 })
 
@@ -486,7 +512,7 @@ test('for every view left and every tab pressed, the key the focus is asked for 
   await ui.unmount()
 })
 
-test('after show beside a topic the focus is asked for Overview above the lines, which the start view did not draw', async ($, on) => {
+test("after a press on a topic's button the focus is asked for Overview above the lines, which the start view did not draw", async ($, on) => {
   // Covers: B201
   const { clock } = await start($, on, fullFake())
   const ui = await mounted($)
@@ -518,10 +544,21 @@ const GIVEN_TWO: BandSession = {
 
 /** What the start view draws from, with what a test sets and nothing else. */
 function modelWith(parts: Partial<SessionModel>): SessionModel {
-  return { given: null, notes: 0, notice: null, snapshot: null, proposals: null, presses: {}, ...parts }
+  return {
+    given: null,
+    notes: 0,
+    rowNotice: null,
+    folderNotice: null,
+    snapshot: null,
+    proposals: null,
+    presses: {},
+    health: null,
+    versionLine: null,
+    ...parts,
+  }
 }
 
-test('a topic left for the overview has the key of show on its row, by its place among the topics, and none where the start view draws no such row', () => {
+test('a topic left for the overview has the key of its button there, by its place among the topics, and none where the start view draws no such row', () => {
   // Covers: B201
   const full = modelWith({ given: GIVEN_TWO })
 
@@ -536,7 +573,7 @@ test('a topic left for the overview has the key of show on its row, by its place
   expect(tabKeyAfterTurn('aside', 'overview')).toBe('tab:proposals:in:overview')
 })
 
-test("a topic left by Overview gets show on its row before the tabs' rule; left by another tab, or with no such row, the tabs' rule holds", () => {
+test("a topic left by Overview gets its own button before the tabs' rule; left by another tab, or with no such row, the tabs' rule holds", () => {
   // Covers: B201
   const full = modelWith({ given: GIVEN_TWO })
   const acme = { kind: 'topic', name: 'Acme Ltd', press: 'p1', isRead: true } as const
@@ -549,7 +586,7 @@ test("a topic left by Overview gets show on its row before the tabs' rule; left 
   expect(focusKeyAfterTab(null, 'settings', full)).toBe('tab:overview:in:settings')
 })
 
-test("show on the row of the topic that was left is a button of the start view and was none above the topic's lines", async ($, on) => {
+test("the button of the topic that was left is a button of the start view and was none above the topic's lines", async ($, on) => {
   // Covers: B201
   const { clock } = await start($, on, fullFake())
   const ui = await mounted($)
@@ -586,7 +623,7 @@ test('where the start view no longer draws the row of the topic that was left, t
 
   await pressTab(ui, 'overview')
 
-  expect(await texts(ui)).toContain('No topic was given.')
+  expect(await partLines(ui, 'session')).toEqual(['The distillate was printed whole at the start.'])
   expect(await viewButtons(ui)).not.toContain('topic:0')
   const key = tabKeyAfterTurn('aside', 'overview')
   expect((await shownTabs(ui)).map(tab => tab.key)).toContain(key)

@@ -14,7 +14,9 @@ import {
   OPEN,
   bandPieces,
   everyText,
+  lookOf,
   pane,
+  partLines,
   pressTab,
   rowSaying,
   sentenceOfM2b,
@@ -35,7 +37,7 @@ const WIDE = { columns: 160, rows: 50, isFullscreen: true }
 const NARROW = { columns: 120, rows: 50, isFullscreen: true }
 const MAIN_SCREEN = { columns: 160, rows: 50, isFullscreen: false }
 const NO_SURFACE = 'no-surface: no surface is attached'
-const OLDER_BAND = 'this session runs the band of m2b 0.3.0 while m2b 0.4.0 is installed: run /reload-plugins'
+const OLDER_M2B = 'This session runs m2b 0.3.0 and m2b 0.4.0 is installed: run /reload-plugins.'
 /** What the band of `busyFake` says on a machine without an entry for the band: what waits, and the tasks due as counts. */
 const COUNTS = '4 wait for you  1 overdue  1 due today'
 const ROW = rowSaying(COUNTS)
@@ -109,7 +111,7 @@ function fullFake(): FakeM2b {
 }
 
 function model(fields: Partial<BandModel> = {}): BandModel {
-  return { snapshot: null, proposals: null, notice: null, proposalsNotice: null, versionLine: null, topics: 0, ...fields }
+  return { snapshot: null, proposals: null, notice: null, topics: 0, ...fields }
 }
 
 test('with nothing waiting, no task due and nothing wrong the band draws nothing of its own, whatever the session was given', async ($, on) => {
@@ -263,14 +265,19 @@ test('fullscreen, wide: the band is the same row before the pane is docked and b
 
   expect(await shownBand(band)).toEqual(ROW)
   // Nothing stands only in the band: every row and its buttons are in the pane.
-  const inPane = await texts(beside)
-  expect(inPane).toContain('Northwind: 3 facts, 1 current')
-  expect(inPane).toContain('Remember? Dana prefers tea')
-  expect(inPane).toContain('Still current? Planning the trip to Porto')
-  expect(inPane).toContain('1 proposal from your sessions, in the tab Proposals')
-  expect(inPane).toContain('m2b: review')
-  expect(inPane).toContain('due today: Send the offer to Acme')
-  expect(inPane).toContain('overdue: Call the plumber')
+  expect(await partLines(beside, 'waits')).toEqual([
+    '1 proposal from your sessions',
+    'in the tab Proposals',
+    'Remember? Dana prefers tea',
+    '[keep] [drop]',
+    'Still current? Planning the trip to Porto',
+    '[keep] [drop]',
+    'Review of the last curation run',
+    '[ok]',
+    'The whole review is in the tab Review.',
+  ])
+  expect(await partLines(beside, 'today')).toEqual(['due today Send the offer to Acme', 'overdue Call the plumber'])
+  expect(await partLines(beside, 'session')).toContain('[Northwind] 3 facts, 1 current')
   for (const key of ['keep:c1', 'drop:c1', 'keep:q1', 'drop:q1', 'ok:r1', tabKey('proposals', 'overview'), tabKey('review', 'overview')]) {
     expect(await beside.find({ key })).toBeDefined()
     expect(await band.find({ key })).toBeUndefined()
@@ -291,7 +298,7 @@ test('with nothing to answer, a task due is all the row counts, beside the docke
   const beside = await drawPane($, clock)
 
   expect(await shownBand(band)).toEqual(rowSaying('1 due today'))
-  expect(await texts(beside)).toContain('due today: Send the offer to Acme')
+  expect(await partLines(beside, 'today')).toEqual(['due today Send the offer to Acme'])
   await beside.unmount()
   await band.unmount()
 })
@@ -305,10 +312,10 @@ for (const columns of [24, 40]) {
     const beside = await drawPane($, clock, 'dock', columns)
 
     expect(await shownBand(band)).toEqual(ROW)
-    const inPane = await texts(beside)
-    expect(inPane).toContain('Northwind: 3 facts, 1 current')
-    expect(inPane).toContain('Acme Ltd: 1 fact')
-    // A topic's lines come on a press, never into a pane this narrow by themselves.
+    const inPane = await partLines(beside, 'session')
+    // A topic's lines come on a press of its name, never into a pane this narrow by themselves.
+    expect(inPane).toContain('[Northwind] 3 facts, 1 current')
+    expect(inPane).toContain('[Acme Ltd] 1 fact')
     expect(await beside.find({ key: 'topic:0' })).toBeDefined()
     await beside.unmount()
     await band.unmount()
@@ -347,26 +354,27 @@ test('proposals that could not be looked at are the row as one sentence, in plac
   await band.unmount()
 })
 
-test('that this session runs an older band is the row, as one sentence after m2b, beside the docked pane too', async ($, on) => {
-  // Covers: B191
+test('that this session runs an older m2b is said in the pane, in the part about m2b, and the band keeps counting', async ($, on) => {
+  // Covers: B96, B191
   const fake = busyFake()
   fake.version = '0.4.0'
   const { clock } = await start($, on, fake)
   const band = await drawBand($, clock)
-  expect(await shownBand(band)).toEqual(rowSaying(OLDER_BAND))
+  expect(await shownBand(band)).toEqual(ROW)
 
   const beside = await drawPane($, clock)
 
-  expect(await shownBand(band)).toEqual(rowSaying(OLDER_BAND))
-  expect(await bandPieces(band)).toEqual([{ text: OLDER_BAND, color: 'warning', dimColor: undefined }])
-  // The pane says nothing of it: the band is where it is said.
-  expect((await texts(beside)).join('\n')).not.toContain('/reload-plugins')
+  expect(await shownBand(band)).toEqual(ROW)
+  expect((await everyText(band)).join('\n')).not.toContain('/reload-plugins')
+  // Above the line about curation, and in the color of what waits: it asks for a command.
+  expect(await partLines(beside, 'm2b')).toEqual([OLDER_M2B, '2 in inbox · curated 18:02'])
+  expect(await lookOf(beside, OLDER_M2B)).toEqual({ color: 'warning', dimColor: undefined, wrap: 'wrap' })
   await beside.unmount()
   await band.unmount()
 })
 
-test('what a press in the pane could not write is the row as one sentence, until the next prompt', async ($, on) => {
-  // Covers: B191
+test('what a press in the pane could not write is said in the pane where it was pressed, until the next prompt, and the band keeps counting', async ($, on) => {
+  // Covers: B207, B191
   on('prompt.submit', (_, e) => ({ text: e.text, context: e.context }))
   const fake = busyFake()
   const { clock } = await start($, on, fake)
@@ -383,16 +391,19 @@ test('what a press in the pane could not write is the row as one sentence, until
   await clock.advance(UNDO_MS)
 
   const refused = 'Already settled in another session, nothing written: Remember? Dana prefers tea'
+  const counts = rowSaying('3 wait for you  1 overdue  1 due today')
   expect(fake.writes()).toEqual([])
-  expect(await shownBand(band)).toEqual(rowSaying(refused))
-  expect(await bandPieces(band)).toEqual([{ text: refused, color: 'error', dimColor: undefined }])
+  expect(await shownBand(band)).toEqual(counts)
+  expect((await partLines(beside, 'waits'))?.[0]).toBe(refused)
+  expect(await lookOf(beside, refused)).toEqual({ color: 'error', dimColor: undefined, wrap: 'wrap' })
   await $.prompt.submit({ text: 'go on', context: [], wait: false, origin: { kind: 'composer' } })
-  expect(await shownBand(band)).toEqual(rowSaying('3 wait for you  1 overdue  1 due today'))
+  expect(await shownBand(band)).toEqual(counts)
+  expect(await texts(beside)).not.toContain(refused)
   await beside.unmount()
   await band.unmount()
 })
 
-test('the row is a sentence where there is one: what a press could not write, then the older band, then what m2b could not read; else the counts', () => {
+test('the row is a sentence where there is one: why open showed no pane, then the task list m2b could not read, then the store; else the counts', () => {
   // Covers: B191
   const waits = {
     snapshot: {
@@ -418,18 +429,13 @@ test('the row is a sentence where there is one: what a press could not write, th
   )
   // Beside a task list that could not be read, the store is most often the same reason.
   expect(bandLine(model({ ...unread, ...noStore }))?.parts).toEqual([{ text: 'm2b could not read the tasks: no answer', tone: 'trouble' }])
-  const older = { versionLine: 'this session runs the band of m2b 0.3.0 while m2b 0.4.0 is installed: run /reload-plugins' }
-  expect(bandLine(model({ ...unread, ...older }))).toEqual(sentence(older.versionLine, 'waits', true))
-  expect(bandLine(model({ ...unread, ...older, proposalsNotice: 'not kept: answered already' }))).toEqual(
-    sentence('not kept: answered already', 'trouble', true),
-  )
-  expect(
-    bandLine(model({ ...unread, ...older, proposalsNotice: 'not kept: answered already', notice: 'Already settled' })),
-  ).toEqual(sentence('Already settled', 'trouble', true))
+  const notShown = 'the m2b pane cannot be shown here: no surface attached places panes; /m2b-pane answers with the lines'
+  expect(bandLine(model({ ...unread, ...noStore, notice: notShown }))).toEqual(sentence(notShown, 'trouble', true))
+  expect(bandLine(model({ ...waits, notice: notShown }))).toEqual(sentence(notShown, 'trouble', true))
   // One line, whatever a text from the store holds.
   expect(bandLine(model({ notice: 'first\nsecond\u001b[2J' }))?.parts).toEqual([{ text: 'first second', tone: 'trouble' }])
   // Only a sentence that begins with m2b's name as a word stands without it.
-  expect(bandLine(model({ notice: 'm2b could not keep "Remember? Dana prefers tea": read-only' }))?.isNamed).toBe(false)
+  expect(bandLine(model({ notice: 'm2b could not open its pane: the session is closing' }))?.isNamed).toBe(false)
   expect(bandLine(model({ notice: 'm2bis not m2b' }))?.isNamed).toBe(true)
 })
 
@@ -482,12 +488,12 @@ test('while the docked pane is turned to another view, and after the tab Overvie
 
   await pressTab(beside, 'review')
 
-  expect(await texts(beside)).not.toContain('In this session')
+  expect(await texts(beside)).not.toContain('Waits for you')
   expect(await shownBand(band)).toEqual(ROW)
 
   await pressTab(beside, 'overview')
   await clock.advance(1)
-  expect(await texts(beside)).toContain('In this session')
+  expect(await texts(beside)).toContain('Waits for you')
   expect(await shownBand(band)).toEqual(ROW)
   await beside.unmount()
   await band.unmount()
@@ -630,8 +636,8 @@ test('not fullscreen: open opens the pane as a dialog in the view it starts in, 
   expect(opened).toEqual([AS_A_DIALOG])
   const block = await drawPane($, clock, 'inline', 100)
 
-  expect((await texts(block))[0]).toBe('In this session')
-  expect(await texts(block)).toContain('Northwind: 3 facts, 1 current')
+  expect((await texts(block))[0]).toBe('Waits for you')
+  expect(await partLines(block, 'session')).toContain('[Northwind] 3 facts, 1 current')
   expect(await shownBand(band)).toEqual(WITH_TOPICS)
   await block.unmount()
   await band.unmount()
@@ -699,11 +705,11 @@ test('open turns a pane left on another view to the view it starts in', async ($
   const band = await drawBand($, clock)
   await typed($, 'm2b-review', { isFullscreen: true, columns: 160 })
   const beside = await drawPane($, clock)
-  expect(await texts(beside)).not.toContain('In this session')
+  expect(await texts(beside)).not.toContain('Waits for you')
 
   await band.press({ key: OPEN })
 
-  expect((await texts(beside))[0]).toBe('In this session')
+  expect((await texts(beside))[0]).toBe('Waits for you')
   await beside.unmount()
   await band.unmount()
 })
@@ -729,7 +735,7 @@ const OPEN_IS_THE_ONE_BUTTON: [string, (fake: FakeM2b) => void][] = [
     },
   ],
   [
-    'the session runs an older band',
+    'the session runs an older m2b',
     fake => {
       fake.version = '0.4.0'
     },
@@ -751,7 +757,7 @@ for (const [situation, arrange] of OPEN_IS_THE_ONE_BUTTON) {
 
     expect(opened).toEqual([AS_A_DIALOG])
     const block = await drawPane($, clock, 'inline', 100)
-    expect((await texts(block))[0]).toBe('In this session')
+    expect((await texts(block))[0]).toBe('Waits for you')
     expect(await shownTab(block)).toBe('overview')
     // The button shows the pane and writes nothing.
     expect(fake.writes()).toHaveLength(writesBefore)
@@ -812,8 +818,9 @@ test('after the pane was closed by hand it does not open by itself, the band is 
   await band.unmount()
 })
 
-test('where the pane cannot be shown, open says so in the band and leaves no pane open', async ($, on) => {
-  // Covers: B191
+test('where the pane cannot be shown, open says so in the band, where it was pressed, until the next prompt, and leaves no pane open', async ($, on) => {
+  // Covers: B191, B207
+  on('prompt.submit', (_, e) => ({ text: e.text }))
   const fake = busyFake()
   fake.paneWaits = 'no surface attached places panes'
   const { clock, openPanes } = await start($, on, fake)
@@ -822,9 +829,12 @@ test('where the pane cannot be shown, open says so in the band and leaves no pan
   await band.press({ key: OPEN })
 
   expect(openPanes.has(PANE)).toBe(false)
-  expect(await shownBand(band)).toEqual(
-    rowSaying('the m2b pane cannot be shown here: no surface attached places panes; /m2b-pane answers with the lines'),
-  )
+  const notShown = 'the m2b pane cannot be shown here: no surface attached places panes; /m2b-pane answers with the lines'
+  expect(await shownBand(band)).toEqual(rowSaying(notShown))
+  expect(await bandPieces(band)).toEqual([{ text: notShown, color: 'error', dimColor: undefined }])
+
+  await $.prompt.submit({ text: 'go on', origin: { kind: 'composer' }, wait: false })
+  expect(await shownBand(band)).toEqual(ROW)
   await band.unmount()
 })
 
@@ -875,7 +885,7 @@ test('the desktop app: docked there, the band of the app is the same row', async
   await band.unmount()
 })
 
-test('the desktop app: as a widget the pane draws counts, no tab and no button, and the band is the same row', async ($, on) => {
+test('the desktop app: as a widget the pane draws counts in the order of the overview, no tab and no button, and the band is the same row', async ($, on) => {
   // Covers: B193, B204
   const { clock } = await start($, on, busyFake())
   const band = await drawBand($, clock, WIDE, 'desktop')
@@ -883,7 +893,7 @@ test('the desktop app: as a widget the pane draws counts, no tab and no button, 
 
   const widget = await drawPane($, clock, 'widget', 30, 'desktop')
 
-  expect(await texts(widget)).toEqual(['2 topics in this session', '4 wait for you', '1 overdue, 1 due today'])
+  expect(await texts(widget)).toEqual(['4 wait for you', '1 overdue, 1 due today', '2 topics in this session'])
   expect(await widget.findAll({ type: 'Button' })).toHaveLength(0)
   expect(await shownTabs(widget)).toEqual([])
   expect(await shownBand(band)).toEqual(ROW)
@@ -902,42 +912,64 @@ test('a widget says what it could not look at, and draws the counts and no tab w
 
   const widget = await drawPane($, clock, 'widget', 30, 'desktop')
 
-  expect(await texts(widget)).toEqual(['m2b holds no note of this session.', 'The task list could not be read.'])
+  expect(await texts(widget)).toEqual(['The task list could not be read.', 'm2b holds no note of this session.'])
   // Turned to the review, whose tab a pane beside the chat marks: the small form draws no tab and no button.
   expect(await shownTabs(widget)).toEqual([])
   expect(await widget.findAll({ type: 'Button' })).toHaveLength(0)
   await widget.unmount()
 })
 
-test('the small form says each thing it could not count in place of the count', () => {
+test('the small form is in the order of the overview: what waits, the tasks due, the topics; it says each thing it could not count in place of the count, and no count of none', () => {
   // Covers: B193
   const known = { id: 's', known: true, topics: [], atStart: 'whole', offUnder: null, error: null }
   const topic = { name: 'Northwind', facts: 3, current: 0 }
   const quiet = { candidates: [], review: null, error: null, due: [] }
   const glance = (fields: Partial<SessionModel>): string[] =>
-    glanceLines({ given: null, notes: 0, notice: null, snapshot: null, proposals: null, presses: {}, ...fields })
+    glanceLines({
+      given: null,
+      notes: 0,
+      rowNotice: null,
+      folderNotice: null,
+      snapshot: null,
+      proposals: null,
+      presses: {},
+      health: null,
+      versionLine: null,
+      ...fields,
+    })
+  const notLooked = 'm2b has not looked yet.'
 
-  expect(glance({})).toEqual(['m2b has not looked yet.'])
-  expect(glance({ given: { ...known, error: 'm2b did not answer' } })).toEqual(['m2b could not look at this session.'])
-  expect(glance({ given: { ...known, known: false } })).toEqual(['m2b holds no note of this session.'])
-  expect(glance({ given: known, snapshot: quiet })).toEqual(['No topic was given.', 'Nothing waits for you.'])
-  expect(glance({ given: { ...known, topics: [topic] }, snapshot: quiet })[0]).toBe('1 topic in this session')
+  // Nothing read yet is said once, also where the session was not looked at either.
+  expect(glance({})).toEqual([notLooked])
+  expect(glance({ given: { ...known, error: 'm2b did not answer' } })).toEqual([notLooked, 'm2b could not look at this session.'])
+  expect(glance({ given: { ...known, known: false } })).toEqual([notLooked, 'm2b holds no note of this session.'])
+  expect(glance({ snapshot: quiet })).toEqual(['Nothing waits for you.', notLooked])
+  // A session given no topic gets no line: a count of none is not said.
+  expect(glance({ given: known, snapshot: quiet })).toEqual(['Nothing waits for you.'])
+  expect(glance({ given: { ...known, topics: [topic] }, snapshot: quiet })).toEqual(['Nothing waits for you.', '1 topic in this session'])
+  expect(glance({ given: { ...known, topics: [topic, topic] }, snapshot: quiet })[1]).toBe('2 topics in this session')
   const one = { ...quiet, candidates: [{ id: 'c1', title: 'Remember? Dana prefers tea' }] }
-  expect(glance({ given: known, snapshot: one })[1]).toBe('1 waits for you')
+  expect(glance({ given: known, snapshot: one })).toEqual(['1 waits for you'])
   const review = { id: 'r1', title: 'm2b: review', findings: [] }
-  expect(glance({ given: known, snapshot: { ...one, review } })[1]).toBe('2 wait for you')
+  expect(glance({ given: known, snapshot: { ...one, review } })).toEqual(['2 wait for you'])
   const noStore = { waiting: [], answered: 0, error: 'the store is not downloaded' }
-  expect(glance({ given: known, snapshot: one, proposals: noStore })[1]).toBe(
+  expect(glance({ given: known, snapshot: one, proposals: noStore })).toEqual([
     'm2b could not look for proposals: the store is not downloaded',
-  )
+  ])
+  const unread = { ...quiet, error: 'm2b could not read the tasks: no answer' }
+  expect(glance({ given: known, snapshot: unread, proposals: noStore })).toEqual(['The task list could not be read.'])
   const due = [
     { id: 'd1', title: 'Send the offer to Acme', overdue: false },
     { id: 'd2', title: 'Call the plumber', overdue: true },
     { id: 'd3', title: 'Return the ladder', overdue: true },
   ]
-  expect(glance({ given: known, snapshot: { ...quiet, due } })[2]).toBe('2 overdue, 1 due today')
-  expect(glance({ given: known, snapshot: { ...quiet, due: due.slice(1) } })[2]).toBe('2 overdue')
-  expect(glance({ given: known, snapshot: { ...quiet, due: due.slice(0, 1) } })[2]).toBe('1 due today')
+  expect(glance({ given: { ...known, topics: [topic] }, snapshot: { ...one, due } })).toEqual([
+    '1 waits for you',
+    '2 overdue, 1 due today',
+    '1 topic in this session',
+  ])
+  expect(glance({ given: known, snapshot: { ...quiet, due: due.slice(1) } })).toEqual(['Nothing waits for you.', '2 overdue'])
+  expect(glance({ given: known, snapshot: { ...quiet, due: due.slice(0, 1) } })).toEqual(['Nothing waits for you.', '1 due today'])
 })
 
 test('claude -p, no surface: nothing opens or stays open, and /m2b-pane answers as text', async ($, on) => {

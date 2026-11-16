@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { CommandRunResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { BAND, FakeM2b, HOME, NOW, STATUS, pane, rowSaying, shownBand, start, texts, viewButtons } from './harness'
+import { BAND, FakeM2b, HOME, NOW, STATUS, linesAt, pane, rowSaying, shownBand, start, texts, viewButtons } from './harness'
 import type { Files } from './harness'
 
 const PANE = 'm2b'
@@ -71,7 +71,7 @@ test('drop in the view of the review waits for undo as in the start view, undo w
   expect(await shownBand(band)).toEqual(rowSaying('6 wait for you'))
 
   await ui.press({ key: 'drop:c4' })
-  expect(await texts(ui)).toContain('dropping: Remember? Dana prefers tea 4')
+  expect(await linesAt(ui, 'row:c4')).toEqual(['Remember? Dana prefers tea 4', '[undo] dropping'])
   await ui.press({ key: 'undo:c4' })
   await ui.press({ key: 'keep:q1' })
   await clock.advance(UNDO_MS)

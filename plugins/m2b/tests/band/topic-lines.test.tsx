@@ -4,7 +4,7 @@ import type { Engine } from 'claude-code/testing'
 
 import { beginTopic, fillTopic, forgetTopicUnless, heldTopic, holdsTopic, parseTopic } from '../../hooks/topic'
 import type { TopicLook } from '../../hooks/topic'
-import { FakeM2b, HOME, SESSION_ID, inView, pane, pressTab, shownTab, shownTabs, start, texts, viewButtons } from './harness'
+import { FakeM2b, HOME, SESSION_ID, inView, pane, partLines, pressTab, shownTab, shownTabs, start, texts, viewButtons } from './harness'
 import type { Files } from './harness'
 
 const PANE = 'm2b'
@@ -110,7 +110,7 @@ test('a reload of the mod, which starts the session again, leaves the pane on it
   await clock.advance(1)
 
   const shown = await texts(ui)
-  expect(shown).toContain('In this session')
+  expect(shown).toContain('Waits for you')
   expect(shown).not.toContain(KIM)
   await ui.unmount()
 })
@@ -138,8 +138,8 @@ test('the tab Overview forgets the lines, and the next press reads them again', 
   await pressTab(ui, 'overview')
 
   const shown = await texts(ui)
-  expect(shown).toContain('In this session')
-  expect(shown).toContain('Acme Ltd: 2 facts, 1 current')
+  expect(shown).toContain('Waits for you')
+  expect(await partLines(ui, 'session')).toContain('[Acme Ltd] 2 facts, 1 current')
   expect(shown).not.toContain(KIM)
 
   fake.topicLines = { 'Acme Ltd': { facts: ['Kim Lee left Acme'], current: [] } }
@@ -218,7 +218,7 @@ test('a command that turns the pane to another view leaves no line of the topic 
   expect(await texts(ui)).not.toContain(KIM)
 
   await pressTab(ui, 'overview')
-  expect(await texts(ui)).toContain('In this session')
+  expect(await texts(ui)).toContain('Waits for you')
   expect(await texts(ui)).not.toContain(KIM)
   await ui.unmount()
 })
@@ -237,7 +237,7 @@ test('after /clear the topic of the conversation that ended is no longer shown',
   await clock.advance(1_000)
 
   const shown = await texts(ui)
-  expect(shown).toContain('In this session')
+  expect(shown).toContain('Waits for you')
   expect(shown).not.toContain(KIM)
   await ui.unmount()
 })
@@ -258,7 +258,7 @@ test('while m2b reads, the view says so, and an answer that comes after the tab 
   await pressed
 
   const shown = await texts(ui)
-  expect(shown).toContain('In this session')
+  expect(shown).toContain('Waits for you')
   expect(shown).not.toContain(KIM)
   await ui.unmount()
 })

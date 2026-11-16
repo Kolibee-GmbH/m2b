@@ -10,6 +10,9 @@ import {
   TROUBLE_LINE,
   answerKeys,
   everyText,
+  linesAt,
+  lookOf,
+  partLines,
   pressTab,
   rowSaying,
   sentenceOfM2b,
@@ -22,6 +25,8 @@ import type { Files } from './harness'
 
 const CACHE = `${HOME}/.local/state/m2b/band-answer.json`
 const UNDO_MS = 5_000
+/** What the part about m2b says of curation for the status the fake answers while nothing is wrong. */
+const CURATED = '2 in inbox · curated 18:02'
 
 function cached(writtenAtMs: number, snapshot: unknown, status: string | null = null): string {
   return JSON.stringify({ writtenAtMs, value: { snapshot, status, version: '0.3.0' } })
@@ -109,7 +114,7 @@ test('a shared review whose findings are not a list is loaded again instead of d
   await band.unmount()
   const ui = await startView($)
   expect(await texts(ui)).toContain('Remember? Acme moved')
-  expect(await texts(ui)).not.toContain('m2b: review')
+  expect(await linesAt(ui, 'review:r1')).toBeNull()
   expect(await answerKeys(ui)).toEqual(['keep:c1', 'drop:c1'])
   await ui.unmount()
 })
@@ -311,16 +316,20 @@ test('a reload under way when m2b stops being set up does not draw the band agai
   await ui.unmount()
 })
 
-test('a session whose band is older than the installed m2b says to run /reload-plugins', async ($, on) => {
+test('a session that runs an older m2b than the installed one says to run /reload-plugins, in the pane and not in the band', async ($, on) => {
   // Covers: B96
   const fake = new FakeM2b()
   fake.version = '0.3.1'
   fake.bandVersion = '0.3.0'
   await start($, on, fake)
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(await shownBand(ui)).toEqual(
-    rowSaying('this session runs the band of m2b 0.3.0 while m2b 0.3.1 is installed: run /reload-plugins'),
-  )
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await everyText(band)).toEqual([ENGINES_OWN_DRAWING])
+  await band.unmount()
+
+  const ui = await startView($)
+  const older = 'This session runs m2b 0.3.0 and m2b 0.3.1 is installed: run /reload-plugins.'
+  expect(await partLines(ui, 'm2b')).toEqual([older, CURATED])
+  expect(await lookOf(ui, older)).toEqual({ color: 'warning', dimColor: undefined, wrap: 'wrap' })
   await ui.unmount()
 })
 
@@ -333,6 +342,9 @@ test('a band newer than the installed m2b, as from a checkout, says nothing abou
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await everyText(ui)).toEqual([ENGINES_OWN_DRAWING])
   await ui.unmount()
+  const beside = await startView($)
+  expect(await partLines(beside, 'm2b')).toEqual([CURATED])
+  await beside.unmount()
 })
 
 test('a band of the installed version says nothing about versions', async ($, on) => {
@@ -342,4 +354,7 @@ test('a band of the installed version says nothing about versions', async ($, on
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await shownBand(ui)).toEqual(rowSaying('1 waits for you'))
   await ui.unmount()
+  const beside = await startView($)
+  expect(await partLines(beside, 'm2b')).toEqual([CURATED])
+  await beside.unmount()
 })

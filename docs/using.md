@@ -46,7 +46,7 @@ curation run failed, the curating machine has not run for three days, or the sto
 found. The distillate is marked as data from your notes, not instructions. In a project where it
 should not appear, such as a screen share or a customer's repository, `m2b distillate off` in
 that folder turns it off for every session there and below, on this machine; the m2b pane has a
-button for it ([The band](band.md#leaving-m2b-out-of-a-folder)).
+button for it ([The band](band.md#turning-m2b-off-in-a-folder)).
 
 Sessions capture what you learn about people and verbal agreements, at work too: who is who,
 which role, what was agreed. Documents of customers and what a third party told you in confidence

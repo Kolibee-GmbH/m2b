@@ -5,7 +5,7 @@ import { M2B, button, dueCounts, styleOf, taskLine, topicsCount, waitForYou } fr
 import type { Tone } from './look'
 import { plainLine } from './plain-text'
 import { couldNotLookLine, errorBesideTasks } from './proposals'
-import { dueFirst } from './session-view'
+import { dueFirst, waitCount } from './session-view'
 
 /*
  * What the band above the prompt draws: one row, in m2b's name, that says how many things wait for
@@ -25,16 +25,13 @@ export const OPEN = 'open'
 export const SHOWS_BY_DEFAULT: BandShows = { dueTasks: 'count', topics: false }
 
 /**
- * Everything the band draws from. `topics` is the number of topics m2b gave this session. The
- * notices are what m2b said to a press that wrote nothing, and `versionLine` that this session
- * runs the band of another m2b version.
+ * Everything the band draws from. `topics` is the number of topics m2b gave this session, `notice`
+ * why the band's own button showed no pane.
  */
 export type BandModel = {
   snapshot: BandSnapshot | null
   proposals: BandProposals | null
   notice: string | null
-  proposalsNotice: string | null
-  versionLine: string | null
   topics: number
 }
 
@@ -61,20 +58,15 @@ function sentence(text: string, tone: Tone): BandLine {
 }
 
 /**
- * What the band's row says, or null where the band draws nothing. First what a press could not
- * write, then that this session runs an older band: both would be said nowhere else. Then what
- * keeps m2b from counting, the task list or the store it could not read. Else the counts: what
- * waits for an answer, the tasks due as the machine shows them, the topics where it shows them.
- * A row that was pressed counts until its write has landed.
+ * What the band's row says, or null where the band draws nothing. First why its own button showed
+ * no pane: a press that did nothing is said where it was pressed. Then what keeps m2b from
+ * counting, the task list or the store it could not read. Else the counts: what waits for an
+ * answer, the tasks due as the machine shows them, the topics where it shows them.
  */
 export function bandLine(model: BandModel): BandLine | null {
   const { snapshot, proposals } = model
-  const refused = model.notice ?? model.proposalsNotice
-  if (refused !== null) {
-    return sentence(refused, 'trouble')
-  }
-  if (model.versionLine !== null) {
-    return sentence(model.versionLine, 'waits')
+  if (model.notice !== null) {
+    return sentence(model.notice, 'trouble')
   }
   const tasksError = snapshot?.error ?? null
   if (tasksError !== null) {
@@ -86,7 +78,7 @@ export function bandLine(model: BandModel): BandLine | null {
   }
   const shows = snapshot?.shows ?? SHOWS_BY_DEFAULT
   const due = snapshot?.due ?? []
-  const waiting = (snapshot?.candidates.length ?? 0) + (proposals?.waiting.length ?? 0) + (snapshot?.review ? 1 : 0)
+  const waiting = waitCount(snapshot, proposals)
   const parts: BandPart[] = [
     ...(waiting > 0 ? [{ text: waitForYou(waiting), tone: 'waits' as const }] : []),
     ...(shows.dueTasks === 'count' ? dueCounts(due) : []),

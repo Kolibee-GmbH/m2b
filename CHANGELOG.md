@@ -14,6 +14,19 @@ All notable changes to this project are documented here. The format follows
   drop and ok are pressed in the pane, where every candidate, question and the review stand
   with their buttons; the band holds no button that writes. The row is the same whether the
   pane is in view or not, and a press that wrote nothing is said in it as one sentence.
+- The pane's overview is four parts in one order, each in a frame: "Waits for you", in the
+  warning color with the number that waits while something does, "Today", "This session" and
+  "m2b". A row is its text and, below it, what you can press; keep and `ok` are the accent, drop
+  steps back. A task's title stands at full strength with `due today` or `overdue` in color
+  before it. A topic is a button that bears its name. m2b in the session's folder is `on` or
+  `off` with `turn off here` and `turn on here`, and the folder breaks only between its folders.
+  A count of none is not said, and a part with nothing in it is one dim line. In a pane narrower
+  than 36 columns a bar stands in for each frame.
+- The part "m2b" says how m2b stands: when it last curated and what waits in the inbox while all
+  is well, and what is wrong with its reason. That a session runs an older m2b than the installed
+  one is said there, no longer in the band.
+- What m2b says to a press that wrote nothing stands where the press was made, in the error
+  color, no longer in the band.
 - The m2b pane has one row of tabs above every view: `Overview`, `Proposals` with the number
   that wait, `Review` and `Settings`; a topic's lines and a search stand under a fifth tab while
   the pane shows them. The tab you look at is marked, every other turns the pane with one press.
