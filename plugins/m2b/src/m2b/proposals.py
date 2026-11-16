@@ -199,9 +199,11 @@ class Outcomes:
 
 @dataclass(frozen=True)
 class WayCounts:
-    """Of the proposals of one way and one source: how many wait, and how those settled lately ended."""
+    """Of the proposals of one way and one source: how many wait for an answer, how many have one
+    that no run has settled yet, and how those settled lately ended."""
 
     waiting: int = 0
+    answered: int = 0
     kept: int = 0
     dropped: int = 0
     expired: int = 0
@@ -481,17 +483,28 @@ def proposer_of(entry: Entry) -> str | None:
     return "handed in by a session" if entry.by == SESSION else f"proposed by {entry.by}"
 
 
-def by_way_and_source(current: Proposals, start: datetime.datetime) -> dict[str, dict[str, WayCounts]]:
+def by_way_and_source(
+    current: Proposals, start: datetime.datetime, answered: Collection[str] = ()
+) -> dict[str, dict[str, WayCounts]]:
     """Per way a proposal came (``READING``, or who proposed) and per source: what waits, and how
     what was settled at ``start`` or later ended. Derived from the entries, so it reaches only as
-    far back as a settled proposal is remembered, and holds only ways and sources with something."""
+    far back as a settled proposal is remembered, and holds only ways and sources with something.
+
+    ``answered`` holds the ids whose answer no run has settled yet
+    (``proposal_answers.awaiting_a_run``). Such a proposal is still open in the file, or expired
+    and kept late, and counted as waiting or as expired it would say the person gave no answer."""
     counted: dict[str, dict[str, WayCounts]] = {}
-    for entry in current.entries.values():
-        if entry.state != OPEN and entry.since < start:
+    for key, entry in current.entries.items():
+        if key in answered:
+            what = "answered"
+        elif entry.state == OPEN:
+            what = "waiting"
+        elif entry.since < start:
             continue
+        else:
+            what = entry.state
         sources = counted.setdefault(entry.by or READING, {})
         counts = sources.get(entry.source, WayCounts())
-        what = "waiting" if entry.state == OPEN else entry.state
         sources[entry.source] = dataclasses.replace(counts, **{what: getattr(counts, what) + 1})
     return counted
 

@@ -14,9 +14,22 @@ All notable changes to this project are documented here. The format follows
   and machines. The README says near its top what m2b is not, a linked knowledge base, and that
   facts with a last day are rewritten once it has passed. The description no longer says the pane
   sits beside the chat, which holds only under the fullscreen layout.
+- `m2b status` counts a proposal you answered apart from those that wait for an answer:
+  `1 waiting, 2 answered for the next run, 3 kept, ...`, and `answered` beside `waiting` in its
+  JSON. Until now a proposal counted as waiting until the next curation run had filed your answer,
+  while `m2b proposals` said that none waits.
 
 ### Fixed
 
+- The band of every open session said `m2b could not read the tasks` for up to a minute when one
+  session could not reach the task list, for one a session the Claude desktop app started, which
+  has no access to Reminders: the sessions share one answer, and the failed one was shared too.
+  A session that could not read the tasks now keeps that to itself, and no session takes such an
+  answer from another. A session that still runs the band of 0.6.0 goes on sharing its failure
+  until `/reload-plugins`; the sessions with the new band no longer show it.
+- A topic of the distillate over 4 KB came in with no prompt that named it, and nothing said so:
+  a prompt brings whole topics only. Lint now reports such a topic as something to act on, in the
+  review of the run, instead of as a size over the 2 KB target.
 - The README counted eight eval cases where [Evals](docs/evals.md) has fourteen, and
   [Using m2b](docs/using.md) said Claude Code keeps its own memory per project or user: it keeps
   it per repository, on one machine.
