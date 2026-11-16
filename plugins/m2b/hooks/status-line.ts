@@ -1,4 +1,4 @@
-import type { BandHealth } from '../types'
+import type { BandHealth, CurateRefusal } from '../types'
 import { timeOrDay } from './moment'
 import { plainLine } from './plain-text'
 
@@ -37,12 +37,80 @@ export function statusLine(answer: unknown): string | null {
  */
 export function healthOf(answer: unknown, nowMs: number): BandHealth {
   if (!isObject(answer)) {
-    return { curation: null, troubles: [COULD_NOT_LOOK_AT_ITSELF] }
+    return { ...NOT_KNOWN, troubles: [COULD_NOT_LOOK_AT_ITSELF] }
   }
   return {
     curation: curationLine(answer, nowMs),
     troubles: troublesOf(answer).map(({ sentence, reason }) => (reason === null ? `${sentence}.` : `${sentence}: ${plainLine(reason)}`)),
+    // Where the store does not name its curating machine, whether this one curates is not known.
+    curates: curatingMachineOf(answer) === null ? null : answer['this_machine_curates'] === true,
+    isCurating: isRunning(answer['run']),
   }
+}
+
+/** The machine that curates the store, as the status part names it; null where it names none. */
+export function curatingMachineOf(answer: unknown): string | null {
+  return isObject(answer) ? textOrNull(answer['curating_machine']) : null
+}
+
+/** How m2b stands where it gave no answer about itself: nothing is said, and nothing is known of curation. */
+export const NOT_KNOWN: BandHealth = { curation: null, troubles: [], curates: null, isCurating: false }
+
+const CURATING = 'curating'
+
+function isRunning(run: unknown): boolean {
+  return isObject(run) && run['state'] === 'running'
+}
+
+/**
+ * How m2b stands right after it started a run: the run's record says so only a moment later, and
+ * until the band has read it the part about m2b must not offer a second start.
+ */
+export function whileCurating(health: BandHealth): BandHealth {
+  return { ...health, isCurating: true, curation: CURATING }
+}
+
+/** What a start of a run in the background came to: a run, or why none, with the command's own words where it failed. */
+export type RunStart = { isStarted: true } | { isStarted: false; refusal: CurateRefusal; reason: string | null }
+
+const REFUSALS: readonly CurateRefusal[] = ['running', 'not-curating', 'not-downloaded']
+
+/** What `m2b curate --detach --json` answered; null for anything that is not that answer. */
+export function parseRunStart(stdout: string): RunStart | null {
+  let answer: unknown
+  try {
+    answer = JSON.parse(stdout)
+  } catch {
+    return null
+  }
+  if (!isObject(answer) || typeof answer['kind'] !== 'string') {
+    return null
+  }
+  const kind = answer['kind']
+  if (kind === 'started') {
+    return { isStarted: true }
+  }
+  const refusal = REFUSALS.find(known => known === kind)
+  // A kind this band does not know is told in the command's words, or by its name.
+  return refusal === undefined
+    ? { isStarted: false, refusal: 'failed', reason: textOrNull(answer['message']) ?? textOrNull(kind) }
+    : { isStarted: false, refusal, reason: null }
+}
+
+const WHY_NO_RUN: Readonly<Record<Exclude<CurateRefusal, 'failed'>, string>> = {
+  running: 'a curation run is already running on this machine',
+  'not-curating': 'another machine curates the store',
+  'not-downloaded': 'store.json is not downloaded on this machine',
+}
+
+/**
+ * What the pane says of a press that started no run. The reasons m2b knows are said in words of
+ * the band's own, which name no machine and no folder; `reason` is the command's own account of a
+ * failure, which the caller keeps outside the session's state.
+ */
+export function noRunStarted(refusal: CurateRefusal, reason: string | null): string {
+  const why = refusal === 'failed' ? (reason ?? 'm2b did not say why') : WHY_NO_RUN[refusal]
+  return `No curation run started: ${why}`
 }
 
 /**
@@ -56,9 +124,8 @@ export function curationLine(answer: unknown, nowMs: number): string | null {
     return null
   }
   const run = answer['run']
-  const isRunning = isObject(run) && run['state'] === 'running'
   const parts = [
-    ...(isRunning ? ['curating'] : [...inboxCount(answer['inbox']), ...lastCurated(run, nowMs)]),
+    ...(isRunning(run) ? [CURATING] : [...inboxCount(answer['inbox']), ...lastCurated(run, nowMs)]),
     ...(answer['paused'] === true ? ['curation paused'] : []),
   ]
   return parts.length === 0 ? null : fit(parts.join(' · '))

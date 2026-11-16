@@ -5,6 +5,7 @@ import type { Engine } from 'claude-code/testing'
 import {
   BAND,
   CALM_ROW,
+  CURATE_NOW,
   ENGINES_OWN_DRAWING,
   FakeM2b,
   HOME,
@@ -98,16 +99,17 @@ test('while proposals wait the band counts each, and the pane has one row with t
   const ui = await startView($)
 
   expect(await shownBand(band)).toEqual(rowSaying('3 wait for you'))
-  // One row for all of them, never one per proposal, and nothing to press: their tab leads to them.
+  // One row for all of them, never one per proposal, and no button of theirs: their tab leads to
+  // them. The one button of the view is curate now, in the part about m2b.
   expect(await waits(ui)).toEqual(['3 proposals from your sessions', 'in the tab Proposals'])
-  expect(await buttons(ui)).toEqual([])
+  expect(await buttons(ui)).toEqual([CURATE_NOW])
   expect((await shownTabs(ui)).map(tab => tab.label)).toEqual(['Overview', 'Proposals 3', 'Review', 'Settings'])
 
   fake.proposals = fake.proposals?.slice(0, 1) ?? null
   await clock.advance(60_000)
   expect(await shownBand(band)).toEqual(rowSaying('1 waits for you'))
   expect(await waits(ui)).toEqual(['1 proposal from your sessions', 'in the tab Proposals'])
-  expect(await buttons(ui)).toEqual([])
+  expect(await buttons(ui)).toEqual([CURATE_NOW])
   expect((await shownTabs(ui)).map(tab => tab.label)).toEqual(['Overview', 'Proposals 1', 'Review', 'Settings'])
   await ui.unmount()
   await band.unmount()
@@ -127,7 +129,8 @@ test('with no proposal waiting the band counts none, the pane has no line for th
 
   const ui = await startView($)
   expect(await texts(ui)).toContain('Nothing waits for you.')
-  expect(await buttons(ui)).toEqual([])
+  // Nothing of the proposals to press: curate now is the view's one button.
+  expect(await buttons(ui)).toEqual([CURATE_NOW])
   expect((await shownTabs(ui)).map(tab => tab.label)).toEqual(['Overview', 'Proposals', 'Review', 'Settings'])
   await ui.unmount()
 })
@@ -163,7 +166,7 @@ test('the task that tells a phone proposals wait is not counted in the band and 
 
   const ui = await startView($)
   expect(await waits(ui)).toEqual(['3 proposals from your sessions', 'in the tab Proposals', 'Remember? Acme moved', '[keep] [drop]'])
-  expect(await buttons(ui)).toEqual(['keep:c1', 'drop:c1'])
+  expect(await buttons(ui)).toEqual(['keep:c1', 'drop:c1', CURATE_NOW])
   await ui.unmount()
 })
 
@@ -579,7 +582,7 @@ test('proposals m2b could not look at say so in the band and the pane, beside th
 
   const first = await startView($)
   expect(await waits(first)).toEqual([line, 'Remember? Acme moved', '[keep] [drop]'])
-  expect(await buttons(first)).toEqual(['keep:c1', 'drop:c1'])
+  expect(await buttons(first)).toEqual(['keep:c1', 'drop:c1', CURATE_NOW])
   await first.unmount()
 
   await typed($, 'm2b-proposals')
@@ -617,11 +620,11 @@ test('a core that does not know proposals leaves the band counting none and the 
 
   const ui = await startView($)
   expect(await waits(ui)).toEqual(['Remember? Acme moved', '[keep] [drop]'])
-  expect(await buttons(ui)).toEqual(['keep:c1', 'drop:c1'])
+  expect(await buttons(ui)).toEqual(['keep:c1', 'drop:c1', CURATE_NOW])
   await ui.unmount()
 })
 
-test('a proposals part of another shape, or an id that is none, is could not look and never a row to press', async ($, on) => {
+test('a proposals part of another shape, or an id that is none, is could not look and never a row to press: the one button of the view is curate now', async ($, on) => {
   // Covers: B127
   const fake = new FakeM2b()
   fake.proposalsPart = {
@@ -635,13 +638,13 @@ test('a proposals part of another shape, or an id that is none, is could not loo
   const line = 'm2b could not look for proposals: m2b answered something other than the proposals that wait'
   expect(await shownBand(band)).toEqual(sentenceOfM2b(line))
   expect(await waits(ui)).toEqual([line])
-  expect(await buttons(ui)).toEqual([])
+  expect(await buttons(ui)).toEqual([CURATE_NOW])
 
   fake.proposalsPart = ['not', 'an', 'object']
   await clock.advance(60_000)
   expect(await shownBand(band)).toEqual(sentenceOfM2b(line))
   expect(await waits(ui)).toEqual([line])
-  expect(await buttons(ui)).toEqual([])
+  expect(await buttons(ui)).toEqual([CURATE_NOW])
   await ui.unmount()
   await band.unmount()
 })

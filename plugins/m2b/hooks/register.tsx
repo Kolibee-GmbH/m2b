@@ -14,6 +14,7 @@ import type {
   BandSettle,
   BandShows,
   BandSnapshot,
+  CurateRefusal,
   FolderSwitch,
   PaneView,
 } from '../types'
@@ -58,7 +59,9 @@ import {
   sessionIdOf,
 } from './session'
 import {
+  CURATE_PRESS,
   FOLDER_PRESS,
+  UNDO_CURATE,
   SESSION_COMMAND,
   UNDO_FOLDER,
   SESSION_PLACED,
@@ -83,7 +86,8 @@ import type { ProposalActions } from './proposals'
 import { REVIEW, undoKey } from './rows'
 import type { RowActions } from './rows'
 import { shared } from './shared-cache'
-import { COULD_NOT_LOOK, healthOf, statusLine } from './status-line'
+import { COULD_NOT_LOOK, NOT_KNOWN, curatingMachineOf, healthOf, noRunStarted, parseRunStart, statusLine, whileCurating } from './status-line'
+import type { RunStart } from './status-line'
 import { parseBandShows, parseBandTasks } from './tasks'
 import {
   SETTINGS_COMMAND,
@@ -147,6 +151,16 @@ const ownPromptsAtom = atom({ plugin: 'm2b', key: 'ownPrompts' } as const, [])
 const sessionAtom = atom({ plugin: 'm2b', key: 'bandSession' } as const, null)
 const notesAtom = atom({ plugin: 'm2b', key: 'sessionNotes' } as const, null)
 const sessionNoticeAtom = atom({ plugin: 'm2b', key: 'sessionNotice' } as const, null)
+const curateNoticeAtom = atom({ plugin: 'm2b', key: 'curateNotice' } as const, null)
+// The command's own account of a start that failed. Its words can name a folder or a machine: they
+// are drawn, and never put into the session's state, which holds only that the start failed.
+let curateFailure: string | null = null
+
+/** Forgets why the last press on `curate now` started no run. */
+async function forgetCurateNotice($: EngineInterface): Promise<void> {
+  curateFailure = null
+  await update($, curateNoticeAtom, () => null)
+}
 
 const REFRESH_EVERY_MS = 60_000
 // `m2b band` reaches and reads the task list (two Apple Reminders calls, 20 seconds each by
@@ -193,7 +207,13 @@ type BandView = {
   proposals?: BandProposals
   /** How m2b itself stands, for the pane; absent where m2b gave no answer to read it from. */
   health?: BandHealth
+  /** The machine that curates the store; absent or null where the answer names none. */
+  curatingMachine?: string | null
 }
+
+// The machine that curates the store, from the last answer. A setting's value: it is drawn, and
+// never put into the session's state, which every plugin can read.
+let curatingMachine: string | null = null
 
 /** Runs jobs one after another, in the order they were queued. */
 function serialQueue(): <T>(job: () => Promise<T>) => Promise<T> {
@@ -206,7 +226,7 @@ function serialQueue(): <T>(job: () => Promise<T>) => Promise<T> {
 }
 
 // Where m2b gave no answer, the pane's part about m2b says nothing: what failed is said once, as the task list's error.
-const NO_HEALTH: BandHealth = { curation: null, troubles: [] }
+const NO_HEALTH: BandHealth = NOT_KNOWN
 
 /** One call for everything the band, the pane and the status line show; whatever fails, it answers a view. */
 async function loadView($: EngineInterface, answer: readonly string[] = BAND_ANSWER): Promise<BandView> {
@@ -228,6 +248,7 @@ async function loadView($: EngineInterface, answer: readonly string[] = BAND_ANS
     run: runOf(fields['status']),
     proposals: parseProposals(fields['proposals']),
     health: healthOf(fields['status'], await $.clock.now()),
+    curatingMachine: curatingMachineOf(fields['status']),
   }
 }
 
@@ -297,6 +318,7 @@ async function loadNow($: EngineInterface, isForced: boolean): Promise<void> {
   // Nor has an answer a session without proposals stored, or one m2b could not give, a word on them.
   await update($, proposalsAtom, current => view.proposals ?? current)
   await update($, healthAtom, current => view.health ?? current)
+  curatingMachine = view.health === undefined ? curatingMachine : (view.curatingMachine ?? null)
   $.ui.status(view.status === null ? undefined : plainLine(view.status))
   await toastFailedRun($, view.run ?? null)
 }
@@ -384,7 +406,8 @@ function isView(value: unknown): value is BandView {
     // Absent in an answer a session without the pane stored: no run to show, like null.
     (value['run'] === undefined || value['run'] === null || isRun(value['run'])) &&
     (value['proposals'] === undefined || isProposals(value['proposals'])) &&
-    (value['health'] === undefined || isHealth(value['health']))
+    (value['health'] === undefined || isHealth(value['health'])) &&
+    (value['curatingMachine'] === undefined || value['curatingMachine'] === null || typeof value['curatingMachine'] === 'string')
   )
 }
 
@@ -393,7 +416,10 @@ function isHealth(value: unknown): value is BandHealth {
     isObject(value) &&
     (value['curation'] === null || typeof value['curation'] === 'string') &&
     Array.isArray(value['troubles']) &&
-    value['troubles'].every(trouble => typeof trouble === 'string')
+    value['troubles'].every(trouble => typeof trouble === 'string') &&
+    // A band from before the button shared its answer without these: it is not taken, and m2b is asked.
+    (value['curates'] === null || typeof value['curates'] === 'boolean') &&
+    typeof value['isCurating'] === 'boolean'
   )
 }
 
@@ -465,12 +491,14 @@ async function clearBand($: EngineInterface): Promise<void> {
   await update($, rowNoticeAtom, () => null)
   await update($, versionNoticeAtom, () => null)
   await update($, healthAtom, () => null)
+  curatingMachine = null
   await update($, runAtom, () => null)
   await update($, proposalsAtom, () => null)
   await update($, proposalsNoticeAtom, () => null)
   await turnTo($, null)
   await update($, sessionAtom, () => null)
   await update($, sessionNoticeAtom, () => null)
+  await forgetCurateNotice($)
   $.ui.status(undefined)
 }
 
@@ -576,7 +604,9 @@ async function sessionModel($: EngineInterface): Promise<SessionModel> {
     notes: notesOf(await read($, notesAtom), session),
     rowNotice: await read($, rowNoticeAtom),
     folderNotice: await read($, sessionNoticeAtom),
+    curateNotice: curateNoticeOf(await read($, curateNoticeAtom)),
     health: await read($, healthAtom),
+    curatingMachine,
     versionLine: await read($, versionNoticeAtom),
     snapshot: await read($, snapshotAtom),
     proposals: await read($, proposalsAtom),
@@ -1007,7 +1037,64 @@ function sessionActions($: EngineInterface): SessionActions {
       await press($, FOLDER_PRESS, change, folderWrite($, change, folder), UNDO_FOLDER)
     },
     undoFolder: () => undo($, FOLDER_PRESS),
+    curateNow: async () => {
+      // Why the last press started no run is no longer what the button is about.
+      await forgetCurateNotice($)
+      await press($, CURATE_PRESS, 'curate', curateWrite($), UNDO_CURATE)
+    },
+    undoCurate: () => undo($, CURATE_PRESS),
   }
+}
+
+// How long after a start the run's record is read: by then the run has written that it is under way.
+const RUN_SHOWS_AFTER_MS = 3_000
+
+/**
+ * Starts one curation run in the background with the core's own command, which answers at once
+ * whether a run started: it runs also while curation is paused, and starts none while a run is
+ * under way or on a machine that does not curate. A run that started is said at once, before its
+ * record says so, and the band is read again a moment later; a press that started none says why,
+ * in the command's words.
+ */
+function curateWrite($: EngineInterface): PressWrite {
+  return async () => {
+    const start = await startedRun($)
+    if (start.isStarted) {
+      await update($, healthAtom, health => (health === null ? health : whileCurating(health)))
+      $.clock.after(
+        RUN_SHOWS_AFTER_MS,
+        inBackground($, () => refresh($, true)),
+      )
+      return false
+    }
+    curateFailure = start.reason
+    await update($, curateNoticeAtom, () => start.refusal)
+    // Most often a run is under way that this session had not read of yet: the look says so, and the button goes.
+    $.clock.after(
+      0,
+      inBackground($, () => refresh($, true)),
+    )
+    return false
+  }
+}
+
+/** Asks the core for one run in the background. A command that failed, threw or answered something else started none. */
+async function startedRun($: EngineInterface): Promise<RunStart> {
+  const failed = (reason: string): RunStart => ({ isStarted: false, refusal: 'failed', reason })
+  try {
+    const outcome = await runM2b($, ['curate', '--force', '--detach', '--json'], WRITE_TIMEOUT_MS)
+    if (!outcome.ok) {
+      return failed(outcome.error)
+    }
+    return parseRunStart(outcome.stdout) ?? failed('m2b answered something that is not the start of a run')
+  } catch (error) {
+    return failed(String(error))
+  }
+}
+
+/** What the pane says of the last press that started no run, null where there is none. */
+function curateNoticeOf(refusal: CurateRefusal | null): string | null {
+  return refusal === null ? null : noRunStarted(refusal, curateFailure)
 }
 
 /**
@@ -1713,6 +1800,7 @@ export const register: Register = on => {
     await update($, rowNoticeAtom, () => null)
     await update($, proposalsNoticeAtom, () => null)
     await update($, sessionNoticeAtom, () => null)
+    await forgetCurateNotice($)
     if (isOwnPrompt(e)) {
       await update($, ownPromptsAtom, prompts => withPrompt(prompts ?? [], e.text))
     }

@@ -311,6 +311,49 @@ class DetachTest(test_runner.RunnerTest):
         self.assertIn("already running", out)
         start.assert_not_called()
 
+    def test_detach_answers_as_json_whether_a_run_started_and_why_none_did(self) -> None:
+        """Covers: B215"""
+        self.curating()
+
+        with test_runner.mock.patch("m2b.curate.detach.subprocess.Popen", return_value=_Started()) as start:
+            started = self.run_json("curate", "--force", "--detach", "--json")
+        start.assert_called_once()
+        self.assertEqual(started["kind"], "started")
+        self.assertIn("started in the background", started["message"])
+
+        lock = machine_state.RunLock(self.machine)
+        self.assertTrue(lock.acquire())
+        self.addCleanup(lock.release)
+        with test_runner.mock.patch("m2b.curate.detach.subprocess.Popen") as start:
+            running = self.run_json("curate", "--force", "--detach", "--json")
+        start.assert_not_called()
+        self.assertEqual(running, {"kind": "running", "message": "a curation run is already running on this machine"})
+
+    def test_detach_as_json_names_the_machine_that_curates_where_this_one_does_not(self) -> None:
+        """Covers: B215"""
+        self.curating()
+        settings = self.store_root / "store.json"
+        raw = json.loads(settings.read_text(encoding="utf-8"))
+        settings.write_text(json.dumps({**raw, "curating_machine": "sb-test-m2"}), encoding="utf-8")
+
+        with test_runner.mock.patch("m2b.curate.detach.subprocess.Popen") as start:
+            answer = self.run_json("curate", "--force", "--detach", "--json")
+
+        start.assert_not_called()
+        self.assertEqual(answer["kind"], "not-curating")
+        self.assertIn("sb-test-m2", answer["message"])
+
+    def test_json_without_detach_is_refused_before_any_run(self) -> None:
+        """Covers: B215"""
+        self.curating()
+
+        with test_runner.mock.patch("m2b.curate.runner.curate") as run:
+            code, out, err = self.run_command("curate", "--force", "--json")
+
+        run.assert_not_called()
+        self.assertEqual((code, out), (cli.EXIT_USAGE, ""))
+        self.assertIn("--json goes with --detach", err)
+
     def test_detach_on_a_paused_machine_starts_nothing_unless_forced(self) -> None:
         """Covers: B161"""
         self.curating(curation={"paused": True})

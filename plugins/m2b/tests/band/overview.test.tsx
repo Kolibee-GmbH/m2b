@@ -5,9 +5,10 @@ import { part, pathLine, row, said, topicLabel } from '../../hooks/look'
 import type { ButtonSpec } from '../../hooks/look'
 import { glanceLines, sessionLines, sessionPane } from '../../hooks/session-view'
 import type { SessionActions, SessionModel } from '../../hooks/session-view'
-import type { BandProposal, BandSession, BandSnapshot } from '../../types'
+import type { BandHealth, BandProposal, BandSession, BandSnapshot } from '../../types'
 import {
   BAND,
+  CURATE_NOW_LINE,
   ENGINES_OWN_DRAWING,
   FakeM2b,
   PARTS,
@@ -67,6 +68,8 @@ const NO_ACTIONS: SessionActions = {
   showTopic: async () => undefined,
   switchFolder: async () => undefined,
   undoFolder: async () => undefined,
+  curateNow: async () => undefined,
+  undoCurate: async () => undefined,
 }
 
 const KNOWN: BandSession = { id: 's', known: true, topics: [], atStart: 'whole', offUnder: null, folder: null, error: null }
@@ -78,6 +81,11 @@ function proposed(id: string, text: string): BandProposal {
   return { id, kind: 'person', text, quote: text, day: '2026-03-12', topic: null, due: null }
 }
 
+/** How m2b stands on the machine that curates the store, with nothing wrong and no run under way, and what a test sets beside that. */
+function healthWith(fields: Partial<BandHealth>): BandHealth {
+  return { curation: null, troubles: [], curates: true, isCurating: false, ...fields }
+}
+
 /** What the overview draws from, with what a test sets and nothing else: nothing looked at, nothing said. */
 function modelWith(parts: Partial<SessionModel>): SessionModel {
   return {
@@ -85,10 +93,12 @@ function modelWith(parts: Partial<SessionModel>): SessionModel {
     notes: 0,
     rowNotice: null,
     folderNotice: null,
+    curateNotice: null,
     snapshot: null,
     proposals: null,
     presses: {},
     health: null,
+    curatingMachine: null,
     versionLine: null,
     ...parts,
   }
@@ -130,7 +140,7 @@ const FULL = modelWith({
     answered: 0,
     error: null,
   },
-  health: { curation: CURATED, troubles: [] },
+  health: healthWith({ curation: CURATED }),
 })
 
 /** A session m2b looked at, with nothing in any part. */
@@ -149,7 +159,7 @@ const TROUBLED = modelWith({
   folderNotice: NOT_TURNED_ON,
   snapshot: QUIET,
   proposals: { waiting: [], answered: 0, error: 'the store at /home/alex/Notes cannot be read' },
-  health: { curation: '2 in inbox', troubles: [RUN_FAILED, NO_CALENDAR] },
+  health: healthWith({ curation: '2 in inbox', troubles: [RUN_FAILED, NO_CALENDAR] }),
   versionLine: OLDER,
 })
 
@@ -259,7 +269,7 @@ test('a part is a frame around its title from 36 columns of pane, and a bar down
       expect(await partLook(ui, key)).toEqual({ ...frame, ...CALM })
     }
     // The same parts with the same lines at every width.
-    expect((await shownParts(ui)).map(shown => shown.lines.length)).toEqual([9, 2, 6, 1])
+    expect((await shownParts(ui)).map(shown => shown.lines.length)).toEqual([9, 2, 6, 2])
     await ui.unmount()
   }
 })
@@ -466,13 +476,13 @@ test('that the session keeps what it was given is said only where m2b is off and
   await whileOn.unmount()
 })
 
-test('the part about m2b is one line that steps back while all is well', async ($, on) => {
+test('the part about m2b is the line about curation, which steps back, and below it the button that starts a run, while all is well on the machine that curates', async ($, on) => {
   // Covers: B206
   await start($, on, new FakeM2b())
 
   const ui = await startView($)
 
-  expect((await shownParts(ui)).at(-1)).toEqual({ key: 'm2b', title: 'm2b', count: null, lines: [CURATED] })
+  expect((await shownParts(ui)).at(-1)).toEqual({ key: 'm2b', title: 'm2b', count: null, lines: [CURATED, CURATE_NOW_LINE] })
   expect(await lookOf(ui, CURATED)).toEqual(DIM)
   expect(await partLook(ui, 'm2b')).toEqual({ ...FRAMED, ...CALM })
   await ui.unmount()
@@ -512,14 +522,15 @@ test('a trouble the answer gives no reason for is a sentence that ends with a fu
 
   const ui = await startView($)
 
-  expect(await partLines(ui, 'm2b')).toEqual(['The last curation run was interrupted.', 'm2b could not reach the tasks.', '2 in inbox'])
+  expect(await partLines(ui, 'm2b')).toEqual(['The last curation run was interrupted.', 'm2b could not reach the tasks.', '2 in inbox', CURATE_NOW_LINE])
   await ui.unmount()
 })
 
 test('the part about m2b is left out where m2b has nothing wrong and nothing to say of curation, and says an older m2b alone where that is all', async ($, on) => {
   // Covers: B206, B96
   const fake = new FakeM2b()
-  // An empty inbox and a last run without a time: nothing to say of curation.
+  // An empty inbox and a last run without a time: nothing to say of curation. The answer names no
+  // curating machine either: on a machine that curates the part holds the button, on another which one does.
   fake.status = { inbox: { count: 0, evicted: 0 }, run: { state: 'succeeded' }, backends: {} }
   const { clock } = await start($, on, fake)
   const ui = await startView($)
@@ -541,15 +552,15 @@ test('in the part about m2b what is wrong stands first, then that the session ru
 
   const ui = await draw(TROUBLED)
 
-  expect(await partLines(ui, 'm2b')).toEqual([RUN_FAILED, NO_CALENDAR, OLDER, '2 in inbox'])
+  expect(await partLines(ui, 'm2b')).toEqual([RUN_FAILED, NO_CALENDAR, OLDER, '2 in inbox', CURATE_NOW_LINE])
   expect(await lookOf(ui, RUN_FAILED)).toEqual(TROUBLE)
   expect(await lookOf(ui, NO_CALENDAR)).toEqual(TROUBLE)
   expect(await lookOf(ui, OLDER)).toEqual(ASKS)
   expect(await lookOf(ui, '2 in inbox')).toEqual(DIM)
   await ui.unmount()
 
-  // No answer read yet, and one that names neither a trouble nor a line: no part.
-  for (const health of [null, { curation: null, troubles: [] }]) {
+  // No answer read yet, and one that names neither a trouble nor a line nor which machine curates: no part.
+  for (const health of [null, healthWith({ curates: null })]) {
     const none = await draw({ ...EMPTY, health })
     expect(await partLines(none, 'm2b')).toBeNull()
     await none.unmount()
@@ -639,7 +650,7 @@ test('the text for a surface without panes has the same parts in the same order 
         '2 notes written in this session',
       ],
     },
-    { key: 'm2b', title: 'm2b', count: null, lines: [CURATED] },
+    { key: 'm2b', title: 'm2b', count: null, lines: [CURATED, CURATE_NOW_LINE] },
   ])
   // A line has no button and no tab to press: what waits is named with the command that shows it.
   expect(sessionLines(FULL)).toEqual([
@@ -714,7 +725,7 @@ test('the pane and the text say what is wrong in the same parts and words, and t
     ['Waits for you', STORE_UNREAD, SETTLED],
     ['Today', NOTHING_DUE],
     ['This session', '[Northwind] 2 facts', PRINTED_WHOLE, 'm2b is off under this folder.', '/home/alex/code', '[turn on here]', KEEPS, NOT_TURNED_ON],
-    ['m2b', RUN_FAILED, NO_CALENDAR, OLDER, '2 in inbox'],
+    ['m2b', RUN_FAILED, NO_CALENDAR, OLDER, '2 in inbox', CURATE_NOW_LINE],
   ])
   for (const line of [STORE_UNREAD, SETTLED, NOT_TURNED_ON, RUN_FAILED, NO_CALENDAR]) {
     expect(await lookOf(ui, line)).toEqual(TROUBLE)
@@ -774,7 +785,7 @@ test('a line of the pane and of the text is one plain line, whatever a title, a 
     given: { ...KNOWN, topics: [{ name: 'North\u001b[31mwind', facts: 1, current: 0 }] },
     rowNotice: 'Already settled in another session,\nnothing written: Dana\u0007',
     snapshot: { ...QUIET, candidates: [{ id: 'c1', title: 'Remember? \u001b[2JDana\nprefers tea' }] },
-    health: { curation: '2 in\tinbox', troubles: ['The last curation run failed: the ingest\u001b[0m step failed'] },
+    health: healthWith({ curation: '2 in\tinbox', troubles: ['The last curation run failed: the ingest\u001b[0m step failed'] }),
     versionLine: 'This session runs\nan older m2b.',
   })
 

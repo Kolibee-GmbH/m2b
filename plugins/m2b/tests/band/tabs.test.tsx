@@ -8,6 +8,7 @@ import { topicShowKey } from '../../hooks/session-view'
 import type { SessionModel } from '../../hooks/session-view'
 import type { BandSession } from '../../types'
 import {
+  CURATE_NOW,
   FakeM2b,
   FakeSettings,
   NOTES,
@@ -359,7 +360,7 @@ test('the start view says under which tab the proposals and the whole review are
   for (const line of ['in the tab Proposals', 'The whole review is in the tab Review.']) {
     expect((await lookOf(ui, line))?.dimColor).toBe(true)
   }
-  expect(await viewButtons(ui)).toEqual(['keep:c1', 'drop:c1', 'keep:q1', 'drop:q1', 'ok:r1', 'topic:0', 'topic:1'])
+  expect(await viewButtons(ui)).toEqual(['keep:c1', 'drop:c1', 'keep:q1', 'drop:q1', 'ok:r1', 'topic:0', 'topic:1', CURATE_NOW])
   await ui.unmount()
 })
 
@@ -542,10 +543,12 @@ function modelWith(parts: Partial<SessionModel>): SessionModel {
     notes: 0,
     rowNotice: null,
     folderNotice: null,
+    curateNotice: null,
     snapshot: null,
     proposals: null,
     presses: {},
     health: null,
+    curatingMachine: null,
     versionLine: null,
     ...parts,
   }

@@ -70,8 +70,13 @@ export type FakeProposal = {
   answer?: 'keep' | 'drop'
 }
 
-/** A status with nothing wrong, which clears the status line. */
+/** The machine the fake answers for, which curates its store. */
+export const THIS_MACHINE = 'tower-1'
+
+/** A status with nothing wrong, which clears the status line, on the machine that curates the store. */
 export const STATUS = {
+  curating_machine: THIS_MACHINE,
+  this_machine_curates: true,
   inbox: { count: 2, evicted: 0 },
   run: { state: 'succeeded', last_succeeded_at: '2026-03-14T18:02:00+01:00' },
   backends: { tasks: { state: 'reachable', detail: '' } },
@@ -80,6 +85,27 @@ export const STATUS = {
 /** A status with something wrong, and what the status line says to it: a line that was written, not cleared. */
 export const TROUBLED_STATUS = { ...STATUS, backends: { tasks: { state: 'not reachable', detail: 'no grant' } } }
 export const TROUBLE_LINE = 'tasks not reachable'
+
+/** The same on a machine that does not curate: another one does. */
+export const STATUS_ELSEWHERE = { ...STATUS, curating_machine: 'tower-2', this_machine_curates: false }
+
+/** The key of the button in the part "m2b" that starts a curation run, on the machine that curates; its `undo`; and how the button reads as a line. */
+export const CURATE_NOW = 'curate:now'
+export const UNDO_CURATE = 'undo:curate'
+export const CURATE_NOW_LINE = '[curate now]'
+
+/** The call that starts one curation run in the background and answers how the start went. */
+export const CURATE_NOW_CALL = ['curate', '--force', '--detach', '--json']
+
+/** An answer of `m2b curate --detach --json`: what became of the start, and the sentence the command has for it. */
+export function runStart(kind: string, message: string): ProcessRunResult {
+  return ok(`${JSON.stringify({ kind, message })}\n`)
+}
+
+/** The answers of the core, in its words: a run that started, and the two ways none does with `--force`. */
+export const RUN_STARTED = 'a curation run started in the background (process 4711); m2b status shows how it goes'
+export const RUN_UNDER_WAY = 'a curation run is already running on this machine'
+export const CURATES_ELSEWHERE = 'this machine is not the curating machine; tower-2 is'
 
 /** A topic whose facts the core gave a session, with what its block held then. */
 export type FakeTopic = { name: string; facts: number | null; current: number | null }
@@ -224,6 +250,8 @@ export class FakeM2b {
    * installed core is one from before the command: it refuses it as an unknown choice.
    */
   onSettings: ((args: readonly string[], env?: Record<string, string>) => ProcessRunResult) | null = null
+  /** How `m2b curate --detach --json` ends: as the core answers a run it started, until a test says otherwise. */
+  curateAnswer: ProcessRunResult = runStart('started', RUN_STARTED)
   /** The installed core's version, as `m2b band --json` answers it. */
   version = '0.3.0'
   /** The version in the manifest of the plugin the band was loaded from; null when it cannot be read. */
@@ -324,6 +352,9 @@ export class FakeM2b {
         : `/home/alex/Notes/${path}`
       const result = ok(`${stdout}\n`)
       return this.captureNotice === null ? result : { ...result, stderr: `m2b: ${this.captureNotice}\n` }
+    }
+    if (args[0] === 'curate') {
+      return this.curateAnswer
     }
     if (args[0] === 'proposals' && args[1] === 'add') {
       this.handedIn.push(stdin ?? '')
@@ -479,6 +510,11 @@ export class FakeM2b {
       proposals: waiting.map(({ answer: _, ...fields }) => fields),
       answered: this.proposals.length - waiting.length,
     }
+  }
+
+  /** The calls that started a curation run, or tried to. */
+  curateCalls(): string[][] {
+    return this.calls.filter(call => call[0] === 'curate')
   }
 
   /** The calls that listed the settings or changed one. */

@@ -3,7 +3,7 @@ import type { CommandRunResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
 import { wholePath } from '../../hooks/plain-text'
-import { FakeM2b, SESSION_ID, buttonsAt, linesAt, lookOf, pane, partLines, pathPieces, start, texts, viewButtons } from './harness'
+import { CURATE_NOW, FakeM2b, SESSION_ID, buttonsAt, linesAt, lookOf, pane, partLines, pathPieces, start, texts, viewButtons } from './harness'
 
 const PANE = 'm2b'
 const UNDO_MS = 5_000
@@ -132,7 +132,7 @@ test('a core that names no folder gets no row for it and no button to turn m2b o
   await ui.unmount()
 })
 
-test('a look that failed offers no button: m2b does not know which folder it would turn off', async ($, on) => {
+test('a look that failed offers no button for the folder, m2b does not know which one it would turn off: the one button of the view is curate now, in the part about m2b', async ($, on) => {
   // Covers: B189
   const fake = inAcme()
   fake.lookFails = 'the machine state cannot be read'
@@ -140,7 +140,7 @@ test('a look that failed offers no button: m2b does not know which folder it wou
 
   const ui = await startView($)
 
-  expect(await viewButtons(ui)).toEqual([])
+  expect(await viewButtons(ui)).toEqual([CURATE_NOW])
   await ui.unmount()
 })
 
@@ -231,7 +231,8 @@ test('while the write is under way the row offers nothing, and a second press ca
   await ui.press({ key: 'folder:off' })
   await clock.advance(UNDO_MS + 1)
 
-  expect(await viewButtons(ui)).toEqual(['topic:0'])
+  // The folder's row has none: the topic's button and curate now belong to other rows.
+  expect(await viewButtons(ui)).toEqual(['topic:0', CURATE_NOW])
   expect(await linesAt(ui, FOLDER_ROW)).toEqual([ON_HERE, ACME, 'turning m2b off here…'])
   await clock.advance(2_000)
   expect(await viewButtons(ui)).toContain('folder:on')

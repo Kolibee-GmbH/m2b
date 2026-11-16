@@ -46,15 +46,33 @@ export type BandSnapshot = {
 /**
  * How m2b itself stands, from the status part of the band's answer: `curation` is the line about
  * the inbox and the last curation run while nothing is wrong with them, null where there is nothing
- * to say; `troubles` are the things that are wrong, each a sentence with its reason.
+ * to say; `troubles` are the things that are wrong, each a sentence with its reason. `curates`
+ * says whether this machine runs curation for the store, null where m2b could not tell;
+ * `isCurating` while a run is under way. The name of the machine that curates is a setting's
+ * value and is not held here: this is kept in the session's state, which every plugin can read.
  */
-export type BandHealth = { curation: string | null; troubles: string[] }
+export type BandHealth = {
+  curation: string | null
+  troubles: string[]
+  curates: boolean | null
+  isCurating: boolean
+}
 
 /** What a press on keep or drop asks the task list for. */
 export type BandSettle = 'complete' | 'drop'
 
 /** What a press on the pane's button for the session's folder asks: the distillate off there, or on again. */
 export type FolderSwitch = 'off' | 'on'
+
+/** What a press on `curate now` asks for: one curation run, started in the background. */
+export type CurateNow = 'curate'
+
+/**
+ * Why a press on `curate now` started no run: a run is under way, another machine curates the
+ * store, `store.json` is not on this machine, or the command failed or answered something else.
+ * Which of these it is, and never the command's sentence, which can name a machine or a folder.
+ */
+export type CurateRefusal = 'running' | 'not-curating' | 'not-downloaded' | 'failed'
 
 /**
  * A press on a row: `waiting` while undo can still take it back and nothing is written, `writing`
@@ -63,7 +81,7 @@ export type FolderSwitch = 'off' | 'on'
  * are the proposals a press on keep all stands for: those the pane showed when it was pressed.
  */
 export type BandPress = {
-  action: BandSettle | FolderSwitch
+  action: BandSettle | FolderSwitch | CurateNow
   phase: 'waiting' | 'writing'
   token: string
   deadlineMs?: number
@@ -206,6 +224,8 @@ declare module 'claude-code' {
       sessionNotes: SessionNotes | null
       /** Why the last press on the folder's button wrote nothing; cleared by the next press on it and the next prompt. */
       sessionNotice: string | null
+      /** Why the last press on `curate now` started no run; cleared by the next press on it and the next prompt. */
+      curateNotice: CurateRefusal | null
       /** The start of the last failed run this session was shown, so it is shown once. */
       bandToastedRun: string | null
       /** The words of each prompt the person submitted in this session, the newest last. */

@@ -4,7 +4,7 @@ import type { Engine } from 'claude-code/testing'
 
 import { UNDO_ALL } from '../../hooks/proposals'
 import { undoKey } from '../../hooks/rows'
-import { UNDO_FOLDER } from '../../hooks/session-view'
+import { UNDO_CURATE, UNDO_FOLDER } from '../../hooks/session-view'
 import { FakeM2b, buttonsAt, linesAt, pane, start } from './harness'
 
 // After a press on keep, drop, ok, keep all or the folder's button the mod asks for the focus on
@@ -62,6 +62,7 @@ const PRESSES: readonly Press[] = [
       fake.given = { topics: [], atStart: 'whole', offUnder: ACME, folder: ACME }
     },
   },
+  { what: 'the button that starts a curation run', command: 'm2b-pane', key: 'curate:now', row: 'row:curate', undo: UNDO_CURATE, says: 'starting a curation run' },
 ]
 
 test('the key of undo names its row: a task or a proposal by its id, keep all and the folder by their own', () => {
@@ -70,8 +71,9 @@ test('the key of undo names its row: a task or a proposal by its id, keep all an
   expect(undoKey(DANA)).toBe(`undo:${DANA}`)
   expect(UNDO_ALL).toBe('undo:all')
   expect(UNDO_FOLDER).toBe('undo:folder')
+  expect(UNDO_CURATE).toBe('undo:curate')
   // No two presses that can wait in one view share a key.
-  expect(new Set([undoKey('c1'), undoKey('q1'), undoKey('r1'), undoKey(DANA), UNDO_ALL, UNDO_FOLDER]).size).toBe(6)
+  expect(new Set([undoKey('c1'), undoKey('q1'), undoKey('r1'), undoKey(DANA), UNDO_ALL, UNDO_FOLDER, UNDO_CURATE]).size).toBe(7)
 })
 
 for (const { what, command, key, row, undo, says, arrange } of PRESSES) {
@@ -105,6 +107,7 @@ for (const { what, command, key, row, undo, says, arrange } of PRESSES) {
     expect(fake.writes()).toEqual([])
     expect(fake.answers()).toEqual([])
     expect(fake.folderCalls()).toEqual([])
+    expect(fake.curateCalls()).toEqual([])
     await ui.unmount()
   })
 }

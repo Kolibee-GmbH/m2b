@@ -12,6 +12,7 @@ import {
   BAND,
   BAND_ROW,
   CALM_ROW,
+  CURATE_NOW_LINE,
   ENGINES_OWN_DRAWING,
   FakeM2b,
   HOME,
@@ -698,7 +699,7 @@ test('that this session runs an older m2b is said in the pane, in the part about
   expect(await shownBand(band)).toEqual(ROW)
   expect((await everyText(band)).join('\n')).not.toContain('/reload-plugins')
   // Above the line about curation, and in the color of what waits: it asks for a command.
-  expect(await partLines(beside, 'm2b')).toEqual([OLDER_M2B, '2 in inbox · curated 18:02'])
+  expect(await partLines(beside, 'm2b')).toEqual([OLDER_M2B, '2 in inbox · curated 18:02', CURATE_NOW_LINE])
   expect(await lookOf(beside, OLDER_M2B)).toEqual({ color: 'warning', dimColor: undefined, wrap: 'wrap' })
   await beside.unmount()
   await band.unmount()
@@ -1392,10 +1393,12 @@ test('the small form is in the order of the overview: what waits, the tasks due,
       notes: 0,
       rowNotice: null,
       folderNotice: null,
+      curateNotice: null,
       snapshot: null,
       proposals: null,
       presses: {},
       health: null,
+      curatingMachine: null,
       versionLine: null,
       ...fields,
     })

@@ -24,6 +24,14 @@ All notable changes to this project are documented here. The format follows
     cut where it ends (`m2b 1 waits for you · /m2b-pane`). The tasks due are counted there,
     never listed.
 
+- `curate now` in the m2b pane: on the machine that curates, the overview's part "m2b" has a
+  button below the line that says when m2b last curated. A press waits five seconds with `undo`,
+  then starts one curation run in the background, also while curation is paused; the part says
+  `curating` while the run goes and names no button then. A press that started no run says why.
+  On a machine that does not curate the part says which one does.
+- `m2b curate --detach --json` answers the start in the background as data: whether a run
+  started and, where none did, why.
+
 ### Changed
 
 - The band above the prompt is there in every session unless `band.place` says otherwise: a

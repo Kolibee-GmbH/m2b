@@ -3,6 +3,7 @@ import { expect, test } from 'claude-code/testing'
 import {
   BAND,
   CALM_ROW,
+  CURATE_NOW_LINE,
   ENGINES_OWN_DRAWING,
   FakeM2b,
   HOME,
@@ -354,7 +355,7 @@ test('a session that runs an older m2b than the installed one says to run /reloa
 
   const ui = await startView($)
   const older = 'This session runs m2b 0.3.0 and m2b 0.3.1 is installed: run /reload-plugins.'
-  expect(await partLines(ui, 'm2b')).toEqual([older, CURATED])
+  expect(await partLines(ui, 'm2b')).toEqual([older, CURATED, CURATE_NOW_LINE])
   expect(await lookOf(ui, older)).toEqual({ color: 'warning', dimColor: undefined, wrap: 'wrap' })
   await ui.unmount()
 })
@@ -371,7 +372,7 @@ test('a session that runs an older m2b than the installed one leaves a band that
   await band.unmount()
 
   const ui = await startView($)
-  expect(await partLines(ui, 'm2b')).toEqual(['This session runs m2b 0.3.0 and m2b 0.3.1 is installed: run /reload-plugins.', CURATED])
+  expect(await partLines(ui, 'm2b')).toEqual(['This session runs m2b 0.3.0 and m2b 0.3.1 is installed: run /reload-plugins.', CURATED, CURATE_NOW_LINE])
   await ui.unmount()
 })
 
@@ -386,7 +387,7 @@ test('a band newer than the installed m2b, as from a checkout, says nothing abou
   expect(await everyText(ui)).toEqual([ENGINES_OWN_DRAWING])
   await ui.unmount()
   const beside = await startView($)
-  expect(await partLines(beside, 'm2b')).toEqual([CURATED])
+  expect(await partLines(beside, 'm2b')).toEqual([CURATED, CURATE_NOW_LINE])
   await beside.unmount()
 })
 
@@ -400,7 +401,7 @@ test('a band newer than the installed m2b, as from a checkout, is calm where it 
   expect(await shownBand(ui)).toEqual(CALM_ROW)
   await ui.unmount()
   const beside = await startView($)
-  expect(await partLines(beside, 'm2b')).toEqual([CURATED])
+  expect(await partLines(beside, 'm2b')).toEqual([CURATED, CURATE_NOW_LINE])
   await beside.unmount()
 })
 
@@ -412,6 +413,6 @@ test('a band of the installed version says nothing about versions', async ($, on
   expect(await shownBand(ui)).toEqual(rowSaying('1 waits for you'))
   await ui.unmount()
   const beside = await startView($)
-  expect(await partLines(beside, 'm2b')).toEqual([CURATED])
+  expect(await partLines(beside, 'm2b')).toEqual([CURATED, CURATE_NOW_LINE])
   await beside.unmount()
 })

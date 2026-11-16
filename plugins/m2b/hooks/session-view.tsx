@@ -86,33 +86,44 @@ const PRINTED = new Map([
 export const FOLDER_PRESS = 'distillate:folder'
 /** The key of `undo` on the folder's row, drawn only while that press waits. */
 export const UNDO_FOLDER = 'undo:folder'
+/** The press on `curate now`, the key of that button, and the key of `undo` while the press waits. */
+export const CURATE_PRESS = 'curate'
+export const CURATE_NOW = 'curate:now'
+export const UNDO_CURATE = 'undo:curate'
 
 /**
  * Everything the overview draws from. `notes` are the notes this session wrote through the mod.
  * `rowNotice` is what m2b said to the last press on a candidate, a question or the review that
- * wrote nothing, `folderNotice` the same for the folder's button. `versionLine` says that this
- * session runs an older m2b than the one installed.
+ * wrote nothing, `folderNotice` the same for the folder's button, `curateNotice` why a press on
+ * `curate now` started no run. `versionLine` says that this session runs an older m2b than the
+ * one installed. `curatingMachine` names the machine that curates the store, null where none is
+ * known: a setting's value, which the caller holds outside the session's state.
  */
 export type SessionModel = {
   given: BandSession | null
   notes: number
   rowNotice: string | null
   folderNotice: string | null
+  curateNotice: string | null
   snapshot: BandSnapshot | null
   proposals: BandProposals | null
   presses: Record<string, BandPress>
   health: BandHealth | null
+  curatingMachine: string | null
   versionLine: string | null
 }
 
 /**
  * What the overview's buttons do: keep, drop and `ok`; a topic's button, which turns the pane to
- * that topic's lines; and m2b off or on for a folder, with its undo.
+ * that topic's lines; m2b off or on for a folder, with its undo; and a curation run now, with its
+ * undo.
  */
 export type SessionActions = RowActions & {
   showTopic: (name: string) => Promise<void>
   switchFolder: (change: FolderSwitch, folder: string) => Promise<void>
   undoFolder: () => Promise<void>
+  curateNow: () => Promise<void>
+  undoCurate: () => Promise<void>
 }
 
 /** A line and what it is, by which it is drawn. */
@@ -234,13 +245,29 @@ function notesLine(notes: number): string | null {
   return notes > 0 ? `${count(notes, 'note', 'notes')} written in this session` : null
 }
 
-/** How m2b itself stands, as lines: what is wrong first, then an older m2b in this session, then the line about curation, which steps back. */
-function healthLines(model: SessionModel): Line[] {
+/** What is wrong with m2b, each with its reason, then an older m2b in this session. */
+function troubleLines(model: SessionModel): Line[] {
   const { health, versionLine } = model
   return [
     ...(health?.troubles ?? []).map(trouble => line(plainLine(trouble), 'trouble')),
     ...(versionLine === null ? [] : [line(plainLine(versionLine), 'waits')]),
+  ]
+}
+
+/** Which machine runs curation, said on every other one: there is nothing to start here. */
+function curatesElsewhere(model: SessionModel): Line[] {
+  return model.health?.curates === false && model.curatingMachine !== null
+    ? [line(`Curation runs on ${plainLine(model.curatingMachine)}.`, 'quiet')]
+    : []
+}
+
+/** How m2b itself stands, as lines: what is wrong first, then the line about curation, which steps back, and where curation runs. */
+function healthLines(model: SessionModel): Line[] {
+  const { health } = model
+  return [
+    ...troubleLines(model),
     ...(health?.curation ? [line(plainLine(health.curation), 'quiet')] : []),
+    ...curatesElsewhere(model),
   ]
 }
 
@@ -457,18 +484,47 @@ function sessionPart($: EngineInterface, e: ResolveInput, model: SessionModel, a
   return body.length === 0 ? null : part(ui, spec, body)
 }
 
-/** "m2b": what is wrong with m2b, each with its reason, and the line about curation, which is all the part holds while all is well. Left out where there is nothing to say. */
-function healthPart($: EngineInterface, e: ResolveInput, model: SessionModel, columns: number) {
-  const lines = healthLines(model)
-  if (lines.length === 0) {
-    return null
-  }
+const STARTING_A_RUN = 'starting a curation run'
+
+/**
+ * How curation stands, and on the machine that curates the button that starts a run now. Like keep
+ * and drop the press waits for undo, and while it starts the run the row offers nothing. No button
+ * while a run is under way, on a machine that does not curate, or where m2b could not tell. A
+ * press that waits keeps its `undo` whatever a look reads meanwhile: it can still be taken back.
+ */
+function curationRow($: EngineInterface, e: ResolveInput, health: BandHealth, pressed: BandPress | undefined, actions: SessionActions) {
   const ui = $.ui.resolve(e)
-  return part(
-    ui,
-    { key: 'm2b', title: M2B_ITSELF, waits: false, columns },
-    lines.map(one => said(ui, one.text, one.tone)),
+  const { Box } = ui
+  const standing = health.curation ? said(ui, plainLine(health.curation), 'quiet') : null
+  if (pressed === undefined && (health.curates !== true || health.isCurating)) {
+    return standing
+  }
+  return (
+    <Box key="row:curate" flexDirection="column">
+      {standing}
+      {pressed === undefined && button(ui, { key: CURATE_NOW, label: 'curate now', kind: 'default', onPress: actions.curateNow })}
+      {pressed?.phase === 'waiting' &&
+        pressLine(ui, [{ key: UNDO_CURATE, label: 'undo', kind: 'default', onPress: actions.undoCurate }], STARTING_A_RUN)}
+      {pressed?.phase === 'writing' && said(ui, `${STARTING_A_RUN}…`, 'quiet')}
+    </Box>
   )
+}
+
+/**
+ * "m2b": what is wrong with m2b, each with its reason, why the last press started no run, and how
+ * curation stands, with the button that starts a run on the machine that curates. Left out where
+ * there is nothing to say.
+ */
+function healthPart($: EngineInterface, e: ResolveInput, model: SessionModel, actions: SessionActions, columns: number) {
+  const { health, curateNotice } = model
+  const ui = $.ui.resolve(e)
+  const body = [
+    ...troubleLines(model).map(one => said(ui, one.text, one.tone)),
+    curateNotice !== null && said(ui, plainLine(curateNotice), 'trouble'),
+    health !== null && curationRow($, e, health, model.presses[CURATE_PRESS], actions),
+    ...curatesElsewhere(model).map(one => said(ui, one.text, one.tone)),
+  ].filter(present)
+  return body.length === 0 ? null : part(ui, { key: 'm2b', title: M2B_ITSELF, waits: false, columns }, body)
 }
 
 /** The overview's drawing. `columns` is the width of the pane's body: docked beside the chat it can be 24. */
@@ -479,7 +535,7 @@ export function sessionPane($: EngineInterface, e: ResolveInput, model: SessionM
       {waitsPart($, e, model, actions, columns)}
       {todayPart($, e, model.snapshot, columns)}
       {sessionPart($, e, model, actions, columns)}
-      {healthPart($, e, model, columns)}
+      {healthPart($, e, model, actions, columns)}
     </Box>
   )
 }
