@@ -1,7 +1,25 @@
 import { expect, test } from 'claude-code/testing'
 
 import { parseReview } from '../../hooks/tasks'
-import { BAND, FakeM2b, answerKeys, linesAt, lookOf, pane, partLines, pressTab, rowSaying, shownBand, start, startView, texts } from './harness'
+import {
+  BAND,
+  FakeM2b,
+  answerKeys,
+  insetsAt,
+  linesAt,
+  lookOf,
+  pane,
+  partLines,
+  pathPieces,
+  piecesAt,
+  pressTab,
+  rowSaying,
+  shownBand,
+  start,
+  startView,
+  texts,
+} from './harness'
+import type { ShownPiece } from './harness'
 
 const UNDO_MS = 5_000
 const REVIEW = 'Review of the last curation run'
@@ -89,16 +107,105 @@ test('the pane shows each changed fact with its file and the added and removed w
   await start($, on, changedFake())
   await $.command.run({ command: 'm2b-review', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
   const ui = await $.ui.mount({ ...pane('m2b'), surface: 'terminal' })
-  const shown = (await texts(ui)).join('\n')
 
-  expect(shown).toContain('Sam (sam.md)')
-  expect(shown).toContain('Dana likes old maps (dana.md, line removed)')
-  expect(shown).toContain('facts before the run: /home/alex/older')
-  expect(shown).toContain('facts before the run: /home/alex/copy; 2 notes filed')
-  expect(shown).toContain('lint: broken link in a.md')
-  expect(shown).not.toContain('rewrote the facts line')
-  const added = (await ui.findAll({ type: 'Text' })).filter(found => found.props['color'] === 'success')
-  expect(added.map(found => found.text)).toEqual([' (carpenter)'])
+  // Under the run's line: each change, where the copies of the facts lie, then the finding no change stands for.
+  expect(await partLines(ui, 'run')).toEqual([
+    'succeeded',
+    'Sam (sam.md)',
+    'Sam, neighbour — Sam Rivers (carpenter), Lee',
+    'Dana likes old maps (dana.md, line removed)',
+    'Dana likes old maps',
+    'facts before the run:',
+    '/home/alex/older',
+    'facts before the run; 2 notes filed:',
+    '/home/alex/copy',
+    'lint: broken link in a.md',
+  ])
+  expect((await texts(ui)).join('\n')).not.toContain('rewrote the facts line')
+  const added = (await piecesAt(ui, 'part:run')).filter(piece => piece.color === 'success')
+  expect(added.map(piece => piece.text)).toEqual([' (carpenter)'])
+  await ui.unmount()
+})
+
+/** A piece of text as drawn where a test names nothing else: to be read, in no color. */
+function piece(text: string, look: Partial<ShownPiece> = {}): ShownPiece {
+  return { text, color: undefined, dimColor: undefined, weight: undefined, strikethrough: undefined, ...look }
+}
+
+test('a changed fact is its topic in bold with its file stepped back and, indented whole below, its line: added words in the color of what is done, removed ones in the color of trouble and struck through, the rest plain', async ($, on) => {
+  // Covers: B101, B106
+  const fake = changedFake()
+  if (fake.reviewDetails === null) {
+    throw new Error('the fake names no changes')
+  }
+  fake.reviewDetails.changes = [
+    {
+      kind: 'rewrote',
+      file: 'sam.md',
+      topic: 'Sam',
+      parts: [
+        { text: 'Sam, neighbour', change: 'same' },
+        { text: ' (carpenter)', change: 'added' },
+        { text: ', Lee', change: 'removed' },
+      ],
+    },
+    { kind: 'removed', file: 'acme.md', topic: 'Acme', parts: [{ text: 'Acme pays within 30 days', change: 'same' }] },
+  ]
+  fake.reviewDetails.copies = [{ path: '/home/alex/my notes/copy', captures: ['a.md'] }]
+  await start($, on, fake)
+  await $.command.run({ command: 'm2b-review', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
+  const ui = await $.ui.mount({ ...pane('m2b'), surface: 'terminal' })
+  const dim = { dimColor: true }
+
+  expect(await piecesAt(ui, 'part:run')).toEqual([
+    piece('Last curation run', { color: 'remember', weight: 'bold' }),
+    piece('succeeded'),
+    piece('Sam', { weight: 'bold' }),
+    piece(' (sam.md)', dim),
+    piece('Sam, neighbour'),
+    piece(' (carpenter)', { color: 'success' }),
+    // Struck through as well, so it reads as removed without its color.
+    piece(', Lee', { color: 'error', strikethrough: true }),
+    piece('Acme', { weight: 'bold' }),
+    // What happened to a whole line stands after its file; the line itself is as it was.
+    piece(' (acme.md, line removed)', dim),
+    piece('Acme pays within 30 days'),
+    piece('facts before the run; 1 note filed:', dim),
+    // The path of the copy is one text for each folder, so it breaks before a slash and nowhere else.
+    piece('/home', dim),
+    piece('/alex', dim),
+    piece('/my notes', dim),
+    piece('/copy', dim),
+    piece('lint: broken link in a.md'),
+  ])
+  expect(await pathPieces(ui, 'part:run')).toEqual(['/home', '/alex', '/my notes', '/copy'])
+  // A change's line and a finding stand in by a box, so their further lines stand in as well where they wrap.
+  expect(await insetsAt(ui, 'part:run')).toEqual([
+    { paddingLeft: 2, lines: ['Sam, neighbour (carpenter), Lee'] },
+    { paddingLeft: 2, lines: ['Acme pays within 30 days'] },
+    { paddingLeft: 2, lines: ['lint: broken link in a.md'] },
+  ])
+  await ui.unmount()
+})
+
+test('a fact file a run removed or emptied is named with what happened to it', async ($, on) => {
+  // Covers: B101, B106
+  const fake = changedFake()
+  if (fake.reviewDetails === null) {
+    throw new Error('the fake names no changes')
+  }
+  // As the core names a change of a whole file: by the file, without a line.
+  fake.reviewDetails.changes = [
+    { kind: 'file_removed', file: 'acme.md', topic: 'acme.md', parts: [] },
+    { kind: 'file_emptied', file: 'northwind.md', topic: 'northwind.md', parts: [] },
+  ]
+  await start($, on, fake)
+  await $.command.run({ command: 'm2b-review', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
+  const ui = await $.ui.mount({ ...pane('m2b'), surface: 'terminal' })
+
+  // The file is named once, and no empty line stands below it: a file that went holds no line to show.
+  const lines = (await partLines(ui, 'run')) ?? []
+  expect(lines.slice(1, 3)).toEqual(['acme.md (file removed)', 'northwind.md (file emptied)'])
   await ui.unmount()
 })
 

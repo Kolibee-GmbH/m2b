@@ -641,8 +641,11 @@ export async function start(
   return { clock, statuses, commands, tools, opened, toasts, openPanes }
 }
 
-/** An element inside a drawing, as the kit hands it on: its tag, its props and what it holds. */
+/** An element inside a drawing: its tag, its props and what it holds. */
 type Element = { type: string; props: Record<string, unknown>; children?: unknown[] }
+
+/** An element as the kit hands it on: one drawn without a prop, as a text to be read plainly is, comes without `props`. */
+type HandedOn = Omit<Element, 'props'> & { props?: Record<string, unknown> }
 
 /** An element a drawing was asked for: its tag, its key, its props, the text it shows and what it holds. */
 type Found = { type: string; key: string | undefined; props: Record<string, unknown>; text: string; children: unknown[] }
@@ -653,16 +656,19 @@ type Drawn = {
   findAll: (q: { type?: string; text?: string }) => Promise<Found[]>
 }
 
-function isElement(value: unknown): value is Element {
-  return typeof value === 'object' && value !== null && 'type' in value && 'props' in value
+function isElement(value: unknown): value is HandedOn {
+  return typeof value === 'object' && value !== null && 'type' in value
 }
 
 function elementsIn(children: unknown[] | undefined, type?: string): Element[] {
-  return (children ?? []).filter(isElement).filter(child => type === undefined || child.type === type)
+  return (children ?? [])
+    .filter(isElement)
+    .filter(child => type === undefined || child.type === type)
+    .map(child => ({ ...child, props: child.props ?? {} }))
 }
 
 /** The text an element shows: its own strings and those of the texts inside it, in the order drawn. */
-function shownText(element: Element): string {
+function shownText(element: HandedOn): string {
   return (element.children ?? []).map(child => (isElement(child) ? shownText(child) : String(child))).join('')
 }
 
@@ -852,12 +858,16 @@ export async function linesAt(ui: Drawn, key: string): Promise<string[] | null> 
 
 /** The title of each part of the overview, by the key the part is drawn under. */
 export const PARTS = { waits: 'Waits for you', today: 'Today', session: 'This session', m2b: 'm2b' } as const
-export type PartKey = keyof typeof PARTS
+/**
+ * The key a part is drawn under, in whichever view: the overview's four, the one part of the
+ * proposals, of a search and of a topic, and the review's `run` beside its own `waits`.
+ */
+export type PartKey = keyof typeof PARTS | 'proposals' | 'run' | 'search' | 'topic'
 
 const PART_KEY = /^part:/
 
 /**
- * A part of the overview as drawn: its key without `part:`, its title, the count at the end of the
+ * A part of a view as drawn: its key without `part:`, its title, the count at the end of the
  * title's line, null where there is none, and the lines below.
  */
 export type ShownPart = { key: string; title: string; count: string | null; lines: string[] }
@@ -873,12 +883,12 @@ function shownPart(part: Found): ShownPart {
   }
 }
 
-/** The parts of the overview in the order drawn; empty where the pane shows another view. */
+/** The parts of the view the pane shows, in the order drawn; empty where it draws none. */
 export async function shownParts(ui: Drawn): Promise<ShownPart[]> {
   return (await ui.findAll({ type: 'Box' })).filter(box => PART_KEY.test(box.key ?? '')).map(shownPart)
 }
 
-/** The lines of one part of the overview, below its title; null where the part is left out. */
+/** The lines of one part of the view shown, below its title; null where the part is left out. */
 export async function partLines(ui: Drawn, key: PartKey): Promise<string[] | null> {
   const part = await ui.find({ key: `part:${key}` })
   return part === undefined ? null : shownPart(part).lines
@@ -945,4 +955,35 @@ export async function pathPieces(ui: Drawn, key: string): Promise<string[]> {
   const found = await ui.find({ key })
   const path = found === undefined ? undefined : allIn(found, 'Box').find(box => box.props['flexWrap'] === 'wrap')
   return elementsIn(path?.children, 'Text').map(shownText)
+}
+
+/** A piece of text as drawn: what it says, and every prop that sets how it reads. */
+export type ShownPiece = { text: string; color: unknown; dimColor: unknown; weight: unknown; strikethrough: unknown }
+
+/**
+ * The innermost texts of the element drawn under `key`, in the order drawn: a line drawn in
+ * pieces, as a changed fact is, comes as its pieces and not as the line that holds them.
+ */
+export async function piecesAt(ui: Drawn, key: string): Promise<ShownPiece[]> {
+  const found = await ui.find({ key })
+  return (found === undefined ? [] : allIn(found, 'Text'))
+    .filter(text => elementsIn(text.children, 'Text').length === 0)
+    .map(text => ({
+      text: shownText(text),
+      color: text.props['color'],
+      dimColor: text.props['dimColor'],
+      weight: text.props['weight'],
+      strikethrough: text.props['strikethrough'],
+    }))
+}
+
+/** What stands indented inside the element drawn under `key`: how far, and the lines that stand in whole. */
+export type ShownInset = { paddingLeft: unknown; lines: string[] }
+
+/** Every box under `key` that stands in from the left, in the order drawn. */
+export async function insetsAt(ui: Drawn, key: string): Promise<ShownInset[]> {
+  const found = await ui.find({ key })
+  return (found === undefined ? [] : allIn(found, 'Box'))
+    .filter(box => box.props['paddingLeft'] !== undefined)
+    .map(box => ({ paddingLeft: box.props['paddingLeft'], lines: linesOf(box) }))
 }

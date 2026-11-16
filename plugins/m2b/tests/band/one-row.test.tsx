@@ -21,6 +21,7 @@ import {
   rowSaying,
   sentenceOfM2b,
   shownBand,
+  shownParts,
   shownTab,
   shownTabs,
   start,
@@ -109,6 +110,14 @@ function fullFake(): FakeM2b {
   ]
   return fake
 }
+
+/** The keys of the parts the pane's view is drawn as: the overview's begin with what waits and what is due today. */
+async function partKeys(ui: Parameters<typeof shownParts>[0]): Promise<string[]> {
+  return (await shownParts(ui)).map(part => part.key)
+}
+
+const OVERVIEW_PARTS = ['waits', 'today', 'session', 'm2b']
+const REVIEW_PARTS = ['run', 'waits']
 
 function model(fields: Partial<BandModel> = {}): BandModel {
   return { snapshot: null, proposals: null, notice: null, topics: 0, ...fields }
@@ -403,6 +412,75 @@ test('what a press in the pane could not write is said in the pane where it was 
   await band.unmount()
 })
 
+for (const view of ['overview', 'review'] as const) {
+  for (const [next, nextPress, written] of [
+    ['keep on another row', 'keep:q1', ['tasks', 'complete', '--', 'q1']],
+    ['ok on the review', 'ok:r1', ['tasks', 'complete', '--', 'r1']],
+  ] as const) {
+    test(`in the ${view === 'overview' ? 'overview' : 'view of the review'}, what a press could not write goes with ${next}, before that press is written`, async ($, on) => {
+      // Covers: B207
+      const fake = busyFake()
+      const { clock } = await start($, on, fake)
+      const band = await drawBand($, clock)
+      const beside = await drawPane($, clock)
+      if (view === 'review') {
+        await pressTab(beside, 'review')
+      }
+      fake.beforeCandidateList = () => {
+        const [task] = fake.tasks
+        if (task !== undefined) {
+          task.completed = true
+        }
+      }
+      await beside.press({ key: 'drop:c1' })
+      await clock.advance(UNDO_MS)
+      const refused = 'Already settled in another session, nothing written: Remember? Dana prefers tea'
+      expect((await partLines(beside, 'waits'))?.[0]).toBe(refused)
+      expect(fake.writes()).toEqual([])
+
+      await beside.press({ key: nextPress })
+
+      // Gone at the press, while its undo still waits and nothing is written.
+      expect(await texts(beside)).not.toContain(refused)
+      expect(await beside.find({ key: `undo:${nextPress.slice(nextPress.indexOf(':') + 1)}` })).toBeDefined()
+      await clock.advance(UNDO_MS - 1)
+      expect(fake.writes()).toEqual([])
+      expect(await texts(beside)).not.toContain(refused)
+      await clock.advance(1)
+      expect(fake.writes()).toEqual([[...written]])
+      expect(await texts(beside)).not.toContain(refused)
+      await beside.unmount()
+      await band.unmount()
+    })
+  }
+}
+
+test('what a press could not write stays while another press, made before it was said, is written: only a press after it takes it away', async ($, on) => {
+  // Covers: B207
+  const fake = busyFake()
+  const { clock } = await start($, on, fake)
+  const beside = await drawPane($, clock)
+  fake.beforeCandidateList = () => {
+    const [task] = fake.tasks
+    if (task !== undefined) {
+      task.completed = true
+    }
+  }
+  // Two presses whose five seconds overlap.
+  await beside.press({ key: 'drop:c1' })
+  await clock.advance(1_000)
+  await beside.press({ key: 'keep:q1' })
+  await clock.advance(UNDO_MS - 1_000)
+  const refused = 'Already settled in another session, nothing written: Remember? Dana prefers tea'
+  expect((await partLines(beside, 'waits'))?.[0]).toBe(refused)
+
+  await clock.advance(1_000)
+
+  expect(fake.writes()).toEqual([['tasks', 'complete', '--', 'q1']])
+  expect((await partLines(beside, 'waits'))?.[0]).toBe(refused)
+  await beside.unmount()
+})
+
 test('the row is a sentence where there is one: why open showed no pane, then the task list m2b could not read, then the store; else the counts', () => {
   // Covers: B191
   const waits = {
@@ -488,12 +566,12 @@ test('while the docked pane is turned to another view, and after the tab Overvie
 
   await pressTab(beside, 'review')
 
-  expect(await texts(beside)).not.toContain('Waits for you')
+  expect(await partKeys(beside)).toEqual(REVIEW_PARTS)
   expect(await shownBand(band)).toEqual(ROW)
 
   await pressTab(beside, 'overview')
   await clock.advance(1)
-  expect(await texts(beside)).toContain('Waits for you')
+  expect(await partKeys(beside)).toEqual(OVERVIEW_PARTS)
   expect(await shownBand(band)).toEqual(ROW)
   await beside.unmount()
   await band.unmount()
@@ -705,11 +783,12 @@ test('open turns a pane left on another view to the view it starts in', async ($
   const band = await drawBand($, clock)
   await typed($, 'm2b-review', { isFullscreen: true, columns: 160 })
   const beside = await drawPane($, clock)
-  expect(await texts(beside)).not.toContain('Waits for you')
+  expect(await partKeys(beside)).toEqual(REVIEW_PARTS)
 
   await band.press({ key: OPEN })
 
-  expect((await texts(beside))[0]).toBe('Waits for you')
+  expect(await shownTab(beside)).toBe('overview')
+  expect(await partKeys(beside)).toEqual(OVERVIEW_PARTS)
   await beside.unmount()
   await band.unmount()
 })

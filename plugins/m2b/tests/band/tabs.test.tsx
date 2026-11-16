@@ -56,9 +56,9 @@ const SHOWN: Readonly<Record<View, Shown>> = {
 }
 /** The label of the fifth tab above the two views that have one. */
 const ASIDE: Readonly<Partial<Record<View, string>>> = { topic: 'Northwind', search: 'Search' }
-/** A line each view draws and no other does. */
+/** A line each view draws and no other does: the review has a part "Waits for you" too, so the overview is told by its part "Today". */
 const SAYS: Readonly<Record<View, string>> = {
-  overview: 'Waits for you',
+  overview: 'Today',
   proposals: 'said on 2026-03-12: "Dana runs IT at Northwind"',
   review: 'lint: broken link in a.md',
   settings: 'Curation paused: off',

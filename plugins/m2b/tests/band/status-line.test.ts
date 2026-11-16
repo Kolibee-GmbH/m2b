@@ -99,7 +99,7 @@ describe('the status line', () => {
 
 describe('the line that says how curation stands', () => {
   test('names the inbox and the time of the last run today', () => {
-    // Covers: B203
+    // Covers: B203, B209
     expect(curationLine(answer({}), NOW)).toBe('3 in inbox · curated 18:02')
   })
 
@@ -116,7 +116,7 @@ describe('the line that says how curation stands', () => {
   })
 
   test('names the day of a last run before today, read in its own offset', () => {
-    // Covers: B203
+    // Covers: B203, B209
     const run = { state: 'succeeded', last_succeeded_at: '2026-03-13T23:50:00+01:00' }
     expect(curationLine(answer({ run }), NOW)).toBe('3 in inbox · curated 2026-03-13')
   })

@@ -10,7 +10,22 @@ import type {
   FolderSwitch,
   SessionTopic,
 } from '../types'
-import { button, dueCounts, part, pathLine, row, said, taskLine, topicLabel, topicsCount, waitForYou } from './look'
+import {
+  NOTHING_WAITS,
+  NOT_LOOKED,
+  WAITS_FOR_YOU,
+  button,
+  dueCounts,
+  part,
+  pathLine,
+  pressLine,
+  row,
+  said,
+  taskLine,
+  topicLabel,
+  topicsCount,
+  waitForYou,
+} from './look'
 import type { Tone } from './look'
 import { plainLine, wholePath } from './plain-text'
 import { couldNotLookLine, countLine, errorBesideTasks } from './proposals'
@@ -40,16 +55,13 @@ export const SESSION_COMMAND: CommandSpec = {
 
 export const SESSION_PLACED = 'what waits for you and this session are in the m2b pane'
 
-const WAITS_FOR_YOU = 'Waits for you'
 const TODAY = 'Today'
 const THIS_SESSION = 'This session'
 const M2B_ITSELF = 'm2b'
-const NOT_LOOKED = 'm2b has not looked yet.'
 // Not known is a session this machine holds no note of: started under an earlier m2b, or without m2b's hooks.
 const NOT_KNOWN = 'm2b holds no note of what it gave this session; that does not say it gave nothing.'
 // Turning m2b off reaches this session too: the prompt hook adds no topic where it is off.
 const KEEPS = 'This session keeps what it was given and gets no more topics.'
-const NOTHING_WAITS = 'Nothing waits for you.'
 const NOTHING_DUE = 'Nothing due today.'
 const TASKS_NOT_READ = 'The task list could not be read.'
 // Where the answer names no tasks due: from a core before it named them whatever the band shows.
@@ -411,12 +423,7 @@ function folderRow(
           kind: isOn ? 'quiet' : 'default',
           onPress: () => actions.switchFolder(change, folder),
         })}
-      {pressed?.phase === 'waiting' && (
-        <Box flexDirection="row" columnGap={1}>
-          {button(ui, { key: UNDO_FOLDER, label: 'undo', kind: 'default', onPress: actions.undoFolder })}
-          {said(ui, doing, 'quiet')}
-        </Box>
-      )}
+      {pressed?.phase === 'waiting' && pressLine(ui, [{ key: UNDO_FOLDER, label: 'undo', kind: 'default', onPress: actions.undoFolder }], doing)}
       {pressed?.phase === 'writing' && said(ui, `${doing}…`, 'quiet')}
     </Box>
   )
@@ -437,13 +444,8 @@ function sessionPart($: EngineInterface, e: ResolveInput, model: SessionModel, a
   const body = [
     ...givenNotes(given).map(one => said(ui, one.text, one.tone)),
     ...given.topics.map((topic, index) => {
-      const counts = topicCounts(topic)
-      return (
-        <Box key={`row:topic:${index}`} flexDirection="row" columnGap={1}>
-          {button(ui, { key: topicKey(index), label: topicLabel(topic.name), kind: 'default', onPress: () => actions.showTopic(topic.name) })}
-          {counts !== null && said(ui, counts, 'quiet')}
-        </Box>
-      )
+      const lead = { key: topicKey(index), label: topicLabel(topic.name), kind: 'default' as const, onPress: () => actions.showTopic(topic.name) }
+      return pressLine(ui, [lead], topicCounts(topic), `row:topic:${index}`)
     }),
     printed !== null && said(ui, printed),
     folderRow($, e, given, model.presses[FOLDER_PRESS], actions),

@@ -29,8 +29,13 @@ export type Tone =
   | 'quiet'
   // The one of several that holds now: the tab whose view is shown.
   | 'shown'
+  // What a line is about, where a part lists several things.
+  | 'strong'
+  // Words a change added to a text, and words it took out.
+  | 'added'
+  | 'removed'
 
-type Style = { color?: ThemeKey; dimColor?: true; weight?: 'bold' }
+type Style = { color?: ThemeKey; dimColor?: true; weight?: 'bold'; strikethrough?: true }
 
 const STYLES: Readonly<Record<Tone, Style>> = {
   brand: { color: 'remember', weight: 'bold' },
@@ -42,6 +47,10 @@ const STYLES: Readonly<Record<Tone, Style>> = {
   plain: {},
   quiet: { dimColor: true },
   shown: { color: 'remember', weight: 'bold' },
+  strong: { weight: 'bold' },
+  added: { color: 'success' },
+  // Struck through as well, so a removed word reads as removed without its color.
+  removed: { color: 'error', strikethrough: true },
 }
 
 /** The `Text` props a tone is drawn with. */
@@ -59,7 +68,26 @@ export function said(ui: Pick<ElementTable, 'Text'>, text: string, tone: Tone = 
   )
 }
 
+// How far a text stands in that belongs to the line above it.
+const INDENT = 2
+
+/** What belongs to the line above it, indented whole: where a text in it wraps, its further lines stand in as well. */
+export function inset(ui: Pick<ElementTable, 'Box'>, child: RenderChildren) {
+  const { Box } = ui
+  return <Box paddingLeft={INDENT}>{child}</Box>
+}
+
+/** A text that belongs to the line above it, indented whole and, where no tone is named, stepped back. */
+export function under(ui: Pick<ElementTable, 'Box' | 'Text'>, text: string, tone: Tone = 'quiet') {
+  return inset(ui, said(ui, text, tone))
+}
+
 export const M2B = 'm2b'
+/** The title of the part that holds what needs an answer, wherever a view has one. */
+export const WAITS_FOR_YOU = 'Waits for you'
+export const NOTHING_WAITS = 'Nothing waits for you.'
+/** Before m2b's first answer: not known, which is never "none". */
+export const NOT_LOOKED = 'm2b has not looked yet.'
 export const DUE_TODAY = 'due today'
 export const OVERDUE = 'overdue'
 
@@ -186,7 +214,7 @@ export function part(ui: Pick<ElementTable, 'Box' | 'Text'>, spec: PartSpec, bod
       paddingX={isFramed ? 1 : 0}
     >
       <Box flexDirection="row" justifyContent="space-between" columnGap={1}>
-        <Text weight="bold" color={colors.title}>
+        <Text weight="bold" color={colors.title} wrap="wrap">
           {spec.title}
         </Text>
         {spec.count ? <Text {...styleOf('waits')}>{spec.count}</Text> : null}
@@ -202,19 +230,34 @@ export function part(ui: Pick<ElementTable, 'Box' | 'Text'>, spec: PartSpec, bod
  */
 export type RowSpec = { key: string; text: string; tone?: Tone; buttons: readonly ButtonSpec[]; detail?: string | null }
 
+/**
+ * What can be pressed, with a detail beside it, on one line. Where the pane is too narrow for
+ * both, the detail goes below the buttons whole: squeezed into what the buttons leave, it would
+ * break after every few letters. `key` names the line where a drawing has to find it.
+ */
+export function pressLine(
+  ui: Pick<ElementTable, 'Box' | 'Button' | 'Text'>,
+  buttons: readonly ButtonSpec[],
+  detail: string | null = null,
+  key?: string,
+) {
+  const { Box } = ui
+  return (
+    <Box key={key} flexDirection="row" columnGap={1} flexWrap="wrap">
+      {buttons.map(one => button(ui, one))}
+      {detail === null ? null : said(ui, detail, 'quiet')}
+    </Box>
+  )
+}
+
 /** A row of a part: the text first, at full width, then what can be pressed, so a long text never pushes a button aside. */
 export function row(ui: Pick<ElementTable, 'Box' | 'Button' | 'Text'>, spec: RowSpec) {
   const { Box } = ui
-  const hasSecondLine = spec.buttons.length > 0 || Boolean(spec.detail)
+  const detail = spec.detail ? spec.detail : null
   return (
     <Box key={spec.key} flexDirection="column">
       {said(ui, spec.text, spec.tone)}
-      {hasSecondLine && (
-        <Box flexDirection="row" columnGap={1}>
-          {spec.buttons.map(one => button(ui, one))}
-          {spec.detail ? said(ui, spec.detail, 'quiet') : null}
-        </Box>
-      )}
+      {(spec.buttons.length > 0 || detail !== null) && pressLine(ui, spec.buttons, detail)}
     </Box>
   )
 }

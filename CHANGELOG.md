@@ -22,11 +22,18 @@ All notable changes to this project are documented here. The format follows
   `off` with `turn off here` and `turn on here`, and the folder breaks only between its folders.
   A count of none is not said, and a part with nothing in it is one dim line. In a pane narrower
   than 36 columns a bar stands in for each frame.
+- The proposals, the review, a topic's lines and a search are drawn like the overview: parts in a
+  frame and rows with their buttons below. A proposal is its text, then keep and drop with what
+  it is beside them, then the words it stands on. The review is two parts, the last curation run
+  with what it changed, and what of it waits for you. No view has a heading that repeats its tab.
+- A time is said one way: the time of day for today, the date before. The review's line about
+  the last run reads `succeeded, 18:00 to 18:04`, and the note about a failed run names its start
+  the same way.
 - The part "m2b" says how m2b stands: when it last curated and what waits in the inbox while all
   is well, and what is wrong with its reason. That a session runs an older m2b than the installed
   one is said there, no longer in the band.
 - What m2b says to a press that wrote nothing stands where the press was made, in the error
-  color, no longer in the band.
+  color, until your next press there, no longer in the band.
 - The m2b pane has one row of tabs above every view: `Overview`, `Proposals` with the number
   that wait, `Review` and `Settings`; a topic's lines and a search stand under a fifth tab while
   the pane shows them. The tab you look at is marked, every other turns the pane with one press.

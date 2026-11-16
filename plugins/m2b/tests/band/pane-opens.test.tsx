@@ -252,6 +252,8 @@ test('a pane the mod closed itself opens again in the next session, in the view 
 
   expect(opened.at(-1)).toEqual(BY_ITSELF)
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  // The review has a part "Waits for you" too: the tab tells the two views apart.
+  expect(await shownTab(ui)).toBe('overview')
   expect(await texts(ui)).toContain('Waits for you')
   await ui.unmount()
   await band.unmount()
@@ -398,6 +400,7 @@ for (const [to, label, shows] of [
     expect(await texts(ui)).toContain(shows)
 
     await pressTab(ui, 'overview')
+    expect(await shownTab(ui)).toBe('overview')
     expect(await texts(ui)).toContain('Waits for you')
     expect(opened).toEqual([BY_ITSELF, AS_A_DIALOG, BY_ITSELF])
     await ui.unmount()

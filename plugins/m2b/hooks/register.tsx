@@ -21,6 +21,7 @@ import { bandLine, bandRow, topicsGiven } from './band'
 import type { BandModel } from './band'
 import { tabRow } from './look'
 import { launcherPath, m2bHome, machineConfigPath, runM2b } from './m2b'
+import { timeOrDay } from './moment'
 import { NOTE_COMMAND, note } from './note'
 import { isInOwnWords, isOwnPrompt, withPrompt } from './own-words'
 import {
@@ -30,11 +31,12 @@ import {
   REVIEW_COMMAND,
   SEARCH_COMMAND,
   isRun,
-  minute,
-  paneTree,
   reviewLines,
+  reviewPane,
   runOf,
   searchLines,
+  searchPane,
+  searchPlaced,
   searchStore,
   searchRequest,
   searchSummary,
@@ -310,7 +312,8 @@ async function toastFailedRun($: EngineInterface, run: BandRun | null): Promise<
     return
   }
   try {
-    $.ui.toast(`m2b: the curation run of ${minute(startedAt)} failed; its review task says why, and /m2b-review shows it`, {
+    const started = plainLine(timeOrDay(startedAt, await $.clock.now()))
+    $.ui.toast(`m2b: the curation run of ${started} failed; its review task says why, and /m2b-review shows it`, {
       timeoutMs: 10_000,
     })
   } catch {
@@ -832,11 +835,21 @@ async function viewOfPane(
     case 'settings':
       return settingsPane($, e, view, heldSettings(view.press), settingsActions($, view.press), bodyColumns)
     case 'proposals':
-      return proposalsPane($, e, proposals, presses, await read($, proposalsNoticeAtom), proposalActions($))
+      return proposalsPane($, e, proposals, presses, await read($, proposalsNoticeAtom), proposalActions($), bodyColumns)
     case 'topic':
-      return topicPane($, e, view.name, heldTopic(view.press))
-    default:
-      return paneTree($, e, view, await read($, snapshotAtom), await read($, runAtom), presses, await read($, rowNoticeAtom), rowActions($))
+      return topicPane($, e, view.name, heldTopic(view.press), bodyColumns)
+    case 'search':
+      return searchPane($, e, view.search, bodyColumns)
+    case 'review': {
+      const model = {
+        snapshot: await read($, snapshotAtom),
+        run: await read($, runAtom),
+        presses,
+        notice: await read($, rowNoticeAtom),
+        nowMs: await $.clock.now(),
+      }
+      return reviewPane($, e, model, rowActions($), bodyColumns)
+    }
   }
 }
 
@@ -1208,7 +1221,8 @@ function taskWrite($: EngineInterface, candidate: BandCandidate, action: BandSet
 }
 
 async function settleNow($: EngineInterface, candidate: BandCandidate, action: BandSettle): Promise<boolean> {
-  await update($, rowNoticeAtom, () => null)
+  // What the last press could not write is not cleared here: it stands until the next press, and
+  // a write may land seconds after a refusal that no press has followed.
   const { snapshot } = await loadView($, TASKS_ANSWER)
   if (snapshot.error !== null) {
     await update($, snapshotAtom, () => snapshot)
@@ -1251,7 +1265,11 @@ function isOtherReview(pressed: BandCandidate, fresh: BandReview): boolean {
 
 function rowActions($: EngineInterface): RowActions {
   return {
-    press: (candidate, action) => press($, candidate.id, action, taskWrite($, candidate, action), undoKey(candidate.id)),
+    press: async (candidate, action) => {
+      // What the last press could not write is said until the next press there.
+      await update($, rowNoticeAtom, () => null)
+      await press($, candidate.id, action, taskWrite($, candidate, action), undoKey(candidate.id))
+    },
     undo: id => undo($, id),
   }
 }
@@ -1280,17 +1298,22 @@ function proposalWrite($: EngineInterface, proposals: BandProposal[], action: Ba
 
 function proposalActions($: EngineInterface): ProposalActions {
   return {
-    answer: (proposal, action) =>
-      press($, pressKey(proposal.id), action, proposalWrite($, [proposal], action), undoKey(proposal.id)),
-    keepAll: proposals =>
-      press(
+    answer: async (proposal, action) => {
+      // What the last answer could not write is said until the next press there.
+      await update($, proposalsNoticeAtom, () => null)
+      await press($, pressKey(proposal.id), action, proposalWrite($, [proposal], action), undoKey(proposal.id))
+    },
+    keepAll: async proposals => {
+      await update($, proposalsNoticeAtom, () => null)
+      await press(
         $,
         KEEP_ALL,
         'complete',
         proposalWrite($, proposals, 'complete'),
         UNDO_ALL,
         proposals.map(proposal => proposal.id),
-      ),
+      )
+    },
     undo: key => undo($, key),
   }
 }
@@ -1470,7 +1493,8 @@ export const register: Register = on => {
     // Opens with what the band holds and reads the run again behind it.
     $.clock.after(0, inBackground($, () => refresh($, true)))
     const [snapshot, run] = [await read($, snapshotAtom), await read($, runAtom)]
-    const text = await showInPane($, 'the last curation run is in the m2b pane', () => reviewLines(snapshot, run))
+    const nowMs = await $.clock.now()
+    const text = await showInPane($, 'the last curation run is in the m2b pane', () => reviewLines(snapshot, run, nowMs))
     return { text }
   })
 
@@ -1526,7 +1550,7 @@ export const register: Register = on => {
       return { text: summary }
     }
     await turnTo($, { kind: 'search', search })
-    return { text: await showInPane($, `${summary} in the m2b pane`, () => [summary, ...searchLines(search)]) }
+    return { text: await showInPane($, searchPlaced(search), () => [summary, ...searchLines(search)]) }
   })
 
   // Registered only outside a curation run; a call there is not this mod's to answer.

@@ -2,16 +2,36 @@ import { expect, test } from 'claude-code/testing'
 import type { CommandRunResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { beginTopic, fillTopic, forgetTopicUnless, heldTopic, holdsTopic, parseTopic } from '../../hooks/topic'
+import { beginTopic, fillTopic, forgetTopicUnless, heldTopic, holdsTopic, parseTopic, topicPane } from '../../hooks/topic'
 import type { TopicLook } from '../../hooks/topic'
-import { FakeM2b, HOME, SESSION_ID, inView, pane, partLines, pressTab, shownTab, shownTabs, start, texts, viewButtons } from './harness'
-import type { Files } from './harness'
+import {
+  FakeM2b,
+  HOME,
+  SESSION_ID,
+  inView,
+  insetsAt,
+  lookOf,
+  pane,
+  partLines,
+  partLook,
+  piecesAt,
+  pressTab,
+  shownParts,
+  shownTab,
+  shownTabs,
+  start,
+  texts,
+  viewButtons,
+} from './harness'
+import type { Files, ShownPiece } from './harness'
 
 const PANE = 'm2b'
 const AS_A_DIALOG = { id: PANE, title: 'm2b', closeOnEscape: true, focus: true }
 const NEXT_SESSION = '7c9e6679-7425-40de-944b-e07fc1f90ae7'
 const AS_IT_IS_NOW = 'As the distillate holds it now, which may differ from what this session was given.'
 const READING = 'm2b is reading the topic…'
+const NO_TOPIC = 'The distillate holds no topic of this name now.'
+const NO_LINES = 'The topic holds no lines now.'
 const KIM = "Kim Lee leads Acme's IT"
 const PAYS = 'Acme pays within 30 days'
 const AUDIT = 'Export audit under way (since 2026-11-02)'
@@ -218,6 +238,7 @@ test('a command that turns the pane to another view leaves no line of the topic 
   expect(await texts(ui)).not.toContain(KIM)
 
   await pressTab(ui, 'overview')
+  expect(await shownTab(ui)).toBe('overview')
   expect(await texts(ui)).toContain('Waits for you')
   expect(await texts(ui)).not.toContain(KIM)
   await ui.unmount()
@@ -459,3 +480,58 @@ test('an answer for a press the pane turned away from is not kept', () => {
   expect(heldTopic('p1')).toEqual({ state: 'reading' })
   forgetTopicUnless(null)
 })
+
+/** A piece of text as drawn where a test names nothing else: to be read, in no color. */
+function piece(text: string, look: Partial<ShownPiece> = {}): ShownPiece {
+  return { text, color: undefined, dimColor: undefined, weight: undefined, strikethrough: undefined, ...look }
+}
+
+const DIM = { dimColor: true }
+const NOT_READ = 'm2b could not read the topic: memory/MEMORY.md is not downloaded to this machine'
+
+/** A look at a topic, and what the view draws of it below the line that says it is of now. */
+const LOOKS: [what: string, look: TopicLook, below: ShownPiece[]][] = [
+  ['while m2b reads', { state: 'reading' }, [piece(READING, DIM)]],
+  [
+    'a topic with facts and current items',
+    { state: 'read', facts: [KIM, PAYS], current: [AUDIT] },
+    [piece(KIM), piece(PAYS), piece('Current', { weight: 'bold' }), piece(AUDIT)],
+  ],
+  ['a topic without current items', { state: 'read', facts: [KIM], current: [] }, [piece(KIM)]],
+  ['a topic with current items alone', { state: 'read', facts: [], current: [AUDIT] }, [piece('Current', { weight: 'bold' }), piece(AUDIT)]],
+  ['a topic without lines', { state: 'read', facts: [], current: [] }, [piece(NO_LINES, DIM)]],
+  ['a topic the distillate no longer holds', { state: 'missing' }, [piece(NO_TOPIC, DIM)]],
+  [
+    'a topic m2b could not read',
+    { state: 'failed', error: 'memory/MEMORY.md is not downloaded to this machine' },
+    [piece(NOT_READ, { color: 'error' })],
+  ],
+]
+
+for (const [what, look, below] of LOOKS) {
+  test(`the view of a topic is one part under the topic's name, whole: ${what}`, async ($, on) => {
+    // Covers: B190, B208
+    const name = 'Riverside Community Choir'
+    on('ui.render', { component: 'Pane', requestId: 'topic-alone' }, (engine, e) => topicPane(engine, e, name, look, e.props.bodyColumns))
+
+    const ui = await $.ui.mount({ ...pane('topic-alone'), plugin: 'test', surface: 'terminal' })
+
+    expect(await shownParts(ui)).toEqual([{ key: 'topic', title: name, count: null, lines: [AS_IT_IS_NOW, ...below.map(drawn => drawn.text)] }])
+    // The name is the part's title, in m2b's color, and stands nowhere else; that the lines are of now steps back.
+    expect(await piecesAt(ui, 'part:topic')).toEqual([piece(name, { color: 'remember', weight: 'bold' }), piece(AS_IT_IS_NOW, DIM), ...below])
+    // A topic is read, not answered: no count, never the color of what waits, and nothing stands in.
+    expect(await partLook(ui, 'topic')).toEqual({
+      borderStyle: 'round',
+      borderColor: 'subtle',
+      paddingX: 1,
+      titleColor: 'remember',
+      titleWeight: 'bold',
+      countColor: undefined,
+    })
+    expect(await insetsAt(ui, 'part:topic')).toEqual([])
+    // A name longer than its tab stands whole in the title, which wraps where the pane is narrow.
+    expect(await lookOf(ui, name)).toEqual({ color: 'remember', dimColor: undefined, wrap: 'wrap' })
+    expect(await viewButtons(ui)).toEqual([])
+    await ui.unmount()
+  })
+}

@@ -1,6 +1,7 @@
 import type { EngineInterface, ResolveInput } from 'claude-code'
 
 import type { PaneView } from '../types'
+import { part, said } from './look'
 import { runM2b } from './m2b'
 import { plainLine } from './plain-text'
 import { OLDER_CORE } from './session'
@@ -107,36 +108,18 @@ export function parseTopic(text: string): TopicLook {
   return found ? { state: 'read', facts, current } : { state: 'missing' }
 }
 
-/** The topic's view. Every line wraps: docked beside the chat, the pane can be 24 columns wide. */
-export function topicPane($: EngineInterface, e: ResolveInput, name: string, look: TopicLook) {
-  const { Box, Text } = $.ui.resolve(e)
-  const heading = (text: string) => (
-    <Text weight="semibold" wrap="wrap">
-      {text}
-    </Text>
-  )
-  const quiet = (text: string) => (
-    <Text dimColor wrap="wrap">
-      {text}
-    </Text>
-  )
-  const line = (text: string) => <Text wrap="wrap">{plainLine(text)}</Text>
+/** The topic's view, one part under the topic's name, whole. `columns` is the width of the pane's body. */
+export function topicPane($: EngineInterface, e: ResolveInput, name: string, look: TopicLook, columns: number) {
+  const ui = $.ui.resolve(e)
   const isEmpty = look.state === 'read' && look.facts.length === 0 && look.current.length === 0
-  return (
-    <Box flexDirection="column">
-      {heading(plainLine(name))}
-      {quiet(AS_IT_IS_NOW)}
-      {look.state === 'reading' && quiet(READING)}
-      {look.state === 'missing' && quiet(NO_TOPIC)}
-      {look.state === 'failed' && (
-        <Text color="error" wrap="wrap">
-          {`m2b could not read the topic: ${plainLine(look.error)}`}
-        </Text>
-      )}
-      {isEmpty && quiet(NO_LINES)}
-      {look.state === 'read' && look.facts.map(line)}
-      {look.state === 'read' && look.current.length > 0 && heading(CURRENT)}
-      {look.state === 'read' && look.current.map(line)}
-    </Box>
-  )
+  return part(ui, { key: 'topic', title: plainLine(name), waits: false, columns }, [
+    said(ui, AS_IT_IS_NOW, 'quiet'),
+    look.state === 'reading' && said(ui, READING, 'quiet'),
+    look.state === 'missing' && said(ui, NO_TOPIC, 'quiet'),
+    look.state === 'failed' && said(ui, `m2b could not read the topic: ${plainLine(look.error)}`, 'trouble'),
+    isEmpty && said(ui, NO_LINES, 'quiet'),
+    ...(look.state === 'read' ? look.facts.map(fact => said(ui, plainLine(fact))) : []),
+    look.state === 'read' && look.current.length > 0 && said(ui, CURRENT, 'strong'),
+    ...(look.state === 'read' ? look.current.map(item => said(ui, plainLine(item))) : []),
+  ])
 }

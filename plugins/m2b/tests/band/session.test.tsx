@@ -623,20 +623,24 @@ test('the tabs Proposals and Review turn the pane to them, and /m2b-pane turns i
   await start($, on, fake)
   const ui = await startView($)
 
+  const parts = async (): Promise<string[]> => (await shownParts(ui)).map(part => part.key)
+  const overview = ['waits', 'today', 'session', 'm2b']
+  expect(await parts()).toEqual(overview)
+
   await pressTab(ui, 'proposals')
-  expect(await texts(ui)).toContain('said on 2026-03-12: "Dana runs IT at Northwind"')
-  expect(await texts(ui)).not.toContain('Waits for you')
+  expect(await parts()).toEqual(['proposals'])
+  expect(await partLines(ui, 'proposals')).toContain('said on 2026-03-12: "Dana runs IT at Northwind"')
 
   await typed($, 'm2b-pane')
   expect(await shownTab(ui)).toBe('overview')
-  expect(await texts(ui)).toContain('Waits for you')
+  expect(await parts()).toEqual(overview)
   await pressTab(ui, 'review')
-  expect(await texts(ui)).toContain('Last curation run: succeeded, started 2026-03-14 18:00')
-  expect(await texts(ui)).toContain('lint: broken link in a.md')
+  expect(await parts()).toEqual(['run', 'waits'])
+  expect(await partLines(ui, 'run')).toEqual(['succeeded, started 18:00', 'lint: broken link in a.md'])
 
   await typed($, 'm2b-pane')
   expect(await shownTab(ui)).toBe('overview')
-  expect(await texts(ui)).toContain('Waits for you')
+  expect(await parts()).toEqual(overview)
   await ui.unmount()
 })
 

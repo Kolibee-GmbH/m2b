@@ -67,7 +67,8 @@ is stored, and a part the pane left out would be kept unseen.
 ## When a curation run fails
 
 Each open session shows one line for a few seconds, once per failed run: `m2b: the curation run of
-2026-03-14 18:00 failed; its review task says why, and /m2b-review shows it`. A reload of the
+18:00 failed; its review task says why, and /m2b-review shows it` (the time for a run of today,
+the date for one before). A reload of the
 plugins does not show the same run again; a run that succeeds shows nothing, and neither does an
 interrupted one, which the status line names. The status line says
 `last curation run failed` until the next run succeeds.
@@ -392,13 +393,15 @@ row is gone, and the focus stands on the row that moved up.
 
 ## The whole review, and search, in a pane
 
-The band keeps to a few rows. `/m2b-review` opens the m2b pane beside the conversation with the
-last curation run in full: its state and times, every finding of the review task whole, paths
-included, and every candidate and "Still current?" question with keep and drop, which work as in
-the band, undo included. Each changed fact gets two lines: what it is about with its fact file,
-then the fact as it reads now, the added words in green and the removed ones in red and struck
-through; below them where each copy of the facts from before a run lies, one for every run the
-open review covers, and how many notes it filed.
+The band only counts. `/m2b-review`, or the tab `Review`, turns the m2b pane to the last
+curation run in full, in two parts. **Last curation run** says how it went and when, in one line
+(`succeeded, 18:00 to 18:02`; for a run before today its date), in the error color where it
+failed, then what it changed: each changed fact gets two lines, what it is about with its fact
+file, then the fact as it reads now, the added words in green and the removed ones in red and
+struck through; below them where each copy of the facts from before a run lies, one for every run
+the open review covers, and how many notes it filed, and every finding of the review task whole,
+paths included. **Waits for you** holds the review with `ok` and every candidate and "Still
+current?" question with keep and drop, which work as in the overview, undo included.
 
 ![The pane after /m2b-review: the last curation run with its times, the review row "1 fact changed: Sam", the fact about Sam with the old day struck through in red and the new one in green, where the facts from before the run lie, and a "Still current?" question with keep and drop; below the pane the band with its rows and the status line](images/review.png)
 
@@ -406,24 +409,37 @@ As text, a review with more findings and a click within its undo:
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ Last curation run: succeeded, 2026-03-14 18:00 to 18:02      │
-│ [ ok ] m2b: review  1 fact changed: Sam                      │
-│   Sam (sam.md)                                               │
-│     Sam Rivers (carpenter), neighbour, has a van             │
-│   facts before the run: ~/.local/state/m2b/memory-before-run/│
-│ 20260314T170005Z; 2 notes filed                              │
-│   lint: broken link in people/sam.md                         │
-│   ingest: eleven captures were not filed because their photos│
-│ are not downloaded; a copy of the run log is at ~/.local/stat│
-│ e/m2b/runs/20260314T170200Z.jsonl                            │
-│ [ keep ] [ drop ] Remember? Sam brings the plywood           │
-│ [ undo ] dropping: Remember? Dana prefers tea                │
-│ [ keep ] [ drop ] Still current? Planning the trip to Porto  │
+│ [ Overview ] [ Proposals ] Review [ Settings ]               │
+│                                                              │
+│ ╭──────────────────────────────────────────────────────────╮ │
+│ │ Last curation run                                        │ │
+│ │ succeeded, 18:00 to 18:02                                │ │
+│ │ Sam (sam.md)                                             │ │
+│ │   Sam Rivers (carpenter), neighbour, has a van           │ │
+│ │ facts before the run; 2 notes filed:                     │ │
+│ │ ~/.local/state/m2b/memory-before-run/20260314T170005Z    │ │
+│ │   lint: broken link in people/sam.md                     │ │
+│ │   ingest: eleven captures were not filed because their   │ │
+│ │   photos are not downloaded; a copy of the run log is at │ │
+│ │   ~/.local/state/m2b/runs/20260314T170200Z.jsonl         │ │
+│ ╰──────────────────────────────────────────────────────────╯ │
+│ ╭──────────────────────────────────────────────────────────╮ │
+│ │ Waits for you                                          4 │ │
+│ │ Review of the last curation run                          │ │
+│ │ [ ok ] 1 fact changed: Sam                               │ │
+│ │ Remember? Sam brings the plywood                         │ │
+│ │ [ keep ] [ drop ]                                        │ │
+│ │ Remember? Dana prefers tea                               │ │
+│ │ [ undo ] dropping                                        │ │
+│ │ Still current? Planning the trip to Porto                │ │
+│ │ [ keep ] [ drop ]                                        │ │
+│ ╰──────────────────────────────────────────────────────────╯ │
 └──────────────────────────────────────────────────────────────┘
 ```
 
-`/m2b-search <text>` shows the hits of `m2b search` in the same pane, each with its file and line
-and the line itself, without a model turn; a text that starts with a dash is searched as written.
+`/m2b-search <text>` shows the hits of `m2b search` in the same pane, under a tab of their own
+and the search in words (`3 hits for plywood`), each with its file and line and the line itself
+below it, without a model turn; a text that starts with a dash is searched as written.
 A word also matches inside longer words, so `Velo` finds `Developer` too; `/m2b-search --word Velo`
 matches whole words only. The hits come as `m2b search` orders them: from memory first, then the
 archive, then the inbox, in both the newest note first.
@@ -440,8 +456,9 @@ lead [back to the start view](#back-to-the-start-view).
 ## The proposals from your sessions, in the pane
 
 `/m2b-proposals`, or the tab `Proposals`, turns the m2b pane to what waits for your answer:
-each proposal with its text, what kind of thing it is (with the due day of a commitment and the
-topic, where it has one), the words it was taken from and their day: `said on` before words you
+each proposal with its text, below it keep and drop with what kind of thing it is beside them
+(with the due day of a commitment and the topic, where it has one), and then the words it was
+taken from and their day: `said on` before words you
 typed, `pasted on` before words from text you pasted into a prompt, which may be someone else's.
 
 ![The pane after /m2b-proposals: three proposals from the sessions, each with keep and drop, its kind, a due day for the commitment, and the words it was taken from with the day they were said; above them "back" and "keep all"; below the pane the band with its rows and the status line](images/proposals.png)
@@ -450,19 +467,23 @@ As text, other proposals, one of them within its undo:
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ 3 proposals from your sessions                               │
-│ [ keep all ]                                                 │
-│ [ keep ] [ drop ] Dana is head of IT at Northwind.           │
-│   person, topic Northwind                                    │
-│   said on 2026-03-04: "Dana runs IT at Northwind"            │
-│ [ undo ] dropping: Call Sam about the ladder.                │
-│   commitment, due 2026-03-06                                 │
-│   said on 2026-03-04: "I still have to call Sam"             │
-│ [ keep ] [ drop ] The spare key is in the shed.              │
-│   personal                                                   │
-│   said on 2026-03-05: "the spare key is in the shed"         │
-│ 1 answer waits for the next curation run, which files what   │
-│ you kept                                                     │
+│ [ Overview ] Proposals 3 [ Review ] [ Settings ]             │
+│                                                              │
+│ ╭──────────────────────────────────────────────────────────╮ │
+│ │ Proposals from your sessions                           3 │ │
+│ │ [ keep all ]                                             │ │
+│ │ Dana is head of IT at Northwind.                         │ │
+│ │ [ keep ] [ drop ] person, topic Northwind                │ │
+│ │   said on 2026-03-04: "Dana runs IT at Northwind"        │ │
+│ │ Call Sam about the ladder.                               │ │
+│ │ [ undo ] dropping                                        │ │
+│ │   said on 2026-03-04: "I still have to call Sam"         │ │
+│ │ The spare key is in the shed.                            │ │
+│ │ [ keep ] [ drop ] personal                               │ │
+│ │   said on 2026-03-05: "the spare key is in the shed"     │ │
+│ │ 1 answer waits for the next curation run, which files    │ │
+│ │ what you kept                                            │ │
+│ ╰──────────────────────────────────────────────────────────╯ │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -480,11 +501,12 @@ follow at once.
 <sub>One real Claude Code session on a demo machine with invented notes, recorded by `scripts/readme-demo --only pane-answers`. Only keys are typed and no model is asked; the five seconds a press waits run as recorded.</sub>
 
 When `m2b` refuses an answer, because another machine answered that proposal the other way first,
-or cannot write it, what it says stands in the pane and in the band until your next prompt. After
+or cannot write it, what it says stands in that view, in the error color, until your next press
+there or your next prompt. After
 `keep all`, where another answer already stands, it names the first such proposal by its text, and
 what could be kept is kept. When the proposals
 cannot be looked at, for instance because the answers folder is not downloaded from iCloud Drive,
-both say that in one line with the command that fetches it, and show no proposal: could not look
+the band and the pane say that in one line with the command that fetches it, and show no proposal: could not look
 is never "nothing waits". For the same reason the pane says that m2b has not looked yet until the
 band's first answer has arrived. Where Claude Code cannot show a pane, `/m2b-proposals` answers as
 text: how many wait, how to list and answer them with `m2b proposals`, then the proposals, each

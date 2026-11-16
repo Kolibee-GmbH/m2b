@@ -5,14 +5,16 @@ import { runM2b } from './m2b'
 import { CLOSED_BY_HAND } from './pane-seat'
 import { untoldFindings } from './tasks'
 import { plainLine, withoutHidden } from './plain-text'
-import { said } from './look'
-import { candidateRow, changesSummary, reviewRow } from './rows'
+import { NOTHING_WAITS, NOT_LOOKED, WAITS_FOR_YOU, inset, part, pathLine, said, styleOf, under } from './look'
+import type { Tone } from './look'
+import { timeOrDay } from './moment'
+import { REVIEW, candidateRow, changesSummary, reviewRow } from './rows'
 import type { RowActions } from './rows'
 
 /*
- * The m2b pane: the last curation run in full, with every finding whole and every candidate, or
- * the hits of a search, without asking the model. Both commands run at once, also while a turn is
- * working.
+ * The m2b pane's views of the last curation run, in full with every finding whole and every
+ * candidate, and of the hits of a search, without asking the model. Both commands run at once,
+ * also while a turn is working. The pane's own name and how it is opened are here too.
  */
 
 export const PANE_ID = 'm2b'
@@ -81,45 +83,98 @@ export function isRun(value: unknown): value is BandRun {
   )
 }
 
-/** `2026-03-14 18:00` from a time m2b wrote with its offset: as written, in the offset of the machine that curated. */
-export function minute(moment: string): string {
-  return plainLine(moment.slice(0, 16).replace('T', ' '))
-}
+const LAST_RUN = 'Last curation run'
+const RUN_NOT_READ = 'm2b could not read the last curation run'
 
-export function runLine(run: BandRun | null): string {
+/**
+ * How the last curation run went, in one line: its state and when it ran, the time for a run of
+ * today and the date for one before. A run m2b could not read, and one that failed or was
+ * interrupted, is trouble; that none ran yet is no more than a note.
+ */
+export function runWords(run: BandRun | null, nowMs: number): { text: string; tone: Tone } {
   if (run === null) {
-    return 'Could not read the last curation run.'
+    return { text: `${RUN_NOT_READ}.`, tone: 'trouble' }
   }
   if (run.state === 'none') {
-    return 'No curation run yet.'
+    return { text: 'No curation run yet.', tone: 'quiet' }
   }
   if (run.state === 'unreadable') {
-    return 'Could not read the last curation run:'
+    return { text: run.message ? `${RUN_NOT_READ}: ${plainLine(run.message)}` : `${RUN_NOT_READ}.`, tone: 'trouble' }
   }
-  const state = plainLine(run.state)
-  if (run.startedAt === null) {
-    return `Last curation run: ${state}`
-  }
-  const started = minute(run.startedAt)
-  if (run.finishedAt === null) {
-    return `Last curation run: ${state}, started ${started}`
-  }
-  const finished = minute(run.finishedAt)
-  const end = finished.slice(0, 10) === started.slice(0, 10) ? finished.slice(11) : finished
-  return `Last curation run: ${state}, ${started} to ${end}`
+  const tone = run.state === 'failed' || run.state === 'interrupted' ? 'trouble' : 'plain'
+  return { text: `${plainLine(run.state)}${whenItRan(run, nowMs)}`, tone }
 }
 
-// After the file, what happened to more than a word or two: a line or a whole fact file gone.
+/** `, 18:00 to 18:04` for a run of today, `, 2026-03-13` for one before, `, started 18:00` for one under way; nothing where no start is known. */
+function whenItRan(run: BandRun, nowMs: number): string {
+  if (run.startedAt === null) {
+    return ''
+  }
+  const started = timeOrDay(run.startedAt, nowMs)
+  if (run.finishedAt === null) {
+    return `, started ${started}`
+  }
+  const finished = timeOrDay(run.finishedAt, nowMs)
+  return started === finished ? `, ${started}` : `, ${started} to ${finished}`
+}
+
+/** Before the band's first answer neither the run nor the list was read: not known, which is not "could not read". */
+function isUnread(snapshot: BandSnapshot | null, run: BandRun | null): boolean {
+  return snapshot === null && run === null
+}
+
+/** What a run said beside its state, where it is no part of the run's line already. */
+function runMessage(run: BandRun | null): string | null {
+  return run !== null && run.state !== 'unreadable' && run.message ? plainLine(run.message) : null
+}
+
+/** The run's line for a text, which has no part's title above it. */
+function runTextLine(run: BandRun | null, nowMs: number): string {
+  const { text: words } = runWords(run, nowMs)
+  return run === null || run.state === 'none' || run.state === 'unreadable' ? words : `${LAST_RUN}: ${words}`
+}
+
+/** How many rows of the run wait for an answer: its candidates and questions, and the review. */
+function runWaits(snapshot: BandSnapshot | null): number {
+  return (snapshot?.candidates.length ?? 0) + (snapshot?.review ? 1 : 0)
+}
+
+/**
+ * Whether the view says that nothing waits: where m2b could read the list and it holds no row.
+ * Not before any run: "no run yet" says it all.
+ */
+function saysNothingWaits(snapshot: BandSnapshot | null, run: BandRun | null): boolean {
+  return snapshot !== null && !snapshot.error && runWaits(snapshot) === 0 && run?.state !== 'none'
+}
+
+// What happened to more than a word or two: a line or a whole fact file gone.
 const KIND_SHOWN: Record<string, string> = {
-  removed: ', line removed',
-  file_removed: ', file removed',
-  file_emptied: ', file emptied',
+  removed: 'line removed',
+  file_removed: 'file removed',
+  file_emptied: 'file emptied',
+}
+
+/**
+ * What stands in brackets beside what a changed fact is about: its fact file and what happened to
+ * it. The file is named once: where a whole file went, the change is about the file itself, and
+ * the core names it as the topic. Null where that leaves nothing.
+ */
+function changedWhere(change: { topic: string; file: string; kind: string }): string | null {
+  const file = plainLine(change.file)
+  const pieces = [...(file === plainLine(change.topic) ? [] : [file]), ...(KIND_SHOWN[change.kind] ? [KIND_SHOWN[change.kind]] : [])]
+  return pieces.length === 0 ? null : pieces.join(', ')
 }
 
 /** Where the copy of the facts from before the run lies, and how many notes the run filed. */
 function copyLine(copy: { path: string; captures: number }): string {
-  const filed = copy.captures > 0 ? `; ${copy.captures} ${copy.captures === 1 ? 'note' : 'notes'} filed` : ''
-  return `  facts before the run: ${plainLine(copy.path)}${filed}`
+  return `${BEFORE_THE_RUN}: ${plainLine(copy.path)}${notesFiled(copy.captures)}`
+}
+
+const BEFORE_THE_RUN = 'facts before the run'
+
+/** `; 2 notes filed`, or nothing where the run filed none. */
+function notesFiled(captures: number): string {
+  return captures > 0 ? `; ${captures} ${captures === 1 ? 'note' : 'notes'} filed` : ''
 }
 
 /** A changed line as text, the added words in [+ ] and the removed ones in [- ]. */
@@ -132,30 +187,32 @@ function changeText(parts: { text: string; change: string }[]): string {
 
 /** The review part as lines of text, for a surface that cannot show the pane. */
 
-export function reviewLines(snapshot: BandSnapshot | null, run: BandRun | null): string[] {
-  const lines = [runLine(run)]
-  if (run?.message) {
-    lines.push(plainLine(run.message))
+export function reviewLines(snapshot: BandSnapshot | null, run: BandRun | null, nowMs: number): string[] {
+  if (isUnread(snapshot, run)) {
+    return [NOT_LOOKED]
   }
+  const message = runMessage(run)
+  const lines = [runTextLine(run, nowMs), ...(message === null ? [] : [message])]
   if (snapshot?.error) {
     lines.push(plainLine(snapshot.error))
   }
   const review = snapshot?.review ?? null
   if (review !== null) {
     const changed = changesSummary(review)
-    lines.push(`${plainLine(review.title)}${changed === null ? '' : `  ${changed}`}`)
+    lines.push(changed === null ? REVIEW : `${REVIEW}, ${changed}`)
     for (const change of review.changes ?? []) {
-      lines.push(`  ${plainLine(change.topic)} (${plainLine(change.file)}): ${changeText(change.parts)}`)
+      const where = changedWhere(change)
+      const head = `  ${plainLine(change.topic)}${where === null ? '' : ` (${where})`}`
+      // A file that went holds no line to show.
+      lines.push(change.parts.length === 0 ? head : `${head}: ${changeText(change.parts)}`)
     }
-    lines.push(...(review.copies ?? []).map(copyLine))
+    lines.push(...(review.copies ?? []).map(copy => `  ${copyLine(copy)}`))
     lines.push(...untoldFindings(review).map(finding => `  ${plainLine(finding)}`))
   }
-  const candidates = snapshot?.candidates ?? []
-  lines.push(
-    ...(candidates.length === 0
-      ? ['Nothing to keep or drop.']
-      : candidates.map(candidate => `- ${plainLine(candidate.title)}`)),
-  )
+  lines.push(...(snapshot?.candidates ?? []).map(candidate => `- ${plainLine(candidate.title)}`))
+  if (saysNothingWaits(snapshot, run)) {
+    lines.push(NOTHING_WAITS)
+  }
   return lines
 }
 
@@ -204,28 +261,40 @@ function isHit(value: unknown): value is SearchHit {
   )
 }
 
+/** The search in words: `3 hits for plywood`, `no hits for Velo, whole words only`. */
 export function searchSummary(search: PaneSearch): string {
-  const query = `${plainLine(search.query)}${search.wholeWords === true ? ', whole words only,' : ''}`
+  const query = `${plainLine(search.query)}${search.wholeWords === true ? ', whole words only' : ''}`
   const count = search.total
   return count === 0 ? `no hits for ${query}` : `${count} ${count === 1 ? 'hit' : 'hits'} for ${query}`
 }
 
+/** That the hits are in the pane, for the command's answer. */
+export function searchPlaced(search: PaneSearch): string {
+  // The comma closes "whole words only", which stands between commas.
+  return `${searchSummary(search)}${search.wholeWords === true ? ',' : ''} in the m2b pane`
+}
+
+function hitPlace(hit: SearchHit): string {
+  return `${plainLine(hit.path)}:${hit.line}`
+}
+
+function noHits(search: PaneSearch): string {
+  return `No hits for ${plainLine(search.query)}.`
+}
+
+/** What a search says after its hits: how many more there are, and which files it could not search. */
+function searchNotes(search: PaneSearch): string[] {
+  return [
+    ...(search.total > search.hits.length ? [`and ${search.total - search.hits.length} more hits`] : []),
+    ...(search.evicted > 0 ? [`${search.evicted} ${search.evicted === 1 ? 'file' : 'files'} not downloaded, not searched`] : []),
+    ...(search.unreadable > 0 ? [`${search.unreadable} ${search.unreadable === 1 ? 'file' : 'files'} could not be read`] : []),
+  ]
+}
+
 /** The search as lines: each hit's place on one line, its text on the next. */
 export function searchLines(search: PaneSearch): string[] {
-  const lines =
-    search.hits.length === 0
-      ? [`No hits for ${plainLine(search.query)}.`]
-      : search.hits.slice(0, HITS_SHOWN).flatMap(hit => [`${plainLine(hit.path)}:${hit.line}`, `  ${plainLine(hit.text)}`])
-  if (search.total > search.hits.length) {
-    lines.push(`and ${search.total - search.hits.length} more hits`)
-  }
-  if (search.evicted > 0) {
-    lines.push(`${search.evicted} ${search.evicted === 1 ? 'file' : 'files'} not downloaded, not searched`)
-  }
-  if (search.unreadable > 0) {
-    lines.push(`${search.unreadable} ${search.unreadable === 1 ? 'file' : 'files'} could not be read`)
-  }
-  return lines
+  const hits = search.hits.slice(0, HITS_SHOWN).flatMap(hit => [hitPlace(hit), `  ${plainLine(hit.text)}`])
+  return [...(search.hits.length === 0 ? [noHits(search)] : hits), ...searchNotes(search)]
 }
 
 /** The pane as a dialog: it asks for the keyboard, and Escape closes it as the person's close mark does. */
@@ -275,81 +344,88 @@ function fallback(lines: string[]): string[] {
 }
 
 /**
- * The pane's drawing: the search, or the run with its findings whole and every row to keep or
- * drop. `notice` is what m2b said to the last press on a row that wrote nothing.
+ * A search's view, one part under the search in words: each hit's place, and its text below it,
+ * indented whole. A search without hits opens no pane, so the part always holds some.
  */
-export function paneTree(
-  $: EngineInterface,
-  e: ResolveInput,
-  view: PaneView,
-  snapshot: BandSnapshot | null,
-  run: BandRun | null,
-  presses: Record<string, BandPress>,
-  notice: string | null,
-  actions: RowActions,
-) {
+export function searchPane($: EngineInterface, e: ResolveInput, search: PaneSearch, columns: number) {
+  const ui = $.ui.resolve(e)
+  const summary = searchSummary(search)
+  const title = `${summary.charAt(0).toUpperCase()}${summary.slice(1)}`
+  return part(ui, { key: 'search', title, waits: false, columns }, [
+    ...search.hits.slice(0, HITS_SHOWN).flatMap(hit => [said(ui, hitPlace(hit), 'quiet'), under(ui, plainLine(hit.text), 'plain')]),
+    ...searchNotes(search).map(note => said(ui, note, 'quiet')),
+  ])
+}
+
+/**
+ * What the review's view draws from. `notice` is what m2b said to the last press on a row that
+ * wrote nothing, `nowMs` the moment the run's times are said against.
+ */
+export type ReviewModel = {
+  snapshot: BandSnapshot | null
+  run: BandRun | null
+  presses: Record<string, BandPress>
+  notice: string | null
+  nowMs: number
+}
+
+/**
+ * The review's view, two parts: the last curation run, how it went and what it changed, with
+ * every finding whole; and what of it waits for an answer, the review with `ok` and every
+ * candidate and question with keep and drop. `columns` is the width of the pane's body.
+ */
+export function reviewPane($: EngineInterface, e: ResolveInput, model: ReviewModel, actions: RowActions, columns: number) {
   const ui = $.ui.resolve(e)
   const { Box, Text } = ui
-  if (view.kind === 'search') {
-    return (
-      <Box flexDirection="column">
-        {searchLines(view.search).map(line => (
-          <Text wrap="wrap">{line}</Text>
-        ))}
-      </Box>
-    )
-  }
+  const { snapshot, run, presses, notice } = model
+  const words = runWords(run, model.nowMs)
+  const message = runMessage(run)
   const review = snapshot?.review ?? null
-  const candidates = snapshot?.candidates ?? []
+  const waits = runWaits(snapshot)
+  const nothingWaits = saysNothingWaits(snapshot, run)
+  if (isUnread(snapshot, run)) {
+    return part(ui, { key: 'run', title: LAST_RUN, waits: false, columns }, [said(ui, NOT_LOOKED, 'quiet')])
+  }
+  // Before any run, with nothing to answer, the first part says all there is.
+  const hasWaitsPart = waits > 0 || nothingWaits || snapshot === null || Boolean(snapshot.error) || notice !== null
   return (
     <Box flexDirection="column">
-      <Text weight="semibold" wrap="wrap">
-        {runLine(run)}
-      </Text>
-      {run?.message ? <Text wrap="wrap">{plainLine(run.message)}</Text> : null}
-      {snapshot?.error ? (
-        <Text color="error" wrap="wrap">
-          {plainLine(snapshot.error)}
-        </Text>
-      ) : null}
-      {notice !== null && said(ui, plainLine(notice), 'trouble')}
-      {review !== null && reviewRow($, e, review, presses[review.id], actions)}
-      {(review?.changes ?? []).map(change => (
-        <Box flexDirection="column">
-          <Text wrap="wrap">
-            <Text weight="semibold">{`  ${plainLine(change.topic)}`}</Text>
-            <Text dimColor>{` (${plainLine(change.file)}${KIND_SHOWN[change.kind] ?? ''})`}</Text>
-          </Text>
-          <Text wrap="wrap">
-            {'    '}
-            {change.parts.map(part =>
-              part.change === 'same' ? (
-                <Text>{plainLine(part.text)}</Text>
-              ) : (
-                <Text color={part.change === 'added' ? 'success' : 'error'} strikethrough={part.change === 'removed'}>
-                  {plainLine(part.text)}
-                </Text>
-              ),
-            )}
-          </Text>
-        </Box>
-      ))}
-      {(review?.copies ?? []).map(copy => (
-        <Text dimColor wrap="wrap">
-          {copyLine(copy)}
-        </Text>
-      ))}
-      {(review === null ? [] : untoldFindings(review)).map(finding => (
-        <Text wrap="wrap">
-          {'  '}
-          {plainLine(finding)}
-        </Text>
-      ))}
-      {candidates.length === 0 ? (
-        <Text dimColor>Nothing to keep or drop.</Text>
-      ) : (
-        candidates.map(candidate => candidateRow($, e, candidate, presses[candidate.id], actions))
-      )}
+      {part(ui, { key: 'run', title: LAST_RUN, waits: false, columns }, [
+        said(ui, words.text, words.tone),
+        message !== null && said(ui, message, words.tone),
+        ...(review?.changes ?? []).map(change => {
+          const where = changedWhere(change)
+          return (
+            <Box flexDirection="column">
+              <Text wrap="wrap">
+                <Text {...styleOf('strong')}>{plainLine(change.topic)}</Text>
+                {where !== null && <Text {...styleOf('quiet')}>{` (${where})`}</Text>}
+              </Text>
+              {/* A file that went holds no line to show. */}
+              {change.parts.length > 0 &&
+                inset(
+                  ui,
+                  <Text wrap="wrap">
+                    {change.parts.map(piece => (
+                      <Text {...styleOf(piece.change === 'same' ? 'plain' : piece.change === 'added' ? 'added' : 'removed')}>{plainLine(piece.text)}</Text>
+                    ))}
+                  </Text>,
+                )}
+            </Box>
+          )
+        }),
+        ...(review?.copies ?? []).flatMap(copy => [said(ui, `${BEFORE_THE_RUN}${notesFiled(copy.captures)}:`, 'quiet'), pathLine(ui, copy.path)]),
+        ...(review === null ? [] : untoldFindings(review)).map(finding => under(ui, plainLine(finding), 'plain')),
+      ])}
+      {hasWaitsPart &&
+        part(ui, { key: 'waits', title: WAITS_FOR_YOU, waits: waits > 0, count: waits > 0 ? String(waits) : null, columns }, [
+          snapshot === null && said(ui, NOT_LOOKED, 'quiet'),
+          snapshot?.error ? said(ui, plainLine(snapshot.error), 'trouble') : null,
+          notice !== null && said(ui, plainLine(notice), 'trouble'),
+          review !== null && reviewRow($, e, review, presses[review.id], actions),
+          ...(snapshot?.candidates ?? []).map(candidate => candidateRow($, e, candidate, presses[candidate.id], actions)),
+          nothingWaits && said(ui, NOTHING_WAITS, 'quiet'),
+        ])}
     </Box>
   )
 }

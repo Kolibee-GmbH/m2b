@@ -1,4 +1,5 @@
 import type { BandHealth } from '../types'
+import { timeOrDay } from './moment'
 import { plainLine } from './plain-text'
 
 export const COULD_NOT_LOOK = 'could not look'
@@ -106,34 +107,9 @@ function lastCurated(run: unknown, nowMs: number): string[] {
   }
   const succeededAt = run['last_succeeded_at']
   if (typeof succeededAt === 'string') {
-    return [`curated ${localTimeOrDay(succeededAt, nowMs)}`]
+    return [`curated ${timeOrDay(succeededAt, nowMs)}`]
   }
   return run['state'] === 'none' ? ['not curated yet'] : []
-}
-
-/**
- * The time of day when the moment lies on today's date, else the date.
- *
- * m2b writes local times with their offset, so "today" is read in that offset; the module has no
- * time zone of its own to trust.
- */
-function localTimeOrDay(moment: string, nowMs: number): string {
-  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.exec(moment)
-  if (match === null) {
-    return moment
-  }
-  const [, day, time, offset] = match as unknown as [string, string, string, string]
-  const today = new Date(nowMs + offsetMinutes(offset) * 60_000).toISOString().slice(0, 10)
-  return day === today ? time : day
-}
-
-function offsetMinutes(offset: string): number {
-  if (offset === 'Z') {
-    return 0
-  }
-  const sign = offset.startsWith('-') ? -1 : 1
-  const [hours = 0, minutes = 0] = offset.slice(1).split(':').map(Number)
-  return sign * (hours * 60 + minutes)
 }
 
 function storeTrouble(answer: JsonObject): Trouble[] {

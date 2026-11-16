@@ -203,8 +203,8 @@ test('the band part is read whole or not at all: a value this band does not know
   expect(parseBandShows(['list', true])).toBeUndefined()
 })
 
-test('a failed run is shown once in a session, naming where the review is', async ($, on) => {
-  // Covers: B103
+test('a failed run is shown once in a session, by the time it started today, naming where the review is', async ($, on) => {
+  // Covers: B103, B209
   const fake = new FakeM2b()
   fake.status = FAILED
   const { clock, toasts } = await start($, on, fake)
@@ -213,9 +213,16 @@ test('a failed run is shown once in a session, naming where the review is', asyn
   await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 't1', reason: 'answer' })
   await clock.advance(1)
 
-  expect(toasts).toEqual([
-    'm2b: the curation run of 2026-03-14 18:00 failed; its review task says why, and /m2b-review shows it',
-  ])
+  expect(toasts).toEqual(['m2b: the curation run of 18:00 failed; its review task says why, and /m2b-review shows it'])
+})
+
+test('a failed run of a day before is named by its date', async ($, on) => {
+  // Covers: B103, B209
+  const fake = new FakeM2b()
+  fake.status = { ...FAILED, run: { ...FAILED.run, started_at: '2026-03-13T18:00:05+01:00' } }
+  const { toasts } = await start($, on, fake)
+
+  expect(toasts).toEqual(['m2b: the curation run of 2026-03-13 failed; its review task says why, and /m2b-review shows it'])
 })
 
 test('a reload of the mod does not show the same failed run again; the next failed run is shown', async ($, on) => {
@@ -227,10 +234,12 @@ test('a reload of the mod does not show the same failed run again; the next fail
   await clock.advance(60_000)
   expect(toasts).toHaveLength(1)
 
-  fake.status = { ...FAILED, run: { ...FAILED.run, started_at: '2026-03-15T18:00:05+01:00' } }
+  fake.status = { ...FAILED, run: { ...FAILED.run, started_at: '2026-03-14T18:20:05+01:00' } }
   await clock.advance(60_000)
-  expect(toasts).toHaveLength(2)
-  expect(toasts[1]).toContain('2026-03-15 18:00')
+  expect(toasts).toEqual([
+    'm2b: the curation run of 18:00 failed; its review task says why, and /m2b-review shows it',
+    'm2b: the curation run of 18:20 failed; its review task says why, and /m2b-review shows it',
+  ])
 })
 
 test('a toast that cannot be shown leaves the status line as read', async ($, on) => {

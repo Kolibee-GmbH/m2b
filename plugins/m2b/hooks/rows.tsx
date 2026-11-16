@@ -43,8 +43,9 @@ function pressableRow(
 }
 
 /**
- * One candidate or question: its title, and below it keep and drop, or while a press waits undo
- * and what it will do, or while it writes that line alone.
+ * One candidate, question or proposal: its title, and below it keep and drop, or while a press
+ * waits undo and what it will do, or while it writes that line alone. `detail` is what it is, in
+ * a few words beside keep and drop.
  */
 export function candidateRow(
   $: EngineInterface,
@@ -52,13 +53,14 @@ export function candidateRow(
   candidate: BandCandidate,
   pressed: BandPress | undefined,
   actions: RowActions,
+  detail: string | null = null,
 ) {
   const buttons: ButtonSpec[] = [
     { key: `keep:${candidate.id}`, label: 'keep', kind: 'accent', onPress: () => actions.press(candidate, 'complete') },
     { key: `drop:${candidate.id}`, label: 'drop', kind: 'quiet', onPress: () => actions.press(candidate, 'drop') },
   ]
   const doing = pressed?.action === 'drop' ? 'dropping' : 'keeping'
-  const spec = { key: `row:${candidate.id}`, id: candidate.id, text: plainLine(candidate.title), detail: null, buttons, doing }
+  const spec = { key: `row:${candidate.id}`, id: candidate.id, text: plainLine(candidate.title), detail, buttons, doing }
   return pressableRow($, e, spec, pressed, () => actions.undo(candidate.id))
 }
 
