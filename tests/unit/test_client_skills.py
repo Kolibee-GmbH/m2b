@@ -43,6 +43,8 @@ SHARED_RULES = {
         "Never add facts the hits do not hold. If the hits do not answer the question, say so.",
         "A hit about another person, place or topic does not answer a question about this one: leave it out, "
         "and do not offer it as possibly the same.",
+        "Where the notes hold nothing about someone, say that, and name no other person, customer or topic of "
+        "the notes as a possible connection, not as a guess and not as an example.",
         "say that you could not look, never that there is nothing",
         "so a file that lives only in the cloud is never downloaded or left hanging.",
     ),
