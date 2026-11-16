@@ -89,8 +89,8 @@ counts what waits for you and names what is due. All names and notes are invente
 
 Say that you want it kept: a sentence on its own, such as "Dana's birthday is on 3 March", stays
 part of the conversation and is not captured. Sessions capture what you learn about people and
-verbal agreements, at work too; documents of customers and what a third party told you in
-confidence are never captured.
+verbal agreements, at work too, and what else goes in is yours to decide: a file you name goes in
+on your yes to Claude Code's question, unless a rule of yours lets the call through.
 
 [Using m2b](docs/using.md) has each of these in detail. From a terminal or a script the same goes
 through commands, such as `m2b capture "<text>"`; [Commands](docs/commands.md) lists every one.

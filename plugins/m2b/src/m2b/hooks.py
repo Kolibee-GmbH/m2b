@@ -81,11 +81,11 @@ ROUTING_RULE = (
     "across projects (people, agreements, facts, tasks) goes to the second brain, not to Claude Code's "
     "own memory."
 )
-# Who is who and what was agreed is what a second brain is for, also at work; what a customer or
-# another third party wrote or said in confidence is theirs.
+# Who is who and what was agreed is what a second brain is for, also at work; what else goes in,
+# a customer's document among it, the owner decides.
 WORK_PEOPLE_RULE = (
-    "Knowledge about people and verbal agreements may be captured from work sessions; documents and "
-    "confidential statements of customers or other third parties never."
+    "Knowledge about people and verbal agreements may be captured from work sessions: who is who, which role, "
+    "what was agreed."
 )
 # Caches older bands wrote, one answer per call; the band now shares one answer in band-answer.json,
 # and a band from before its one row, while a session still runs it, in band-view.json.

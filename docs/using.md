@@ -57,8 +57,8 @@ that folder turns it off for every session there and below, on this machine; the
 button for it ([The band](band.md#turning-m2b-off-in-a-folder)).
 
 Sessions capture what you learn about people and verbal agreements, at work too: who is who,
-which role, what was agreed. Documents of customers and what a third party told you in confidence
-are never captured. A customer's people land under that customer's topic, so their facts reach a
+which role, what was agreed. What else goes in is yours to decide, a customer's document among it
+([SECURITY.md](../SECURITY.md#what-m2b-handles) says where it then lies and who reads it). A customer's people land under that customer's topic, so their facts reach a
 session only when it is about that customer. What you are working on for that customer lands under
 the same topic in Current; what goes on in your own life stays above the topics there and reaches
 every session.

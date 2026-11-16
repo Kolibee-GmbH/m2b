@@ -22,7 +22,6 @@ run the commands below.
 - Personal things without a home in a repository: facts, ideas, open questions, tasks.
 - What the user learns about people and verbal agreements: who is who, which role, what was
   agreed, from work too.
-- Never documents of customers or confidential statements about third parties.
 - A project's own todos and decisions belong in that project's repository, not here. When
   something touches both, the repository gets the content and the capture gets a pointer.
 

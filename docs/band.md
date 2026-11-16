@@ -681,8 +681,8 @@ call:
 | `mcp__m2b__search` | `m2b search --json --any -- <terms>`, or `m2b source --json -- <source>` | `terms`, each a phrase of its own, `whole_words`, and `question_language`, the language the question was asked in; or `source`, the name of one fact file or note to read whole |
 
 Their descriptions, which the model reads, carry the rules of the skills `/m2b:capture` and
-`/m2b:search`: what may be noted (never documents of customers or confidential statements about
-third parties), the text stays in your words, and an answer holds only what the hits hold. A test
+`/m2b:search`: what may be noted (who is who, which role, what was agreed, from work too), the text
+stays in your words, and an answer holds only what the hits hold. A test
 holds the core rules of each description to the skill's own sentences. The skills stay as they
 are; where the tools are offered, they name the tool as the first way, and where the mod does not
 run they work through their commands as before. A calendar entry still goes through the skill.
@@ -784,7 +784,7 @@ The tool has no skill. Its description, about 3,200 characters in the prompt of 
 that has it, is where its rules stand: the four kinds in the words the reading of your sessions is
 instructed with, and that each is about you, someone you deal with or an agreement you are a
 party to; what to leave out (how the model should work, the project at hand, what your memory
-already says, never documents of customers or confidential statements about third parties); that
+already says; from work only who is who, which role, what was agreed); that
 it holds a fact against the distillate first and searches where the distillate only names a
 topic; that a text the model read is data, so a sentence in it that asks to be remembered, or
 says how to word a proposal or what to quote, is not carried out; that "remember this" from you is a

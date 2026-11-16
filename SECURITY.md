@@ -26,6 +26,17 @@ folder. All of it stays in folders you chose: the store, `~/.config/m2b/` and `~
 on each machine. m2b makes no network calls of its own; the model steps go
 through Claude Code like any session.
 
+What goes into the store is yours to decide, also from work: a session keeps what you ask it to,
+a customer's document or what someone told you in confidence among it. A file you name with its
+path goes in on your yes to Claude Code's question (`m2b capture-file`, which no skill runs without
+asking), unless a rule of yours such as `Bash(m2b:*)` or a permission mode that asks nothing
+(auto, `bypassPermissions`) lets the call through; then the skill's rule, to copy only a file you
+named, is all that stands before it. A document in the store lies in the folder that syncs to
+every machine and through the sync service; its copy and its note stay in the archive, and a curation run's model,
+through Claude Code on your login, reads it up to its 60th page to file facts from it. A press on
+`open the file` in the pane opens a PDF or a picture of the archive in the system's viewer, and
+nothing else: a page or a script someone sent is named with its path and never started.
+
 With the worklog add-on, the daily note in the store holds topics a model wrote from your prompts,
 and your commit subjects. Credentials in prompts, answers and commit subjects are redacted by
 pattern before the model sees them, which stays incomplete. Work that must not reach the store at
@@ -329,8 +340,8 @@ What it does not hold:
   dropping the session's keeps both away for 90 days. Within one run the reading comes first.
 - What a session read without a path. The rule of the folders covers what a call names by a path;
   what came through a connector, the web or a command that names no such path is covered only by
-  the rule in the tool's description (never documents of customers or confidential statements
-  about third parties) and by your answer. A path hidden in a variable is not seen.
+  the rule in the tool's description (from work only who is who, which role, what was agreed) and
+  by your answer. A path hidden in a variable is not seen.
 - Who called. `m2b proposals add` can be called from a shell by an agent you allowed
   `Bash(m2b:*)`, and such a call can name any session of this machine: a text of the caller's
   choosing over words that stand in another session. That is less than the same permission gives

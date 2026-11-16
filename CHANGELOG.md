@@ -44,6 +44,14 @@ All notable changes to this project are documented here. The format follows
   over 25 MB are refused; the size is the new setting `capture.file_limit_mb`
   ([Capture](docs/using.md#capture)).
 
+### Changed
+
+- What goes into your second brain is yours to decide, also from work. The note and propose
+  tools, the text every session starts with and the capture skill name what a note may hold from
+  work, who is who, which role, what was agreed, and no longer tell a session never to keep a
+  customer's document or what someone told you in confidence. [SECURITY.md](SECURITY.md#what-m2b-handles)
+  says where such a document then lies and who reads it.
+
 ## [0.7.0] - 2026-11-16
 
 m2b is there in every session: the band's row stands above the prompt also while nothing waits,
