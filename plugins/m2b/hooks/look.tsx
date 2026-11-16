@@ -27,6 +27,8 @@ export type Tone =
   | 'plain'
   // May be skipped: detail, what is not known yet.
   | 'quiet'
+  // The one of several that holds now: the tab whose view is shown.
+  | 'shown'
 
 type Style = { color?: ThemeKey; dimColor?: true; weight?: 'bold' }
 
@@ -39,6 +41,7 @@ const STYLES: Readonly<Record<Tone, Style>> = {
   trouble: { color: 'error' },
   plain: {},
   quiet: { dimColor: true },
+  shown: { color: 'remember', weight: 'bold' },
 }
 
 /** The `Text` props a tone is drawn with. */
@@ -102,6 +105,31 @@ export function taskLine(ui: Pick<ElementTable, 'Box' | 'Text'>, task: BandDueTa
     <Box key={`task:${task.id}`} flexDirection="row" columnGap={1}>
       <Text {...styleOf(task.overdue ? 'overdue' : 'dueToday')}>{(task.overdue ? OVERDUE : DUE_TODAY).padEnd(DUE_COLUMN)}</Text>
       <Text wrap={wrap}>{plainLine(task.title)}</Text>
+    </Box>
+  )
+}
+
+/** A tab of a row: `turn` is the press that shows its view, null for the tab whose view is shown. */
+export type Tab = { label: string; turn: { key: string; onPress: () => void } | null }
+
+/**
+ * A row of tabs above a view: the one shown is marked, underlined too so it reads without color,
+ * and is no button; every other turns to its view. The row breaks between tabs where it is too
+ * narrow for them.
+ */
+export function tabRow(ui: Pick<ElementTable, 'Box' | 'Button' | 'Text'>, tabs: readonly Tab[]) {
+  const { Box, Text } = ui
+  return (
+    <Box key="tabs" flexDirection="row" columnGap={1} flexWrap="wrap">
+      {tabs.map(tab =>
+        tab.turn === null ? (
+          <Text {...styleOf('shown')} underline>
+            {tab.label}
+          </Text>
+        ) : (
+          button(ui, { key: tab.turn.key, label: tab.label, kind: 'quiet', onPress: tab.turn.onPress })
+        ),
+      )}
     </Box>
   )
 }

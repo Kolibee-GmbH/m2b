@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { CommandRunResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { BAND, FakeM2b, HOME, NOW, STATUS, pane, rowSaying, shownBand, start, texts } from './harness'
+import { BAND, FakeM2b, HOME, NOW, STATUS, pane, rowSaying, shownBand, start, texts, viewButtons } from './harness'
 import type { Files } from './harness'
 
 const PANE = 'm2b'
@@ -56,7 +56,7 @@ test('the review command opens the pane with every finding whole, every candidat
     expect(shown).toContain(`Remember? Dana prefers tea ${n}`)
   }
   expect(shown).toContain('Still current? Planning the trip to Porto')
-  expect(await ui.findAll({ type: 'Button' })).toHaveLength(12) // with ok on the review, and back above the view
+  expect(await viewButtons(ui)).toHaveLength(11) // with ok on the review
   await ui.unmount()
 })
 

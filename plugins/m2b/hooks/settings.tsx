@@ -491,7 +491,6 @@ export function showsCard(view: Extract<PaneView, { kind: 'settings' }>, kept: H
   return view.at !== null && kept.look.state === 'read' && kept.look.catalog.settings[view.at] !== undefined
 }
 
-const HEADING = 'Settings'
 const READING = 'm2b is reading its settings…'
 const COULD_NOT_READ = 'm2b could not read its settings'
 const NOT_READ = 'not read'
@@ -580,12 +579,7 @@ export function settingsPane(
   )
   const { look, trouble, change, refusal } = kept
   if (look.state !== 'read') {
-    return (
-      <Box flexDirection="column">
-        {heading(HEADING)}
-        {look.state === 'reading' ? quiet(READING) : failure(`${COULD_NOT_READ}: ${plainLine(look.error)}`)}
-      </Box>
-    )
+    return look.state === 'reading' ? quiet(READING) : failure(`${COULD_NOT_READ}: ${plainLine(look.error)}`)
   }
   const { settings, curates, notRead } = look.catalog
   const isNarrow = columns < NARROW_BELOW
@@ -616,7 +610,6 @@ export function settingsPane(
       )
     return (
       <Box flexDirection="column">
-        {heading(HEADING)}
         {again}
         {change !== null && quiet(underWay(change))}
         {GROUPS.map(group => {
@@ -652,7 +645,7 @@ export function settingsPane(
   const list = <Button key={LIST} label="list" onPress={() => actions.toList(at)} />
   return (
     <Box flexDirection="column">
-      {heading(`${HEADING} · ${at + 1} of ${settings.length}`)}
+      {heading(`${at + 1} of ${settings.length}`)}
       {/* The way on comes before any switch, so that a switch is never the first thing a key can press. */}
       {isNarrow ? (
         // Three buttons side by side are wider than the narrowest pane: `list` goes below the other two.

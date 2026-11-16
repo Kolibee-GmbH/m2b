@@ -2,10 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { CommandRunResult, SessionMessage } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { BACK, focusKeyAfterBack } from '../../hooks/session-view'
-import type { SessionModel } from '../../hooks/session-view'
-import type { BandProposals, BandSession, BandSnapshot, PaneView } from '../../types'
-import { FakeM2b, HOME, SESSION_ID, STATUS, pane, start, texts } from './harness'
+import { FakeM2b, HOME, SESSION_ID, STATUS, pane, pressTab, shownTab, start, texts, viewButtons } from './harness'
 import type { Files } from './harness'
 
 const PANE = 'm2b'
@@ -98,11 +95,11 @@ test('/m2b-pane opens the pane on what this session was given, what waits and wh
     'Acme Ltd: 1 fact',
     'The distillate was printed whole at the start.',
     'Waits for you',
-    '1 proposal from your sessions',
+    '1 proposal from your sessions, in the tab Proposals',
     'Remember? Dana prefers tea',
     'Still current? Planning the trip to Porto',
     'm2b: review',
-    'the whole review',
+    'The whole review is in the tab Review.',
     'Today',
     'due today: Buy screws',
     'overdue: Return the ladder',
@@ -542,8 +539,7 @@ test('keep, drop and ok in the start view wait for undo and then write', async (
   const fake = busyFake()
   const { clock } = await start($, on, fake)
   const ui = await startView($)
-  const keys = (await ui.findAll({ type: 'Button' })).map(button => button.key)
-  expect(keys).toEqual(['topic:0', 'topic:1', 'show:proposals', 'keep:c1', 'drop:c1', 'keep:q1', 'drop:q1', 'ok:r1', 'show:review', 'show:settings'])
+  expect(await viewButtons(ui)).toEqual(['topic:0', 'topic:1', 'keep:c1', 'drop:c1', 'keep:q1', 'drop:q1', 'ok:r1'])
 
   await ui.press({ key: 'drop:c1' })
   expect(await texts(ui)).toContain('dropping: Remember? Dana prefers tea')
@@ -578,24 +574,26 @@ test('every candidate and question stands in the start view, however many there 
   await ui.unmount()
 })
 
-test('show on the proposals and on the review turns the pane to them, and /m2b-pane turns it back', async ($, on) => {
-  // Covers: B185
+test('the tabs Proposals and Review turn the pane to them, and /m2b-pane turns it back', async ($, on) => {
+  // Covers: B185, B204
   const fake = busyFake()
   fake.status = { ...STATUS, run: { state: 'succeeded', started_at: '2026-03-14T18:00:05+01:00' } }
   await start($, on, fake)
   const ui = await startView($)
 
-  await ui.press({ key: 'show:proposals' })
+  await pressTab(ui, 'proposals')
   expect(await texts(ui)).toContain('said on 2026-03-12: "Dana runs IT at Northwind"')
   expect(await texts(ui)).not.toContain('In this session')
 
   await typed($, 'm2b-pane')
+  expect(await shownTab(ui)).toBe('overview')
   expect(await texts(ui)).toContain('In this session')
-  await ui.press({ key: 'show:review' })
+  await pressTab(ui, 'review')
   expect(await texts(ui)).toContain('Last curation run: succeeded, started 2026-03-14 18:00')
   expect(await texts(ui)).toContain('lint: broken link in a.md')
 
   await typed($, 'm2b-pane')
+  expect(await shownTab(ui)).toBe('overview')
   expect(await texts(ui)).toContain('In this session')
   await ui.unmount()
 })
@@ -738,75 +736,5 @@ test('the start view wraps its lines in a pane as narrow as a dock gets', async 
   const wraps = (await ui.findAll({ type: 'Text' })).filter(found => found.text.trim() !== '').map(found => found.props['wrap'])
   expect(wraps.every(wrap => wrap === 'wrap' || wrap === undefined)).toBe(true)
   expect((await ui.findAll({ type: 'Text', text: 'Northwind: 3 facts, 1 current' }))[0]?.props['wrap']).toBe('wrap')
-  await ui.unmount()
-})
-
-// What the kit shows of the focus: which button the mod asks it for, and that the button is drawn.
-// A move the mod asks for fails in the kit and reaches no hook of a test, so every press below that
-// turns the pane runs with a move that failed, as where the pane does not hold the keyboard.
-
-/** What the start view draws from, with what a test sets and nothing else. */
-function modelWith(parts: Partial<SessionModel>): SessionModel {
-  return { given: null, notes: 0, notice: null, snapshot: null, proposals: null, presses: {}, ...parts }
-}
-
-const GIVEN_TWO: BandSession = {
-  id: SESSION_ID,
-  known: true,
-  topics: [
-    { name: 'Northwind', facts: 3, current: 1 },
-    { name: 'Acme Ltd', facts: 1, current: 0 },
-  ],
-  atStart: 'whole',
-  offUnder: null,
-  error: null,
-}
-
-test('back puts the focus on the button that led to the view it leaves, where the start view draws it, else on settings', () => {
-  // Covers: B201
-  const waiting = { waiting: [{}], answered: 0, error: null } as unknown as BandProposals
-  const reviewed = { candidates: [], review: {}, error: null } as unknown as BandSnapshot
-  const full = modelWith({ given: GIVEN_TWO, proposals: waiting, snapshot: reviewed })
-  const topic = (name: string): PaneView => ({ kind: 'topic', name, press: 'p', isRead: true })
-
-  expect(focusKeyAfterBack({ kind: 'proposals' }, full)).toBe('show:proposals')
-  expect(focusKeyAfterBack({ kind: 'review' }, full)).toBe('show:review')
-  expect(focusKeyAfterBack(topic('Northwind'), full)).toBe('topic:0')
-  expect(focusKeyAfterBack(topic('Acme Ltd'), full)).toBe('topic:1')
-  // Every other view falls to settings: the list of the settings, one of its cards, a search.
-  expect(focusKeyAfterBack({ kind: 'settings', press: 'p', at: null, drawn: 0 }, full)).toBe('show:settings')
-  expect(focusKeyAfterBack({ kind: 'settings', press: 'p', at: 0, drawn: 0 }, full)).toBe('show:settings')
-  expect(focusKeyAfterBack({ kind: 'search' } as PaneView, full)).toBe('show:settings')
-  expect(focusKeyAfterBack(null, full)).toBe('show:settings')
-  // What led there is gone from the start view: the last proposal was answered, the review settled, the topic no longer given.
-  const bare = modelWith({ given: { ...GIVEN_TWO, topics: [] } })
-  expect(focusKeyAfterBack({ kind: 'proposals' }, bare)).toBe('show:settings')
-  expect(focusKeyAfterBack({ kind: 'proposals' }, modelWith({ proposals: { ...waiting, waiting: [] } }))).toBe('show:settings')
-  expect(focusKeyAfterBack({ kind: 'review' }, bare)).toBe('show:settings')
-  expect(focusKeyAfterBack({ kind: 'review' }, modelWith({ snapshot: { ...reviewed, review: null } }))).toBe('show:settings')
-  expect(focusKeyAfterBack(topic('Northwind'), bare)).toBe('show:settings')
-  expect(focusKeyAfterBack(topic('Lumen'), full)).toBe('show:settings')
-  expect(focusKeyAfterBack(topic('Northwind'), modelWith({}))).toBe('show:settings')
-})
-
-test('the buttons the focus is asked for are drawn: back first on every view a press turns to, and on the start view the button that led there', async ($, on) => {
-  // Covers: B201
-  const fake = busyFake()
-  await start($, on, fake)
-  const ui = await startView($)
-  const keys = async () => (await ui.findAll({ type: 'Button' })).map(button => String(button.key))
-
-  expect(await keys()).not.toContain(BACK)
-  const all = ['show:proposals', 'show:review', 'topic:0', 'topic:1', 'show:settings']
-  for (const leads of all) {
-    expect(await keys()).toEqual(expect.arrayContaining(all))
-    await ui.press({ key: leads })
-    expect((await keys())[0]).toBe(BACK)
-    // None of the start view's keys is drawn here: asked for from here, each is one not drawn yet.
-    expect((await keys()).filter(key => all.includes(key))).toEqual([])
-    await ui.press({ key: BACK })
-    expect(await texts(ui)).toContain('In this session')
-    expect(await keys()).not.toContain(BACK)
-  }
   await ui.unmount()
 })

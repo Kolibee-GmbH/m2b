@@ -11,6 +11,7 @@ import {
   answerKeys,
   everyText,
   fail,
+  pressTab,
   rowSaying,
   sentenceOfM2b,
   shownBand,
@@ -478,7 +479,7 @@ test('a reload starts exactly one m2b process for the band and the status line',
   await band.unmount()
   const ui = await startView($)
   expect(await answerKeys(ui)).toEqual(['keep:c1', 'drop:c1', 'keep:q1', 'drop:q1', 'ok:r1'])
-  await ui.press({ key: 'show:review' })
+  await pressTab(ui, 'review')
   expect(await texts(ui)).toContain('lint: broken link in a.md')
   await ui.unmount()
 })

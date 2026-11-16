@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, Timer } from 'claude-code'
+import type { EngineInterface, Register, ResolveInput, Timer } from 'claude-code'
 
 import type {
   BandCandidate,
@@ -18,6 +18,7 @@ import type {
 } from '../types'
 import { bandLine, bandRow, topicsGiven } from './band'
 import type { BandModel } from './band'
+import { tabRow } from './look'
 import { launcherPath, m2bHome, machineConfigPath, runM2b } from './m2b'
 import { NOTE_COMMAND, note } from './note'
 import { isInOwnWords, isOwnPrompt, withPrompt } from './own-words'
@@ -39,6 +40,8 @@ import {
   showPane,
 } from './pane'
 import { CLOSED_BY_HAND, closeAnswer, docksFor, staysBesideChat } from './pane-seat'
+import { focusKeyAfterTab, paneTabs, tabKeyAfterTurn } from './pane-tabs'
+import type { TabId } from './pane-tabs'
 import { plainLine, wholePath } from './plain-text'
 import {
   askCoreAgain,
@@ -54,10 +57,8 @@ import {
 import {
   FOLDER_PRESS,
   SESSION_COMMAND,
+  UNDO_FOLDER,
   SESSION_PLACED,
-  BACK,
-  backRow,
-  focusKeyAfterBack,
   glancePane,
   sessionLines,
   sessionPane,
@@ -67,6 +68,7 @@ import {
   KEEP_ALL,
   PROPOSALS_COMMAND,
   PROPOSALS_PLACED,
+  UNDO_ALL,
   isProposals,
   refusedLine,
   parseProposals,
@@ -75,6 +77,7 @@ import {
   proposalsPane,
 } from './proposals'
 import type { ProposalActions } from './proposals'
+import { undoKey } from './rows'
 import type { RowActions } from './rows'
 import { shared } from './shared-cache'
 import { COULD_NOT_LOOK, statusLine } from './status-line'
@@ -543,23 +546,49 @@ async function sessionModel($: EngineInterface): Promise<SessionModel> {
 }
 
 /**
- * Turns the open pane to another of its views, as a dialog, and reads the band again behind it. A
- * pane that opened by itself does not close on Escape; opened anew it does, and Escape on the view
- * leads back to the one the pane starts in.
+ * A press on a tab: the pane turns to that tab's view, and the focus goes to the tab that leads
+ * back to the view that is left, which that view did not draw. Left at its place in the row of
+ * buttons, the focus could stand on a button of the new view that writes. Escape leads to the
+ * start view without it: it hands the keyboard back to the prompt.
  */
-async function turnPane($: EngineInterface, view: PaneView): Promise<void> {
-  await asDialog($, view)
-  const focusMoved = focusOnBack($)
+async function turnByTab($: EngineInterface, to: TabId): Promise<void> {
+  const focusKey = await focusKeyAfterPress($, to)
+  if (to === 'overview') {
+    await backToStart($)
+    await focusInPane($, focusKey)
+    return
+  }
+  if (to === 'settings') {
+    await showSettings($, focusKey)
+    return
+  }
+  await asDialog($, { kind: to })
+  const focusMoved = focusInPane($, focusKey)
   $.clock.after(0, inBackground($, () => refresh($, true)))
   await focusMoved
 }
 
+/** Where the focus goes after a press on the tab `to`, null where what the pane shows cannot be read. */
+async function focusKeyAfterPress($: EngineInterface, to: TabId): Promise<string | null> {
+  try {
+    return focusKeyAfterTab(await read($, paneViewAtom), to, await sessionModel($))
+  } catch {
+    // The pane turns all the same.
+    return null
+  }
+}
+
+/**
+ * Turns the open pane to another of its views, as a dialog. A pane that opened by itself does not
+ * close on Escape; opened anew it does, and Escape on the view leads back to the one the pane
+ * starts in.
+ */
 async function asDialog($: EngineInterface, view: PaneView): Promise<void> {
   await turnTo($, view)
   try {
     await $.ui.open(AS_A_DIALOG)
   } catch {
-    // The view is turned all the same; the button above it leads back.
+    // The view is turned all the same; the tabs above it lead on.
   }
 }
 
@@ -577,15 +606,15 @@ async function turnTo($: EngineInterface, view: PaneView | null): Promise<void> 
 /**
  * Turns the pane to one topic and reads its lines from the distillate as it is now. The lines are
  * kept by the module that draws them, never in the session's state, and only for the press that
- * asked: after `back`, a close, another view or a press on another topic nothing is kept for this
- * one, and an answer that arrives then is dropped.
+ * asked: after a tab, a close, another view or a press on another topic nothing is kept for this
+ * one, and an answer that arrives then is dropped. The focus goes to the tab that leads back.
  */
 async function showTopic($: EngineInterface, name: string): Promise<void> {
   const press = await newPressToken($)
   beginTopic(press)
   await asDialog($, { kind: 'topic', name, press, isRead: false })
   // The read does not wait for the focus.
-  const focusMoved = focusOnBack($)
+  const focusMoved = focusInPane($, tabKeyAfterTurn('overview', 'aside'))
   if (fillTopic(press, await readTopic($, name))) {
     // The lines are the module's; this write is what draws the pane again.
     await update($, paneViewAtom, view => (view !== null && view.kind === 'topic' && view.press === press ? { ...view, isRead: true } : view))
@@ -614,15 +643,16 @@ async function loadSettings($: EngineInterface, press: string): Promise<void> {
 }
 
 /**
- * Turns the pane to the list of the settings and reads it. The values are kept by the module that
- * draws them, never in the session's state, and only for this opening of the view.
+ * Turns the pane to the list of the settings and reads it, with the focus on the button under
+ * `focusKey`. The values are kept by the module that draws them, never in the session's state, and
+ * only for this opening of the view.
  */
-async function showSettings($: EngineInterface): Promise<void> {
+async function showSettings($: EngineInterface, focusKey: string | null): Promise<void> {
   const press = await newPressToken($)
   beginSettings(press)
   await asDialog($, { kind: 'settings', press, at: null, drawn: 0 })
   // The read does not wait for the focus.
-  const focusMoved = focusOnBack($)
+  const focusMoved = focusInPane($, focusKey)
   await loadSettings($, press)
   await focusMoved
 }
@@ -711,31 +741,6 @@ async function focusInPane($: EngineInterface, key: string | null): Promise<void
 }
 
 /**
- * After a press on the start view turned the pane to another view: the focus goes to `back`, the
- * first button of that view, which the start view does not draw. Left at its place in the row of
- * buttons it would stand on whatever the new view has there, `keep all` after `show` on the
- * proposals.
- */
-function focusOnBack($: EngineInterface): Promise<void> {
-  return focusInPane($, BACK)
-}
-
-/**
- * The pane's `back` button: back to the start view, with the focus on the button that leads to the
- * view that is left. Escape leads back without it: it hands the keyboard back to the prompt.
- */
-async function backByPress($: EngineInterface): Promise<void> {
-  let key: string | null = null
-  try {
-    key = focusKeyAfterBack(await read($, paneViewAtom), await sessionModel($))
-  } catch {
-    // The pane turns back all the same.
-  }
-  await backToStart($)
-  await focusInPane($, key)
-}
-
-/**
  * Asks for the focus on the button that leads on from the card the pane shows; nothing where it
  * shows no card. Never throws: a press is written whatever becomes of the focus.
  */
@@ -784,6 +789,33 @@ function settingsActions($: EngineInterface, press: string): SettingsActions {
         await focusOnOpenCard($)
       }
     },
+  }
+}
+
+/**
+ * What the pane draws below its tabs: the view it is turned to, null for the one it starts in.
+ * `bodyColumns` is the width of the pane's body.
+ */
+async function viewOfPane(
+  $: EngineInterface,
+  e: ResolveInput,
+  view: PaneView | null,
+  proposals: BandProposals | null,
+  bodyColumns: number,
+) {
+  if (view === null) {
+    return sessionPane($, e, await sessionModel($), sessionActions($))
+  }
+  const presses = await read($, pressesAtom)
+  switch (view.kind) {
+    case 'settings':
+      return settingsPane($, e, view, heldSettings(view.press), settingsActions($, view.press), bodyColumns)
+    case 'proposals':
+      return proposalsPane($, e, proposals, presses, await read($, proposalsNoticeAtom), proposalActions($))
+    case 'topic':
+      return topicPane($, e, view.name, heldTopic(view.press))
+    default:
+      return paneTree($, e, view, await read($, snapshotAtom), await read($, runAtom), presses, rowActions($))
   }
 }
 
@@ -846,7 +878,7 @@ let wentBackAtMs: number | null = null
 const SAME_KEY_TWICE_MS = 500
 
 /**
- * Back to the view the pane starts in, for Escape and the button above the other views. Beside the
+ * Back to the view the pane starts in, for Escape and the tab `Overview`. Beside the
  * chat the pane is opened once more, without the manners of a dialog: each open sets them anew, and
  * a pane that stays must not close on an Escape at the empty prompt. That comes before the view is
  * turned, so a close that arrives meanwhile still meets the other view and leads back as well.
@@ -904,21 +936,18 @@ async function openByItself($: EngineInterface): Promise<void> {
     return
   }
   // A pane that closed left its start view behind, so there is no view to turn here. A command
-  // that opens the pane in this very moment is retitled without its Escape; `back` still leads out.
+  // that opens the pane in this very moment is retitled without its Escape; its tabs still lead out.
   await $.ui.open({ id: PANE_ID, title: PANE_TITLE })
 }
 
 function sessionActions($: EngineInterface): SessionActions {
   return {
     ...rowActions($),
-    showProposals: () => turnPane($, { kind: 'proposals' }),
-    showReview: () => turnPane($, { kind: 'review' }),
     showTopic: name => showTopic($, name),
-    showSettings: () => showSettings($),
     switchFolder: async (change, folder) => {
       // What the last press could not write is no longer what the button is about.
       await update($, sessionNoticeAtom, () => null)
-      await press($, FOLDER_PRESS, change, folderWrite($, change, folder))
+      await press($, FOLDER_PRESS, change, folderWrite($, change, folder), UNDO_FOLDER)
     },
     undoFolder: () => undo($, FOLDER_PRESS),
   }
@@ -1070,12 +1099,18 @@ type PressWrite = () => Promise<boolean>
  * so a crash, a closed session or a reload of the mod during those seconds leaves everything as it
  * was, and an item another session settles meanwhile is caught when the write comes. `ids` are the
  * proposals a press on keep all stands for.
+ *
+ * The focus goes to the row's `undo`, drawn under `undoKey` once the press waits: Enter pressed
+ * again takes the press back. Left at its place in the row of buttons, it would stand on `undo`
+ * after keep and, after drop, on keep of the row below, since the pressed row draws one button
+ * where it drew two.
  */
 async function press(
   $: EngineInterface,
   id: string,
   action: BandPress['action'],
   write: PressWrite,
+  undoKey: string,
   ids?: string[],
 ): Promise<void> {
   const token = await newPressToken($)
@@ -1093,6 +1128,7 @@ async function press(
         inBackground($, () => settle($, id, token, write)),
       ),
     )
+    await focusInPane($, undoKey)
   }
 }
 
@@ -1191,7 +1227,7 @@ function isOtherReview(pressed: BandCandidate, fresh: BandReview): boolean {
 
 function rowActions($: EngineInterface): RowActions {
   return {
-    press: (candidate, action) => press($, candidate.id, action, taskWrite($, candidate, action)),
+    press: (candidate, action) => press($, candidate.id, action, taskWrite($, candidate, action), undoKey(candidate.id)),
     undo: id => undo($, id),
   }
 }
@@ -1220,13 +1256,15 @@ function proposalWrite($: EngineInterface, proposals: BandProposal[], action: Ba
 
 function proposalActions($: EngineInterface): ProposalActions {
   return {
-    answer: (proposal, action) => press($, pressKey(proposal.id), action, proposalWrite($, [proposal], action)),
+    answer: (proposal, action) =>
+      press($, pressKey(proposal.id), action, proposalWrite($, [proposal], action), undoKey(proposal.id)),
     keepAll: proposals =>
       press(
         $,
         KEEP_ALL,
         'complete',
         proposalWrite($, proposals, 'complete'),
+        UNDO_ALL,
         proposals.map(proposal => proposal.id),
       ),
     undo: key => undo($, key),
@@ -1591,32 +1629,13 @@ export const register: Register = on => {
       return glancePane($, e, await sessionModel($))
     }
     const view = await read($, paneViewAtom)
-    const presses = await read($, pressesAtom)
-    if (view === null) {
-      return sessionPane($, e, await sessionModel($), sessionActions($))
-    }
-    const { Box } = $.ui.resolve(e)
-    const snapshot = await read($, snapshotAtom)
-    const run = await read($, runAtom)
-    if (view.kind === 'settings') {
-      // A card has its own way on, to its neighbours and to the list; whatever else the view
-      // draws, the list or that m2b could not read it, leads back like every view.
-      const kept = heldSettings(view.press)
-      return (
-        <Box flexDirection="column">
-          {!showsCard(view, kept) && backRow($, e, () => backByPress($))}
-          {settingsPane($, e, view, kept, settingsActions($, view.press), e.props.bodyColumns)}
-        </Box>
-      )
-    }
+    const proposals = await read($, proposalsAtom)
+    const ui = $.ui.resolve(e)
+    const { Box } = ui
     return (
       <Box flexDirection="column">
-        {backRow($, e, () => backByPress($))}
-        {view.kind === 'proposals'
-          ? proposalsPane($, e, await read($, proposalsAtom), presses, await read($, proposalsNoticeAtom), proposalActions($))
-          : view.kind === 'topic'
-            ? topicPane($, e, view.name, heldTopic(view.press))
-            : paneTree($, e, view, snapshot, run, presses, rowActions($))}
+        <Box marginBottom={1}>{tabRow(ui, paneTabs(view, proposals?.waiting.length ?? 0, to => turnByTab($, to)))}</Box>
+        {await viewOfPane($, e, view, proposals, e.props.bodyColumns)}
       </Box>
     )
   })

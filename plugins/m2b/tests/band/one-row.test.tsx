@@ -4,6 +4,7 @@ import type { Engine } from 'claude-code/testing'
 
 import { bandLine, topicsGiven } from '../../hooks/band'
 import type { BandModel } from '../../hooks/band'
+import { tabKey } from '../../hooks/pane-tabs'
 import { glanceLines } from '../../hooks/session-view'
 import type { SessionModel } from '../../hooks/session-view'
 import {
@@ -14,9 +15,12 @@ import {
   bandPieces,
   everyText,
   pane,
+  pressTab,
   rowSaying,
   sentenceOfM2b,
   shownBand,
+  shownTab,
+  shownTabs,
   start,
   texts,
 } from './harness'
@@ -263,11 +267,11 @@ test('fullscreen, wide: the band is the same row before the pane is docked and b
   expect(inPane).toContain('Northwind: 3 facts, 1 current')
   expect(inPane).toContain('Remember? Dana prefers tea')
   expect(inPane).toContain('Still current? Planning the trip to Porto')
-  expect(inPane).toContain('1 proposal from your sessions')
+  expect(inPane).toContain('1 proposal from your sessions, in the tab Proposals')
   expect(inPane).toContain('m2b: review')
   expect(inPane).toContain('due today: Send the offer to Acme')
   expect(inPane).toContain('overdue: Call the plumber')
-  for (const key of ['keep:c1', 'drop:c1', 'keep:q1', 'drop:q1', 'ok:r1', 'show:proposals', 'show:review']) {
+  for (const key of ['keep:c1', 'drop:c1', 'keep:q1', 'drop:q1', 'ok:r1', tabKey('proposals', 'overview'), tabKey('review', 'overview')]) {
     expect(await beside.find({ key })).toBeDefined()
     expect(await band.find({ key })).toBeUndefined()
   }
@@ -469,19 +473,19 @@ test('the counts of the row: what waits, then the tasks due as the machine shows
   expect(bandLine(model({ snapshot: { ...idle, shows: { dueTasks: 'off', topics: true } } }))).toBeNull()
 })
 
-test('while the docked pane is turned to another view, and after back, the band is the same row', async ($, on) => {
+test('while the docked pane is turned to another view, and after the tab Overview, the band is the same row', async ($, on) => {
   // Covers: B191
   const { clock } = await start($, on, busyFake())
   const band = await drawBand($, clock)
   const beside = await drawPane($, clock)
   expect(await shownBand(band)).toEqual(ROW)
 
-  await beside.press({ key: 'show:review' })
+  await pressTab(beside, 'review')
 
   expect(await texts(beside)).not.toContain('In this session')
   expect(await shownBand(band)).toEqual(ROW)
 
-  await beside.press({ key: 'back' })
+  await pressTab(beside, 'overview')
   await clock.advance(1)
   expect(await texts(beside)).toContain('In this session')
   expect(await shownBand(band)).toEqual(ROW)
@@ -748,7 +752,7 @@ for (const [situation, arrange] of OPEN_IS_THE_ONE_BUTTON) {
     expect(opened).toEqual([AS_A_DIALOG])
     const block = await drawPane($, clock, 'inline', 100)
     expect((await texts(block))[0]).toBe('In this session')
-    expect(await block.find({ key: 'back' })).toBeUndefined()
+    expect(await shownTab(block)).toBe('overview')
     // The button shows the pane and writes nothing.
     expect(fake.writes()).toHaveLength(writesBefore)
     expect(fake.answers()).toEqual([])
@@ -871,8 +875,8 @@ test('the desktop app: docked there, the band of the app is the same row', async
   await band.unmount()
 })
 
-test('the desktop app: as a widget the pane draws counts and no button, and the band is the same row', async ($, on) => {
-  // Covers: B193
+test('the desktop app: as a widget the pane draws counts, no tab and no button, and the band is the same row', async ($, on) => {
+  // Covers: B193, B204
   const { clock } = await start($, on, busyFake())
   const band = await drawBand($, clock, WIDE, 'desktop')
   await typed($, 'm2b-pane', { isFullscreen: true, columns: 160 })
@@ -881,13 +885,14 @@ test('the desktop app: as a widget the pane draws counts and no button, and the 
 
   expect(await texts(widget)).toEqual(['2 topics in this session', '4 wait for you', '1 overdue, 1 due today'])
   expect(await widget.findAll({ type: 'Button' })).toHaveLength(0)
+  expect(await shownTabs(widget)).toEqual([])
   expect(await shownBand(band)).toEqual(ROW)
   await widget.unmount()
   await band.unmount()
 })
 
-test('a widget says what it could not look at, and draws the counts whatever view the pane was turned to', async ($, on) => {
-  // Covers: B193
+test('a widget says what it could not look at, and draws the counts and no tab whatever view the pane was turned to', async ($, on) => {
+  // Covers: B193, B204
   const fake = new FakeM2b()
   fake.given = null
   fake.failure = 'the task list did not answer'
@@ -898,7 +903,9 @@ test('a widget says what it could not look at, and draws the counts whatever vie
   const widget = await drawPane($, clock, 'widget', 30, 'desktop')
 
   expect(await texts(widget)).toEqual(['m2b holds no note of this session.', 'The task list could not be read.'])
-  expect(await widget.find({ key: 'back' })).toBeUndefined()
+  // Turned to the review, whose tab a pane beside the chat marks: the small form draws no tab and no button.
+  expect(await shownTabs(widget)).toEqual([])
+  expect(await widget.findAll({ type: 'Button' })).toHaveLength(0)
   await widget.unmount()
 })
 

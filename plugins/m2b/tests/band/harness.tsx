@@ -3,6 +3,8 @@ import { expect, mock } from 'claude-code/testing'
 import type { Engine, MockClock } from 'claude-code/testing'
 import type { EngineResultOf, On, ProcessRunResult } from 'claude-code'
 
+import { tabKey } from '../../hooks/pane-tabs'
+import type { Shown, TabId } from '../../hooks/pane-tabs'
 import type { BandShows } from '../../types'
 
 export const HOME = '/home/alex'
@@ -642,11 +644,13 @@ export async function start(
 /** An element inside a drawing, as the kit hands it on: its tag, its props and what it holds. */
 type Element = { type: string; props: Record<string, unknown>; children?: unknown[] }
 
-type Mounted = { findAll: (q: { type: string }) => Promise<{ text: string }[]> }
+/** An element a drawing was asked for: its tag, its key, its props, the text it shows and what it holds. */
+type Found = { type: string; key: string | undefined; props: Record<string, unknown>; text: string; children: unknown[] }
 
-type Searchable = {
-  find: (q: { key: string }) => Promise<{ children: unknown[] } | undefined>
-  findAll: (q: { type: string }) => Promise<{ key: string | undefined }[]>
+/** A drawing of the band or of the pane, as far as these helpers read it. */
+type Drawn = {
+  find: (q: { key: string }) => Promise<Found | undefined>
+  findAll: (q: { type?: string }) => Promise<Found[]>
 }
 
 function isElement(value: unknown): value is Element {
@@ -668,7 +672,7 @@ const BAND_TASKS = 'tasks'
 export const OPEN = 'open'
 
 /** The line of the band's row: the one text that is cut where the row is too narrow, with its pieces inside. */
-async function bandLineOf(ui: Searchable): Promise<{ texts: Element[]; line: Element | undefined } | null> {
+async function bandLineOf(ui: Drawn): Promise<{ texts: Element[]; line: Element | undefined } | null> {
   const row = await ui.find({ key: BAND_ROW })
   if (row === undefined) {
     return null
@@ -685,7 +689,7 @@ async function bandLineOf(ui: Searchable): Promise<{ texts: Element[]; line: Ele
 export type ShownBand = { isNamed: boolean; says: string; below: string[]; buttons: (string | undefined)[] }
 
 /** The band's row and what stands below it; null where m2b drew no band. */
-export async function shownBand(ui: Searchable): Promise<ShownBand | null> {
+export async function shownBand(ui: Drawn): Promise<ShownBand | null> {
   const row = await bandLineOf(ui)
   if (row === null) {
     return null
@@ -723,12 +727,12 @@ function pieceOf(text: Element): BandPiece {
 }
 
 /** The pieces of the band's row in the order drawn, each with its color and whether it is dimmed. */
-export async function bandPieces(ui: Searchable): Promise<BandPiece[]> {
+export async function bandPieces(ui: Drawn): Promise<BandPiece[]> {
   return elementsIn((await bandLineOf(ui))?.line?.children, 'Text').map(pieceOf)
 }
 
 /** The two texts of a task listed below the band's row: when it is due, as wide as drawn, and its title. */
-export async function listedTask(ui: Searchable, id: string): Promise<{ due: BandPiece; title: BandPiece & { wrap: unknown } } | null> {
+export async function listedTask(ui: Drawn, id: string): Promise<{ due: BandPiece; title: BandPiece & { wrap: unknown } } | null> {
   const [due, title] = elementsIn((await ui.find({ key: `task:${id}` }))?.children, 'Text')
   return due === undefined || title === undefined ? null : { due: pieceOf(due), title: { ...pieceOf(title), wrap: title.props['wrap'] } }
 }
@@ -745,16 +749,72 @@ export async function answerKeys(ui: { findAll: (q: { type: string }) => Promise
   return (await ui.findAll({ type: 'Button' })).map(button => button.key ?? '').filter(key => ANSWERS.test(key))
 }
 
+/** The key of the box that holds the pane's row of tabs. */
+const TABS = 'tabs'
+const TAB_IDS: readonly TabId[] = ['overview', 'proposals', 'review', 'settings']
+
 /**
- * The texts m2b drew, without the engine's own drawing. Whether the engine draws beside a band that
- * shows something depends on the Claude Code version: up to 2.1.322 the band stands in its place,
- * from 2.1.323 the engine draws below it.
+ * A tab of the pane's row as drawn: its label, and the key of its button; `key` is null for the
+ * tab whose view is shown, which is a text and no button.
  */
-export async function texts(ui: Mounted): Promise<string[]> {
-  return (await everyText(ui)).filter(text => text !== ENGINES_OWN_DRAWING)
+export type ShownTab = { label: string; key: string | null }
+
+/** The pane's row of tabs in the order drawn; empty where the pane draws none. */
+export async function shownTabs(ui: Drawn): Promise<ShownTab[]> {
+  return elementsIn((await ui.find({ key: TABS }))?.children).map(tab => {
+    if (tab.type === 'Button') {
+      return { label: String(tab.props['label']), key: String(tab.props['key']) }
+    }
+    if (tab.type !== 'Text') {
+      throw new Error(`the row of tabs holds a ${tab.type}`)
+    }
+    return { label: shownText(tab), key: null }
+  })
+}
+
+/** Which tab the row marks as the one shown: one of the four by its place, or the fifth beside them. */
+export async function shownTab(ui: Drawn): Promise<Shown> {
+  const at = (await shownTabs(ui)).findIndex(tab => tab.key === null)
+  if (at === -1) {
+    throw new Error('the pane marks no tab as the one shown')
+  }
+  return TAB_IDS[at] ?? 'aside'
+}
+
+/** Presses the tab that turns the pane to `to`, under the key it has above the view drawn now. */
+export async function pressTab(ui: Drawn & { press: (target: { key: string }) => Promise<unknown> }, to: TabId): Promise<void> {
+  await ui.press({ key: tabKey(to, await shownTab(ui)) })
+}
+
+/**
+ * What the pane's view draws of the given tags, in the order drawn: everything but the row of
+ * tabs above it. The row is the first thing the pane draws, which is checked here.
+ */
+export async function inView(ui: Drawn, ...types: string[]): Promise<Found[]> {
+  const drawn = (await ui.findAll({})).filter(found => types.includes(found.type))
+  const inRow = elementsIn((await ui.find({ key: TABS }))?.children).filter(tab => types.includes(tab.type))
+  expect(drawn.slice(0, inRow.length).map(found => found.key ?? found.text)).toEqual(
+    inRow.map(tab => (tab.type === 'Button' ? String(tab.props['key']) : shownText(tab))),
+  )
+  return drawn.slice(inRow.length)
+}
+
+/** The keys of the buttons of the pane's view, without the tabs above it. */
+export async function viewButtons(ui: Drawn): Promise<string[]> {
+  return (await inView(ui, 'Button')).map(button => button.key ?? '')
+}
+
+/**
+ * The texts m2b drew, without the engine's own drawing and without the pane's row of tabs, which
+ * `shownTabs` reads. Whether the engine draws beside a band that shows something depends on the
+ * Claude Code version: up to 2.1.322 the band stands in its place, from 2.1.323 the engine draws
+ * below it.
+ */
+export async function texts(ui: Drawn): Promise<string[]> {
+  return (await inView(ui, 'Text')).map(found => found.text.trim()).filter(text => text !== '' && text !== ENGINES_OWN_DRAWING)
 }
 
 /** Every text on the surface, the engine's own drawing included: `[ENGINES_OWN_DRAWING]` when m2b drew nothing. */
-export async function everyText(ui: Mounted): Promise<string[]> {
+export async function everyText(ui: Drawn): Promise<string[]> {
   return (await ui.findAll({ type: 'Text' })).map(found => found.text.trim()).filter(text => text !== '')
 }

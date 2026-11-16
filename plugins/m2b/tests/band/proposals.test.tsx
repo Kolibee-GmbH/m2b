@@ -12,12 +12,15 @@ import {
   answerKeys,
   everyText,
   pane,
+  pressTab,
   rowSaying,
   sentenceOfM2b,
   shownBand,
+  shownTabs,
   start,
   startView,
   texts,
+  viewButtons,
 } from './harness'
 import type { Files } from './harness'
 
@@ -53,18 +56,16 @@ function proposedFake(): FakeM2b {
     .proposal(SHED, 'The spare key is in the shed.', 'the spare key is in the shed', { kind: 'personal', day: '2026-03-05' })
 }
 
-/** The buttons of the proposals themselves: `back`, which stands above every view but the pane's first, is left out. */
-async function buttons(ui: { findAll: (q: { type: string }) => Promise<{ key?: string }[]> }): Promise<(string | undefined)[]> {
-  return (await ui.findAll({ type: 'Button' })).map(button => button.key).filter(key => key !== 'back')
-}
+/** The buttons of the view itself: the tabs, which stand above every view, are left out. */
+const buttons = viewButtons
 
 /** The lines of the start view's part "Waits for you", between its heading and the next. */
-async function waits(ui: { findAll: (q: { type: string }) => Promise<{ text: string }[]> }): Promise<string[]> {
+async function waits(ui: Parameters<typeof texts>[0]): Promise<string[]> {
   const shown = await texts(ui)
   return shown.slice(shown.indexOf('Waits for you') + 1, shown.indexOf('Today'))
 }
 
-test('while proposals wait the band counts each, and the pane has one row with their number, whatever the number', async ($, on) => {
+test('while proposals wait the band counts each, and the pane has one line with their number and counts them on their tab, whatever the number', async ($, on) => {
   // Covers: B127
   const fake = proposedFake()
   const { clock } = await start($, on, fake)
@@ -72,20 +73,22 @@ test('while proposals wait the band counts each, and the pane has one row with t
   const ui = await startView($)
 
   expect(await shownBand(band)).toEqual(rowSaying('3 wait for you'))
-  // One row for all of them, never one per proposal.
-  expect(await waits(ui)).toEqual(['3 proposals from your sessions'])
-  expect(await buttons(ui)).toEqual(['show:proposals', 'show:settings'])
+  // One line for all of them, never one per proposal, and nothing to press: their tab leads to them.
+  expect(await waits(ui)).toEqual(['3 proposals from your sessions, in the tab Proposals'])
+  expect(await buttons(ui)).toEqual([])
+  expect((await shownTabs(ui)).map(tab => tab.label)).toEqual(['Overview', 'Proposals 3', 'Review', 'Settings'])
 
   fake.proposals = fake.proposals?.slice(0, 1) ?? null
   await clock.advance(60_000)
   expect(await shownBand(band)).toEqual(rowSaying('1 waits for you'))
-  expect(await waits(ui)).toEqual(['1 proposal from your sessions'])
-  expect(await buttons(ui)).toEqual(['show:proposals', 'show:settings'])
+  expect(await waits(ui)).toEqual(['1 proposal from your sessions, in the tab Proposals'])
+  expect(await buttons(ui)).toEqual([])
+  expect((await shownTabs(ui)).map(tab => tab.label)).toEqual(['Overview', 'Proposals 1', 'Review', 'Settings'])
   await ui.unmount()
   await band.unmount()
 })
 
-test('with no proposal waiting the band counts none and the pane has no row for them', async ($, on) => {
+test('with no proposal waiting the band counts none, the pane has no line for them and their tab says no number', async ($, on) => {
   // Covers: B127
   const fake = proposedFake()
   for (const proposed of fake.proposals ?? []) {
@@ -98,7 +101,8 @@ test('with no proposal waiting the band counts none and the pane has no row for 
 
   const ui = await startView($)
   expect(await texts(ui)).toContain('Nothing waits for you.')
-  expect(await buttons(ui)).toEqual(['show:settings'])
+  expect(await buttons(ui)).toEqual([])
+  expect((await shownTabs(ui)).map(tab => tab.label)).toEqual(['Overview', 'Proposals', 'Review', 'Settings'])
   await ui.unmount()
 })
 
@@ -120,12 +124,12 @@ test('the task that tells a phone proposals wait is not counted in the band and 
   await band.unmount()
 
   const ui = await startView($)
-  expect(await waits(ui)).toEqual(['3 proposals from your sessions', 'Remember? Acme moved'])
-  expect(await buttons(ui)).toEqual(['show:proposals', 'keep:c1', 'drop:c1', 'show:settings'])
+  expect(await waits(ui)).toEqual(['3 proposals from your sessions, in the tab Proposals', 'Remember? Acme moved'])
+  expect(await buttons(ui)).toEqual(['keep:c1', 'drop:c1'])
   await ui.unmount()
 })
 
-test('open in the band, then show on the row of the pane, lead to every proposal: its kind, the text, the words, the day, keep and drop, and keep all', async ($, on) => {
+test('open in the band, then the tab Proposals, lead to every proposal: its kind, the text, the words, the day, keep and drop, and keep all', async ($, on) => {
   // Covers: B127
   const fake = proposedFake()
   const { opened } = await start($, on, fake)
@@ -137,7 +141,7 @@ test('open in the band, then show on the row of the pane, lead to every proposal
   expect(opened.map(one => one.id)).toEqual([PANE])
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
   expect(await texts(ui)).toContain('In this session')
-  await ui.press({ key: 'show:proposals' })
+  await pressTab(ui, 'proposals')
   expect(await texts(ui)).toEqual([
     '3 proposals from your sessions',
     'Dana is head of IT at Northwind.',
@@ -512,7 +516,7 @@ test('proposals m2b could not look at say so in the band and the pane, beside th
 
   const first = await startView($)
   expect(await waits(first)).toEqual([line, 'Remember? Acme moved'])
-  expect(await buttons(first)).toEqual(['keep:c1', 'drop:c1', 'show:settings'])
+  expect(await buttons(first)).toEqual(['keep:c1', 'drop:c1'])
   await first.unmount()
 
   await typed($, 'm2b-proposals')
@@ -548,7 +552,7 @@ test('a core that does not know proposals leaves the band counting none and the 
 
   const ui = await startView($)
   expect(await waits(ui)).toEqual(['Remember? Acme moved'])
-  expect(await buttons(ui)).toEqual(['keep:c1', 'drop:c1', 'show:settings'])
+  expect(await buttons(ui)).toEqual(['keep:c1', 'drop:c1'])
   await ui.unmount()
 })
 
@@ -566,13 +570,13 @@ test('a proposals part of another shape, or an id that is none, is could not loo
   const line = 'm2b could not look for proposals: m2b answered something other than the proposals that wait'
   expect(await shownBand(band)).toEqual(sentenceOfM2b(line))
   expect(await waits(ui)).toEqual([line])
-  expect(await buttons(ui)).toEqual(['show:settings'])
+  expect(await buttons(ui)).toEqual([])
 
   fake.proposalsPart = ['not', 'an', 'object']
   await clock.advance(60_000)
   expect(await shownBand(band)).toEqual(sentenceOfM2b(line))
   expect(await waits(ui)).toEqual([line])
-  expect(await buttons(ui)).toEqual(['show:settings'])
+  expect(await buttons(ui)).toEqual([])
   await ui.unmount()
   await band.unmount()
 })

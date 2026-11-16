@@ -30,7 +30,7 @@ import {
 } from '../../hooks/settings'
 import type { Reached, Setting, SettingsActions } from '../../hooks/settings'
 import type { PaneView } from '../../types'
-import { FakeM2b, fail, ok, pane, start, texts } from './harness'
+import { FakeM2b, fail, inView, ok, pane, pressTab, shownTab, shownTabs, start, texts, viewButtons } from './harness'
 
 const PANE = 'm2b'
 const AS_A_DIALOG = { id: PANE, title: 'm2b', closeOnEscape: true, focus: true }
@@ -211,21 +211,18 @@ async function openCard($: Engine, clock: Clock, at: number, columns = 80, surfa
 }
 
 /** A drawing of the pane, on whatever surface it was mounted. */
-type Mounted = Pick<Awaited<ReturnType<typeof openList>>, 'findAll'>
+type Mounted = Parameters<typeof inView>[0]
 
-async function buttons(ui: Mounted): Promise<string[]> {
-  return (await ui.findAll({ type: 'Button' })).map(button => String(button.key))
-}
+/** The buttons of the settings themselves: the tabs, which stand above every view, are left out. */
+const buttons = viewButtons
 
-/** What the pane draws, in the order of its tree: a button as `[key]`, a text as it reads. */
+/** What the view draws below the tabs, in the order of its tree: a button as `[key]`, a text as it reads. */
 async function inOrder(ui: Mounted): Promise<string[]> {
-  return (await ui.findAll({}))
-    .filter(found => found.type === 'Button' || found.type === 'Text')
-    .map(found => (found.type === 'Button' ? `[${String(found.key)}]` : found.text.trim()))
+  return (await inView(ui, 'Button', 'Text')).map(found => (found.type === 'Button' ? `[${String(found.key)}]` : found.text.trim()))
 }
 
 async function labels(ui: Mounted): Promise<string[]> {
-  return (await ui.findAll({ type: 'Button' })).map(button => String(button.props['label']))
+  return (await inView(ui, 'Button')).map(button => String(button.props['label']))
 }
 
 type On = Parameters<typeof start>[1]
@@ -248,7 +245,9 @@ test('/m2b-settings opens the list: every setting under its file, with its title
 
   const answer = await typed($, 'm2b-settings')
   const reading = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
-  expect(await texts(reading)).toEqual(['Settings', READING])
+  // What the view is stands on its tab: the line said while m2b reads has no heading above it.
+  expect(await shownTab(reading)).toBe('settings')
+  expect(await texts(reading)).toEqual([READING])
   await clock.advance(1)
 
   expect(answer.text).toBe(PLACED)
@@ -256,7 +255,6 @@ test('/m2b-settings opens the list: every setting under its file, with its title
   expect(opened.slice(opensBefore)).toEqual([AS_A_DIALOG])
   expect(fake.settingCalls()).toEqual([LIST])
   expect(await texts(reading)).toEqual([
-    'Settings',
     'This machine',
     "This machine's name: tower-1",
     `Store folder: ${NOTES}`,
@@ -271,24 +269,25 @@ test('/m2b-settings opens the list: every setting under its file, with its title
     'Language: en',
     'Customers: 2 customers',
   ])
-  expect(await buttons(reading)).toEqual(['back', ...catalog().map((_, at) => `setting:${at}`)])
+  expect(await buttons(reading)).toEqual(catalog().map((_, at) => `setting:${at}`))
   await reading.unmount()
 })
 
-test('the button on the start view opens the list too, as a dialog that leads back', async ($, on) => {
-  // Covers: B197
+test('the tab Settings opens the list too, as a dialog, and the tab Overview leads back', async ($, on) => {
+  // Covers: B197, B204
   const { fake } = world()
   const { clock, opened } = await start($, on, fake)
   await typed($, 'm2b-pane')
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
   const opensBefore = opened.length
 
-  await ui.press({ key: 'show:settings' })
+  await pressTab(ui, 'settings')
   await clock.advance(1)
 
   expect(opened.slice(opensBefore)).toEqual([AS_A_DIALOG])
+  expect(fake.settingCalls()).toEqual([LIST])
   expect(await texts(ui)).toContain('Curation paused: off')
-  await ui.press({ key: 'back' })
+  await pressTab(ui, 'overview')
   expect(await texts(ui)).toContain('In this session')
   await ui.unmount()
 })
@@ -301,7 +300,7 @@ test('a row opens the card of its setting: what it is, where it lives, its value
   const ui = await openCard($, clock, PAUSED)
 
   expect(await texts(ui)).toEqual([
-    'Settings · 4 of 10',
+    '4 of 10',
     'Curation paused',
     'this machine · curation.paused',
     'now: off',
@@ -343,9 +342,9 @@ test('next and previous walk through every setting, the shown and the counted on
   ])
   expect(await buttons(ui)).toEqual([previousOf(CUSTOMERS), 'settings:list'])
   await ui.press({ key: previousOf(CUSTOMERS) })
-  expect((await texts(ui))[0]).toBe('Settings · 9 of 10')
+  expect((await texts(ui))[0]).toBe('9 of 10')
   await ui.press({ key: 'settings:list' })
-  expect((await texts(ui)).slice(0, 2)).toEqual(['Settings', 'This machine'])
+  expect((await texts(ui))[0]).toBe('This machine')
   await ui.unmount()
 })
 
@@ -490,9 +489,9 @@ test('in a terminal, the desktop app and VS Code the card of handing in offers t
 
   for (const surface of OFFERED_THE_TURN_ON) {
     const ui = await openList($, clock, 80, surface)
-    // The list has rows to open and the way back, never a switch.
+    // The list has rows to open, never a switch.
     expect(await buttons(ui)).toContain(`setting:${PROPOSE}`)
-    expect((await buttons(ui)).every(key => key === 'back' || key.startsWith('setting:'))).toBe(true)
+    expect((await buttons(ui)).every(key => key.startsWith('setting:'))).toBe(true)
     await ui.press({ key: `setting:${PROPOSE}` })
 
     expect(await buttons(ui)).toEqual([...walk(PROPOSE), TURN_ON])
@@ -774,7 +773,7 @@ test('on a machine that does not curate, the list and the cards of the curation 
 
   const ui = await openList($, clock)
 
-  expect((await texts(ui)).slice(1, 3)).toEqual(['This machine', DOES_NOT_CURATE])
+  expect((await texts(ui)).slice(0, 2)).toEqual(['This machine', DOES_NOT_CURATE])
   expect((await ui.findAll({ type: 'Text', text: 'Curation paused: off' }))[0]?.props['dimColor']).toBe(true)
   expect((await ui.findAll({ type: 'Text', text: 'Sessions hand in proposals: off' }))[0]?.props['dimColor']).not.toBe(true)
   await ui.press({ key: `setting:${PAUSED}` })
@@ -801,7 +800,7 @@ test('while one change is written, no card offers a switch, and the list says wh
   expect(await texts(ui)).toContain('A change of curation.model is under way.')
   expect(await buttons(ui)).toEqual([...walk(PAUSED)])
   await ui.press({ key: 'settings:list' })
-  expect((await texts(ui)).slice(0, 2)).toEqual(['Settings', 'A change of curation.model is under way.'])
+  expect((await texts(ui))[0]).toBe('A change of curation.model is under way.')
 
   await clock.advance(3_000)
   await clock.advance(1)
@@ -849,8 +848,8 @@ test('a change being written goes on when the settings are left, and a view open
   await clock.advance(5_000)
 
   await ui.press({ key: 'settings:list' })
-  await ui.press({ key: 'back' })
-  await ui.press({ key: 'show:settings' })
+  await pressTab(ui, 'overview')
+  await pressTab(ui, 'settings')
   await clock.advance(1)
 
   // The list of the new opening was read while the write was under way: it says so, and offers no switch.
@@ -904,12 +903,14 @@ test('a list that cannot be read again after a change stays as it was read, with
   expect(await texts(ui)).toContain('now: off')
   expect(await buttons(ui)).toEqual([...walk(PAUSED), `set:${PAUSED}:0`])
   await ui.press({ key: 'settings:list' })
-  expect((await texts(ui)).slice(0, 2)).toEqual(['Settings', 'm2b could not read its settings again: the store cannot be reached'])
-  expect((await buttons(ui))[0]).toBe('back')
+  expect((await texts(ui))[0]).toBe('m2b could not read its settings again: the store cannot be reached')
+  // The list keeps its rows, and the tabs above it lead on.
+  expect((await buttons(ui))[0]).toBe(rowKey(0))
+  expect((await shownTabs(ui)).map(tab => tab.label)).toEqual(['Overview', 'Proposals', 'Review', 'Settings'])
   await ui.unmount()
 })
 
-test('a card whose place the list no longer has falls back to the list, with the way back', async ($, on) => {
+test('a card whose place the list no longer has falls back to the list', async ($, on) => {
   // Covers: B197
   const { fake, settings } = world()
   const { clock } = await start($, on, fake)
@@ -921,8 +922,8 @@ test('a card whose place the list no longer has falls back to the list, with the
   await clock.advance(5_000)
   await clock.advance(1)
 
-  expect((await texts(ui)).slice(0, 2)).toEqual(['Settings', 'This machine'])
-  expect(await buttons(ui)).toEqual(['back', 'setting:0', 'setting:1', 'setting:2', 'setting:3'])
+  expect((await texts(ui))[0]).toBe('This machine')
+  expect(await buttons(ui)).toEqual(['setting:0', 'setting:1', 'setting:2', 'setting:3'])
   await ui.unmount()
 })
 
@@ -976,13 +977,41 @@ test('leaving the settings within the five seconds takes the press back', async 
 
   await ui.press({ key: `set:${PAUSED}:0` })
   await ui.press({ key: 'settings:list' })
-  await ui.press({ key: 'back' })
+  await pressTab(ui, 'overview')
   await clock.advance(10_000)
 
   expect(await texts(ui)).toContain('In this session')
   expect(fake.settingCalls()).toEqual([LIST])
   await ui.unmount()
 })
+
+for (const [to, label] of [
+  ['overview', 'Overview'],
+  ['proposals', 'Proposals'],
+  ['review', 'Review'],
+] as const) {
+  test(`the tab ${label} pressed on the card within the five seconds takes the press back: nothing is written`, async ($, on) => {
+    // Covers: B198
+    const { fake } = world()
+    const { clock } = await start($, on, fake)
+    const ui = await openCard($, clock, PAUSED)
+
+    await ui.press({ key: `set:${PAUSED}:0` })
+    expect(await buttons(ui)).toContain(SETTINGS_UNDO)
+    await pressTab(ui, to)
+    await clock.advance(10_000)
+
+    expect(await shownTab(ui)).toBe(to)
+    expect(fake.settingCalls()).toEqual([LIST])
+    // Opened again, the settings are read anew and the switch is as it was.
+    await pressTab(ui, 'settings')
+    await clock.advance(1)
+    await ui.press({ key: `setting:${PAUSED}` })
+    expect(await labels(ui)).toEqual(['previous', 'next', 'list', 'turn on'])
+    expect(fake.settingCalls()).toEqual([LIST, LIST])
+    await ui.unmount()
+  })
+}
 
 test('a command that turns the pane to another view within the five seconds takes the press back too', async ($, on) => {
   // Covers: B198
@@ -1020,7 +1049,7 @@ test("no value reaches the session's state, which every plugin can read, or the 
   await clock.advance(5_000)
   await clock.advance(1)
   await ui.press({ key: 'settings:list' })
-  await ui.press({ key: 'back' })
+  await pressTab(ui, 'overview')
 
   const kept = writes.join('\n')
   expect(kept).toContain('"kind":"settings"')
@@ -1076,10 +1105,9 @@ test('a core from before the command, one that fails and one that answers someth
   const { clock } = await start($, on, olderCore)
   const ui = await openList($, clock)
   expect(await texts(ui)).toEqual([
-    'Settings',
     'm2b could not read its settings: the installed m2b is older than this band; update m2b, then run /reload-plugins',
   ])
-  expect(await buttons(ui)).toEqual(['back'])
+  expect(await buttons(ui)).toEqual([])
   await ui.unmount()
 
   expect(parseSettings('no json')).toEqual({ state: 'failed', error: 'm2b answered something other than its settings' })
@@ -1097,7 +1125,7 @@ test('a list that could not be read says why in the words of the command', async
 
   const ui = await openList($, clock)
 
-  expect(await texts(ui)).toEqual(['Settings', 'm2b could not read its settings: not set up: no machine config'])
+  expect(await texts(ui)).toEqual(['m2b could not read its settings: not set up: no machine config'])
   await ui.unmount()
 })
 

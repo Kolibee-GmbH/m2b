@@ -7,20 +7,20 @@ import type {
   BandSession,
   BandSnapshot,
   FolderSwitch,
-  PaneView,
   SessionTopic,
 } from '../types'
 import { dueCounts, waitForYou } from './look'
 import { plainLine, wholePath } from './plain-text'
-import { SHOW_PROPOSALS, couldNotLookLine, countLine, errorBesideTasks, proposalsRow } from './proposals'
+import { couldNotLookLine, countLine, errorBesideTasks } from './proposals'
 import { candidateRow, reviewRow } from './rows'
 import type { RowActions } from './rows'
 
 /*
- * The view the m2b pane starts in, in three parts: what m2b gave this session, so the owner sees
- * which topic's facts it holds without scrolling to its start; what waits for an answer, each with
- * its buttons, which the band only counts; and the tasks due today. The review, a search and the proposals are the
- * pane's other views.
+ * The view the m2b pane starts in, its overview, in three parts: what m2b gave this session, so
+ * the owner sees which topic's facts it holds without scrolling to its start; what waits for an
+ * answer, each with its buttons, which the band only counts; and the tasks due today. The
+ * proposals, the review, the settings, a topic's lines and a search are the pane's other views,
+ * each under its tab.
  */
 
 // Not `m2b`: Claude Code gives the plugin's skill of that name the short name `/m2b`. A command
@@ -47,7 +47,9 @@ const NOTHING_DUE = 'Nothing due today.'
 const TASKS_NOT_READ = 'The task list could not be read.'
 // Where the answer names no tasks due: from a core before it named them whatever the band shows, or one a session with an earlier band shared.
 const DUE_NOT_SHOWN = 'Tasks due are not shown.'
-const WHOLE_REVIEW = 'the whole review'
+// Where the things a row only counts or names are shown whole: under their tab, which a line cannot press.
+const IN_PROPOSALS = 'in the tab Proposals'
+const WHOLE_REVIEW = 'The whole review is in the tab Review.'
 // The short forms of the small pane, where the long ones would be most of what it draws.
 const NO_NOTE = 'm2b holds no note of this session.'
 const SESSION_NOT_READ = 'm2b could not look at this session.'
@@ -61,6 +63,8 @@ const PRINTED = new Map([
 
 // The press on the button for the session's folder, among the presses on rows, which go by a task's or a proposal's id.
 export const FOLDER_PRESS = 'distillate:folder'
+/** The key of `undo` on the folder's row, drawn only while that press waits. */
+export const UNDO_FOLDER = 'undo:folder'
 
 /**
  * Everything the start view draws. `notes` are the notes this session wrote through the mod,
@@ -76,13 +80,10 @@ export type SessionModel = {
 }
 
 /**
- * What the start view's buttons do: keep, drop and `ok`; `show`, which turns the
- * pane, also to the lines of one topic; and the distillate off or on for a folder, with its undo.
+ * What the start view's buttons do: keep, drop and `ok`; `show`, which turns the pane to the lines
+ * of one topic; and the distillate off or on for a folder, with its undo.
  */
 export type SessionActions = RowActions & {
-  showSettings: () => Promise<void>
-  showProposals: () => Promise<void>
-  showReview: () => Promise<void>
   showTopic: (name: string) => Promise<void>
   switchFolder: (change: FolderSwitch, folder: string) => Promise<void>
   undoFolder: () => Promise<void>
@@ -268,46 +269,17 @@ export function glancePane($: EngineInterface, e: ResolveInput, model: SessionMo
   )
 }
 
-/** The key of `back`, which every view but the start view draws first, and the start view never. */
-export const BACK = 'back'
-const SHOW_REVIEW = 'show:review'
-const SHOW_SETTINGS = 'show:settings'
-
 function topicKey(index: number): string {
   return `topic:${index}`
 }
 
 /**
- * The way back to the start view, drawn above the pane's other views. Escape goes the same way
- * there; the button is for a pointer, and for a pane that does not hold the keyboard.
+ * The key of `show` on the row of the topic `name`, null where the start view draws no such row.
+ * The pane's other views draw no button under it.
  */
-export function backRow($: EngineInterface, e: ResolveInput, back: () => Promise<void>) {
-  const { Button } = $.ui.resolve(e)
-  return <Button key={BACK} label="back" onPress={back} />
-}
-
-/**
- * The key of the start view's button the focus is asked for when `back` turns the pane from
- * `view`: the button that leads to that kind of view, however this one was opened, where the
- * start view draws it now, else `settings`, which it always draws and which every other view
- * falls to. Each of them turns the pane and writes nothing; left at its place in the
- * row of buttons, the focus would stand on the first button of the start view, which may be the
- * one that leaves m2b out of the folder.
- */
-export function focusKeyAfterBack(view: PaneView | null, model: SessionModel): string {
-  if (view?.kind === 'proposals' && (model.proposals?.waiting.length ?? 0) > 0) {
-    return SHOW_PROPOSALS
-  }
-  if (view?.kind === 'review' && (model.snapshot?.review ?? null) !== null) {
-    return SHOW_REVIEW
-  }
-  if (view?.kind === 'topic') {
-    const line = givenLines(model.given).find(one => one.topic?.name === view.name)
-    if (line?.topic !== undefined) {
-      return topicKey(line.topic.index)
-    }
-  }
-  return SHOW_SETTINGS
+export function topicShowKey(model: SessionModel, name: string): string | null {
+  const line = givenLines(model.given).find(one => one.topic?.name === name)
+  return line?.topic === undefined ? null : topicKey(line.topic.index)
 }
 
 /**
@@ -336,7 +308,7 @@ function folderRow(
     const line = pressed.action === 'on' ? ` turning the distillate on under ${shown}` : ` leaving m2b out of ${shown}`
     return pressed.phase === 'waiting' ? (
       <Box key="row:folder" flexDirection="row">
-        <Button key="undo:folder" label="undo" onPress={actions.undoFolder} />
+        <Button key={UNDO_FOLDER} label="undo" onPress={actions.undoFolder} />
         <Text dimColor wrap="wrap">
           {line}
         </Text>
@@ -407,24 +379,19 @@ export function sessionPane($: EngineInterface, e: ResolveInput, model: SessionM
       {snapshot === null && quiet(NOT_LOOKED)}
       {snapshot?.error ? failure(plainLine(snapshot.error)) : null}
       {storeError !== null && failure(couldNotLookLine(storeError))}
-      {waiting > 0 && proposalsRow($, e, waiting, actions.showProposals, 'wrap')}
+      {waiting > 0 && <Text wrap="wrap">{`${countLine(waiting)}, ${IN_PROPOSALS}`}</Text>}
       {(snapshot?.candidates ?? []).map(candidate => candidateRow($, e, candidate, presses[candidate.id], actions, 'wrap'))}
       {review !== null && reviewRow($, e, review, presses[review.id], actions, 'wrap')}
       {review !== null && (
-        <Box key="row:whole-review" flexDirection="row">
-          <Button key={SHOW_REVIEW} label="show" onPress={actions.showReview} />
-          <Text dimColor wrap="wrap">
-            {' '}
-            {WHOLE_REVIEW}
-          </Text>
-        </Box>
+        <Text dimColor wrap="wrap">
+          {WHOLE_REVIEW}
+        </Text>
       )}
       {waitsNothing(model) && quiet(NOTHING_WAITS)}
       {heading(TODAY)}
       {nothingDue === null
         ? dueFirst(snapshot?.due ?? []).map(task => <Text wrap="wrap">{dueLine(task)}</Text>)
         : quiet(nothingDue)}
-      <Button key={SHOW_SETTINGS} label="settings" onPress={actions.showSettings} />
     </Box>
   )
 }

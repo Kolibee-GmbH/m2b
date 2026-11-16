@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { parseReview } from '../../hooks/tasks'
-import { BAND, FakeM2b, answerKeys, pane, rowSaying, shownBand, start, startView, texts } from './harness'
+import { BAND, FakeM2b, answerKeys, pane, pressTab, rowSaying, shownBand, start, startView, texts } from './harness'
 
 const UNDO_MS = 5_000
 const SAM_PARAGRAPH = 'ingest: rewrote the facts line "- Sam, neighbour — Sam Rivers, Lee (sam.md)" as "- Sam, ..."'
@@ -45,13 +45,13 @@ test('the review counts as one in the band, and its row in the pane sums up the 
   const shown = await texts(ui)
   expect(shown).toContain('m2b: review')
   expect(shown).toContain('2 facts changed: Sam, Dana likes old maps')
-  expect(shown).toContain('the whole review')
+  expect(shown).toContain('The whole review is in the tab Review.')
   expect(await answerKeys(ui)).toEqual(['ok:r1'])
   expect(shown.join('\n')).not.toContain('rewrote the facts line')
   expect(shown.join('\n')).not.toContain('/home/alex/copy')
 
   // The findings no change stands for are left as written, in the view of the review.
-  await ui.press({ key: 'show:review' })
+  await pressTab(ui, 'review')
   const whole = (await texts(ui)).join('\n')
   expect(whole).toContain('lint: broken link in a.md')
   expect(whole).not.toContain('rewrote the facts line')
@@ -105,7 +105,7 @@ test('a core that names no changes leaves every finding as written', async ($, o
   expect(await texts(ui)).toContain('m2b: review')
   expect((await texts(ui)).join('\n')).not.toContain('facts changed')
 
-  await ui.press({ key: 'show:review' })
+  await pressTab(ui, 'review')
   const whole = (await texts(ui)).join('\n')
   expect(whole).toContain('rewrote the facts line')
   expect(whole).toContain('/home/alex/copy')
@@ -131,7 +131,7 @@ test('ok writes nothing when a run rewrote the review since it was drawn, and sh
   expect(fake.writes()).toEqual([])
   expect(await shownBand(band)).toEqual(rowSaying('The review changed since it was drawn, nothing written: m2b: review'))
   expect(await answerKeys(ui)).toEqual(['ok:r1'])
-  await ui.press({ key: 'show:review' })
+  await pressTab(ui, 'review')
   expect(await texts(ui)).toContain('lint: broken link in c.md')
   await ui.unmount()
   await band.unmount()

@@ -21,6 +21,8 @@ export const PROPOSALS_PLACED = 'the proposals from your sessions are in the m2b
 
 /** The key of the press on keep all, beside the keys of the presses on single proposals. */
 export const KEEP_ALL = 'proposals:all'
+/** The key of `undo` beside keep all, drawn only while that press waits. */
+export const UNDO_ALL = 'undo:all'
 
 const NO_PROPOSALS: BandProposals = { waiting: [], answered: 0, error: null }
 // Where a quote stands when it was typed, as the core names it.
@@ -222,26 +224,6 @@ export function proposalLines(proposals: BandProposals | null): string[] {
   ]
 }
 
-/** The key of `show` in the row for all of them. */
-export const SHOW_PROPOSALS = 'show:proposals'
-
-/** One row for all of them: the number, and `show`, which opens them in the pane. Cut in the band, wrapped in the pane. */
-export function proposalsRow(
-  $: EngineInterface,
-  e: ResolveInput,
-  count: number,
-  onShow: () => Promise<void>,
-  wrap: 'truncate-end' | 'wrap' = 'truncate-end',
-) {
-  const { Box, Button, Text } = $.ui.resolve(e)
-  return (
-    <Box key="row:proposals" flexDirection="row">
-      <Button key={SHOW_PROPOSALS} label="show" onPress={onShow} />
-      <Text wrap={wrap}> {countLine(count)}</Text>
-    </Box>
-  )
-}
-
 /**
  * The pane's drawing: each proposal with what it is, the person's words and the day, to keep or
  * drop, and keep all for those not pressed on their own. `notice` is what m2b said to the last
@@ -328,7 +310,7 @@ function keepAllRow(
   if (pressed.phase === 'waiting') {
     return (
       <Box key="row:keep-all" flexDirection="row">
-        <Button key="undo:all" label="undo" onPress={() => actions.undo(KEEP_ALL)} />
+        <Button key={UNDO_ALL} label="undo" onPress={() => actions.undo(KEEP_ALL)} />
         <Text dimColor> {line}</Text>
       </Box>
     )

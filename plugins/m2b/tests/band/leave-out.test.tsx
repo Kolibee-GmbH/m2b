@@ -3,7 +3,7 @@ import type { CommandRunResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
 import { wholePath } from '../../hooks/plain-text'
-import { FakeM2b, SESSION_ID, pane, start, texts } from './harness'
+import { FakeM2b, SESSION_ID, pane, start, texts, viewButtons } from './harness'
 
 const PANE = 'm2b'
 const UNDO_MS = 5_000
@@ -28,17 +28,13 @@ function inAcme(folder = ACME): FakeM2b {
   return fake
 }
 
-async function buttons(ui: { findAll: (q: { type: string }) => Promise<{ key?: string }[]> }): Promise<(string | undefined)[]> {
-  return (await ui.findAll({ type: 'Button' })).map(button => button.key)
-}
-
 test('the start view offers to leave m2b out of the folder the session runs in, and names it', async ($, on) => {
   // Covers: B189
   await start($, on, inAcme())
 
   const ui = await startView($)
 
-  expect(await buttons(ui)).toContain('folder:off')
+  expect(await viewButtons(ui)).toContain('folder:off')
   // Below what the session was given and how its start printed the distillate, above its notes.
   expect((await texts(ui)).slice(0, 5)).toEqual([
     'In this session',
@@ -61,8 +57,8 @@ test('a press waits for undo, then turns the distillate off for the folder the a
   await ui.press({ key: 'folder:off' })
 
   expect(await texts(ui)).toContain(`leaving m2b out of ${ACME}`)
-  expect(await buttons(ui)).toContain('undo:folder')
-  expect(await buttons(ui)).not.toContain('folder:off')
+  expect(await viewButtons(ui)).toContain('undo:folder')
+  expect(await viewButtons(ui)).not.toContain('folder:off')
   await clock.advance(UNDO_MS - 1)
   expect(fake.folderCalls()).toEqual([])
 
@@ -75,8 +71,8 @@ test('a press waits for undo, then turns the distillate off for the folder the a
   expect(shown).toContain(OFF_UNDER_ACME)
   expect(shown).toContain(KEEPS)
   expect(shown).toContain('Acme Ltd: 3 facts')
-  expect(await buttons(ui)).toContain('folder:on')
-  expect(await buttons(ui)).not.toContain('folder:off')
+  expect(await viewButtons(ui)).toContain('folder:on')
+  expect(await viewButtons(ui)).not.toContain('folder:off')
   await ui.unmount()
 })
 
@@ -92,7 +88,7 @@ test('undo within the window leaves the folder as it was and writes nothing', as
   await clock.advance(UNDO_MS * 2)
 
   expect(fake.folderCalls()).toEqual([])
-  expect(await buttons(ui)).toContain('folder:off')
+  expect(await viewButtons(ui)).toContain('folder:off')
   expect(await texts(ui)).not.toContain(KEEPS)
   await ui.unmount()
 })
@@ -115,7 +111,7 @@ test('where the distillate is off, the button turns it on again for the folder i
   const shown = await texts(ui)
   expect(shown).not.toContain(OFF_UNDER_ACME)
   expect(shown).not.toContain(KEEPS)
-  expect(await buttons(ui)).toContain('folder:off')
+  expect(await viewButtons(ui)).toContain('folder:off')
   await ui.unmount()
 })
 
@@ -125,12 +121,12 @@ test('a core that names no folder gets no button to leave m2b out, and still one
   fake.given = { topics: [], atStart: 'whole', offUnder: null }
   const { clock } = await start($, on, fake)
   const ui = await startView($)
-  expect(await buttons(ui)).not.toContain('folder:off')
+  expect(await viewButtons(ui)).not.toContain('folder:off')
 
   fake.given = { topics: [], atStart: 'whole', offUnder: ACME }
   await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 't1', reason: 'answer' })
   await clock.advance(1)
-  expect(await buttons(ui)).toContain('folder:on')
+  expect(await viewButtons(ui)).toContain('folder:on')
   await ui.unmount()
 })
 
@@ -142,7 +138,7 @@ test('a look that failed offers no button: m2b does not know which folder it wou
 
   const ui = await startView($)
 
-  expect(await buttons(ui)).toEqual(['show:settings'])
+  expect(await viewButtons(ui)).toEqual([])
   await ui.unmount()
 })
 
@@ -160,7 +156,7 @@ test('a write m2b refuses is said in the view, and the button stays', async ($, 
   const shown = await texts(ui)
   expect(shown).toContain(`m2b could not leave itself out of ${ACME}: the machine config cannot be written`)
   expect(shown).not.toContain(KEEPS)
-  expect(await buttons(ui)).toContain('folder:off')
+  expect(await viewButtons(ui)).toContain('folder:off')
 
   // The next prompt clears what was said, as it clears the band's notices.
   await $.prompt.submit({ text: 'go on', origin: { kind: 'composer' }, wait: false })
@@ -212,10 +208,10 @@ test('while the write is under way the row offers nothing, and a second press ca
   await ui.press({ key: 'folder:off' })
   await clock.advance(UNDO_MS + 1)
 
-  expect(await buttons(ui)).toEqual(['topic:0', 'show:settings'])
+  expect(await viewButtons(ui)).toEqual(['topic:0'])
   expect(await texts(ui)).toContain(`leaving m2b out of ${ACME}`)
   await clock.advance(2_000)
-  expect(await buttons(ui)).toContain('folder:on')
+  expect(await viewButtons(ui)).toContain('folder:on')
   expect(fake.folderCalls()).toHaveLength(1)
   await ui.unmount()
 })

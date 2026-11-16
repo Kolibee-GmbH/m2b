@@ -202,16 +202,20 @@ def pane_beats(command: str, presses: Sequence[Beat]) -> tuple[Beat, ...]:
 
 
 def answering_beats() -> tuple[Beat, ...]:
-    """To the proposals, keep the first and take that back, keep it again and let it be written,
-    back to the start view."""
+    """To the proposals by their tab, keep the first and take that back, keep it again and let it be
+    written, back to the start view by its tab.
+
+    The tabs are the first buttons of every view: ``Proposals`` is one Tab into the start view, the
+    first ``keep`` four Tabs past ``Overview``, where the focus stands after the turn, and from the
+    row that moved up once the answer is written ``Overview`` is four back."""
     return pane_beats(
         "/m2b-pane",
         (
-            *pressed([TAB, TAB, TAB, ENTER], 2.0),
-            *pressed([TAB, TAB, ENTER], 2.5),
+            *pressed([TAB, ENTER], 2.0),
+            *pressed([TAB, TAB, TAB, TAB, ENTER], 2.5),
             Beat(1.5, ENTER),
             Beat(1.5, ENTER),
-            *pressed([SHIFT_TAB, SHIFT_TAB, ENTER], PRESS_SECONDS + 1.5),
+            *pressed([SHIFT_TAB, SHIFT_TAB, SHIFT_TAB, SHIFT_TAB, ENTER], PRESS_SECONDS + 1.5),
             Beat(3.0),
         ),
     )
@@ -219,11 +223,13 @@ def answering_beats() -> tuple[Beat, ...]:
 
 def settings_beats() -> tuple[Beat, ...]:
     """Open the first setting's card, walk with Enter on ``next`` to the model of curation, press its
-    switch and take that back, press it again and let it be written, back to the list."""
+    switch and take that back, press it again and let it be written, back to the list.
+
+    The first row of the list is the fourth button: three tabs stand before it."""
     return pane_beats(
         "/m2b-settings",
         (
-            *pressed([TAB, TAB, ENTER], 2.0),
+            *pressed([TAB, TAB, TAB, TAB, ENTER], 2.0),
             *(Beat(0.9, ENTER) for _ in range(8)),
             *pressed([TAB, TAB, ENTER], 2.5),
             Beat(1.5, ENTER),

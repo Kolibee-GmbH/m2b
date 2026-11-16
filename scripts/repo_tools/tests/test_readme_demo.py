@@ -95,9 +95,9 @@ class PicturesTest(unittest.TestCase):
         presses = keys_of(readme_demo.PICTURES[2]).partition("/m2b-settings" + readme_images.ENTER)[2]
         before = [setting.key for setting in catalog.settings()].index("curation.model")
 
-        # Two tabs to the first row, Enter opens its card, then Enter on next once per setting before.
+        # Past the three tabs to the first row, Enter opens its card, then Enter on next once per setting before.
         opened_and_walked = readme_images.ENTER * (1 + before)
-        self.assertTrue(presses.startswith(readme_demo.TAB * 2 + opened_and_walked + readme_demo.TAB))
+        self.assertTrue(presses.startswith(readme_demo.TAB * 4 + opened_and_walked + readme_demo.TAB))
 
     def test_the_proposal_the_picture_keeps_is_one_of_the_demo_store(self) -> None:
         self.assertIn(readme_demo.KEPT_PROPOSAL, [text for _, text, _, _ in readme_images.PROPOSALS])

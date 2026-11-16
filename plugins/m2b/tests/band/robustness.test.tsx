@@ -10,6 +10,7 @@ import {
   TROUBLE_LINE,
   answerKeys,
   everyText,
+  pressTab,
   rowSaying,
   sentenceOfM2b,
   shownBand,
@@ -45,7 +46,7 @@ test('a title with control characters or line breaks is drawn cleaned, and the b
   expect(shown).toContain('Remember? plain again and on')
   expect(shown).toContain('Remember? red alert from the terminal')
   expect(shown).toContain('Remember? right-to-left override and a tab here')
-  await ui.press({ key: 'show:review' })
+  await pressTab(ui, 'review')
   expect(await texts(ui)).toContain('lint: a link in a.md')
   await ui.unmount()
 })

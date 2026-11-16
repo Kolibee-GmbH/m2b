@@ -4,7 +4,7 @@ import type { Engine } from 'claude-code/testing'
 
 import { beginTopic, fillTopic, forgetTopicUnless, heldTopic, holdsTopic, parseTopic } from '../../hooks/topic'
 import type { TopicLook } from '../../hooks/topic'
-import { FakeM2b, HOME, SESSION_ID, pane, start, texts } from './harness'
+import { FakeM2b, HOME, SESSION_ID, inView, pane, pressTab, shownTab, shownTabs, start, texts, viewButtons } from './harness'
 import type { Files } from './harness'
 
 const PANE = 'm2b'
@@ -60,7 +60,9 @@ test('a press on a topic shows its lines as the distillate holds them now, and s
   expect(await texts(ui)).toEqual(['Acme Ltd', AS_IT_IS_NOW, KIM, PAYS, 'Current', AUDIT])
   // Opened anew as a dialog, so Escape leads back to the view the pane starts in.
   expect(opened.slice(opensBefore)).toEqual([AS_A_DIALOG])
-  expect((await ui.findAll({ type: 'Button' })).map(button => button.key)).toEqual(['back'])
+  // The lines are read, never pressed: the tabs above them are the one way on, the topic's own beside the four.
+  expect(await viewButtons(ui)).toEqual([])
+  expect((await shownTabs(ui)).at(-1)).toEqual({ label: 'Acme Ltd', key: null })
   await ui.unmount()
 })
 
@@ -85,7 +87,7 @@ test("the session's state, which every plugin can read, names the topic and neve
 
   await ui.press({ key: 'topic:0' })
   expect(await texts(ui)).toContain(KIM)
-  await ui.press({ key: 'back' })
+  await pressTab(ui, 'overview')
 
   const kept = writes.join('\n')
   expect(kept).toContain('"name":"Acme Ltd"')
@@ -126,14 +128,14 @@ test('each topic has its own button, and a topic without current items shows non
   await ui.unmount()
 })
 
-test('back forgets the lines, and the next press reads them again', async ($, on) => {
+test('the tab Overview forgets the lines, and the next press reads them again', async ($, on) => {
   // Covers: B190
   const fake = givenAcme()
   await start($, on, fake)
   const ui = await startView($)
   await ui.press({ key: 'topic:0' })
 
-  await ui.press({ key: 'back' })
+  await pressTab(ui, 'overview')
 
   const shown = await texts(ui)
   expect(shown).toContain('In this session')
@@ -146,6 +148,34 @@ test('back forgets the lines, and the next press reads them again', async ($, on
   expect(await texts(ui)).toEqual(['Acme Ltd', AS_IT_IS_NOW, 'Kim Lee left Acme'])
   await ui.unmount()
 })
+
+for (const [to, label] of [
+  ['proposals', 'Proposals'],
+  ['review', 'Review'],
+  ['settings', 'Settings'],
+] as const) {
+  test(`the tab ${label} forgets the lines too: back on the start view, the next press reads them again`, async ($, on) => {
+    // Covers: B190
+    const fake = givenAcme()
+    await start($, on, fake)
+    const ui = await startView($)
+    await ui.press({ key: 'topic:0' })
+    expect(await texts(ui)).toContain(KIM)
+
+    await pressTab(ui, to)
+
+    expect(await shownTab(ui)).toBe(to)
+    expect(await texts(ui)).not.toContain(KIM)
+    await pressTab(ui, 'overview')
+    expect(await texts(ui)).not.toContain(KIM)
+
+    fake.topicLines = { 'Acme Ltd': { facts: ['Kim Lee left Acme'], current: [] } }
+    await ui.press({ key: 'topic:0' })
+    expect(fake.topicCalls()).toEqual([READ_ACME, READ_ACME])
+    expect(await texts(ui)).toEqual(['Acme Ltd', AS_IT_IS_NOW, 'Kim Lee left Acme'])
+    await ui.unmount()
+  })
+}
 
 test('no line of a topic reaches a text for the conversation or a file the sessions share', async ($, on) => {
   // Covers: B190
@@ -187,7 +217,7 @@ test('a command that turns the pane to another view leaves no line of the topic 
   await typed($, 'm2b-review')
   expect(await texts(ui)).not.toContain(KIM)
 
-  await ui.press({ key: 'back' })
+  await pressTab(ui, 'overview')
   expect(await texts(ui)).toContain('In this session')
   expect(await texts(ui)).not.toContain(KIM)
   await ui.unmount()
@@ -212,7 +242,7 @@ test('after /clear the topic of the conversation that ended is no longer shown',
   await ui.unmount()
 })
 
-test('while m2b reads, the view says so, and an answer that comes after back is dropped', async ($, on) => {
+test('while m2b reads, the view says so, and an answer that comes after the tab Overview is dropped', async ($, on) => {
   // Covers: B190
   const fake = givenAcme()
   fake.delayMs = args => (args[1] === 'topic' ? 2_000 : 0)
@@ -223,13 +253,36 @@ test('while m2b reads, the view says so, and an answer that comes after back is 
   await clock.advance(1)
   expect(await texts(ui)).toEqual(['Acme Ltd', AS_IT_IS_NOW, READING])
 
-  await ui.press({ key: 'back' })
+  await pressTab(ui, 'overview')
   await clock.advance(2_000)
   await pressed
 
   const shown = await texts(ui)
   expect(shown).toContain('In this session')
   expect(shown).not.toContain(KIM)
+  await ui.unmount()
+})
+
+test('an answer that comes after another tab was pressed is dropped too, and draws no fifth tab again', async ($, on) => {
+  // Covers: B190
+  const fake = givenAcme()
+  fake.delayMs = args => (args[1] === 'topic' ? 2_000 : 0)
+  const { clock } = await start($, on, fake)
+  const ui = await startView($)
+
+  const pressed = ui.press({ key: 'topic:0' })
+  await clock.advance(1)
+  expect(await texts(ui)).toEqual(['Acme Ltd', AS_IT_IS_NOW, READING])
+
+  await pressTab(ui, 'review')
+  await clock.advance(2_000)
+  await pressed
+
+  expect(await shownTab(ui)).toBe('review')
+  expect(await shownTabs(ui)).toHaveLength(4)
+  expect(await texts(ui)).not.toContain(KIM)
+  await pressTab(ui, 'overview')
+  expect(await texts(ui)).not.toContain(KIM)
   await ui.unmount()
 })
 
@@ -242,7 +295,7 @@ test('an answer that comes after another topic was opened does not fill that one
 
   const first = ui.press({ key: 'topic:0' })
   await clock.advance(1)
-  await ui.press({ key: 'back' })
+  await pressTab(ui, 'overview')
   const second = ui.press({ key: 'topic:1' })
   await clock.advance(2_000)
   await first
@@ -265,7 +318,7 @@ test('an answer to an earlier press on the same topic does not fill the view of 
 
   const first = ui.press({ key: 'topic:0' })
   await clock.advance(1)
-  await ui.press({ key: 'back' })
+  await pressTab(ui, 'overview')
   // The distillate changed between the two presses: the later answer is the one to show.
   fake.topicLines = { 'Acme Ltd': { facts: ['Kim Lee left Acme'], current: [] } }
   const second = ui.press({ key: 'topic:0' })
@@ -289,7 +342,7 @@ test('a topic the distillate no longer holds is said, apart from one without lin
   await ui.press({ key: 'topic:0' })
   expect(await texts(ui)).toEqual(['Acme Ltd', AS_IT_IS_NOW, 'The distillate holds no topic of this name now.'])
 
-  await ui.press({ key: 'back' })
+  await pressTab(ui, 'overview')
   await ui.press({ key: 'topic:1' })
   expect(await texts(ui)).toEqual(['Riverside Choir', AS_IT_IS_NOW, 'The topic holds no lines now.'])
   await ui.unmount()
@@ -347,7 +400,8 @@ test('the lines are drawn without what a terminal would run, and wrap in a narro
   // Asked for under the name as m2b gave it.
   expect(fake.topicCalls()).toEqual([['distillate', 'topic', '--json', '--', 'Ac\u001b[31mme Ltd']])
   expect(await texts(ui)).toEqual(['Acme Ltd', AS_IT_IS_NOW, 'Kim leads IT', 'Current', 'Audit under way'])
-  const wraps = (await ui.findAll({ type: 'Text' })).map(found => found.props['wrap'])
+  const wraps = (await inView(ui, 'Text')).map(found => found.props['wrap'])
+  expect(wraps).not.toEqual([])
   expect(wraps.every(wrap => wrap === 'wrap')).toBe(true)
   await ui.unmount()
 })

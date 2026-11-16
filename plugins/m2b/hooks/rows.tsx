@@ -9,6 +9,11 @@ export type RowActions = {
   undo: (id: string) => Promise<void>
 }
 
+/** The key of `undo` on the row of the item `id`, which the row draws only while a press on it waits. */
+export function undoKey(id: string): string {
+  return `undo:${id}`
+}
+
 /**
  * One candidate or question: keep and drop, or while a press waits undo and what it will do, or
  * while it writes that line alone. `wrap` is how a long title is drawn.
@@ -35,7 +40,7 @@ export function candidateRow(
   if (pressed.phase === 'waiting') {
     return (
       <Box key={`row:${candidate.id}`} flexDirection="row">
-        <Button key={`undo:${candidate.id}`} label="undo" onPress={() => actions.undo(candidate.id)} />
+        <Button key={undoKey(candidate.id)} label="undo" onPress={() => actions.undo(candidate.id)} />
         <Text dimColor wrap={wrap}>
           {pressedLine(pressed.action, candidate.title)}
         </Text>
@@ -76,7 +81,7 @@ export function reviewRow(
   if (pressed.phase === 'waiting') {
     return (
       <Box key={`review:${review.id}`} flexDirection="row">
-        <Button key={`undo:${review.id}`} label="undo" onPress={() => actions.undo(review.id)} />
+        <Button key={undoKey(review.id)} label="undo" onPress={() => actions.undo(review.id)} />
         <Text dimColor wrap={wrap}>
           {line}
         </Text>

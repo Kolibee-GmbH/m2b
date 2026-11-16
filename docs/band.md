@@ -92,8 +92,9 @@ the tool below, or the skill `/m2b:capture` where the mod does not run.
 
 ## This session, what waits and today, in the pane
 
-`/m2b-pane` opens the m2b pane in the view it starts in, with three parts. (`/m2b` alone is not
-this command: Claude Code runs the skill `/m2b:m2b` for it, which asks the model what m2b is.)
+`/m2b-pane` opens the m2b pane in the view it starts in, its overview, with three parts below
+[the row of tabs](#the-tabs). (`/m2b` alone is not this command: Claude Code runs the skill
+`/m2b:m2b` for it, which asks the model what m2b is.)
 
 ![A Claude Code session in the fullscreen layout after /m2b-pane: the m2b pane sits beside the chat in its start view. In this session: the topic Northwind with 2 facts and 1 current item and "show", the distillate printed whole at the start, and "leave m2b out" of the project folder. Waits for you: 3 proposals from your sessions with "show", a "Still current?" question with keep and drop, the review row "1 fact changed: Sam" with ok, and "show" for the whole review. Today: one task due today and one overdue. Below them "settings". Left of the pane the band above the prompt is one line that counts what waits, and the status line stands below the prompt](images/pane.png)
 
@@ -101,6 +102,8 @@ As text, another session:
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
+│ Overview [ Proposals 1 ] [ Review ] [ Settings ]             │
+│                                                              │
 │ In this session                                              │
 │ [ show ] Northwind: 3 facts, 1 current                       │
 │ [ show ] Acme Ltd: 1 fact                                    │
@@ -108,14 +111,13 @@ As text, another session:
 │ [ leave m2b out ] of /home/alex/code/lumen                   │
 │ 1 note written in this session                               │
 │ Waits for you                                                │
-│ [ show ] 1 proposal from your sessions                       │
+│ 1 proposal from your sessions, in the tab Proposals          │
 │ [ keep ] [ drop ] Remember? Dana prefers tea                 │
 │ [ ok ] m2b: review                                           │
-│ [ show ] the whole review                                    │
+│ The whole review is in the tab Review.                       │
 │ Today                                                        │
 │ due today: Buy screws                                        │
 │ overdue: Return the ladder                                   │
-│ [ settings ]                                                 │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -131,11 +133,11 @@ As text, another session:
   `/clear` and a compaction begin the list of topics again, as the context no longer holds what
   came before. A session this machine holds no note of, one that started under an earlier m2b or
   without m2b's hooks, is said to be not known, which does not say it was given nothing.
-- **Waits for you** holds what the band counts: one row for the proposals from your sessions,
+- **Waits for you** holds what the band counts: one line for the proposals from your sessions,
   every memory candidate and "Still current?" question with keep and drop, and the open review
-  with `ok`. `show` on the proposals turns the pane to
-  [them](#the-proposals-from-your-sessions-in-the-pane), `show` under the review to
-  [the whole review](#the-whole-review-and-search-in-a-pane); `back` above that view, Escape or
+  with `ok`. The tab `Proposals` turns the pane to
+  [them](#the-proposals-from-your-sessions-in-the-pane), the tab `Review` to
+  [the whole review](#the-whole-review-and-search-in-a-pane); the tab `Overview`, Escape or
   `/m2b-pane` turn it [back](#back-to-the-start-view).
 
   **Keep and drop are buttons: click them, or walk to them with Tab and press Enter.** Keep
@@ -174,7 +176,7 @@ m2b and to run `/reload-plugins`.
 
 Where Claude Code cannot show a pane, `/m2b-pane` answers with the same lines as text, at most 20 of
 them and without any character that draws nothing, and names `/m2b-proposals` and `/m2b-review`
-where the pane has `show`. It waits up to two seconds for a fresh answer about the session, and
+where the pane names their tabs. It waits up to two seconds for a fresh answer about the session, and
 without one the text says that m2b has not looked yet.
 
 ### A topic's lines
@@ -182,7 +184,8 @@ without one the text says that m2b has not looked yet.
 `show` beside a topic turns the pane to that topic: its facts and its current items, read with
 `m2b distillate topic` at the press. m2b keeps the names and counts of what it gave a session and
 not the lines, so these are the lines the distillate holds now; a curation run since the session
-got the topic may have changed them, and the view says so. `back`, Escape or `/m2b-pane` lead
+got the topic may have changed them, and the view says so. The topic stands under a fifth tab
+that bears its name while the pane shows it; the tab `Overview`, Escape or `/m2b-pane` lead
 [back](#back-to-the-start-view).
 
 The lines are your facts, often about a customer. The band keeps them while the pane shows them
@@ -214,7 +217,7 @@ guesses which folder a press would turn off.
 
 ### Every setting, in the pane
 
-`settings` at the end of the start view, or `/m2b-settings`, turns the pane to the settings of
+The tab `Settings`, or `/m2b-settings`, turns the pane to the settings of
 m2b: every setting of this machine, of the store and of the owner, as `m2b settings` lists them
 ([Configuration](configuration.md#every-setting-in-one-list)), each a row with its title and its
 value.
@@ -225,7 +228,9 @@ value.
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ Settings · 15 of 31                                          │
+│ [ Overview ] [ Proposals ] [ Review ] Settings               │
+│                                                              │
+│ 15 of 31                                                     │
 │ [ previous ] [ next ] [ list ]                               │
 │ Curation paused                                              │
 │ this machine · curation.paused                               │
@@ -300,7 +305,7 @@ the m2b pane by itself, with its first drawing on the terminal in a session: in 
 without taking the keyboard, and Escape does not close it. After `/clear` it does so once more. Claude Code draws a pane nobody asked for only on a
 terminal wide enough for it (from 144 columns, from 110 once you have opened the pane yourself);
 below that the pane stays open undrawn and appears when you widen the terminal, and `/m2b-pane` or
-`show` on the band's row for this session shows it at once.
+`open` on the band's row shows it at once.
 
 On the main screen, where a pane is a block above the prompt that takes rows from the
 conversation, nothing opens by itself: `/m2b-pane` opens the pane there, as a dialog that Escape
@@ -331,21 +336,29 @@ The small form says how many topics this session was given, how many things wait
 many tasks are due today and overdue, or what m2b could not look at in place of a count. A click
 may not reach it: `open` in the band shows the pane with its buttons.
 
+### The tabs
+
+One row of tabs stands above every view of the pane, always in this order: `Overview`, the view
+the pane starts in; `Proposals`, with the number that wait; `Review`; `Settings`. The tab of the
+view you look at is marked and is no button, every other turns the pane to its view. A topic's
+lines and the hits of a search stand under a fifth tab, which is there only while the pane shows
+them. No view has a button that leads back: the tabs are the one way from a view to another.
+
 ### Back to the start view
 
-`/m2b-review`, `/m2b-search`, `/m2b-proposals`, `/m2b-settings` and `show` or `settings` in the
-start view turn the pane to their view and give it the keyboard. Escape there, the pane's close
-mark or the `back` button above the view lead back to the start view; the pane stays open. From
+`/m2b-review`, `/m2b-search`, `/m2b-proposals`, `/m2b-settings`, a tab and `show` beside a topic
+turn the pane to their view and give it the keyboard. Escape there, the pane's close
+mark or the tab `Overview` lead back to the start view; the pane stays open. From
 the card of a setting they lead to the list of the settings first. Beside the chat it then stays
 without closing on Escape, so an Escape at the empty prompt does not take it away, and an Escape
 pressed twice within half a second leads back once and closes nothing. Above the prompt the pane
 stays a dialog, and a later Escape closes the block.
 
 With the keyboard in the pane, the band asks Claude Code to put the focus where a second Enter
-writes nothing: on `back` after `show` or `settings` turned the pane, and after `back` on the
-button that led there (on `settings` where that button is gone, as after the last proposal was
-answered). Outside the settings the band moves no focus within a view: after keep it is on
-`undo`.
+writes nothing: after a press on a tab, on the tab that leads back to the view you left, so Enter
+pressed again returns there; after `show` beside a topic on `Overview`, and from there back on
+that topic's `show`; after keep, drop or `ok` on the row's `undo`. Once an answer is written its
+row is gone, and the focus stands on the row that moved up.
 
 ## The whole review, and search, in a pane
 
@@ -391,12 +404,12 @@ with the content as text instead, its first 20 lines, each cut at 200 characters
 in the conversation the model reads. A search without hits answers in one line and opens no pane,
 and one with more hits than `m2b` can hand over asks for a narrower search. The pane takes its data from the same refresh as the band, so it
 follows the next curation run within a minute. It asks for the keyboard when it opens over an
-empty prompt, so the arrows scroll a long review; Escape, the close mark and `back` above the view
+empty prompt, so the arrows scroll a long review; Escape, the close mark and the tab `Overview`
 lead [back to the start view](#back-to-the-start-view).
 
 ## The proposals from your sessions, in the pane
 
-`/m2b-proposals`, or `show` on the band's row, opens the m2b pane with what waits for your answer:
+`/m2b-proposals`, or the tab `Proposals`, turns the m2b pane to what waits for your answer:
 each proposal with its text, what kind of thing it is (with the due day of a commitment and the
 topic, where it has one), the words it was taken from and their day: `said on` before words you
 typed, `pasted on` before words from text you pasted into a prompt, which may be someone else's.

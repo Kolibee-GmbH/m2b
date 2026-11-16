@@ -14,6 +14,12 @@ All notable changes to this project are documented here. The format follows
   drop and ok are pressed in the pane, where every candidate, question and the review stand
   with their buttons; the band holds no button that writes. The row is the same whether the
   pane is in view or not, and a press that wrote nothing is said in it as one sentence.
+- The m2b pane has one row of tabs above every view: `Overview`, `Proposals` with the number
+  that wait, `Review` and `Settings`; a topic's lines and a search stand under a fifth tab while
+  the pane shows them. The tab you look at is marked, every other turns the pane with one press.
+  `back` above the views and `show` and `settings` on the start view are gone. After a press on
+  a tab the focus stands on the tab that leads back, and after keep, drop or `ok` on the row's
+  `undo`: after drop it stood on keep of the row below.
 - The status line under the prompt says only what is wrong with m2b, such as `last curation run
   failed` or `calendar not reachable`, and is gone while nothing is. Claude Code draws a plugin's
   status line as a warning, so `0 in inbox · curated 18:02` warned in every session.
