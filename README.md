@@ -359,7 +359,7 @@ scripts/e2e --level stub    # end-to-end scenarios without a model
 [Integrations](docs/integrations.md); to add a store, task or calendar backend, [Writing a
 backend](docs/writing-a-backend.md). What m2b promises to do, and which defects it must not have, is
 listed in [Behavior](docs/behavior.md). What it does to Claude's answers is measured:
-[Evals](docs/evals.md) has fourteen cases, each run with m2b and without, and the scores of the last
+[Evals](docs/evals.md) has sixteen cases, each run with m2b and without, and the scores of the last
 run.
 
 ## License

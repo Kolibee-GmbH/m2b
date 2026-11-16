@@ -16,6 +16,7 @@ need none of it: you say what you want kept or want to know, and the session doe
 | "remind me to call the plumber on Friday" | the same | the note, and a task due that day in your task list |
 | "put it in my calendar: dentist, Tuesday at 10" | the `capture` skill | an event in the calendar you name (macOS, with a calendar set up) |
 | "what did I note about the shed?" | the search tool, or the `search` skill | the lines that match, each with its file |
+| "what exactly does the rowing club's handbook say about lockers?" | the same, called with the fact file's name | the whole fact file, then the note of the document behind it with its outline |
 | "what's open?", "what's on today?" | the `todos` skill | open tasks by due date, and today's events where a calendar is set up |
 | "I returned Sam's ladder, tick it off", "the paint task is done" | the `todos` skill | ticks that task in your list; asks when more than one fits |
 | "show me something old", "what did I note last spring?" | the `rediscover` skill | one or a few old notes, each with the reason it was picked |
@@ -77,6 +78,7 @@ command answers as JSON with it.
 |---|---|
 | `m2b capture [--follow-up <day>] [--quiet] [--source <name>] [--json] <text>` | writes a new note into the inbox; with `--follow-up YYYY-MM-DD` also a task due that day; `--quiet` keeps the note out of everything proactive; `--source` says who wrote it, `cli` when left out ([Integrations](integrations.md)); without text, or with `-`, it reads standard input |
 | `m2b search [--any] [--word] [--json] <terms>` | full text over archive, memory and inbox; the terms are one phrase, with `--any` each term counts on its own |
+| `m2b source [--json] <name>` | one fact file or note, read whole by its name: the name a distillate line ends with (`dana.md`), or a note's name from the archive (a document's or picture's name answers its note); a fact file with its lines, last day, earlier values and evidence, a note with its words and what curation added, a document's note with its original name and outline. A path or any other name is refused with exit 2; a file not on this machine is named with the command that fetches it |
 | `m2b todos [--json]` | open tasks by due date, and today's events |
 | `m2b rediscover [--count <n>] [--month <YYYY-MM>] [--today <day>] [--json]` | old notes back into view, three without `--count`; `--today YYYY-MM-DD` sets the day that counts as today |
 | `m2b status [--json]` | the inbox, the last curation run, whether one is due, the backends |

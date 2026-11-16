@@ -22,10 +22,12 @@ yourself.
 | Case | With m2b | Without m2b |
 |---|---|---|
 | `coding` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
+| `details` | not in this run, new since | not in this run, new since |
 | `no-false-lead` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `no-invention` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `no-leak` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `note` | 1.00 (3 of 3 runs) | 0.33 (0 of 3 runs) |
+| `outline` | not in this run, new since | not in this run, new since |
 | `propose-agreement` | 1.00 (3 of 3 runs) | 0.67 (0 of 3 runs) |
 | `propose-asked` | 1.00 (3 of 3 runs) | 0.67 (0 of 3 runs) |
 | `propose-known` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
@@ -52,6 +54,8 @@ sessions.
 |---|---|---|
 | `recall` | when Sam brings the plywood, where the shed key is | the answer names both, from the distillate |
 | `topic` | who runs IT at Northwind, when the contract renews | the topic's facts arrive with the prompt that names it |
+| `details` | how many sheets of plywood the shed roof takes, and how thick | the answer names both, from the house's fact file, which holds more than its line in the distillate |
+| `outline` | which pages of the home insurance policy cover storm damage, and the excess | the answer names the pages and the excess, from the outline in the note of the policy's PDF |
 | `no-invention` | Dana's favourite colour, which no note holds | no colour is named, not even as a guess |
 | `no-false-lead` | what to bring up with Ben Hart, whom no note names | no note about someone else is offered as possibly about him |
 | `note` | "Remember this: ..." | the note is saved in the user's words, "my" kept |

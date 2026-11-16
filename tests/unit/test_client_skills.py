@@ -47,6 +47,8 @@ SHARED_RULES = {
         "the notes as a possible connection, not as a guess and not as an example.",
         "say that you could not look, never that there is nothing",
         "so a file that lives only in the cloud is never downloaded or left hanging.",
+        "A document itself is never read: answer from its note and outline, and where they do not hold the "
+        "answer, say so.",
     ),
 }
 # The tool a session hands a proposal in with has no skill: its description is where its rules
@@ -132,6 +134,27 @@ class SessionSkillTest(unittest.TestCase):
         block = "m2b capture --source claude - <<'CAPTURE'\nfirst line\nsecond line\nCAPTURE\n"
 
         self.assertEqual(commands_in(block), 1)
+
+
+class SourceSkillTest(unittest.TestCase):
+    """The search skill reads one source behind a fact with ``m2b source``, as the tool does."""
+
+    def test_the_search_skill_may_run_the_source_command_alone_without_asking(self) -> None:
+        """Covers: B221"""
+        front = skill_text("search").split("---", 2)[1]
+        allowed = next(line for line in front.splitlines() if line.startswith("allowed-tools:"))
+
+        self.assertIn("Bash(m2b source *)", allowed)
+        self.assertIn("m2b source --json -- dana.md", bash_examples("search")[-1])
+
+    def test_the_search_skill_names_the_three_kinds_of_answer_and_never_reads_a_document(self) -> None:
+        """Covers: B221"""
+        text = one_line(skill_text("search"))
+
+        for said in ("`fact file`", "`note`, `picture` or `document`", "`not read`", "never a path"):
+            with self.subTest(said=said):
+                self.assertIn(said, text)
+        self.assertIn("A document itself is never read", text)
 
 
 class ToolSkillTest(unittest.TestCase):

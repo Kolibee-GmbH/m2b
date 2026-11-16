@@ -364,6 +364,16 @@ like an instruction. Where the tool is not offered, the `search` skill runs `m2b
 shell: a hit then comes without those invisible characters too, but with its escape sequences
 and without the line that marks it as data.
 
+With a source in place of search terms, the search tool reads one fact file or one note of the
+archive whole through `m2b source`, under the same line and with the same characters removed. It
+takes a file name and never a path, and refuses before it lists or reads anything a name that
+holds a separator or a line break, or that is neither a note's name nor the name of a fact file;
+the distillate itself is refused too. So the name a model chooses, after whatever it read, reaches
+only what `m2b search` reads anyway, apart from the inbox, and never the machine config, the
+state or the tasks. A file that is only in the cloud is named with the command that fetches it,
+and a symlink is not followed. The document behind a note is not read by the tool or the skill;
+the session gets the note and its outline.
+
 The mod lets a call of any of these tools run where Claude Code would only ask because no rule allows it,
 as the skills run their commands without asking; then neither the classifier of auto mode nor a
 `PermissionRequest` hook is asked. For the note tool this holds only for a note in your own words:

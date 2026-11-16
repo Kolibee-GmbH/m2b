@@ -14,6 +14,13 @@ All notable changes to this project are documented here. The format follows
   a curation run read the first pages of a long document and filed what stood there; the rest was
   in no fact and in nothing a search reads. `m2b search` finds the outline, and the note says where
   the run stopped in a longer document ([A document in the inbox](docs/curation.md#a-document-in-the-inbox)).
+- A session reads what stands behind a fact. The search tool, called with the name a line of the
+  distillate ends with (`dana.md`), answers that fact file whole: its lines, its last day, its
+  earlier values and the notes it rests on, each with its day, what it is and its first line;
+  called with one of those notes' names, it answers the note, and for a document its original
+  name and the outline of what stands on which page. The new command behind it is
+  `m2b source <name>`; it takes a name, never a path, and reads only fact files and notes of the
+  archive ([Noting and searching as tools of the model](docs/band.md#noting-and-searching-as-tools-of-the-model)).
 
 ## [0.7.0] - 2026-11-16
 

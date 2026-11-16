@@ -39,6 +39,7 @@ from m2b.commands import rediscover as rediscover_commands
 from m2b.commands import refresh as refresh_commands
 from m2b.commands import search as search_commands
 from m2b.commands import setup as setup_commands
+from m2b.commands import source as source_commands
 from m2b.commands import status as status_commands
 from m2b.commands import todos as todos_commands
 from m2b.config.errors import ConfigError, NotSetUpError, StoreUnreachableError
@@ -299,6 +300,11 @@ def _parser() -> argparse.ArgumentParser:
     search.add_argument("terms", nargs="+", help="one phrase; with --any, one phrase per term")
     search.add_argument("--any", action="store_true", help="each term on its own; a line holding one of them is a hit")
     search.add_argument("--word", action="store_true", help="whole words only, not parts of words")
+
+    source = _command(
+        commands, "source", source_commands.source_command, "one fact file or note, read whole by its name", True
+    )
+    source.add_argument("name", help="the name a distillate line ends with, or a note's name; never a path")
 
     again = _command(commands, "rediscover", rediscover_commands.rediscover_command, "old notes back into view", True)
     again.add_argument("--count", type=int, default=3, help="at most this many notes; 3 without it")

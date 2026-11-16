@@ -651,7 +651,7 @@ call:
 | Tool | Runs | Takes |
 |---|---|---|
 | `mcp__m2b__note` | `m2b capture --source claude --json -`, the text on standard input | `text`, and optionally `follow_up` (`YYYY-MM-DD`, also a task due that day) and `quiet` |
-| `mcp__m2b__search` | `m2b search --json --any -- <terms>` | `terms`, each a phrase of its own, `whole_words`, and `question_language`, the language the question was asked in |
+| `mcp__m2b__search` | `m2b search --json --any -- <terms>`, or `m2b source --json -- <source>` | `terms`, each a phrase of its own, `whole_words`, and `question_language`, the language the question was asked in; or `source`, the name of one fact file or note to read whole |
 
 Their descriptions, which the model reads, carry the rules of the skills `/m2b:capture` and
 `/m2b:search`: what may be noted (never documents of customers or confidential statements about
@@ -659,7 +659,7 @@ third parties), the text stays in your words, and an answer holds only what the 
 holds the core rules of each description to the skill's own sentences. The skills stay as they
 are; where the tools are offered, they name the tool as the first way, and where the mod does not
 run they work through their commands as before. A calendar entry still goes through the skill.
-Both descriptions, about 5,000 characters together, are in the prompt of every session the mod
+Both descriptions, about 5,500 characters together, are in the prompt of every session the mod
 runs in, so the model knows the tools without loading a skill.
 
 The note tool answers with the path of the saved note, the day of its task or that the task waits
@@ -679,12 +679,28 @@ reorder text, zero-width characters, variation selectors and tag characters. Tha
 complete. When `m2b` fails, the model gets an error that says it could not look, which it must not
 read as nothing found. Before m2b is set up, both answer that and call nothing.
 
+Called with `source` in place of `terms`, the search tool reads one source whole with
+`m2b source --json -- <source>`: a fact file by the name a line of the distillate ends with
+(`dana.md`), or a note by its file name, taken from a hit's path or from a fact file's evidence.
+A fact file answers its title, its last day, its lines, its earlier values and its evidence, one
+line for each note it rests on with that note's day, what it is (a note, a picture, a document),
+a document's original file name and its first line; each of those is a source of its own. A note
+answers its words and what the curation run added below them, and the note of a document its
+outline, what stands on which page. The document itself is never read: the model answers from
+the note and its outline, and says so where they do not hold the answer. The answer comes under
+the same line that marks it as data from your notes, at most 200 lines, each cut as a hit is;
+every line taken from a note starts with two spaces, so none can pass for the end of the answer. A
+name with a separator, a path, or a name of anything but a fact file or a note of the archive is
+refused before the store is read ([m2b source](commands.md#the-m2b-command)). This second way of
+calling the tool adds about 600 characters to its description and its input; a tool of its own
+would have cost every session a description of its own.
+
 **Permission.** Claude Code lists the tools under these names and decides on a call as it does
 for an MCP tool: a rule `mcp__m2b__note` or `mcp__m2b__search` (or `mcp__m2b` for both) in
 `permissions.allow`, `ask` or `deny` of your settings applies to them. A rule you set for the
 skill's command applies to the tool too: with `Bash(m2b capture:*)` in `permissions.ask` or
 `deny`, the note tool asks or is refused the same way, and `Bash(m2b search:*)` does that for
-search. Where no such rule, no hook, setting or organization limit decides and Claude Code would
+search, `Bash(m2b source:*)` for reading a source. Where no such rule, no hook, setting or organization limit decides and Claude Code would
 only ask because nothing allows the tool, the mod lets the call run, as the skills run their own
 `m2b` commands without asking. For a note it does so only when the note is in your own words:
 every word of it is in one prompt you submitted in this session, in any order ("remember that Sam

@@ -122,13 +122,13 @@ import {
   PROPOSE_COMMAND_LINE,
   PROPOSE_TOOL,
   PROPOSE_TOOL_NAME,
-  SEARCH_COMMAND_LINE,
   SEARCH_TOOL,
   SEARCH_TOOL_NAME,
   isHandingInOn,
   noteTextOf,
   noteTool,
   proposeTool,
+  searchCommandLineOf,
   searchTool,
   verdictFor,
 } from './tools'
@@ -1718,7 +1718,7 @@ export const register: Register = on => {
     return verdictFor($, e, verdict, NOTE_COMMAND_LINE, isOwn)
   })
   on('tool.check', { tool: SEARCH_TOOL_NAME }, async ($, e, next) =>
-    verdictFor($, e, await next(e), SEARCH_COMMAND_LINE),
+    verdictFor($, e, await next(e), searchCommandLineOf(e.input)),
   )
   on('tool.check', { tool: PROPOSE_TOOL_NAME }, async ($, e, next) =>
     verdictFor($, e, await next(e), PROPOSE_COMMAND_LINE),

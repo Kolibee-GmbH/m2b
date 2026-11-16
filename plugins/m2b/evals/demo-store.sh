@@ -44,7 +44,45 @@ cat > "$store/memory/MEMORY.md" <<'MEMORY'
 MEMORY
 printf '# Dana\n\nMy sister. Birthday on 3 March. Would love a good fountain pen.\n' > "$store/memory/dana.md"
 printf '# Sam\n\nRepairs boats at the harbour. Brings plywood for the shed roof on 14 November.\n' > "$store/memory/sam.md"
-printf '# House\n\nThe spare key for the shed is under the blue pot by the back door.\n' > "$store/memory/house.md"
+# The house's fact file holds more than its line in the distillate, and rests on a document: the
+# note of a home insurance policy with the outline a curation run writes of a long PDF.
+cat > "$store/memory/house.md" <<'HOUSE'
+# House
+
+The spare key for the shed is under the blue pot by the back door.
+
+## Shed roof
+
+- The new roof takes 6 sheets of plywood, 18 mm, and two rolls of roof felt.
+- The old felt goes to the recycling yard, which takes it on Saturdays only.
+
+## Insurance
+
+- Home insurance with Acme Insurance, policy 4471-H, renews on 1 January.
+
+## Evidence
+
+- [[20261020T090000Z-cli-5e6f.pdf]]
+HOUSE
+mkdir -p "$store/corpus/2026/10"
+printf '%%PDF-1.4\n' > "$store/corpus/2026/10/20261020T090000Z-cli-5e6f.pdf"
+cat > "$store/corpus/2026/10/20261020T090000Z-cli-5e6f.md" <<'POLICY'
+---
+kind: sidecar
+created: 2026-10-20T11:00:00+02:00
+source: cli
+curated: true
+---
+A pdf file, captured as 20261020T090000Z-cli-5e6f.pdf.
+<!-- m2b:curation -->
+original name: acme-home-insurance-2026.pdf
+pp. 1-2: Acme Insurance home policy 4471-H for Alex, renews 1 January, premium 380 a year
+pp. 3-6: what is covered: the house, the shed, contents up to 60000
+pp. 7-9: storm, hail and water damage; excess 500 per claim; a claim within 30 days
+pp. 10-12: theft and break-in; a police report within 48 hours
+pp. 13-14: what is not covered: floods from groundwater, wear, a shed without a lock
+filed: fact house.md (insurance), outline of 14 pages
+POLICY
 printf '# Northwind\n\nA customer. Nora Lind runs their IT. The contract renews in March.\n' > "$store/memory/northwind.md"
 # One run with an empty inbox needs no model; afterwards no run is due at the session start.
 m2b curate --force >/dev/null

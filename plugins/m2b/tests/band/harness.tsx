@@ -204,6 +204,9 @@ export class FakeM2b {
   searchCut = false
   /** When set, `m2b search` fails with this as its message. */
   searchFails: string | null = null
+  /** What `m2b source --json` answers for any name; `null` fails it with `sourceFails`. */
+  sourceAnswer: Record<string, unknown> | null = null
+  sourceFails = 'no fact file or note is named that'
   /**
    * The machine's `band` settings as `m2b band --json` names them: where the band stands, how it
    * shows the tasks due, and whether it counts the topics. Null as a core before these settings
@@ -322,6 +325,9 @@ export class FakeM2b {
     }
     if (args[0] === 'band') {
       return this.bandAnswer(args.includes('--tasks-only'))
+    }
+    if (args[0] === 'source') {
+      return this.sourceAnswer === null ? fail(this.sourceFails) : ok(JSON.stringify(this.sourceAnswer))
     }
     if (args[0] === 'search') {
       if (this.searchFails !== null) {
