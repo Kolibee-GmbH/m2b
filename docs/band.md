@@ -104,6 +104,10 @@ The way into the pane is the button `open` under the fullscreen layout, where a 
 presses it. No key reaches a button below the prompt, and outside the fullscreen layout no click
 does either, so there the line names the command `/m2b-pane`, dim, where the button would stand.
 
+![A Claude Code session on the main screen with band.place set to below: nothing of m2b stands above the prompt. The hint line below the prompt reads "manual mode on", "? for shortcuts" and "1 agent" in the dim text of Claude Code and ends in "m2b", "1 waits for you", "1 overdue" and "1 due today" in their colors and the command /m2b-pane, dim](images/band-below.png)
+
+<sub>One real Claude Code session on a demo machine with invented notes, recorded by `scripts/readme-images --only band-below` in a terminal of 130 columns. Nothing is typed and no model is asked.</sub>
+
 m2b draws its part only where the line has room for it, and never cuts Claude Code's text. The
 room is counted with Claude Code's hint and with 27 cells for the label of the session's mode,
 which Claude Code draws before the hint: the widest one, `bypass permissions on`. Where the line

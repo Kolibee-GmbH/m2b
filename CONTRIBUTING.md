@@ -419,7 +419,7 @@ The screenshots in `docs/images/` come from real Claude Code sessions against a 
 invented data. After a change the README pictures show, record them again:
 
 ```bash
-scripts/readme-images                # all seven
+scripts/readme-images                # all eight
 scripts/readme-images --only todos   # one, with the one its store depends on
 ```
 
@@ -441,7 +441,9 @@ an invented session in a Claude Code folder of the demo's own. Its memory holds 
 customer the demo project's folder names, so the pane's start view lists a topic the session was
 given. Your sessions are never read, and the four pictures differ between recordings only in
 their dates and times. `pane` and `settings` each build that store themselves, so `--only` records
-one of them alone.
+one of them alone. The eighth, `band-below`, types nothing: on the everyday store with
+`band.place` set to `below`, on the main screen in a terminal of 130 columns, it shows the band
+at the end of the hint line below the prompt with every count. It builds its store itself.
 
 Three pictures move. `scripts/readme-demo` records all of them, `--only <name>` one:
 

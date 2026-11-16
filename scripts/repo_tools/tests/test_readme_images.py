@@ -232,6 +232,14 @@ class RecordTest(unittest.TestCase):
 
         self.assertEqual(keys, [readme_images.DOWN, readme_images.ENTER, "what's on my list?", readme_images.ENTER, ""])
 
+    def test_a_shot_without_a_prompt_trusts_the_folder_and_types_nothing(self) -> None:
+        shot = readme_images.Shot("band-below", 12, 6, "", True)
+
+        steps = readme_images.steps_for(shot)
+
+        self.assertEqual([keys for _, keys in steps], [readme_images.DOWN, readme_images.ENTER, ""])
+        self.assertEqual(steps[-1][0], 14 + 6)
+
     def test_the_capture_shot_names_a_weekday_a_few_days_ahead_and_never_the_day_of_the_recording(self) -> None:
         (capture,) = [shot for shot in readme_images.SHOTS if shot.name == "capture"]
         monday = datetime.date(2030, 1, 7)
@@ -275,9 +283,26 @@ class ShotsTest(unittest.TestCase):
 
         self.assertEqual(docked, {"pane": readme_images.WIDE, "settings": readme_images.WIDE})
         self.assertGreaterEqual(readme_images.WIDE, 110)
-        self.assertEqual(
-            {shot.columns for shot in readme_images.SHOTS if not shot.full_screen}, {readme_images.COLUMNS}
-        )
+        on_the_main_screen = {shot.name: shot.columns for shot in readme_images.SHOTS if not shot.full_screen}
+        # The hint line below the prompt has room for every count of the band only in a wide terminal.
+        self.assertEqual(on_the_main_screen.pop("band-below"), readme_images.WIDE)
+        self.assertEqual(set(on_the_main_screen.values()), {readme_images.COLUMNS})
+
+    def test_the_shot_of_the_band_below_the_prompt_sets_its_place_and_asks_nothing(self) -> None:
+        (below,) = [shot for shot in readme_images.SHOTS if shot.settings]
+
+        self.assertEqual(below.name, "band-below")
+        self.assertEqual(below.settings, (("band.place", "below"),))
+        self.assertEqual(below.prompt, "")
+
+    def test_a_shot_that_sets_something_builds_its_own_store_and_no_shot_runs_on_what_it_leaves(self) -> None:
+        for index, shot in enumerate(readme_images.SHOTS):
+            if not shot.settings:
+                continue
+            with self.subTest(shot=shot.name):
+                self.assertTrue(shot.fresh_store)
+                self.assertTrue(all(later.fresh_store for later in readme_images.SHOTS[index + 1 : index + 2]))
+                self.assertEqual([each.name for each in readme_images.shots_for(shot.name)], [shot.name])
 
     def test_a_shot_beside_the_chat_is_recorded_alone(self) -> None:
         self.assertEqual([shot.name for shot in readme_images.shots_for("pane")], ["pane"])
