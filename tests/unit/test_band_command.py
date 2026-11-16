@@ -105,9 +105,18 @@ class BandCommandTest(test_runner.RunnerTest):
         """Covers: B202"""
         self.curating()
 
-        self.assertEqual(self.band()["band"], {"due_tasks": "count", "topics": False})
+        self.assertEqual(self.band()["band"], {"place": "above", "due_tasks": "count", "topics": False})
         self.write_band_settings(due_tasks="list", topics=True)
-        self.assertEqual(self.band()["band"], {"due_tasks": "list", "topics": True})
+        self.assertEqual(self.band()["band"], {"place": "above", "due_tasks": "list", "topics": True})
+
+    def test_the_answer_names_where_the_band_stands_beside_what_a_band_before_it_reads(self) -> None:
+        """Covers: B213"""
+        self.curating()
+
+        for place in ("below", "waiting", "above"):
+            with self.subTest(place=place):
+                self.write_band_settings(place=place)
+                self.assertEqual(self.band()["band"], {"place": place, "due_tasks": "count", "topics": False})
 
     def test_a_band_from_before_the_three_values_is_handed_the_tasks_only_where_they_are_listed(self) -> None:
         """Covers: B102"""

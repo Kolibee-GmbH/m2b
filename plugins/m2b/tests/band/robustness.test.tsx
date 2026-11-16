@@ -2,10 +2,13 @@ import { expect, test } from 'claude-code/testing'
 
 import {
   BAND,
+  CALM_ROW,
   ENGINES_OWN_DRAWING,
   FakeM2b,
   HOME,
   NOW,
+  ONLY_WHILE_WAITING,
+  SHOWN_WITHOUT_ENTRY,
   TROUBLED_STATUS,
   TROUBLE_LINE,
   answerKeys,
@@ -91,7 +94,7 @@ test('M2B_HOME with a leading ~ resolves under HOME, as the core reads it', asyn
 
 test('a shared answer of the wrong shape is loaded again instead of drawn', async ($, on) => {
   // Covers: B95
-  const files: Files = new Map([[CACHE, cached(NOW - 10_000, { candidates: [null], review: null, error: null })]])
+  const files: Files = new Map([[CACHE, cached(NOW - 10_000, { candidates: [null], review: null, error: null, shows: SHOWN_WITHOUT_ENTRY })]])
   const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
   await start($, on, fake, {}, files)
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -106,7 +109,7 @@ test('a shared answer of the wrong shape is loaded again instead of drawn', asyn
 test('a shared review whose findings are not a list is loaded again instead of drawn', async ($, on) => {
   // Covers: B95
   const review = { id: 'r1', title: 'm2b: review', findings: 'abc' }
-  const files: Files = new Map([[CACHE, cached(NOW - 10_000, { candidates: [], review, error: null })]])
+  const files: Files = new Map([[CACHE, cached(NOW - 10_000, { candidates: [], review, error: null, shows: SHOWN_WITHOUT_ENTRY })]])
   const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
   await start($, on, fake, {}, files)
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -121,7 +124,7 @@ test('a shared review whose findings are not a list is loaded again instead of d
 
 test('a shared answer stamped in the future is loaded again and replaced', async ($, on) => {
   // Covers: B95
-  const snapshot = { candidates: [{ id: 'c9', title: 'Remember? From the future' }], review: null, error: null }
+  const snapshot = { candidates: [{ id: 'c9', title: 'Remember? From the future' }], review: null, error: null, shows: SHOWN_WITHOUT_ENTRY }
   const files: Files = new Map([[CACHE, cached(NOW + 3_600_000, snapshot)]])
   const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
   await start($, on, fake, {}, files)
@@ -193,6 +196,7 @@ test('several turns while m2b is slow leave at most one reload waiting', async (
 test('the row stays locked until the reload after a keep has landed', async ($, on) => {
   // Covers: B94
   const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
+  fake.shows = ONLY_WHILE_WAITING
   const { clock } = await start($, on, fake)
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
   const ui = await startView($)
@@ -209,6 +213,27 @@ test('the row stays locked until the reload after a keep has landed', async ($, 
   await clock.advance(5_000)
   expect(await texts(ui)).not.toContain('keeping: Remember? Acme moved')
   expect(await everyText(band)).toEqual([ENGINES_OWN_DRAWING])
+  expect(fake.writes()).toHaveLength(1)
+  await ui.unmount()
+  await band.unmount()
+})
+
+test('a band that is always there counts the locked row until the reload after a keep has landed, and is calm then', async ($, on) => {
+  // Covers: B94, B213
+  const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
+  const { clock } = await start($, on, fake)
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const ui = await startView($)
+
+  await ui.press({ key: 'keep:c1' })
+  fake.delayMs = args => (args[0] === 'band' && args.length === 2 ? 5_000 : 0)
+  await clock.advance(UNDO_MS)
+  expect(fake.writes()).toEqual([['tasks', 'complete', '--', 'c1']])
+
+  expect(await shownBand(band)).toEqual(rowSaying('1 waits for you'))
+  await clock.advance(5_000)
+  expect(await texts(ui)).not.toContain('keeping: Remember? Acme moved')
+  expect(await shownBand(band)).toEqual(CALM_ROW)
   expect(fake.writes()).toHaveLength(1)
   await ui.unmount()
   await band.unmount()
@@ -288,7 +313,7 @@ test('a turn that ends while a minute reload waits makes that reload read for it
   await clock.advance(121_000)
   await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 't1', reason: 'answer' })
   await clock.advance(5_000)
-  const other = { candidates: [{ id: 'c9', title: 'Remember? From the other session' }], review: null, error: null }
+  const other = { candidates: [{ id: 'c9', title: 'Remember? From the other session' }], review: null, error: null, shows: SHOWN_WITHOUT_ENTRY }
   files.set(CACHE, cached(clock.now(), other))
   fake.candidate('c1', 'Remember? Acme moved')
   await clock.advance(10_000)
@@ -319,6 +344,7 @@ test('a reload under way when m2b stops being set up does not draw the band agai
 test('a session that runs an older m2b than the installed one says to run /reload-plugins, in the pane and not in the band', async ($, on) => {
   // Covers: B96
   const fake = new FakeM2b()
+  fake.shows = ONLY_WHILE_WAITING
   fake.version = '0.3.1'
   fake.bandVersion = '0.3.0'
   await start($, on, fake)
@@ -333,14 +359,45 @@ test('a session that runs an older m2b than the installed one says to run /reloa
   await ui.unmount()
 })
 
+test('a session that runs an older m2b than the installed one leaves a band that is always there calm: the pane says to run /reload-plugins', async ($, on) => {
+  // Covers: B96, B213
+  const fake = new FakeM2b()
+  fake.version = '0.3.1'
+  fake.bandVersion = '0.3.0'
+  await start($, on, fake)
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await shownBand(band)).toEqual(CALM_ROW)
+  expect((await everyText(band)).join('\n')).not.toContain('/reload-plugins')
+  await band.unmount()
+
+  const ui = await startView($)
+  expect(await partLines(ui, 'm2b')).toEqual(['This session runs m2b 0.3.0 and m2b 0.3.1 is installed: run /reload-plugins.', CURATED])
+  await ui.unmount()
+})
+
 test('a band newer than the installed m2b, as from a checkout, says nothing about versions', async ($, on) => {
   // Covers: B96
   const fake = new FakeM2b()
+  fake.shows = ONLY_WHILE_WAITING
   fake.version = '0.3.0'
   fake.bandVersion = '0.10.0'
   await start($, on, fake)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await everyText(ui)).toEqual([ENGINES_OWN_DRAWING])
+  await ui.unmount()
+  const beside = await startView($)
+  expect(await partLines(beside, 'm2b')).toEqual([CURATED])
+  await beside.unmount()
+})
+
+test('a band newer than the installed m2b, as from a checkout, is calm where it is always there and says nothing about versions', async ($, on) => {
+  // Covers: B96, B213
+  const fake = new FakeM2b()
+  fake.version = '0.3.0'
+  fake.bandVersion = '0.10.0'
+  await start($, on, fake)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await shownBand(ui)).toEqual(CALM_ROW)
   await ui.unmount()
   const beside = await startView($)
   expect(await partLines(beside, 'm2b')).toEqual([CURATED])

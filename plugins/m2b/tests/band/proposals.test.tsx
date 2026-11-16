@@ -4,11 +4,14 @@ import type { Engine } from 'claude-code/testing'
 
 import {
   BAND,
+  CALM_ROW,
   ENGINES_OWN_DRAWING,
   FakeM2b,
   HOME,
   NOW,
+  ONLY_WHILE_WAITING,
   OPEN,
+  SHOWN_WITHOUT_ENTRY,
   answerKeys,
   buttonsAt,
   everyText,
@@ -113,6 +116,7 @@ test('while proposals wait the band counts each, and the pane has one row with t
 test('with no proposal waiting the band counts none, the pane has no line for them and their tab says no number', async ($, on) => {
   // Covers: B127
   const fake = proposedFake()
+  fake.shows = ONLY_WHILE_WAITING
   for (const proposed of fake.proposals ?? []) {
     proposed.answer = 'keep'
   }
@@ -126,6 +130,18 @@ test('with no proposal waiting the band counts none, the pane has no line for th
   expect(await buttons(ui)).toEqual([])
   expect((await shownTabs(ui)).map(tab => tab.label)).toEqual(['Overview', 'Proposals', 'Review', 'Settings'])
   await ui.unmount()
+})
+
+test('with no proposal waiting a band that is always there is calm and counts none', async ($, on) => {
+  // Covers: B127, B213
+  const fake = proposedFake()
+  for (const proposed of fake.proposals ?? []) {
+    proposed.answer = 'keep'
+  }
+  await start($, on, fake)
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await shownBand(band)).toEqual(CALM_ROW)
+  await band.unmount()
 })
 
 test('the task that tells a phone proposals wait is not counted in the band and is no row in the pane', async ($, on) => {
@@ -674,7 +690,8 @@ test('a shared answer whose proposals are of another shape is loaded again inste
   // Covers: B127
   const fake = proposedFake()
   const proposals = { waiting: [{ id: '--all', kind: 'person', text: 'Dana', quote: 'Dana', day: '2026-03-04', topic: null, due: null }], answered: 0, error: null }
-  const stored = { writtenAtMs: NOW - 1_000, value: { snapshot: NO_TASKS, status: null, version: '0.3.0', proposals } }
+  const snapshot = { ...NO_TASKS, shows: SHOWN_WITHOUT_ENTRY }
+  const stored = { writtenAtMs: NOW - 1_000, value: { snapshot, status: null, version: '0.3.0', proposals } }
   const files: Files = new Map([[CACHE, JSON.stringify(stored)]])
   await start($, on, fake, {}, files)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -687,13 +704,47 @@ test('a shared answer whose proposals are of another shape is loaded again inste
 test('a shared answer of a band that does not know proposals says nothing about them, and the next own look does', async ($, on) => {
   // Covers: B127
   const fake = proposedFake()
-  const stored = { writtenAtMs: NOW - 1_000, value: { snapshot: NO_TASKS, status: null, version: '0.3.0' } }
+  const snapshot = { ...NO_TASKS, shows: ONLY_WHILE_WAITING }
+  const stored = { writtenAtMs: NOW - 1_000, value: { snapshot, status: null, version: '0.3.0' } }
   const files: Files = new Map([[CACHE, JSON.stringify(stored)]])
   const { clock } = await start($, on, fake, {}, files)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
 
   expect(fake.calls).toEqual([])
   expect(await everyText(ui)).toEqual([ENGINES_OWN_DRAWING])
+
+  await clock.advance(60_000)
+  expect(await shownBand(ui)).toEqual(rowSaying('3 wait for you'))
+  await ui.unmount()
+})
+
+test('a shared answer of a band that does not know proposals leaves a band that is always there calm, and the next own look counts them', async ($, on) => {
+  // Covers: B127, B213
+  const fake = proposedFake()
+  const snapshot = { ...NO_TASKS, shows: SHOWN_WITHOUT_ENTRY }
+  const stored = { writtenAtMs: NOW - 1_000, value: { snapshot, status: null, version: '0.3.0' } }
+  const files: Files = new Map([[CACHE, JSON.stringify(stored)]])
+  const { clock } = await start($, on, fake, {}, files)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+
+  expect(fake.calls).toEqual([])
+  expect(await shownBand(ui)).toEqual(CALM_ROW)
+
+  await clock.advance(60_000)
+  expect(await shownBand(ui)).toEqual(rowSaying('3 wait for you'))
+  await ui.unmount()
+})
+
+test('a shared answer that names neither proposals nor settings of the band is not taken: m2b is asked, and its own look counts the proposals', async ($, on) => {
+  // Covers: B127, B213
+  const fake = proposedFake()
+  const stored = { writtenAtMs: NOW - 1_000, value: { snapshot: NO_TASKS, status: null, version: '0.3.0' } }
+  const files: Files = new Map([[CACHE, JSON.stringify(stored)]])
+  const { clock } = await start($, on, fake, {}, files)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+
+  expect(fake.calls).toEqual([['band', '--json']])
+  expect(await shownBand(ui)).toEqual(rowSaying('3 wait for you'))
 
   await clock.advance(60_000)
   expect(await shownBand(ui)).toEqual(rowSaying('3 wait for you'))

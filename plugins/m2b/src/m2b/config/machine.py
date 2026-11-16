@@ -58,7 +58,13 @@ CURATION_KEYS = (
     "paused",
 )
 DISTILLATE_KEYS = ("skip_under",)
-BAND_KEYS = ("due_tasks", "topics")
+BAND_KEYS = ("place", "due_tasks", "topics")
+# Where the band stands: above the prompt and always there, at the end of the hint line below the
+# prompt, or above the prompt only while it has something to say.
+BAND_ABOVE, BAND_BELOW, BAND_WAITING = "above", "below", "waiting"
+BAND_PLACES = (BAND_ABOVE, BAND_BELOW, BAND_WAITING)
+# Always there: someone who installed m2b and has nothing waiting would otherwise see nothing of it.
+DEFAULT_BAND_PLACE = BAND_ABOVE
 # How the band shows the owner's tasks due today or overdue: not at all, how many, or the first by name.
 DUE_TASKS_OFF, DUE_TASKS_COUNT, DUE_TASKS_LIST = "off", "count", "list"
 DUE_TASKS_CHOICES = (DUE_TASKS_OFF, DUE_TASKS_COUNT, DUE_TASKS_LIST)
@@ -145,6 +151,8 @@ class DistillateSettings:
 
 @dataclass(frozen=True)
 class BandSettings:
+    # One of BAND_PLACES.
+    place: str = DEFAULT_BAND_PLACE
     # One of DUE_TASKS_CHOICES. The pane lists the tasks whatever this says.
     due_tasks: str = DEFAULT_DUE_TASKS
     # Whether the band names how many topics m2b gave the session.
@@ -263,7 +271,11 @@ def _distillate(fields: Fields, home: Path) -> DistillateSettings:
 
 def _band(fields: Fields) -> BandSettings:
     fields.reject_unknown(SECTION_KEYS["band"])
-    return BandSettings(due_tasks=_due_tasks(fields), topics=fields.boolean("topics", default=False))
+    return BandSettings(
+        place=fields.choice("place", BAND_PLACES, default=DEFAULT_BAND_PLACE),
+        due_tasks=_due_tasks(fields),
+        topics=fields.boolean("topics", default=False),
+    )
 
 
 def _due_tasks(fields: Fields) -> str:

@@ -234,9 +234,9 @@ def answering_beats() -> tuple[Beat, ...]:
 
 # How many Tabs lead from the prompt to ``sonnet`` of the model of curation in the settings of the
 # demo store: three tabs of the pane, then every value that is not in force of the settings above
-# it (two of the tasks in the band, one each of the topics, of reading the sessions and of handing
-# in), then it.
-TABS_TO_THE_MODEL = 9
+# it (two each of where the band stands and of the tasks in the band, one each of the topics, of
+# reading the sessions and of handing in), then it.
+TABS_TO_THE_MODEL = 11
 # How many Shift+Tabs lead back to it from the row of "About this setup", the last button of the
 # view: every value that is not in force of the settings below the model (one each of the pause,
 # of the git commit and of the language), then it.

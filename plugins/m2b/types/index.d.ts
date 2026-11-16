@@ -24,8 +24,14 @@ export type BandReview = {
 /** One of the owner's own tasks due today or overdue. */
 export type BandDueTask = { id: string; title: string; overdue: boolean }
 
-/** What the band shows of the tasks due and of the topics, as the machine's `band` settings say. */
-export type BandShows = { dueTasks: 'off' | 'count' | 'list'; topics: boolean }
+/**
+ * Where the band stands: above the prompt and always there, at the end of the hint line below the
+ * prompt, or above the prompt only while it has something to say.
+ */
+export type BandPlace = 'above' | 'below' | 'waiting'
+
+/** Where the band stands and what it shows of the tasks due and of the topics, as the machine's `band` settings say. */
+export type BandShows = { place: BandPlace; dueTasks: 'off' | 'count' | 'list'; topics: boolean }
 
 export type BandSnapshot = {
   candidates: BandCandidate[]
@@ -33,7 +39,7 @@ export type BandSnapshot = {
   error: string | null
   /** The tasks due today or overdue, whatever the band shows of them. Absent where the core named none: not known, which is not none due. */
   due?: BandDueTask[]
-  /** Absent in an answer a band before these settings shared: the band then shows what a machine without an entry shows. */
+  /** Absent where the core's answer named no settings this band knows: the band then shows what a machine without an entry shows. */
   shows?: BandShows
 }
 

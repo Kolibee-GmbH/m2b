@@ -7,6 +7,29 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A setting for where the band stands, `band.place`, in the settings under "What m2b shows":
+  `above`, `below` or `waiting` (`m2b settings set band.place below`).
+  - `above` is what a machine without an entry has: the band's row is above the prompt in every
+    session. While nothing waits and no task is due it is calm, `m2b` and `open` alone, both
+    stepped back, so the pane is one press away: Ctrl+X Tab, then Enter, or a click.
+  - `waiting` is the band as it was: there only while something waits or a task is due, and
+    `/m2b-pane` opens the pane otherwise.
+  - `below` leaves the space above the prompt free and puts the band at the end of the hint line
+    under it: `m2b`, the counts in their colors, as many as the line has room for (`…` stands
+    for the rest), and, under the fullscreen layout, the button `open` for a mouse click; no key
+    reaches a button there, so anywhere else the line names `/m2b-pane`. Where the line has not
+    room for the first count, m2b's words are added to the engine's own line, stepped back, and
+    cut where it ends (`m2b 1 waits for you · /m2b-pane`). The tasks due are counted there,
+    never listed.
+
+### Changed
+
+- The band above the prompt is there in every session unless `band.place` says otherwise: a
+  session where nothing waits now shows one calm row, `m2b  [ open ]`, where it showed none.
+  `m2b settings set band.place waiting` brings the band of 0.6.0 back.
+
 ## [0.6.0] - 2026-11-16
 
 The band above the prompt is one row that counts what waits for you, and the m2b pane is where

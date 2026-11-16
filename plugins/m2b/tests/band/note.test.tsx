@@ -3,7 +3,7 @@ import { expect, test } from 'claude-code/testing'
 import type { CommandRunResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { FakeM2b, HOME, TROUBLED_STATUS, TROUBLE_LINE, start } from './harness'
+import { FakeM2b, HOME, SHOWN_WITHOUT_ENTRY, TROUBLED_STATUS, TROUBLE_LINE, start } from './harness'
 import type { Files } from './harness'
 
 const NOTE = 'm2b-note'
@@ -89,7 +89,7 @@ test('after a note the status line is read again, whatever another session store
   const fake = new FakeM2b()
   const { clock, statuses } = await start($, on, fake, {}, files)
   expect(statuses.at(-1)).toBeUndefined()
-  const snapshot = { candidates: [], review: null, error: null }
+  const snapshot = { candidates: [], review: null, error: null, shows: SHOWN_WITHOUT_ENTRY }
   const other = { writtenAtMs: clock.now(), value: { snapshot, status: null, version: '0.3.0' } }
   files.set(`${HOME}/.local/state/m2b/band-answer.json`, JSON.stringify(other))
   fake.status = TROUBLED_STATUS

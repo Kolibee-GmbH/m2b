@@ -2,9 +2,12 @@ import { expect, test } from 'claude-code/testing'
 
 import {
   BAND,
+  CALM_ROW,
   ENGINES_OWN_DRAWING,
   FakeM2b,
   NOW,
+  ONLY_WHILE_WAITING,
+  SHOWN_WITHOUT_ENTRY,
   STATUS,
   TROUBLED_STATUS,
   TROUBLE_LINE,
@@ -56,9 +59,19 @@ test('five candidates and the review are one count in the band, and each a row w
 })
 
 test('nothing to show draws nothing of its own', async ($, on) => {
-  await start($, on, new FakeM2b())
+  const fake = new FakeM2b()
+  fake.shows = ONLY_WHILE_WAITING
+  await start($, on, fake)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await everyText(ui)).toEqual([ENGINES_OWN_DRAWING])
+  await ui.unmount()
+})
+
+test('nothing to show is the calm row where the band is always there', async ($, on) => {
+  // Covers: B213
+  await start($, on, new FakeM2b())
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await shownBand(ui)).toEqual(CALM_ROW)
   await ui.unmount()
 })
 
@@ -166,7 +179,7 @@ test('an answer another session stored within 55 seconds is used without startin
       `${cache}/band-answer.json`,
       JSON.stringify({
         writtenAtMs: NOW - 10_000,
-        value: { snapshot: { candidates, review: null, error: null }, status: TROUBLE_LINE, version: '0.3.0' },
+        value: { snapshot: { candidates, review: null, error: null, shows: SHOWN_WITHOUT_ENTRY }, status: TROUBLE_LINE, version: '0.3.0' },
       }),
     ],
   ])
@@ -194,9 +207,26 @@ test('an answer another session stored within 55 seconds is used without startin
 test('after its own turn a session reads again, whatever another session stored', async ($, on) => {
   const files: Files = new Map()
   const fake = new FakeM2b()
+  fake.shows = ONLY_WHILE_WAITING
   const { clock } = await start($, on, fake, {}, files)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await everyText(ui)).toEqual([ENGINES_OWN_DRAWING])
+
+  fake.candidate('c1', 'Remember? Acme moved')
+  await clock.advance(10_000)
+  await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 't1', reason: 'answer' })
+  await clock.advance(1)
+  expect(await shownBand(ui)).toEqual(rowSaying('1 waits for you'))
+  await ui.unmount()
+})
+
+test('after its own turn a session reads again and the calm row counts, whatever another session stored', async ($, on) => {
+  // Covers: B213
+  const files: Files = new Map()
+  const fake = new FakeM2b()
+  const { clock } = await start($, on, fake, {}, files)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await shownBand(ui)).toEqual(CALM_ROW)
 
   fake.candidate('c1', 'Remember? Acme moved')
   await clock.advance(10_000)
@@ -212,7 +242,7 @@ test('a slow load never replaces an answer another session started later', async
   const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
   fake.delayMs = args => (args[0] === 'band' ? 30_000 : 0)
   const { clock } = await start($, on, fake, {}, files)
-  const snapshot = { candidates: [], review: null, error: null }
+  const snapshot = { candidates: [], review: null, error: null, shows: SHOWN_WITHOUT_ENTRY }
   const newer = { writtenAtMs: NOW + 5_000, value: { snapshot, status: null, version: '0.3.0' } }
   files.set(cache, JSON.stringify(newer))
   await clock.advance(31_000)
@@ -269,7 +299,7 @@ test('after keep the tasks are read from m2b itself, not from the answer stored 
       JSON.stringify({
         writtenAtMs: NOW,
         value: {
-          snapshot: { candidates: [{ id: 'c1', title: 'Remember? Acme moved' }], review: null, error: null },
+          snapshot: { candidates: [{ id: 'c1', title: 'Remember? Acme moved' }], review: null, error: null, shows: SHOWN_WITHOUT_ENTRY },
           status: null,
           version: '0.3.0',
         },
@@ -292,6 +322,7 @@ test('after keep the tasks are read from m2b itself, not from the answer stored 
 test('a candidate settled in another session is not written, and the pane says so where it was pressed', async ($, on) => {
   // Covers: B30, B207
   const fake = new FakeM2b().candidate('c1', 'Remember? Alex runs on Tuesdays')
+  fake.shows = ONLY_WHILE_WAITING
   const { clock } = await start($, on, fake)
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
   const ui = await startView($)
@@ -316,6 +347,32 @@ test('a candidate settled in another session is not written, and the pane says s
   await band.unmount()
 })
 
+test('a candidate settled in another session leaves a band that is always there calm, with no word of the press', async ($, on) => {
+  // Covers: B207, B213
+  const fake = new FakeM2b().candidate('c1', 'Remember? Alex runs on Tuesdays')
+  const { clock } = await start($, on, fake)
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const ui = await startView($)
+  fake.beforeCandidateList = () => {
+    const task = fake.tasks[0]
+    if (task !== undefined) {
+      task.completed = true
+    }
+  }
+
+  await ui.press({ key: 'drop:c1' })
+  await clock.advance(UNDO_MS)
+
+  expect(fake.writes()).toEqual([])
+  expect(await partLines(ui, 'waits')).toEqual([
+    'Already settled in another session, nothing written: Remember? Alex runs on Tuesdays',
+    'Nothing waits for you.',
+  ])
+  expect(await shownBand(band)).toEqual(CALM_ROW)
+  await ui.unmount()
+  await band.unmount()
+})
+
 test('a failing command shows one error line', async ($, on) => {
   // Covers: X11
   const fake = new FakeM2b().candidate('c1', 'Remember? Alex runs on Tuesdays')
@@ -332,9 +389,28 @@ test('a failing command shows one error line', async ($, on) => {
 test('the band reloads every 60 seconds and after each turn', async ($, on) => {
   // Covers: B31
   const fake = new FakeM2b()
+  fake.shows = ONLY_WHILE_WAITING
   const { clock } = await start($, on, fake)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await everyText(ui)).toEqual([ENGINES_OWN_DRAWING])
+
+  fake.candidate('c1', 'Remember? Acme moved')
+  await clock.advance(60_000)
+  expect(await shownBand(ui)).toEqual(rowSaying('1 waits for you'))
+
+  fake.candidate('c2', 'Remember? Dana likes tea')
+  await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 't1', reason: 'answer' })
+  await clock.advance(1)
+  expect(await shownBand(ui)).toEqual(rowSaying('2 wait for you'))
+  await ui.unmount()
+})
+
+test('a band that is always there is calm until a reload finds something, every 60 seconds and after each turn', async ($, on) => {
+  // Covers: B31, B213
+  const fake = new FakeM2b()
+  const { clock } = await start($, on, fake)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await shownBand(ui)).toEqual(CALM_ROW)
 
   fake.candidate('c1', 'Remember? Acme moved')
   await clock.advance(60_000)
@@ -428,6 +504,7 @@ function slowFirstCandidateList(fake: FakeM2b): () => void {
 
 test('a reload that read before keep was pressed does not bring the candidate back', async ($, on) => {
   const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
+  fake.shows = ONLY_WHILE_WAITING
   const arm = slowFirstCandidateList(fake)
   const { clock } = await start($, on, fake)
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -442,6 +519,27 @@ test('a reload that read before keep was pressed does not bring the candidate ba
   expect(await answerKeys(ui)).toEqual([])
   expect(await texts(ui)).not.toContain('Remember? Acme moved')
   expect(await everyText(band)).toEqual([ENGINES_OWN_DRAWING])
+  await ui.unmount()
+  await band.unmount()
+})
+
+test('a reload that read before keep was pressed does not bring the count back to a band that is always there', async ($, on) => {
+  // Covers: B213
+  const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
+  const arm = slowFirstCandidateList(fake)
+  const { clock } = await start($, on, fake)
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const ui = await startView($)
+  arm()
+  await clock.advance(60_000)
+
+  await ui.press({ key: 'keep:c1' })
+  await clock.advance(SLOW_RELOAD_MS)
+
+  expect(fake.writes()).toEqual([['tasks', 'complete', '--', 'c1']])
+  expect(await answerKeys(ui)).toEqual([])
+  expect(await texts(ui)).not.toContain('Remember? Acme moved')
+  expect(await shownBand(band)).toEqual(CALM_ROW)
   await ui.unmount()
   await band.unmount()
 })

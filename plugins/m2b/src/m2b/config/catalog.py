@@ -255,10 +255,22 @@ def _of_this_machine() -> tuple[Setting, ...]:
         ),
         _switch(
             MACHINE,
+            "band.place",
+            "Where the band stands",
+            "The band is m2b's row in a session, with the button that opens the pane: above keeps it above the "
+            "prompt, also while nothing waits; waiting draws it there only while something waits or a task is "
+            "due; below puts it at the end of the hint line under the prompt and leaves the space above free. "
+            "Below the prompt no key reaches the button and a mouse click only under the fullscreen layout: "
+            "/m2b-pane opens the pane.",
+            machine.DEFAULT_BAND_PLACE,
+            machine.BAND_PLACES,
+        ),
+        _switch(
+            MACHINE,
             "band.due_tasks",
             "Tasks in the band",
-            "Your tasks due today or overdue in the band above the prompt: off shows none there, count says how "
-            "many, list names the first three. The pane lists them whatever this says.",
+            "Your tasks due today or overdue in the band: off shows none there, count says how many, list names "
+            "the first three, which a band below the prompt counts as well. The pane lists them whatever this says.",
             machine.DEFAULT_DUE_TASKS,
             machine.DUE_TASKS_CHOICES,
         ),
@@ -396,7 +408,11 @@ def groups() -> tuple[Group, ...]:
     """Every setting once, by what a person wants from m2b, in the order a view shows the groups."""
     add_ons = tuple((MACHINE, f"{machine.ADDONS_KEY}.{name}") for name in addons.addon_names())
     return (
-        Group(SHOWS, "What m2b shows", ((MACHINE, "band.due_tasks"), (MACHINE, "band.topics"))),
+        Group(
+            SHOWS,
+            "What m2b shows",
+            ((MACHINE, "band.place"), (MACHINE, "band.due_tasks"), (MACHINE, "band.topics")),
+        ),
         Group(
             READS,
             "What m2b reads",
@@ -484,6 +500,7 @@ def _machine_values(config: MachineConfig) -> dict[str, Shown]:
         "curation.git_directory": _plain(None if curation.git_directory is None else str(curation.git_directory)),
         "curation.paused": _plain(curation.paused),
         "distillate.skip_under": _counted(len(config.distillate.skip_under), "no folders", "{} folder", "{} folders"),
+        "band.place": _plain(config.band.place),
         "band.due_tasks": _plain(config.band.due_tasks),
         "band.topics": _plain(config.band.topics),
         "sessions.propose": _plain(config.sessions.propose),

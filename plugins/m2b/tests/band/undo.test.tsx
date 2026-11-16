@@ -1,6 +1,19 @@
 import { expect, test } from 'claude-code/testing'
 
-import { BAND, FakeM2b, answerKeys, linesAt, lookOf, partLines, rowSaying, shownBand, start, startView } from './harness'
+import {
+  BAND,
+  CALM_ROW,
+  FakeM2b,
+  ONLY_WHILE_WAITING,
+  answerKeys,
+  linesAt,
+  lookOf,
+  partLines,
+  rowSaying,
+  shownBand,
+  start,
+  startView,
+} from './harness'
 
 const UNDO_MS = 5_000
 
@@ -68,6 +81,7 @@ test('while a press waits, its row offers only undo and the other rows stay pres
 test('a press another session settled during the window writes nothing and says so in the pane, where it was pressed', async ($, on) => {
   // Covers: B30, B207
   const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
+  fake.shows = ONLY_WHILE_WAITING
   const { clock } = await start($, on, fake)
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
   const ui = await startView($)
@@ -85,6 +99,30 @@ test('a press another session settled during the window writes nothing and says 
   expect(await partLines(ui, 'waits')).toEqual([refused, 'Nothing waits for you.'])
   expect(await lookOf(ui, refused)).toEqual({ color: 'error', dimColor: undefined, wrap: 'wrap' })
   expect(await shownBand(band)).toBeNull()
+  await ui.unmount()
+  await band.unmount()
+})
+
+test('a press another session settled during the window leaves a band that is always there calm, and the pane says so', async ($, on) => {
+  // Covers: B207, B213
+  const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
+  const { clock } = await start($, on, fake)
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const ui = await startView($)
+
+  await ui.press({ key: 'drop:c1' })
+  const task = fake.tasks[0]
+  if (task !== undefined) {
+    task.completed = true
+  }
+  await clock.advance(UNDO_MS)
+
+  expect(fake.writes()).toEqual([])
+  expect(await partLines(ui, 'waits')).toEqual([
+    'Already settled in another session, nothing written: Remember? Acme moved',
+    'Nothing waits for you.',
+  ])
+  expect(await shownBand(band)).toEqual(CALM_ROW)
   await ui.unmount()
   await band.unmount()
 })

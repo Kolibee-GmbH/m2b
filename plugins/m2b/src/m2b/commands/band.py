@@ -1,4 +1,4 @@
-"""``band``: everything the band above the prompt shows, in one call.
+"""``band``: everything the band shows, in one call.
 
 The band refreshes about once a minute in every open session, so this answer reaches and reads the
 task list once and sorts it by marker, instead of one list per marker, and hands the same probe of
@@ -14,8 +14,10 @@ list, whatever the band shows of them. ``tasks.due`` holds the same tasks only w
 ``band.due_tasks`` is ``list``: a band from before the three values draws every task this key
 names, so it stays what such a band may list.
 ``band`` is the machine config's section of that name as it reads, so the band need not ask for
-the config: ``due_tasks``, how the band shows the tasks due (``off``, ``count`` or ``list``), and
-``topics``, whether it names how many topics the session was given.
+the config: ``place``, where the band stands (``above`` the prompt, ``below`` it or above it only
+while something is ``waiting``), ``due_tasks``, how the band shows the tasks due (``off``,
+``count`` or ``list``), and ``topics``, whether it names how many topics the session was given. A
+band from before ``place`` reads the other two and stands where it always stood.
 ``tasks.review`` holds, while a review task is open, the changes of the facts it names as data:
 each with its fact file, a short topic, the whole lines before and after and the words that
 differ, each copy of ``memory/`` from before a run, and the review's paragraphs these stand for,

@@ -181,7 +181,7 @@ test('what one session was given never reaches the answer the sessions share', a
   expect(shared).toContain('Remember? Dana prefers tea')
   expect(shared).not.toContain('"name":"Northwind"')
   // The one word on topics there is the machine's setting, whether the band counts them: no session's topics.
-  expect(JSON.parse(shared).value.snapshot.shows).toEqual({ dueTasks: 'count', topics: false })
+  expect(JSON.parse(shared).value.snapshot.shows).toEqual({ place: 'above', dueTasks: 'count', topics: false })
   expect(shared.split('"topics"')).toHaveLength(2)
   expect(Object.keys(JSON.parse(shared).value).sort()).toEqual(['health', 'proposals', 'run', 'snapshot', 'status', 'version'])
   expect([...files.values()].join('\n')).not.toContain('Acme Ltd')
@@ -700,7 +700,7 @@ for (const dueTasks of ['off', 'count', 'list'] as const) {
   test(`the part Today lists the tasks due whatever the band shows of them, with ${dueTasks} too: today's first, each word in its color and the title at full strength`, async ($, on) => {
     // Covers: B102
     const fake = busyFake()
-    fake.shows = { dueTasks, topics: false }
+    fake.shows = { place: 'above', dueTasks, topics: false }
     await start($, on, fake)
 
     const ui = await startView($)
