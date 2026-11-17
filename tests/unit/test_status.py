@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import datetime
 import json
+from pathlib import Path
 from typing import Any
 from unittest import mock
 
 import test_runner
-from m2b import cli, proposal_answers, proposals
+from m2b import cli, handed_in, proposal_answers, proposals
 from m2b.curate import machine_state
 from m2b.run_record import RUN_RECORD
+from m2b.store.base import StoreError
+from m2b.store.guard import DatalessGuard
 
 
 def _iso(moment: datetime.datetime) -> str:
@@ -24,6 +27,51 @@ class StatusTest(test_runner.RunnerTest):
 
     def record(self, **fields: Any) -> None:
         self.write(RUN_RECORD, json.dumps({"machine_id": "sb-test-m1", **fields}))
+
+    def test_it_counts_what_sessions_handed_in_and_has_no_line_while_nothing_waits(self) -> None:
+        """Covers: B240"""
+        self.curating()
+        self.assertEqual(self.run_json("status")["handed_in"], {"count": 0, "evicted": 0})
+        self.assertNotIn("handed in", self.run_command("status")[1])
+
+        self.write(f"{handed_in.FOLDER}/s1.a1b2c3d4e5f6.json", "{}")
+        self.write(f"{handed_in.FOLDER}/s2.b2c3d4e5f6a1.json", "words no check has seen")
+
+        self.assertEqual(self.run_json("status")["handed_in"], {"count": 2, "evicted": 0})
+        out = self.run_command("status")[1]
+        self.assertIn("handed in: 2 waiting for the next curation run\n", out)
+        self.assertNotIn("words no check has seen", out)
+
+    def test_a_folder_of_handed_in_proposals_that_cannot_be_listed_is_said_and_the_other_parts_answer(self) -> None:
+        """Covers: B240"""
+        self.curating()
+        self.capture()
+        failure = StoreError("state/core/handed-in cannot be listed")
+
+        with mock.patch("m2b.handed_in.waiting", side_effect=failure):
+            answer = self.run_json("status")
+            out = self.run_command("status")[1]
+
+        self.assertEqual(answer["handed_in"], {"error": "state/core/handed-in cannot be listed"})
+        self.assertEqual(answer["inbox"]["count"], 1)
+        self.assertIn("handed in: could not look: state/core/handed-in cannot be listed\n", out)
+        self.assertIn("inbox: 1\n", out)
+
+    def test_a_handed_in_file_that_is_not_downloaded_is_counted_and_named_as_such(self) -> None:
+        """Covers: B240"""
+        self.curating()
+        self.write(f"{handed_in.FOLDER}/s1.a1b2c3d4e5f6.json", "{}")
+        self.write(f"{handed_in.FOLDER}/s2.b2c3d4e5f6a1.json", "{}")
+
+        evicted = mock.patch.object(
+            DatalessGuard, "is_evicted", side_effect=lambda path: Path(path).name == "s2.b2c3d4e5f6a1.json"
+        )
+        with evicted:
+            answer = self.run_json("status")["handed_in"]
+            out = self.run_command("status")[1]
+
+        self.assertEqual(answer, {"count": 2, "evicted": 1})
+        self.assertIn("handed in: 2 waiting for the next curation run (1 not downloaded)\n", out)
 
     def test_on_the_curating_machine_it_reports_inbox_due_run_and_backends(self) -> None:
         self.curating()

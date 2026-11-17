@@ -2,8 +2,9 @@
 hanging or failed run at once.
 
 Inbox count, the run record, whether a run is due (only on the curating machine, the only one
-where that question has an answer), whether the backends can be reached, and, where sessions are
-read for proposals or were, how many of the proposals the person kept lately. The backend probes
+where that question has an answer), whether the backends can be reached, where sessions are
+read for proposals or were, how many of the proposals the person kept lately, and how many
+proposals sessions handed in wait for the next run to take them in. The backend probes
 start other programs, so their answer is kept for 5 minutes in the machine state; the rest is read
 fresh. Each part that cannot be looked at says why instead of disappearing.
 
@@ -20,7 +21,7 @@ import datetime
 import json
 from typing import Any
 
-from m2b import proposal_answers, proposals
+from m2b import handed_in, proposal_answers, proposals
 from m2b.addons import ADDONS, is_on
 from m2b.atomic_file import replace_atomically
 from m2b.commands import Context
@@ -89,6 +90,7 @@ def status_answer(config: MachineConfig, context: Context, tasks_check: Check | 
     answers = _proposal_answers(store, config, now)
     if answers is not None:
         answer["proposal_answers"] = answers
+    answer["handed_in"] = _handed_in(store)
     return answer
 
 
@@ -115,6 +117,18 @@ def _inbox(store: Store) -> dict[str, Any]:
     except StoreError as error:
         return {"error": str(error)}
     return {"count": len(scan.files) + len(scan.evicted), "evicted": len(scan.evicted)}
+
+
+def _handed_in(store: Store) -> dict[str, Any]:
+    """How many proposals sessions handed in wait for the next run, counted like the inbox.
+
+    Between the call of a session and the run nothing else shows that a session proposed anything.
+    """
+    try:
+        waiting = handed_in.waiting(store)
+    except StoreError as error:
+        return {"error": str(error)}
+    return {"count": waiting.count, "evicted": waiting.evicted}
 
 
 def _run(store: Store, machine: MachinePaths, this_machine: str, now: datetime.datetime) -> dict[str, Any]:
@@ -242,6 +256,12 @@ def _print_text(answer: dict[str, Any]) -> None:
         print(f"proposals: {_proposal_answers_text(answers)}")
         for line in _proposal_ways_lines(answers):
             print(line)
+    handed = answer["handed_in"]
+    if "error" in handed:
+        print(f"handed in: could not look: {handed['error']}")
+    elif handed["count"]:
+        not_downloaded = f" ({handed['evicted']} not downloaded)" if handed["evicted"] else ""
+        print(f"handed in: {handed['count']} waiting for the next curation run{not_downloaded}")
     on = [name for name, is_addon_on in answer["addons"].items() if is_addon_on]
     print(f"add-ons on: {', '.join(on) if on else 'none'}")
 

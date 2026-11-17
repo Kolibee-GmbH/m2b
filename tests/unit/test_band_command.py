@@ -12,6 +12,7 @@ import test_proposals_command
 import test_runner
 from m2b import cli, launcher, proposals, topic_state
 from m2b.commands import band, doctor
+from m2b.store.base import StoreError
 from m2b.tasks import markers
 from test_proposal_answers import DANA_ID, LADDER_ID
 from test_proposals import DANA, LADDER
@@ -382,9 +383,33 @@ class BandProposalsTest(test_proposals_command.ProposalsCommandTest):
         )
         self.assertEqual(part["answered"], 1)
 
+    def test_it_carries_how_many_handed_in_proposals_wait_for_a_run_beside_the_proposals_and_in_the_status(
+        self,
+    ) -> None:
+        """Covers: B240"""
+        target = self.store_root / "state" / "core" / "handed-in" / "s1.a1b2c3d4e5f6.json"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("words no check has seen", encoding="utf-8")
+
+        answer = self.band()
+
+        self.assertEqual(answer["proposals"]["handed_in"], 1)
+        self.assertEqual(answer["status"]["handed_in"], {"count": 1, "evicted": 0})
+        self.assertNotIn("words no check has seen", json.dumps(answer))
+
+    def test_a_folder_of_handed_in_proposals_that_cannot_be_listed_leaves_the_proposals_listed(self) -> None:
+        """Covers: B240"""
+        failure = StoreError("state/core/handed-in cannot be listed")
+
+        with mock.patch("m2b.handed_in.waiting", side_effect=failure):
+            answer = self.band()
+
+        self.assertEqual(answer["proposals"], {"proposals": [], "answered": 0, "handed_in": None})
+        self.assertEqual(answer["status"]["handed_in"], {"error": "state/core/handed-in cannot be listed"})
+
     def test_a_store_without_proposals_answers_an_empty_list(self) -> None:
         """Covers: B126"""
-        self.assertEqual(self.band()["proposals"], {"proposals": [], "answered": 0})
+        self.assertEqual(self.band()["proposals"], {"proposals": [], "answered": 0, "handed_in": 0})
 
     def test_answers_that_are_not_downloaded_are_named_in_this_part_and_the_rest_still_answers(self) -> None:
         """Covers: B6, B126"""

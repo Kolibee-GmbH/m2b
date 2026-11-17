@@ -699,7 +699,7 @@ test('once m2b is no longer set up on this machine the count of the proposals go
 test('a shared answer whose proposals are of another shape is loaded again instead of drawn', async ($, on) => {
   // Covers: B127
   const fake = proposedFake()
-  const proposals = { waiting: [{ id: '--all', kind: 'person', text: 'Dana', quote: 'Dana', day: '2026-03-04', topic: null, due: null }], answered: 0, error: null }
+  const proposals = { waiting: [{ id: '--all', kind: 'person', text: 'Dana', quote: 'Dana', day: '2026-03-04', topic: null, due: null }], answered: 0, handedIn: 0, error: null }
   const snapshot = { ...NO_TASKS, shows: SHOWN_WITHOUT_ENTRY }
   const stored = { writtenAtMs: NOW - 1_000, value: { snapshot, status: null, version: '0.3.0', proposals } }
   const files: Files = new Map([[CACHE, JSON.stringify(stored)]])

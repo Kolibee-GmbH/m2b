@@ -789,7 +789,7 @@ class WaitingTaskTest(GleanStepTest):
         self.assertEqual(self.kept()["counts"]["person"]["expired"], 1)
         (task,) = self.proposals_tasks()
         self.assertTrue(task.completed)
-        self.assertEqual(self.run_json("band")["proposals"], {"proposals": [], "answered": 0})
+        self.assertEqual(self.run_json("band")["proposals"], {"proposals": [], "answered": 0, "handed_in": 0})
         self.assertEqual(
             self.info("proposals"), ["1 proposal from the sessions got no answer for 14 days and waits no longer"]
         )

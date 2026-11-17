@@ -433,6 +433,16 @@ proposals sessions handed in from a tool's result: 1 waiting, 3 kept, 2 dropped,
 `waiting` counts the proposals without an answer. One you answered since the last curation run is
 counted apart until that run files it: `1 waiting, 2 answered for the next run, 3 kept, ...`.
 
+What a session handed in is one of these proposals only once a run took it in. Until then
+`m2b status` says how many wait, and nothing of what they say:
+
+```text
+handed in: 2 waiting for the next curation run
+```
+
+`m2b proposals` says the same below its listing, and the overview of the m2b pane says it above
+`curate now`, so you see that a session proposed something and that a run is worth starting.
+
 Where the store is a git repository, a handed-in file is committed with the waiting captures
 before a run's first step, and the run takes in only what a commit holds, so taking that run back
 puts the file where the next run takes it in again; a file that came in later, or was not

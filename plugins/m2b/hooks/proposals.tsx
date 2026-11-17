@@ -26,7 +26,7 @@ export const KEEP_ALL = 'proposals:all'
 /** The key of `undo` beside keep all, drawn only while that press waits. */
 export const UNDO_ALL = 'undo:all'
 
-const NO_PROPOSALS: BandProposals = { waiting: [], answered: 0, error: null }
+const NO_PROPOSALS: BandProposals = { waiting: [], answered: 0, handedIn: 0, error: null }
 // Where a quote stands when it was typed, as the core names it.
 const TYPED = 'typed'
 
@@ -103,6 +103,8 @@ export function isProposals(value: unknown): value is BandProposals {
     Array.isArray(value['waiting']) &&
     value['waiting'].every(isProposal) &&
     isCount(value['answered']) &&
+    // An answer of a band from before the count says nothing of what sessions handed in: it is not taken for "none".
+    (value['handedIn'] === null || isCount(value['handedIn'])) &&
     isTextOrNull(value['error'])
   )
 }
@@ -121,6 +123,12 @@ export function parseProposals(part: unknown): BandProposals {
   if (!isObject(part) || !Array.isArray(part['proposals']) || !part['proposals'].every(isProposal) || !isCount(part['answered'])) {
     return { ...NO_PROPOSALS, error: OTHER_SHAPE }
   }
+  // A core from before the count leaves it out: the pane says nothing of what sessions handed
+  // in. Null is the core's word for a folder it could not list, which is not none.
+  const handedIn = part['handed_in'] === undefined ? 0 : part['handed_in']
+  if (handedIn !== null && !isCount(handedIn)) {
+    return { ...NO_PROPOSALS, error: OTHER_SHAPE }
+  }
   const waiting = part['proposals'].map(({ id, kind, text, quote, day, topic, due, source, tool, by }) => ({
     id,
     kind,
@@ -133,7 +141,7 @@ export function parseProposals(part: unknown): BandProposals {
     tool,
     by,
   }))
-  return { waiting, answered: part['answered'], error: null }
+  return { waiting, answered: part['answered'], handedIn, error: null }
 }
 
 export function countLine(count: number): string {
@@ -197,6 +205,22 @@ export function answeredLine(answered: number, machine: string | null = null): s
   const run = machine === null ? 'the next curation run' : `the next curation run on ${machine}`
   return `${answered} ${answered === 1 ? 'answer waits' : 'answers wait'} for ${run}, which files what you kept`
 }
+
+/**
+ * What waits for the next curation run, in one sentence: the proposals sessions handed in, which
+ * the run takes in, and the answers to proposals, which it files. Null where neither waits. One
+ * sentence, since two that both end in "wait for the next curation run" read as a repetition.
+ */
+export function waitingForRunLine(handedIn: number, answered: number): string | null {
+  const waiting = [
+    ...(handedIn === 1 ? ['1 proposal handed in by a session'] : handedIn > 1 ? [`${handedIn} proposals handed in by sessions`] : []),
+    ...(answered === 1 ? ['1 answer of yours'] : answered > 1 ? [`${answered} answers of yours`] : []),
+  ]
+  return waiting.length === 0 ? null : `Waiting for the next curation run: ${waiting.join(', ')}.`
+}
+
+/** Said where the core could not count what sessions handed in: not known is never "none". */
+export const HANDED_IN_NOT_COUNTED = 'm2b could not look at what sessions handed in.'
 
 const RUN_UNDER_WAY = 'A curation run is under way.'
 const RUN_FILES_THE_KEPT = 'A curation run is under way: it files what you kept.'

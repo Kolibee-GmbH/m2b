@@ -39,6 +39,8 @@ const UNDER_WAY = 'A curation run is under way.'
 const WAITS_FOR_UNDO = '[undo] starting a curation run'
 const NOT_STARTED = 'No curation run started: '
 const CURATED = '2 in inbox · curated 18:02'
+const ONE_ANSWER_OF_YOURS = 'Waiting for the next curation run: 1 answer of yours.'
+const TWO_ANSWERS_OF_YOURS = 'Waiting for the next curation run: 2 answers of yours.'
 
 const DIM = { color: undefined, dimColor: true, wrap: 'wrap' }
 const TROUBLE = { color: 'error', dimColor: undefined, wrap: 'wrap' }
@@ -268,7 +270,7 @@ for (const [situation, answer, words] of [
     expect(await lookOf(ui, notice)).toEqual(TROUBLE)
     // The overview says the same where it says how curation stands.
     await pressTab(ui, 'overview')
-    expect(await partLines(ui, 'm2b')).toEqual([notice, CURATED, ONE_ANSWER_WAITS, CURATE_NOW_LINE])
+    expect(await partLines(ui, 'm2b')).toEqual([notice, CURATED, ONE_ANSWER_OF_YOURS, CURATE_NOW_LINE])
     await ui.unmount()
   })
 }
@@ -367,8 +369,8 @@ test('the overview says how many answers wait for a run between the line about c
   await clock.advance(UNDO_MS)
 
   await pressTab(ui, 'overview')
-  expect(await partLines(ui, 'm2b')).toEqual([CURATED, TWO_ANSWERS_WAIT, CURATE_NOW_LINE])
-  expect(await lookOf(ui, TWO_ANSWERS_WAIT)).toEqual(DIM)
+  expect(await partLines(ui, 'm2b')).toEqual([CURATED, TWO_ANSWERS_OF_YOURS, CURATE_NOW_LINE])
+  expect(await lookOf(ui, TWO_ANSWERS_OF_YOURS)).toEqual(DIM)
 
   fake.status = RUNNING
   await clock.advance(60_000)
@@ -386,7 +388,7 @@ test('on a machine that does not curate the overview says how many answers wait 
   await clock.advance(UNDO_MS)
 
   await pressTab(ui, 'overview')
-  expect(await partLines(ui, 'm2b')).toEqual([CURATED, ONE_ANSWER_WAITS, 'Curation runs on tower-2.'])
+  expect(await partLines(ui, 'm2b')).toEqual([CURATED, ONE_ANSWER_OF_YOURS, 'Curation runs on tower-2.'])
   expect(await viewButtons(ui)).toEqual([])
   await ui.unmount()
 })

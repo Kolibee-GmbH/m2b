@@ -279,6 +279,8 @@ export class FakeM2b {
   toastFails = false
   /** What a reading of the sessions proposed; null as a core that does not know proposals answers. */
   proposals: FakeProposal[] | null = []
+  /** How many proposals sessions handed in wait for a run; null as a core from before the count, which leaves it out. */
+  handedInWaiting: number | null = 0
   /** When set, the proposals part of the band's answer is this error, as with answers that are not downloaded. */
   proposalsError: string | null = null
   /** When set, the proposals part is this instead, whatever its shape. */
@@ -657,6 +659,7 @@ export class FakeM2b {
     return {
       proposals: waiting.map(({ answer: _, ...fields }) => fields),
       answered: this.proposals.length - waiting.length,
+      ...(this.handedInWaiting === null ? {} : { handed_in: this.handedInWaiting }),
     }
   }
 

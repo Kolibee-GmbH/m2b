@@ -109,10 +109,12 @@ export type BandProposal = {
 }
 
 /**
- * The proposals that wait for keep or drop, as `m2b band --json` names them, and how many answers
- * wait for the next curation run. `error` is why m2b could not look; nothing is listed then.
+ * The proposals that wait for keep or drop, as `m2b band --json` names them, how many answers
+ * wait for the next curation run, and how many proposals sessions handed in wait for a run to
+ * take them in: their number alone, never a word of them, and null where m2b could not count
+ * them, which is not none. `error` is why m2b could not look; nothing is listed then.
  */
-export type BandProposals = { waiting: BandProposal[]; answered: number; error: string | null }
+export type BandProposals = { waiting: BandProposal[]; answered: number; handedIn: number | null; error: string | null }
 
 /** The last curation run, as `m2b band --json` reports it under `status.run`; times as written, with their offset. */
 export type BandRun = {

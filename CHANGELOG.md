@@ -18,6 +18,9 @@ All notable changes to this project are documented here. The format follows
   many, with `curate now` below them on the machine that curates.
 - `m2b curate --detach --after-answers` starts a run only where the answers call for one, and
   with `--json` says why none started.
+- What a session handed in shows before the next run takes it in: `m2b status` and `m2b proposals`
+  say how many such proposals wait, `m2b band --json` carries the number, and the overview of the
+  m2b pane says it above `curate now`. Only the number, never the words.
 
 ## [0.8.0] - 2026-11-17
 

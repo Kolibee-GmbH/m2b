@@ -25,8 +25,9 @@ so the band can draw them readably and leave the rest of the review as written. 
 paragraph the open review still holds are named: the changes are this machine's, the review is
 shared, and another machine's run may have rewritten it.
 ``proposals`` is the answer of ``proposals --json``: what a reading of the sessions proposed and
-still waits for keep or drop, with the fields the band draws, and how many answers wait for the
-next run. A store where that cannot be looked at is named in ``proposals.error``, like the task
+still waits for keep or drop, with the fields the band draws, how many answers wait for the
+next run, and how many proposals sessions handed in wait for a run to take them in (null where
+their folder could not be listed). A store where that cannot be looked at is named in ``proposals.error``, like the task
 list in its part, and the other parts still answer: could not look is never an empty list.
 ``version`` is this core's: the launcher always runs the installed one, while a session keeps the
 band it loaded, so the band compares the two and asks for a reload when they differ.

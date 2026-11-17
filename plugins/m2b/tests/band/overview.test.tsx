@@ -138,13 +138,14 @@ const FULL = modelWith({
       proposed('c3c3c3c3c3c3', 'The spare key is in the shed.'),
     ],
     answered: 0,
+    handedIn: 0,
     error: null,
   },
   health: healthWith({ curation: CURATED }),
 })
 
 /** A session m2b looked at, with nothing in any part. */
-const EMPTY = modelWith({ given: KNOWN, snapshot: QUIET, proposals: { waiting: [], answered: 0, error: null } })
+const EMPTY = modelWith({ given: KNOWN, snapshot: QUIET, proposals: { waiting: [], answered: 0, handedIn: 0, error: null } })
 
 const STORE_UNREAD = 'm2b could not look for proposals: the store at /home/alex/Notes cannot be read'
 const SETTLED = 'Already settled in another session, nothing written: Remember? Dana prefers tea'
@@ -158,7 +159,7 @@ const TROUBLED = modelWith({
   rowNotice: SETTLED,
   folderNotice: NOT_TURNED_ON,
   snapshot: QUIET,
-  proposals: { waiting: [], answered: 0, error: 'the store at /home/alex/Notes cannot be read' },
+  proposals: { waiting: [], answered: 0, handedIn: 0, error: 'the store at /home/alex/Notes cannot be read' },
   health: healthWith({ curation: '2 in inbox', troubles: [RUN_FAILED, NO_CALENDAR] }),
   versionLine: OLDER,
 })
