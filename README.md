@@ -20,6 +20,17 @@
   <a href="#limits">Limits</a> · <a href="#docs">Docs</a> · <a href="SECURITY.md">Security</a> · <a href="CHANGELOG.md">Changelog</a>
 </p>
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/overview-dark.svg">
+  <img src="docs/images/overview-light.svg" width="100%" alt="How m2b works, from left to right. 1, what goes in: in a Claude Code session you type &quot;remember that Dana's birthday is on 3 March&quot;, in any session and any project; or you give it a file, a PDF, a scan, a photo; or, optional, m2b proposes what was said in passing and you keep or drop it. 2, m2b keeps it on your machine, as plain files in a folder you own, ~/m2b: what is new lands in inbox/ as you gave it; the curator, drawn with the m2b mark, files it at your next session start into memory/MEMORY.md, which starts every session, memory/dana.md, a file per subject, corpus/2026/11/ with your words and files, and tasks/ or Apple Reminders; optional: a worklog, a daily log, via herdr. 3, what comes back: a later session in any project is asked &quot;when is Dana's birthday?&quot; and answers 3 March (dana.md); you can ask for more, a search or the note behind a fact; and the band and the pane show what waits for you, as the row &quot;m2b 1 waits for you&quot; with the button &quot;open&quot;, where you keep or drop, tick tasks and see facts. A thick line in the logo's color follows the sentence from the first prompt through the inbox, the curator and MEMORY.md to the answer">
+</picture>
+
+<sub>One sentence on its way through m2b. You say it, give m2b a file, or keep what it proposes from
+what you said in passing (off until you turn it on). The curator is a run in the background, a
+model through your Claude Code login, that files what is new at your next session start. After
+that every session starts with the summary in `MEMORY.md`; a search, the note behind a fact, the
+band and the pane bring back the rest. Below: the same way in three real sessions.</sub>
+
 ![Three steps in a terminal. First, in a Claude Code session in the project invoice-tool, the prompt "remember that Dana's birthday is on 3 March" makes Claude call the m2b note tool, which saves the sentence as one file in the inbox. Second, the next Claude Code session starts in the same project and nobody types anything while its start begins a curation run in the background; then /m2b-review opens the m2b pane, whose part "Last curation run" reads "succeeded" with its time. Third, a new Claude Code session in another project, garden-site, is asked "when is Dana's birthday?" and answers 3 March from the note dana.md, without a tool call. Above the prompt of each session stands the band's row, "m2b" and "open" alone, as nothing waits](docs/images/demo.gif)
 
 <sub>One sentence from a prompt into a later session: three real Claude Code sessions on a demo machine with invented notes, recorded by `scripts/readme-demo`. The start of the second begins the real background run that files the note; the one command typed there only shows that run. The waits are shortened.</sub>
@@ -36,12 +47,13 @@ What m2b adds to Claude Code's own memory, the notes Claude keeps for itself for
 - facts that end on a known day, rewritten once the day has passed.
 
 m2b keeps what you know about people, agreements and your own life. It is no linked knowledge
-base: notes have no links to one another, nothing is synthesized from them, and search is full
-text ([Limits](#limits)).
+base: the only links lead from a fact to the notes and documents it rests on, and from a note to
+an older one about the same thing; nothing is synthesized from them, and search is full text
+([Limits](#limits)).
 
 **What it costs.** Setup is three slash commands in Claude Code and a few questions; setup itself,
 started as `/m2b:setup` with every answer given at once, took 15 seconds (2026-11-12). A session
-starts with a summary of your notes, at most 8 KB, and about 10,000 characters of tool and skill
+starts with a summary of your notes, at most 8 KB, and about 11,000 characters of tool and skill
 descriptions, without a model call. Filing uses your Claude Code login: five notes cost US$0.013 at
 API prices (2026-11-08).
 
@@ -70,7 +82,7 @@ in the one after it ask where the spare key is. [Getting started](docs/getting-s
 what you should see at each step, and [Install](#install) what m2b needs. Before you install:
 [what runs on your machine](#what-runs-on-your-machine) and [uninstalling](#uninstalling).
 
-![A Claude Code session in an unrelated project is asked when Sam brings the plywood and where the spare key for the shed is. Claude answers from the notes it started with, without a tool call: Sam brings the plywood for the shed roof on 14 November (sam.md), two days before the day of the picture, and the key is under the blue pot by the back door (house.md). Above the prompt the band is one row, "m2b 1 waits for you" with the button "open", and below it one task due today and one overdue, by name](docs/images/session-start.png)
+![A Claude Code session in an unrelated project is asked when Sam brings the plywood and where the spare key for the shed is. Claude answers from the notes it started with, without a tool call: Sam brings the plywood for the shed roof on 14 November (sam.md), three days before the day of the picture, which the answer notes, and the key is under the blue pot by the back door (house.md). Above the prompt the band is one row, "m2b 1 waits for you" with the button "open", and below it one task due today and one overdue, by name](docs/images/session-start.png)
 
 <sub>A new session in an unrelated repository answers from your notes. Above the prompt, [the band](#the-band)
 counts what waits for you and names what is due. All names and notes are invented.</sub>
@@ -81,9 +93,11 @@ counts what waits for you and names what is due. All names and notes are invente
 |---|---|
 | "remember that Dana's birthday is on 3 March" | a note in your own words goes into the inbox, and the next run files it as a fact |
 | "remind me to call the plumber on Friday" | the same, and a task due that day in your task list: Apple Reminders or Markdown files |
+| "keep this contract, ~/Documents/lease.pdf, it runs until March" | after your yes to Claude Code's question, a copy of the file goes into the inbox with your words beside it; the next run reads it, a PDF up to its 60th page, and files its facts |
 | "what's open?" | your open tasks by due date, and today's events where a calendar is set up |
 | "I returned Sam's ladder, tick it off" | that task is ticked; m2b asks when more than one fits |
 | "what did I note about the shed?" | the lines that match, each with its file, from a full-text search over everything you noted |
+| "what exactly does the rowing club's handbook say about lockers?" | an answer from the fact's file and the note of the document behind it, which says what stands on which page; the session never reads the document itself |
 | "show me something old" | one or a few old notes, each with the reason it was picked |
 | "put the dentist in my calendar, Thursday at 10" | an event in the calendar you name (macOS, experimental) |
 
@@ -115,9 +129,9 @@ Dana's birthday is on 3 March.
 ```
 
 **2. A run files it.** At the next session start m2b sees a note waiting and starts a curation
-run in the background: a `claude -p` of its own, apart from your session, in which a model reads
-the inbox and may call only the commands its step needs. Here it took 11 seconds. It wrote one
-line into `memory/MEMORY.md`, the distillate:
+run in the background, the curator of the picture at the top: a `claude -p` of its own, apart from
+your session, in which a model reads the inbox and may call only the commands its step needs.
+Here it took 11 seconds. It wrote one line into `memory/MEMORY.md`, the distillate:
 
 ```markdown
 ## Facts
@@ -178,13 +192,22 @@ session ran it ([The band](docs/band.md)).
 `/m2b-pane` opens the pane in the view it starts in, its overview: what waits for you, what is
 due today, what m2b gave this session and how m2b itself stands, with the button `curate now`
 on the machine that curates, which starts a curation run in the background. A row of tabs above
-every view leads to the proposals, the review and the settings. Under Claude Code's fullscreen layout the
+every view leads to the others: `Proposals`, `Review`, `Tasks` with every open task of yours and
+`done` to tick one, `Facts` with what every session starts with and every topic, and `Settings`.
+In `Facts`, `details` on a fact shows its file with the notes and documents it rests on, `show`
+one of those, and `open the file` a PDF or a picture in the system's viewer
+([What m2b knows](docs/band.md#what-m2b-knows)). Under Claude Code's fullscreen layout the
 pane sits beside the conversation, where it opens by itself in a wide terminal, and
 `/m2b-settings` turns it to every setting of m2b, sorted by what you want from m2b, a switch
 with its values to press
 ([This session, what waits and today, in the pane](docs/band.md#this-session-what-waits-and-today-in-the-pane)).
 
-![A Claude Code session in the fullscreen layout after /m2b-pane: the m2b pane sits beside the chat, under the tabs Overview, Proposals 3, Review and Settings. The part "Waits for you", framed in the warning color, counts 5: 3 proposals from your sessions, in the tab Proposals; a "Still current?" question with keep and drop; the review of the last curation run with ok and "1 fact changed: Sam". The part "Today" names one task due today and one overdue, and the part "This session" begins below it. Left of the pane the band above the prompt is one row, "m2b 5 wait for you" with the button "open", and the two tasks below it](docs/images/pane.png)
+![A Claude Code session in the fullscreen layout after /m2b-pane: the m2b pane sits beside the chat, under the tabs Overview, Proposals 3, Review, Tasks, Facts and Settings. The part "Waits for you", framed in the warning color, counts 5: 3 proposals from your sessions, in the tab Proposals; a "Still current?" question with keep and drop; the review of the last curation run with ok and "1 fact changed: Sam". The part "Today" names one task due today and one overdue, and the part "This session" begins below it. Left of the pane the band above the prompt is one row, "m2b 5 wait for you" with the button "open", and the two tasks below it](docs/images/pane.png)
+
+![A Claude Code session in the fullscreen layout with the m2b pane beside the chat, under the tabs Overview, Proposals, Review, Tasks, Facts and Settings and a seventh tab, "dana". The part "Dana" holds the fact file's lines: my sister, birthday on 3 March, would love a good fountain pen, treasurer of the harbour rowing club, its fee 240 a year, due 31 January. The part "What it rests on" lists two entries, each with the button "show" below it: a note of 2026-10-12, "Dana's birthday is on 3 March. She would love a good fountain pen.", and a document of 2026-11-09, harbour-rowing-club-handbook.pdf, "p. 1: the harbour rowing club, handbook 2026". Left of the pane the band above the prompt is one row, "m2b 1 waits for you" with the button "open", and one task due today and one overdue below it](docs/images/fact.png)
+
+<sub>A fact's file, one press below the tab `Facts`: its lines, and the note and the document it
+rests on, each with `show`. All names and notes are invented.</sub>
 
 **Proposals from your sessions.** A curation run can also read what you typed and pasted in Claude
 Code and propose what you said in passing, without "remember this", each proposal with the words
@@ -203,16 +226,17 @@ nothing and no run starts.
 |---|---|---|---|---|
 | Session-start hooks | at every session start: four commands, each with a limit of 20 or 30 seconds | no | nothing by m2b. They print the distillate (at most 8 KB) and a routing rule into the session, start a curation run when one is due, keep the `m2b` command up to date and, with the worklog on, set its recording switch and keep its recorder, its link in herdr and its timer in place. Where sessions are read (below), they note the git remotes of the session's folder in a file on the machine | `m2b distillate off` in a folder keeps the distillate out of the sessions there and below; the other three commands have no switch of their own. With the plugin turned off in `/plugin`, none of the four runs |
 | Prompt hook | before every prompt: one command, with a limit of 5 seconds | no | nothing by m2b. When the prompt names a topic, it adds that topic's facts to the session, at most 4 KB; it reads the prompt and stores nothing of it | it has no switch of its own; where the distillate is off, it adds nothing |
-| Curation run | in the background, on the one machine that curates: at a session start when a capture waits or the last successful run is more than 20 hours old, on a schedule if you set one up, or when you start one with `m2b curate --force` or `curate now` in the m2b pane | yes, in the steps with something to read: `claude -p` with `haiku` by default. A run with nothing to read starts no model | the captures in the inbox, your memory files, and what a step reads or searches in the archive, to the model | `m2b config set curation.paused true` on the curating machine: no session start and no schedule starts one there until you set it back to `false`, while `m2b curate --force` and `curate now` in the pane still run one ([Pausing](docs/curation.md#pausing)). `m2b curate take-over` on another machine moves curation there; with the plugin turned off in `/plugin`, no session starts one, while a schedule you set up goes on until you delete it |
+| Curation run | in the background, on the one machine that curates: at a session start when a capture waits or the last successful run is more than 20 hours old, on a schedule if you set one up, or when you start one with `m2b curate --force` or `curate now` in the m2b pane | yes, in the steps with something to read: `claude -p` with `haiku` by default. A run with nothing to read starts no model | the captures in the inbox, a PDF among them up to its 60th page, your memory files, and what a step reads or searches in the archive, to the model | `m2b config set curation.paused true` on the curating machine: no session start and no schedule starts one there until you set it back to `false`, while `m2b curate --force` and `curate now` in the pane still run one ([Pausing](docs/curation.md#pausing)). `m2b curate take-over` on another machine moves curation there; with the plugin turned off in `/plugin`, no session starts one, while a schedule you set up goes on until you delete it |
 | Reading your sessions | once in a curation run, only after you said yes in setup | yes, one call that can use no tool | the distillate, your latest answers to its proposals and, for each session since the last reading, its folder, its day and the prompts you typed, with what you pasted into them, with credentials redacted, to the model | `m2b config set curation.read_sessions false` |
 | Handing in by a session | only after you turned `sessions.propose` on, in a terminal outside Claude Code or with a press on its `on` in the pane's settings: the agent of a session hands in a proposal for your memory by itself, checked against that session's transcript, and the next curation run takes it into the list you answer | no | nothing. A quote of up to 500 characters from what the agent read for you, a mail or a document, lies in the store's state with the session's id and the tool's name, and syncs with the store. The tool's description, about 3,200 characters, is part of every session that has it, and a call runs without a permission prompt ([Security](SECURITY.md#what-a-session-hands-in)) | `m2b config set sessions.propose false` |
 | Worklog add-on | only after `/m2b:worklog-setup`, on the machine that curates: herdr starts its recorder on each event, a timer starts it every five minutes, and one step of a curation run writes the day's worklog | yes, once a day with sessions | the day's prompts, the end of each session's last answer, your commit subjects and, for each session, its folder, herdr workspace, repository and time spans, with the spheres of work and customers you named in its setup, the inbox, memory and what the step searches in the archive, to the model. The recordings stay on the machine | `m2b addons off worklog` stops its model step and, from the next session start, the recording; `/m2b:worklog-setup remove` also takes the recorder out of herdr and the timer out of the operating system |
-| The band | while a session is open and mods are on in Claude Code: it asks `m2b` about once a minute and after each of your turns, and about the session itself also at its start, three seconds after a prompt and after a compaction | no | nothing by m2b. The descriptions of its note and search tools, about 5,000 characters, are part of every session it runs in. A call of either tool runs without Claude Code's permission prompt, the note tool only for a note in your own words; your own `permissions.ask` and `permissions.deny` rules for `mcp__m2b__note` and `mcp__m2b__search` come first ([Security](SECURITY.md#the-tools-the-model-calls)) | it has no switch of its own; with mods off in Claude Code it does not run |
+| The band | while a session is open and mods are on in Claude Code: it asks `m2b` about once a minute and after each of your turns, and about the session itself also at its start, three seconds after a prompt and after a compaction | no | nothing by m2b. The descriptions of its note and search tools, about 5,500 characters, are part of every session it runs in. A call of either tool runs without Claude Code's permission prompt, the note tool only for a note in your own words; your own `permissions.ask` and `permissions.deny` rules for `mcp__m2b__note` and `mcp__m2b__search` come first ([Security](SECURITY.md#the-tools-the-model-calls)) | it has no switch of its own; with mods off in Claude Code it does not run |
 
 m2b opens no network connection of its own and sends no telemetry. Your notes reach a model only
 through your Claude Code, under your login. In a session: the distillate, the facts of a topic a
 prompt names, and what you ask the session to look up, such as search hits from the inbox, the
-archive and memory, rediscovered notes, your open tasks and today's events. In a curation run:
+archive and memory, a fact's file or a note read whole, rediscovered notes, your open tasks and
+today's events. In a curation run:
 what the table says. Whoever provides the model behind your Claude Code receives them as it
 receives your sessions.
 

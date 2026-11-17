@@ -14,6 +14,7 @@ need none of it: you say what you want kept or want to know, and the session doe
 |---|---|---|
 | "remember that the spare key is under the blue pot", "note this" | the note tool, or the `capture` skill where the band does not run | one file in `inbox/` with your words; the next curation run files it |
 | "remind me to call the plumber on Friday" | the same | the note, and a task due that day in your task list |
+| "keep this contract, ~/Documents/lease.pdf" | the `capture` skill, and Claude Code asks you before the copy | a copy of the file in `inbox/` with a note beside it that holds your words; the next curation run reads it |
 | "put it in my calendar: dentist, Tuesday at 10" | the `capture` skill | an event in the calendar you name (macOS, with a calendar set up) |
 | "what did I note about the shed?" | the search tool, or the `search` skill | the lines that match, each with its file |
 | "what exactly does the rowing club's handbook say about lockers?" | the same, called with the fact file's name | the whole fact file, then the note of the document behind it with its outline |
@@ -41,7 +42,7 @@ There are two spellings, and they are two different things:
 |---|---|
 | `/m2b:m2b` | says what m2b is and what to type; `/m2b:m2b setup` guides through setup, `/m2b:m2b status` shows the inbox, the last curation run and the backends, `/m2b:m2b doctor` checks the machine, `/m2b:m2b addons` shows the add-ons. Claude Code also runs it for `/m2b` alone; the pane is `/m2b-pane` |
 | `/m2b:setup` | sets this machine up, for a new store or one another machine already uses; `/m2b:m2b setup` starts it |
-| `/m2b:capture` | captures a note, a task or a calendar entry; saying "remember ..." does the same |
+| `/m2b:capture` | captures a note, a task, a file you name with its path or a calendar entry; saying "remember ..." does the same |
 | `/m2b:search` | searches archive, memory and inbox in full text |
 | `/m2b:todos` | open tasks by due date, and today's events; ticks a task you say is done |
 | `/m2b:rediscover` | brings one or a few old notes back into view |
@@ -57,7 +58,7 @@ do not do their work there. The first three start a curation run in the backgrou
 
 | Command | What it does |
 |---|---|
-| `/m2b-pane` | shows in the m2b pane its overview: what waits for you, what is due today, what m2b gave this session and how m2b itself stands; there a press shows a topic's lines, turns m2b off in the session's folder or, on the machine that curates, starts a curation run (`curate now`), and the tabs above lead to the other views; under the fullscreen layout that pane opens by itself |
+| `/m2b-pane` | shows in the m2b pane its overview: what waits for you, what is due today, what m2b gave this session and how m2b itself stands; there a press shows a topic's lines, turns m2b off in the session's folder or, on the machine that curates, starts a curation run (`curate now`), and the tabs above lead to the other views, of which `Tasks` (every open task, with `done`) and `Facts` (what m2b knows, each fact with `details`) have no command of their own; under the fullscreen layout that pane opens by itself |
 | `/m2b-note <text>` | writes the text into the inbox at once, through `m2b capture` |
 | `/m2b-search [--word] <text>` | shows the hits of `m2b search` in the m2b pane; `--word` matches whole words only |
 | `/m2b-review` | shows the last curation run in the m2b pane: every finding, candidate and question |
@@ -88,7 +89,8 @@ command answers as JSON with it.
 ### Tasks and calendar
 
 With Markdown tasks, these are how you look at a task's id and tick it in a terminal; with Apple
-Reminders the Reminders app does the same. In a session, saying that a task is done ticks it.
+Reminders the Reminders app does the same. In a session, saying that a task is done ticks it, and
+so does `done` on its row in the m2b pane's tab `Tasks`.
 
 | Command | What it does |
 |---|---|

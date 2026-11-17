@@ -87,7 +87,11 @@ step:
 
 A file that is no text note, dropped into `inbox/` (from the Finder, or synced from a phone),
 becomes a bundle at the next run: the file under the name the store gives it, a note beside it
-that names the original file name, and a JPEG copy of a HEIC picture. The ingest step reads it and
+that names the original file name, and a JPEG copy of a HEIC picture. A file a session copied in
+with `m2b capture-file` ([Capture](using.md#capture)) is such a bundle from the start, with your
+words in its note. Where that note has reached the curating machine and its file has not synced
+there yet, the run leaves the note in the inbox and reports it; the first run that finds the file
+beside it files both. The ingest step reads the bundle and
 files its facts like those of any capture. A PDF of more than one page is read whole up to its
 60th page, and its note gets an outline, one line per page or run of pages, with the names, numbers
 and days that stand there:
@@ -101,7 +105,10 @@ filed: facts alex.md, rowing-club.md
 ```
 
 `m2b search` finds a word of the outline as of any note, so what did not become a fact is still
-found, with the note that leads to the file. The last line above says the run stopped at page 60
+found, with the note that leads to the file. A session reads the note with its outline when a
+question goes beyond the fact, never the document itself, and the m2b pane shows both one press
+below the fact's file, with `open the file` for a PDF or a picture
+([What m2b knows](band.md#what-m2b-knows)). The last line above says the run stopped at page 60
 of 75. A file the step cannot read gets a line saying so, and the run goes on. A longer document
 makes the ingest step longer: every 20 pages are a read of their own, up to three per document.
 

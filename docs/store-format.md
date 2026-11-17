@@ -3,7 +3,7 @@
 This page describes format 3, the current one; [Formats](#formats) lists what changed and when.
 
 The store is a plain folder. Everything in it is a text file you can read and back up with any
-tool; m2b has no database and no hidden index. `STORE.md` in the store repeats the rules an
+tool, or a picture or a document you gave it; m2b has no database and no hidden index. `STORE.md` in the store repeats the rules an
 integration needs, generated from `store.json`.
 
 ```
@@ -72,7 +72,11 @@ The frontmatter is a block between `---` lines, one `key: value` per line, lists
 
 **Photos and other binary files** become a bundle: the original under the schema name, a reading
 copy when the format needs one (HEIC as JPEG on macOS), and a sidecar `<stem>.md` with
-`kind: sidecar`. The sidecar moves last, so a bundle in the archive is always complete. For a PDF
+`kind: sidecar`. The sidecar moves last, so a bundle in the archive is always complete. A file a
+session captures with `m2b capture-file` reaches the inbox as such a bundle: the sidecar is written
+first, with the words that came with the file below the line that names it and the original file
+name in the trailer, then the file. A sidecar whose file has not synced to the curating machine
+yet stays in the inbox until a run finds the file beside it. For a PDF
 of more than one page the curator writes the document's outline into the sidecar's trailer, one
 line per page or run of pages (`p. 3: ...`, `pp. 6-9: ...`) and, where it stopped before the last
 page, `outline: pages 1-60 of 75`.
@@ -256,7 +260,7 @@ show the proposal as said or under a source it does not know and write it back w
 | `corpus/` | ingest, the journal | the journal (appends to the month's file) | lint, only conflict copies identical to their original |
 | `memory/` | ingest | ingest, refresh, the sorting step, a migration after an update, harvest (only `## Current`, from "Still current?" answers), lint (a broken link it repairs) | nobody |
 | `state/core/` | the curation run; any client adds an answer to a proposal under `proposal-answers/` and a proposal a session hands in under `handed-in/` | the curating machine | harvest prunes settled candidates and removes the answers it settled; the run removes the handed-in proposals it took in; every curation run removes the proposals kept, dropped or expired 90 days ago or longer |
-| tasks (`tasks/` with the `markdown` backend, or the Reminders list) | you, integrations, capture (a follow-up), ingest, `m2b tasks add --candidate` (a memory candidate), the curation run (review, "Still current?" questions, the task for waiting proposals) | you, also through the todos skill, which ticks a task you say is done; the band ticks or drops a curator task; the curation run completes its review task when nothing needs you, and the task for waiting proposals when none waits | harvest and the refresh step, once a curator task is settled or its item is gone; lint, with the `markdown` backend, only conflict copies of task files identical to their original; you |
+| tasks (`tasks/` with the `markdown` backend, or the Reminders list) | you, integrations, capture (a follow-up), ingest, `m2b tasks add --candidate` (a memory candidate), the curation run (review, "Still current?" questions, the task for waiting proposals) | you, also through the todos skill, which ticks a task you say is done, and through the m2b pane, which ticks one of your tasks with `done` and ticks or drops a curator task with keep, drop or `ok`; the curation run completes its review task when nothing needs you, and the task for waiting proposals when none waits | harvest and the refresh step, once a curator task is settled or its item is gone; lint, with the `markdown` backend, only conflict copies of task files identical to their original; you |
 | `state/addons/<a>/`, `state/integrations/<i>/` | that add-on or integration | the same | the same |
 
 Nothing captured is ever deleted by m2b.

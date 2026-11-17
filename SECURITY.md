@@ -85,8 +85,8 @@ repository is therefore as trusted as your own, and where it lies decides who ca
 
 ## Untrusted input
 
-A capture is text from wherever it came: a share sheet, a shortcut, an integration writing into
-`inbox/`, a web page someone pasted. m2b treats it as data, but the ingest step is a model that
+A capture is text, or a file, from wherever it came: a share sheet, a shortcut, an integration
+writing into `inbox/`, a web page someone pasted, a PDF someone sent you. m2b treats it as data, but the ingest step is a model that
 reads it, and a capture can be written to steer that model. What such a capture can reach is what
 ingest is allowed: the `m2b ingest`, `m2b search` and `m2b curate report` commands, reading the
 inbox and `memory/`, and editing files in `memory/`. Two more steps read captures as evidence:
