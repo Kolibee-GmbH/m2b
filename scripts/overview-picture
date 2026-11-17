@@ -2,7 +2,8 @@
 # Writes the overview picture at the top of the README, docs/images/overview-light.svg and
 # overview-dark.svg. Needs uv, which brings fontTools for this run alone, and a folder with the
 # two typefaces the picture is drawn in (the script's docstring names the files). Look at both
-# pictures before committing them, in a browser too: there a dot travels the sentence's way once.
+# pictures before committing them, in a browser too: there a dot travels the sentence's way, rests
+# and sets out again.
 set -eu
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)

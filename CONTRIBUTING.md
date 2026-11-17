@@ -513,4 +513,5 @@ where they come from). The letters are drawn as outlines, because GitHub shows a
 loading a font, so the picture looks the same on every machine; the script measures every text
 against the room it has and stops at one that does not fit. The picture says what m2b does, so
 hold each label against the code before changing it, and look at both files in a browser: there a
-dot travels the sentence's way once, and with reduced motion asked for it stands still.
+dot travels the sentence's way, rests for a few seconds and sets out again, and with reduced motion
+asked for it stands still.
