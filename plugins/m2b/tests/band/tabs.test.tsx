@@ -67,6 +67,9 @@ const LABELS: Readonly<Record<TabId, string>> = {
  */
 type View = TabId | 'group' | 'topic' | 'fact' | 'search' | 'source'
 const VIEWS: readonly View[] = ['overview', 'proposals', 'review', 'tasks', 'facts', 'settings', 'group', 'topic', 'fact', 'search', 'source']
+// A test that walks every view and every tab grows with both, and a shared runner takes several
+// times a laptop's time for it: one such walk ran past the kit's five seconds there.
+const WALK = { timeoutMs: 20_000 }
 /** The views that stand under a tab beside the six: a seventh, and for a source an eighth. */
 const BESIDE_THE_SIX = ['group', 'topic', 'fact', 'search', 'source'] as const
 /** The button of the row the settings keep their folded group behind, which turns the pane to that group. */
@@ -440,7 +443,7 @@ test('the start view says under which tab the proposals and the whole review are
   await ui.unmount()
 })
 
-test('a press on each tab turns the pane to its view, from every other view, and reads what that view shows', async ($, on) => {
+test('a press on each tab turns the pane to its view, from every other view, and reads what that view shows', WALK, async ($, on) => {
   // Covers: B204
   const fake = fullFake()
   const { clock } = await start($, on, fake)
@@ -498,7 +501,7 @@ for (const [command, view] of [
   })
 }
 
-test('a command typed on any view turns the pane to its own, and the row marks that tab', async ($, on) => {
+test('a command typed on any view turns the pane to its own, and the row marks that tab', WALK, async ($, on) => {
   // Covers: B204
   const { clock } = await start($, on, fullFake())
   const ui = await mounted($)
@@ -622,7 +625,7 @@ test('after a press on a tab the focus is asked for the tab that leads back to t
   }
 })
 
-test('for every view left and every tab pressed, the key the focus is asked for is a tab drawn above the view turned to, was no button of the view that was left, and leads back', async ($, on) => {
+test('for every view left and every tab pressed, the key the focus is asked for is a tab drawn above the view turned to, was no button of the view that was left, and leads back', WALK, async ($, on) => {
   // Covers: B201
   const { clock } = await start($, on, fullFake())
   const ui = await mounted($)
