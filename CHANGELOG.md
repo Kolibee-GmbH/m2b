@@ -7,6 +7,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- What you keep reaches the memory without a second step: once you have answered every proposal
+  that waits and kept at least one, a curation run starts in the background and files what you
+  kept. The view of the proposals says that it runs. `curation.run_after_answers` turns that off;
+  a paused machine starts no such run, and on a machine that does not curate the view names the
+  machine whose run the answers wait for.
+- While answers to proposals wait for a run, the view of the proposals and the overview say how
+  many, with `curate now` below them on the machine that curates.
+- `m2b curate --detach --after-answers` starts a run only where the answers call for one, and
+  with `--json` says why none started.
+
 ## [0.8.0] - 2026-11-17
 
 From a fact to what it rests on. The pane has two new tabs, `Tasks` and `Facts`; a fact opens its

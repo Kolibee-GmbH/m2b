@@ -108,7 +108,7 @@ so does `done` on its row in the m2b pane's tab `Tasks`.
 
 | Command | What it does |
 |---|---|
-| `m2b curate [--force] [--detach [--json]]` | the curation run: without `--force` only when one is due, as a schedule calls it; `--detach` starts it in the background and says in one line whether a run started, with `--json` as data (`kind` and `message`), which is how `curate now` in the m2b pane starts one ([Curation](curation.md#when-it-runs)). `--refresh-all` and `--sort-facts` run now and do one more step, once ([Curation](curation.md#moving-over-an-older-distillate)) |
+| `m2b curate [--force] [--detach [--json] [--after-answers]]` | the curation run: without `--force` only when one is due, as a schedule calls it; `--detach` starts it in the background and says in one line whether a run started, with `--json` as data (`kind` and `message`), which is how `curate now` in the m2b pane starts one ([Curation](curation.md#when-it-runs)). `--detach --after-answers` starts one only where every proposal is answered and one is kept, which is what the pane asks for after an answer; `curation.run_after_answers` turns it off. `--refresh-all` and `--sort-facts` run now and do one more step, once ([Curation](curation.md#moving-over-an-older-distillate)) |
 | `m2b curate take-over` | makes this machine the curating machine ([Several machines](several-machines.md)) |
 | `m2b proposals [--json]` | what the reading of your sessions proposed and what sessions handed in, as far as it waits for your answer |
 | `m2b proposals keep [--all] <ids>` | files these proposals with the next curation run; `--all` leaves those a session handed in, which you keep by id |

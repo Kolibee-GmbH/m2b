@@ -116,6 +116,19 @@ class WaitingTest(AnswerFixture):
         self.assertEqual(waiting.proposals[0][1].text, "Alex drinks green tea.")
         self.assertEqual(waiting.answered, 1)
 
+    def test_of_the_answers_that_wait_for_a_run_the_keeps_are_counted_and_a_drop_is_none(self) -> None:
+        """Covers: B237"""
+        added = proposals.add(proposals.load(self.store), [Said(DANA, NOW.date()), Said(LADDER, NOW.date())], NOW)
+        proposals.save(self.store, added.proposals)
+        proposal_answers.give(self.store, [LADDER_ID], DROP)
+        dropped = proposal_answers.waiting(self.store)
+        self.assertEqual((dropped.answered, dropped.kept), (1, 0))
+
+        proposal_answers.give(self.store, [DANA_ID], KEEP)
+
+        waiting = proposal_answers.waiting(self.store)
+        self.assertEqual((waiting.proposals, waiting.answered, waiting.kept), ((), 2, 1))
+
     def test_a_proposal_the_run_has_settled_neither_waits_nor_counts_as_answered(self) -> None:
         self.kept(DANA, LADDER)
         self.settle(DANA_ID, proposals.KEPT)

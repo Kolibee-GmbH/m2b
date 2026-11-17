@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from m2b import launcher
+from m2b import launcher, proposals
 from m2b.commands import Context, ProblemError, UsageError
 from m2b.commands.output import print_json
 from m2b.config.machine import load_machine_config
@@ -22,18 +22,29 @@ def curate_run(arguments: argparse.Namespace, context: Context) -> int:
     in the background is told in one line, or with ``--json`` as data: ``kind`` says whether a run
     started and, where none did, why (``detach``'s kinds), so a caller that draws the answer need
     not read the sentence, and ``message`` is that sentence.
+
+    ``--after-answers`` is the start an answer to a proposal asks for, in the background alone: it
+    is no start by hand, so it goes with none of the switches that are.
     """
     if arguments.json and not arguments.detach:
         raise UsageError("--json goes with --detach: a run in the foreground is told in lines")
+    if arguments.after_answers and not arguments.detach:
+        raise UsageError("--after-answers goes with --detach: it starts a run in the background or none")
+    if arguments.after_answers and (arguments.force or arguments.refresh_all or arguments.sort_facts):
+        raise UsageError("--after-answers starts a run only when the answers call for one: leave out the other switch")
     if arguments.detach:
-        start = start_detached(
-            context.machine,
-            context.environ,
-            arguments.force,
-            runner.now(),
-            arguments.refresh_all,
-            arguments.sort_facts,
-        )
+        try:
+            start = start_detached(
+                context.machine,
+                context.environ,
+                arguments.force,
+                runner.now(),
+                arguments.refresh_all,
+                arguments.sort_facts,
+                arguments.after_answers,
+            )
+        except proposals.ProposalsError as error:
+            raise ProblemError(str(error)) from error
         if arguments.json:
             print_json({"kind": start.kind, "message": start.message})
         else:

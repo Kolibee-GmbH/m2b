@@ -253,6 +253,15 @@ def _of_this_machine() -> tuple[Setting, ...]:
             "m2b curate --force still runs one, and captures keep reaching the inbox.",
             False,
         ),
+        _switch(
+            MACHINE,
+            "curation.run_after_answers",
+            "A run after your answers",
+            "Once you have answered every proposal that waits and kept at least one, this machine starts a "
+            "curation run in the background, which files what you kept. Off, your answers wait for the next "
+            "run or for curate now. A paused machine starts none.",
+            True,
+        ),
         Setting(
             "distillate.skip_under",
             MACHINE,
@@ -434,6 +443,7 @@ def groups() -> tuple[Group, ...]:
                 (MACHINE, "curation.model"),
                 (STORE, "curating_machine"),
                 (MACHINE, "curation.paused"),
+                (MACHINE, "curation.run_after_answers"),
                 (MACHINE, "curation.git_commit"),
                 (OWNER, "language"),
             ),
@@ -510,6 +520,7 @@ def _machine_values(config: MachineConfig) -> dict[str, Shown]:
         "curation.git_commit": _plain(curation.git_commit),
         "curation.git_directory": _plain(None if curation.git_directory is None else str(curation.git_directory)),
         "curation.paused": _plain(curation.paused),
+        "curation.run_after_answers": _plain(curation.run_after_answers),
         "distillate.skip_under": _counted(len(config.distillate.skip_under), "no folders", "{} folder", "{} folders"),
         "band.place": _plain(config.band.place),
         "band.due_tasks": _plain(config.band.due_tasks),

@@ -12,11 +12,13 @@ import subprocess
 import time
 
 import test_runner
-from m2b import cli, launcher
+from m2b import cli, launcher, proposal_answers, proposals
 from m2b.config.machine import load_machine_config
 from m2b.config.store_settings import load_store_settings
 from m2b.curate import machine_state, runner
 from m2b.run_record import RUN_RECORD, RUNNING, SUCCEEDED, load_run_record
+from test_proposal_answers import DANA_ID, LADDER_ID
+from test_proposals import DANA, DAY, LADDER, NOW, Said
 
 
 class CurateCommandTest(test_runner.RunnerTest):
@@ -379,6 +381,148 @@ class DetachTest(test_runner.RunnerTest):
 
         self.assertEqual((code, err), (cli.EXIT_OK, ""))
         self.assertIn("curation is paused: no curation run starts by itself", out)
+
+
+class AfterAnswersTest(test_runner.RunnerTest):
+    """``m2b curate --detach --after-answers``: the start an answer to a proposal asks for."""
+
+    START = ("curate", "--detach", "--after-answers")
+
+    def proposed(self, *found: proposals.Proposal) -> None:
+        added = proposals.add(proposals.load(self.store), [Said(proposal, DAY) for proposal in found], NOW)
+        proposals.save(self.store, added.proposals)
+
+    def start(self) -> tuple[dict[str, str], int]:
+        """What the start answers as data, and how many runs it started."""
+        with test_runner.mock.patch("m2b.curate.detach.subprocess.Popen", return_value=_Started()) as popen:
+            answer = self.run_json(*self.START)
+        return answer, popen.call_count
+
+    def test_every_proposal_answered_and_one_kept_starts_one_run_in_the_background(self) -> None:
+        """Covers: B237"""
+        self.curating()
+        self.proposed(DANA, LADDER)
+        proposal_answers.give(self.store, [DANA_ID], proposal_answers.KEEP)
+        proposal_answers.give(self.store, [LADDER_ID], proposal_answers.DROP)
+
+        with test_runner.mock.patch("m2b.curate.detach.subprocess.Popen", return_value=_Started()) as popen:
+            answer = self.run_json(*self.START)
+
+        self.assertEqual(answer["kind"], "started")
+        self.assertIn("started in the background", answer["message"])
+        popen.assert_called_once()
+        self.assertEqual(popen.call_args.args[0][-2:], ["curate", "--force"])
+
+    def test_the_run_starts_whatever_the_inbox_holds_and_whenever_the_last_run_was(self) -> None:
+        """Covers: B237"""
+        self.curating()
+        self.proposed(DANA)
+        proposal_answers.give(self.store, [DANA_ID], proposal_answers.KEEP)
+        an_hour_ago = {"state": SUCCEEDED, "machine_id": "sb-test-m1", "started_at": _ago(1), "finished_at": _ago(1)}
+        self.write(RUN_RECORD, json.dumps({"version": 1, **an_hour_ago, "last_success": _ago(1)}))
+
+        with test_runner.mock.patch("m2b.curate.detach.subprocess.Popen") as popen:
+            _, not_asked_by_an_answer, _ = self.run_command("curate", "--detach")
+        popen.assert_not_called()
+        answer, started = self.start()
+
+        self.assertIn("no curation run is due", not_asked_by_an_answer)
+        self.assertEqual((answer["kind"], started), ("started", 1))
+
+    def test_while_a_proposal_waits_for_its_answer_no_run_starts(self) -> None:
+        """Covers: B237"""
+        self.curating()
+        self.proposed(DANA, LADDER)
+        proposal_answers.give(self.store, [DANA_ID], proposal_answers.KEEP)
+
+        answer, started = self.start()
+
+        self.assertEqual(answer, {"kind": "proposals-wait", "message": "1 proposal still waits for an answer"})
+        self.assertEqual(started, 0)
+
+    def test_drops_alone_start_no_run(self) -> None:
+        """Covers: B237"""
+        self.curating()
+        self.proposed(DANA, LADDER)
+        proposal_answers.give(self.store, [DANA_ID, LADDER_ID], proposal_answers.DROP)
+
+        answer, started = self.start()
+
+        self.assertEqual(answer, {"kind": "nothing-kept", "message": "no kept proposal waits for a curation run"})
+        self.assertEqual(started, 0)
+
+    def test_a_store_without_proposals_starts_no_run(self) -> None:
+        """Covers: B237"""
+        self.curating()
+
+        answer, started = self.start()
+
+        self.assertEqual((answer["kind"], started), ("nothing-kept", 0))
+
+    def test_with_the_setting_off_no_run_starts_and_the_answer_names_the_setting(self) -> None:
+        """Covers: B237"""
+        self.curating(curation={"run_after_answers": False})
+        self.proposed(DANA)
+        proposal_answers.give(self.store, [DANA_ID], proposal_answers.KEEP)
+
+        answer, started = self.start()
+
+        self.assertEqual((answer["kind"], started), ("off", 0))
+        self.assertIn("m2b settings set curation.run_after_answers true", answer["message"])
+
+    def test_a_paused_machine_starts_no_run_after_an_answer(self) -> None:
+        """Covers: B237, B161"""
+        self.curating(curation={"paused": True})
+        self.proposed(DANA)
+        proposal_answers.give(self.store, [DANA_ID], proposal_answers.KEEP)
+
+        answer, started = self.start()
+
+        self.assertEqual((answer["kind"], started), ("paused", 0))
+
+    def test_a_machine_that_does_not_curate_starts_no_run_after_an_answer(self) -> None:
+        """Covers: B237"""
+        self.curating()
+        self.proposed(DANA)
+        proposal_answers.give(self.store, [DANA_ID], proposal_answers.KEEP)
+        settings = self.store_root / "store.json"
+        raw = json.loads(settings.read_text(encoding="utf-8"))
+        settings.write_text(json.dumps({**raw, "curating_machine": "sb-test-m2"}), encoding="utf-8")
+
+        answer, started = self.start()
+
+        self.assertEqual((answer["kind"], started), ("not-curating", 0))
+
+    def test_while_a_run_is_under_way_no_second_one_starts(self) -> None:
+        """Covers: B237"""
+        self.curating()
+        self.proposed(DANA)
+        proposal_answers.give(self.store, [DANA_ID], proposal_answers.KEEP)
+        lock = machine_state.RunLock(self.machine)
+        self.assertTrue(lock.acquire())
+        self.addCleanup(lock.release)
+
+        answer, started = self.start()
+
+        self.assertEqual((answer["kind"], started), ("running", 0))
+
+    def test_it_is_a_start_in_the_background_alone_and_goes_with_no_switch_of_a_start_by_hand(self) -> None:
+        """Covers: B237"""
+        self.curating()
+
+        for arguments, said in (
+            (("curate", "--after-answers"), "--after-answers goes with --detach"),
+            (("curate", "--detach", "--after-answers", "--force"), "leave out the other switch"),
+            (("curate", "--detach", "--after-answers", "--refresh-all"), "leave out the other switch"),
+            (("curate", "--detach", "--after-answers", "--sort-facts"), "leave out the other switch"),
+        ):
+            with self.subTest(arguments=arguments), test_runner.mock.patch("m2b.curate.runner.curate") as run:
+                with test_runner.mock.patch("m2b.curate.detach.subprocess.Popen") as popen:
+                    code, out, err = self.run_command(*arguments)
+                run.assert_not_called()
+                popen.assert_not_called()
+                self.assertEqual((code, out), (cli.EXIT_USAGE, ""))
+                self.assertIn(said, err)
 
 
 class TakeOverTest(test_runner.RunnerTest):

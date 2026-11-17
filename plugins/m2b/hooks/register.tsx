@@ -82,11 +82,21 @@ import {
   proposalLines,
   proposalsPane,
 } from './proposals'
-import type { ProposalActions } from './proposals'
+import type { AnswersCuration, ProposalActions } from './proposals'
 import { REVIEW, undoKey } from './rows'
-import type { RowActions } from './rows'
+import type { CurateActions, RowActions } from './rows'
 import { shared } from './shared-cache'
-import { COULD_NOT_LOOK, NOT_KNOWN, curatingMachineOf, healthOf, noRunStarted, parseRunStart, statusLine, whileCurating } from './status-line'
+import {
+  COULD_NOT_LOOK,
+  NOT_KNOWN,
+  curatingMachineOf,
+  healthOf,
+  noRunStarted,
+  parseRunAfterAnswers,
+  parseRunStart,
+  statusLine,
+  whileCurating,
+} from './status-line'
 import type { RunStart } from './status-line'
 import { parseBandShows, parseBandTasks } from './tasks'
 import {
@@ -1089,7 +1099,7 @@ async function viewOfPane(
     case 'settings':
       return settingsPane($, e, view, heldSettings(view.press), settingsActions($, view.press), bodyColumns)
     case 'proposals':
-      return proposalsPane($, e, proposals, presses, await read($, proposalsNoticeAtom), proposalActions($), bodyColumns)
+      return proposalsPane($, e, proposals, presses, await read($, proposalsNoticeAtom), proposalActions($), await answersCuration($, presses), bodyColumns)
     case 'topic':
       return topicPane($, e, topicNameOf(view.press), heldTopic(view.press), bodyColumns)
     case 'search':
@@ -1237,6 +1247,7 @@ async function openByItself($: EngineInterface): Promise<void> {
 function sessionActions($: EngineInterface): SessionActions {
   return {
     ...rowActions($),
+    ...curateActions($),
     showTopic: name => showTopic($, name),
     switchFolder: async (change, folder) => {
       // What the last press could not write is no longer what the button is about.
@@ -1244,12 +1255,29 @@ function sessionActions($: EngineInterface): SessionActions {
       await press($, FOLDER_PRESS, change, folderWrite($, change, folder), UNDO_FOLDER)
     },
     undoFolder: () => undo($, FOLDER_PRESS),
+  }
+}
+
+/** The press on `curate now`, the same in every view that offers the button. */
+function curateActions($: EngineInterface): CurateActions {
+  return {
     curateNow: async () => {
-      // Why the last press started no run is no longer what the button is about.
+      // Why the last start began no run is no longer what the button is about.
       await forgetCurateNotice($)
       await press($, CURATE_PRESS, 'curate', curateWrite($), UNDO_CURATE)
     },
     undoCurate: () => undo($, CURATE_PRESS),
+  }
+}
+
+/** What the view of the proposals says of the answers that wait: how curation stands, and the press on `curate now`. */
+async function answersCuration($: EngineInterface, presses: Record<string, BandPress>): Promise<AnswersCuration> {
+  return {
+    health: await read($, healthAtom),
+    curatingMachine,
+    notice: curateNoticeOf(await read($, curateNoticeAtom)),
+    pressed: presses[CURATE_PRESS],
+    actions: curateActions($),
   }
 }
 
@@ -1265,13 +1293,9 @@ const RUN_SHOWS_AFTER_MS = 3_000
  */
 function curateWrite($: EngineInterface): PressWrite {
   return async () => {
-    const start = await startedRun($)
+    const start = await startedRun($, CURATE_NOW_CALL, parseRunStart)
     if (start.isStarted) {
-      await update($, healthAtom, health => (health === null ? health : whileCurating(health)))
-      $.clock.after(
-        RUN_SHOWS_AFTER_MS,
-        inBackground($, () => refresh($, true)),
-      )
+      await sayCurating($)
       return false
     }
     curateFailure = start.reason
@@ -1285,18 +1309,73 @@ function curateWrite($: EngineInterface): PressWrite {
   }
 }
 
-/** Asks the core for one run in the background. A command that failed, threw or answered something else started none. */
-async function startedRun($: EngineInterface): Promise<RunStart> {
+/** A run started: the pane says so at once, and the band is read again once the run's record says it too. */
+async function sayCurating($: EngineInterface): Promise<void> {
+  await update($, healthAtom, health => (health === null ? health : whileCurating(health)))
+  $.clock.after(
+    RUN_SHOWS_AFTER_MS,
+    inBackground($, () => refresh($, true)),
+  )
+}
+
+// A run now, whatever is due; and a run only where the answers to the proposals call for one.
+const CURATE_NOW_CALL = ['curate', '--force', '--detach', '--json'] as const
+const AFTER_ANSWERS_CALL = ['curate', '--detach', '--after-answers', '--json'] as const
+
+/**
+ * Asks the core for one run in the background and reads its answer with `parse`. A command that
+ * failed, threw or answered something else started none.
+ */
+async function startedRun<Start>(
+  $: EngineInterface,
+  call: readonly string[],
+  parse: (stdout: string) => Start | null,
+): Promise<Start | RunStart> {
   const failed = (reason: string): RunStart => ({ isStarted: false, refusal: 'failed', reason })
   try {
-    const outcome = await runM2b($, ['curate', '--force', '--detach', '--json'], WRITE_TIMEOUT_MS)
+    const outcome = await runM2b($, call, WRITE_TIMEOUT_MS)
     if (!outcome.ok) {
       return failed(outcome.error)
     }
-    return parseRunStart(outcome.stdout) ?? failed('m2b answered something that is not the start of a run')
+    return parse(outcome.stdout) ?? failed('m2b answered something that is not the start of a run')
   } catch (error) {
     return failed(String(error))
   }
+}
+
+/**
+ * Once an answer to a proposal is written and the band has read again: where no proposal waits
+ * any more and answers wait for a run, asks the core for the run that files what was kept. The
+ * core decides from the store whether one is due, so answers of other sessions and machines count
+ * like this one's, and it starts none while curation is paused or the setting is off. It is not
+ * asked on a machine that does not curate, nor while a run is under way, nor while a press on
+ * `curate now` waits or is being written: that press starts the run itself, or the person took it
+ * back. Where the answers call for no run nothing is said; a start that failed is said like a
+ * press on `curate now` that started none.
+ */
+async function runAfterAnswers($: EngineInterface): Promise<void> {
+  const proposals = await read($, proposalsAtom)
+  const health = await read($, healthAtom)
+  if (proposals === null || proposals.error !== null || proposals.waiting.length > 0 || proposals.answered === 0) {
+    return
+  }
+  if (health?.curates === false || health?.isCurating === true) {
+    return
+  }
+  if ((await read($, pressesAtom))[CURATE_PRESS] !== undefined) {
+    return
+  }
+  await forgetCurateNotice($)
+  const start = await startedRun($, AFTER_ANSWERS_CALL, parseRunAfterAnswers)
+  if (start.isStarted) {
+    await sayCurating($)
+    return
+  }
+  if (start.refusal === 'none-due') {
+    return
+  }
+  curateFailure = start.reason
+  await update($, curateNoticeAtom, () => start.refusal)
 }
 
 /** What the pane says of the last press that started no run, null where there is none. */
@@ -1447,6 +1526,12 @@ async function carryPressesOver($: EngineInterface): Promise<void> {
 type PressWrite = () => Promise<boolean>
 
 /**
+ * `ids` are the proposals a press on keep all stands for. `afterReload` runs once the write has
+ * landed and the band has read again, with the row released: what follows from the new state.
+ */
+type PressOptions = { ids?: string[]; afterReload?: () => Promise<void> }
+
+/**
  * A press on keep or drop writes nothing yet: the row offers undo for a few seconds, and only then
  * is the task completed or dropped, or the proposal answered. Taking a press back is forgetting it,
  * so a crash, a closed session or a reload of the mod during those seconds leaves everything as it
@@ -1464,7 +1549,7 @@ async function press(
   action: BandPress['action'],
   write: PressWrite,
   undoKey: string,
-  ids?: string[],
+  { ids, afterReload }: PressOptions = {},
 ): Promise<void> {
   const token = await newPressToken($)
   const pressed: BandPress = { action, phase: 'waiting', token, ...(ids === undefined ? {} : { ids }) }
@@ -1478,7 +1563,7 @@ async function press(
       id,
       $.clock.after(
         UNDO_WINDOW_MS,
-        inBackground($, () => settle($, id, token, write)),
+        inBackground($, () => settle($, id, token, write, afterReload)),
       ),
     )
     await focusInPane($, undoKey)
@@ -1502,7 +1587,13 @@ async function undo($: EngineInterface, id: string): Promise<void> {
  * Writes a press once its undo window is over. The row stays locked until the reload after the
  * write has landed, so a second press cannot meet the old row.
  */
-async function settle($: EngineInterface, id: string, token: string, write: PressWrite): Promise<void> {
+async function settle(
+  $: EngineInterface,
+  id: string,
+  token: string,
+  write: PressWrite,
+  afterReload?: () => Promise<void>,
+): Promise<void> {
   undoTimers.delete(id)
   const deadlineMs = (await $.clock.now()) + WRITE_LOCK_MS
   let isStillPressed = false
@@ -1516,13 +1607,18 @@ async function settle($: EngineInterface, id: string, token: string, write: Pres
   if (!isStillPressed) {
     return
   }
+  let hasReadAgain = false
   try {
     // Written: whatever the reload does, the band no longer says the write failed.
     if (await bandJobs(write)) {
       await reload($, true)
+      hasReadAgain = true
     }
   } finally {
     await update($, pressesAtom, presses => withoutPress(presses, id, token))
+  }
+  if (hasReadAgain) {
+    await afterReload?.()
   }
 }
 
@@ -1618,11 +1714,13 @@ function proposalWrite($: EngineInterface, proposals: BandProposal[], action: Ba
 }
 
 function proposalActions($: EngineInterface): ProposalActions {
+  // In the queue of the band's reads and writes: a look asked for meanwhile reads after the start, never over it.
+  const afterReload = (): Promise<void> => bandJobs(() => runAfterAnswers($))
   return {
     answer: async (proposal, action) => {
       // What the last answer could not write is said until the next press there.
       await update($, proposalsNoticeAtom, () => null)
-      await press($, pressKey(proposal.id), action, proposalWrite($, [proposal], action), undoKey(proposal.id))
+      await press($, pressKey(proposal.id), action, proposalWrite($, [proposal], action), undoKey(proposal.id), { afterReload })
     },
     keepAll: async proposals => {
       await update($, proposalsNoticeAtom, () => null)
@@ -1632,7 +1730,7 @@ function proposalActions($: EngineInterface): ProposalActions {
         'complete',
         proposalWrite($, proposals, 'complete'),
         UNDO_ALL,
-        proposals.map(proposal => proposal.id),
+        { ids: proposals.map(proposal => proposal.id), afterReload },
       )
     },
     undo: key => undo($, key),

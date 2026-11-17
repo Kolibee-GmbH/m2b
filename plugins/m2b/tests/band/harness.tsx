@@ -97,6 +97,9 @@ export const CURATE_NOW_LINE = '[curate now]'
 /** The call that starts one curation run in the background and answers how the start went. */
 export const CURATE_NOW_CALL = ['curate', '--force', '--detach', '--json']
 
+/** The call that starts a run in the background only where the answers to the proposals call for one. */
+export const AFTER_ANSWERS_CALL = ['curate', '--detach', '--after-answers', '--json']
+
 /** An answer of `m2b curate --detach --json`: what became of the start, and the sentence the command has for it. */
 export function runStart(kind: string, message: string): ProcessRunResult {
   return ok(`${JSON.stringify({ kind, message })}\n`)
@@ -300,6 +303,11 @@ export class FakeM2b {
   onSettings: ((args: readonly string[], env?: Record<string, string>) => ProcessRunResult) | null = null
   /** How `m2b curate --detach --json` ends: as the core answers a run it started, until a test says otherwise. */
   curateAnswer: ProcessRunResult = runStart('started', RUN_STARTED)
+  /**
+   * How `m2b curate --detach --after-answers --json` ends. Unset, as the core decides it from the
+   * store: no run while a proposal waits for its answer or nothing is kept, else one.
+   */
+  afterAnswersAnswer: ProcessRunResult | null = null
   /** The installed core's version, as `m2b band --json` answers it. */
   version = '0.3.0'
   /** The version in the manifest of the plugin the band was loaded from; null when it cannot be read. */
@@ -421,7 +429,7 @@ export class FakeM2b {
       return this.captureNotice === null ? result : { ...result, stderr: `m2b: ${this.captureNotice}\n` }
     }
     if (args[0] === 'curate') {
-      return this.curateAnswer
+      return args.includes('--after-answers') ? this.afterAnswers() : this.curateAnswer
     }
     if (args[0] === 'proposals' && args[1] === 'add') {
       this.handedIn.push(stdin ?? '')
@@ -650,6 +658,20 @@ export class FakeM2b {
       proposals: waiting.map(({ answer: _, ...fields }) => fields),
       answered: this.proposals.length - waiting.length,
     }
+  }
+
+  /** As the core answers a start after the answers, from the proposals this fake holds. */
+  afterAnswers(): ProcessRunResult {
+    if (this.afterAnswersAnswer !== null) {
+      return this.afterAnswersAnswer
+    }
+    const proposed = this.proposals ?? []
+    if (proposed.some(one => one.answer === undefined)) {
+      return runStart('proposals-wait', '1 proposal still waits for an answer')
+    }
+    return proposed.some(one => one.answer === 'keep')
+      ? runStart('started', RUN_STARTED)
+      : runStart('nothing-kept', 'no kept proposal waits for a curation run')
   }
 
   /** The calls that started a curation run, or tried to. */

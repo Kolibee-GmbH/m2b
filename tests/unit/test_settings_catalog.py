@@ -202,6 +202,7 @@ class CatalogTest(unittest.TestCase):
                 "curation.model",
                 "curation.paused",
                 "curation.read_sessions",
+                "curation.run_after_answers",
                 "language",
                 "sessions.propose",
             ],

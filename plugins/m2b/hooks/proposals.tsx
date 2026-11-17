@@ -1,9 +1,10 @@
 import type { CommandSpec, EngineInterface, ResolveInput } from 'claude-code'
 
-import type { BandPress, BandProposal, BandProposals, BandSettle } from '../types'
+import type { BandHealth, BandPress, BandProposal, BandProposals, BandSettle } from '../types'
 import { plainLine, writtenOut } from './plain-text'
 import { NOT_LOOKED, button, part, pressLine, said, under } from './look'
-import { candidateRow } from './rows'
+import { CURATE_ROW, candidateRow, curateButton } from './rows'
+import type { CurateActions } from './rows'
 
 /*
  * What a reading of the sessions proposed for the memory and still waits for an answer: one row
@@ -44,6 +45,19 @@ export type ProposalActions = {
   answer: (proposal: BandProposal, action: BandSettle) => Promise<void>
   keepAll: (proposals: BandProposal[]) => Promise<void>
   undo: (key: string) => Promise<void>
+}
+
+/**
+ * What becomes of the answers, as the view of the proposals says it below them: how m2b stands,
+ * the machine that curates the store where one is known, why the last start began no run, and
+ * the press on `curate now` with what it does.
+ */
+export type AnswersCuration = {
+  health: BandHealth | null
+  curatingMachine: string | null
+  notice: string | null
+  pressed: BandPress | undefined
+  actions: CurateActions
 }
 
 /** The key a press on one proposal is kept under; a task of the band's other rows never has it. */
@@ -178,8 +192,48 @@ function saidLine(proposal: BandProposal): string {
   return `${lead} ${writtenOut(proposal.day)}: "${writtenOut(proposal.quote)}"`
 }
 
-function answeredLine(answered: number): string {
-  return `${answered} ${answered === 1 ? 'answer waits' : 'answers wait'} for the next curation run, which files what you kept`
+/** How many answers wait for a run; `machine` names the machine whose run it is, where this one does not curate. */
+export function answeredLine(answered: number, machine: string | null = null): string {
+  const run = machine === null ? 'the next curation run' : `the next curation run on ${machine}`
+  return `${answered} ${answered === 1 ? 'answer waits' : 'answers wait'} for ${run}, which files what you kept`
+}
+
+const RUN_UNDER_WAY = 'A curation run is under way.'
+const RUN_FILES_THE_KEPT = 'A curation run is under way: it files what you kept.'
+
+/**
+ * Below the proposals, what becomes of the answers. While a run is under way, that it runs. Else
+ * how many answers wait for a run: on a machine that does not curate, for the run of the machine
+ * that does; on the one that curates with `curate now` below them, and above them why the last
+ * start began no run. A press on `curate now` that waits keeps its `undo` whatever a look reads
+ * meanwhile.
+ */
+function answersLines($: EngineInterface, e: ResolveInput, answered: number, curation: AnswersCuration) {
+  const ui = $.ui.resolve(e)
+  const { Box } = ui
+  const { health, curatingMachine, notice, pressed, actions } = curation
+  const waits = answered > 0 ? said(ui, answeredLine(answered), 'quiet') : null
+  if (pressed === undefined) {
+    if (health?.isCurating === true) {
+      return [said(ui, answered > 0 ? RUN_FILES_THE_KEPT : RUN_UNDER_WAY, 'quiet')]
+    }
+    if (answered === 0) {
+      return []
+    }
+    if (health?.curates === false && curatingMachine !== null) {
+      return [said(ui, answeredLine(answered, plainLine(curatingMachine)), 'quiet')]
+    }
+    if (health?.curates !== true) {
+      return [waits]
+    }
+  }
+  return [
+    notice !== null && said(ui, plainLine(notice), 'trouble'),
+    <Box key={CURATE_ROW} flexDirection="column">
+      {waits}
+      {curateButton($, e, pressed, actions)}
+    </Box>,
+  ]
 }
 
 /**
@@ -230,8 +284,9 @@ export function proposalLines(proposals: BandProposals | null): string[] {
  * The view's drawing, one part: keep all for the proposals not pressed on their own, then each
  * proposal as a row, its text, keep and drop with what it is beside them, and below them the
  * words it stands on, indented whole. `notice` is what m2b said to the last answer it refused,
- * said here, where it was pressed. Before the band's first answer about proposals the part says
- * that m2b has not looked. `columns` is the width of the pane's body.
+ * said here, where it was pressed. Below the proposals stands what becomes of the answers
+ * (`answersLines`). Before the band's first answer about proposals the part says that m2b has not
+ * looked. `columns` is the width of the pane's body.
  */
 export function proposalsPane(
   $: EngineInterface,
@@ -240,6 +295,7 @@ export function proposalsPane(
   presses: Record<string, BandPress>,
   notice: string | null,
   actions: ProposalActions,
+  curation: AnswersCuration,
   columns: number,
 ) {
   const ui = $.ui.resolve(e)
@@ -277,7 +333,7 @@ export function proposalsPane(
       </Box>
     )),
     error === null && waiting.length === 0 && said(ui, NONE_WAITS, 'quiet'),
-    answered > 0 && said(ui, answeredLine(answered), 'quiet'),
+    ...answersLines($, e, answered, curation),
   ])
 }
 

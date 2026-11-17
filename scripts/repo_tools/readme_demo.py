@@ -239,8 +239,8 @@ def answering_beats() -> tuple[Beat, ...]:
 TABS_TO_THE_MODEL = 13
 # How many Shift+Tabs lead back to it from the row of "About this setup", the last button of the
 # view: every value that is not in force of the settings below the model (one each of the pause,
-# of the git commit and of the language), then it.
-BACK_TO_THE_MODEL = 4
+# of the run after the answers, of the git commit and of the language), then it.
+BACK_TO_THE_MODEL = 5
 
 
 def settings_beats() -> tuple[Beat, ...]:

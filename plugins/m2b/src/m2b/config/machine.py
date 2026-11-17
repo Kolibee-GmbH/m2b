@@ -57,6 +57,7 @@ CURATION_KEYS = (
     "git_commit",
     "git_directory",
     "paused",
+    "run_after_answers",
 )
 DISTILLATE_KEYS = ("skip_under",)
 CAPTURE_KEYS = ("file_limit_mb",)
@@ -140,6 +141,10 @@ class CurationSettings:
     # A run asked for by hand (``m2b curate --force``) still runs, so the owner can pause the
     # background work and file the inbox when it suits.
     paused: bool = False
+    # Whether this machine starts a run once every proposal that waited is answered and one is
+    # kept (``curate.detach``), so what the owner keeps reaches the memory without a second step.
+    # Such a run is started by an answer, not asked for by hand: a paused machine starts none.
+    run_after_answers: bool = True
 
 
 @dataclass(frozen=True)
@@ -250,6 +255,7 @@ def _curation(fields: Fields, home: Path) -> CurationSettings:
         git_commit=fields.boolean("git_commit", default=True),
         git_directory=_git_directory(fields, home),
         paused=fields.boolean("paused", default=False),
+        run_after_answers=fields.boolean("run_after_answers", default=True),
     )
 
 
