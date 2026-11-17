@@ -523,7 +523,7 @@ for (const [what, look, below] of LOOKS) {
   test(`the view of a topic is one part under the topic's name, whole: ${what}`, async ($, on) => {
     // Covers: B190, B208
     const name = 'Riverside Community Choir'
-    on('ui.render', { component: 'Pane', requestId: 'topic-alone' }, (engine, e) => topicPane(engine, e, name, look, e.props.bodyColumns))
+    on('ui.render', { component: 'Pane', requestId: 'topic-alone' }, (engine, e) => topicPane(engine, e, name, look, async () => {}, e.props.bodyColumns))
 
     const ui = await $.ui.mount({ ...pane('topic-alone'), plugin: 'test', surface: 'terminal' })
 

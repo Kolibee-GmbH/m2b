@@ -155,6 +155,33 @@ class Outcome:
     is_new: bool
 
 
+@dataclass(frozen=True)
+class Waiting:
+    """How many handed-in proposals wait for a run to take them in, and how many of those are not downloaded."""
+
+    count: int
+    evicted: int
+
+
+def waiting(store: Store) -> Waiting:
+    """What waits in the folder, from its listing alone, as the inbox is counted.
+
+    No file is opened, so none is downloaded for the count: a file that is not downloaded counts
+    as one, and so does a folder that is not, since what it holds cannot be listed. A file the
+    run will find not in the form counts until that run removes it. Only the number leaves this
+    function: the words have not been through the run's checks.
+    """
+    scan = store.scan(FOLDER)
+    return Waiting(len(scan.files) + len(scan.evicted), len(scan.evicted))
+
+
+def waiting_line(count: int) -> str:
+    """The sentence for a person: how many wait, and for what."""
+    if count == 1:
+        return "1 proposal handed in by a session waits for the next curation run, which takes it in"
+    return f"{count} proposals handed in by sessions wait for the next curation run, which takes them in"
+
+
 def require_on(config: MachineConfig, environ: Mapping[str, str]) -> None:
     """Refuses where nothing is handed in at all: the switch is off, or this is a curation run."""
     if not config.sessions.propose:

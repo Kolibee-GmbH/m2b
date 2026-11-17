@@ -1,7 +1,8 @@
 """``proposals``, ``proposals keep``, ``proposals drop`` and ``proposals add``: the proposals, answered and handed in.
 
-The listing shows what still waits for an answer; keep and drop add the answer as a file and
-leave the filing to the next curation run, like every client. A proposals file or an answers
+The listing shows what still waits for an answer, and how many proposals sessions handed in
+wait for the next run to take them in; keep and drop add the answer as a file and leave the
+filing to the next curation run, like every client. A proposals file or an answers
 folder that is not downloaded ends the command with the line that names what to fetch: could not
 look is never an empty list.
 
@@ -30,7 +31,7 @@ from m2b.config.store_settings import require_store_writable
 from m2b.notes.characters import CONTROL
 from m2b.proposal_answers import KEEP, Given, Waiting
 from m2b.proposals import Entry
-from m2b.store.base import Store
+from m2b.store.base import Store, StoreError
 
 NONE_WAITS = "no proposal waits for an answer"
 HOW_TO_ANSWER = "keep with: m2b proposals keep <id>... (or keep --all); drop with: m2b proposals drop <id>..."
@@ -56,8 +57,9 @@ def proposals_command(arguments: argparse.Namespace, context: Context) -> int:
 
 def _list(store: Store, as_json: bool) -> int:
     waiting = proposal_answers.waiting(store)
+    handed, not_counted = _handed_in(store)
     if as_json:
-        print_json(_waiting_json(waiting))
+        print_json(_waiting_json(waiting, handed))
         return 0
     if waiting.proposals:
         one = len(waiting.proposals) == 1
@@ -71,18 +73,37 @@ def _list(store: Store, as_json: bool) -> int:
     if waiting.answered:
         one = waiting.answered == 1
         print(f"{waiting.answered} {'answer waits' if one else 'answers wait'} for the next curation run")
+    if handed:
+        print(handed_in.waiting_line(handed))
+    if not_counted is not None:
+        print(f"handed in: could not look: {not_counted}")
     return 0
 
 
 def waiting_answer(store: Store) -> dict[str, Any]:
-    """What ``proposals --json`` answers: the proposals that wait, and how many answers wait for a run."""
-    return _waiting_json(proposal_answers.waiting(store))
+    """What ``proposals --json`` answers: the proposals that wait, how many answers wait for a run,
+    and how many proposals sessions handed in wait for a run to take them in."""
+    return _waiting_json(proposal_answers.waiting(store), _handed_in(store)[0])
 
 
-def _waiting_json(waiting: Waiting) -> dict[str, Any]:
+def _handed_in(store: Store) -> tuple[int | None, str | None]:
+    """How many handed-in proposals wait for a run, or None and why their folder could not be listed.
+
+    A count that fails is said for itself: the proposals that could be read are still listed.
+    """
+    try:
+        return handed_in.waiting(store).count, None
+    except StoreError as error:
+        return None, str(error)
+
+
+def _waiting_json(waiting: Waiting, handed: int | None) -> dict[str, Any]:
     return {
         "proposals": [_as_json(key, entry) for key, entry in waiting.proposals],
         "answered": waiting.answered,
+        # The number alone: what was handed in has not been through the run's checks. Null where
+        # the folder could not be listed, which is not none.
+        "handed_in": handed,
     }
 
 

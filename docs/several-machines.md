@@ -9,7 +9,7 @@ folder in iCloud Drive. Every machine captures, searches and lists tasks. **One 
 | capture, search, todos, rediscover | yes | |
 | the distillate at session start | yes | |
 | a session handing in a proposal, where `sessions.propose` is on | yes | |
-| curation runs (at session start or scheduled) | | yes |
+| curation runs (at session start, scheduled or after your answers to proposals) | | yes |
 | the worklog's step in the curation run | | yes |
 | worklog recording in herdr | | yes |
 
@@ -44,7 +44,10 @@ curating machine; `take-over` lists the add-ons that were on in the last run.
 
 On a machine that does not curate, `m2b status` answers the question whether a run is due with
 `due: asked on <machine>, the curating machine`: only that machine decides it, so ask there. The
-m2b pane says `Curation runs on <machine>.` there and has no `curate now`.
+m2b pane says `Curation runs on <machine>.` there and has no `curate now`. An answer to a
+proposal given there starts no run: the view of the proposals says that your answers wait for
+the next curation run on `<machine>`, and the overview says how many answers and how many
+proposals sessions handed in wait for it.
 
 ## When the curating machine is away
 

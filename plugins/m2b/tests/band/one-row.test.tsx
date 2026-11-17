@@ -796,10 +796,10 @@ test('the row is a sentence where there is one: why open showed no pane, then th
       review: { id: 'r1', title: 'm2b: review', findings: [] },
       error: null,
     },
-    proposals: { waiting: [], answered: 0, error: null },
+    proposals: { waiting: [], answered: 0, handedIn: 0, error: null },
   }
   const unread = { snapshot: { candidates: [], review: null, error: 'm2b could not read the tasks: no answer' } }
-  const noStore = { proposals: { waiting: [], answered: 0, error: 'the store is not downloaded' } }
+  const noStore = { proposals: { waiting: [], answered: 0, handedIn: 0, error: 'the store is not downloaded' } }
   const counts = (text: string) => ({ parts: [{ text, tone: 'waits' }], isNamed: true, isCalm: false, listed: [], more: 0 })
   const sentence = (text: string, tone: string, isNamed: boolean) => ({ parts: [{ text, tone }], isNamed, isCalm: false, listed: [], more: 0 })
   const idle = { candidates: [], review: null, error: null, shows: ONLY_WHILE_WAITING }
@@ -885,7 +885,7 @@ test('with nothing to say the row is calm where the band is always there, and th
   expect(bandLine(model({ snapshot: { candidates: [], review: null, error: null, due: [] } }))).toEqual(calm)
   // No answer yet is not an answer that nothing waits: no row, though the band is above until m2b says where.
   expect(bandLine(model())).toBeNull()
-  expect(bandLine(model({ proposals: { waiting: [], answered: 0, error: null } }))).toBeNull()
+  expect(bandLine(model({ proposals: { waiting: [], answered: 0, handedIn: 0, error: null } }))).toBeNull()
   // Anything to say takes the calm away, also a sentence.
   expect(showing({ place: 'above', dueTasks: 'count', topics: false })?.isCalm).toBe(false)
   expect(showing({ place: 'above', dueTasks: 'off', topics: true }, 1)?.isCalm).toBe(false)
@@ -1401,7 +1401,7 @@ test('the small form is in the order of the overview: what waits, the tasks due,
   expect(glance({ given: known, snapshot: one })).toEqual(['1 waits for you'])
   const review = { id: 'r1', title: 'm2b: review', findings: [] }
   expect(glance({ given: known, snapshot: { ...one, review } })).toEqual(['2 wait for you'])
-  const noStore = { waiting: [], answered: 0, error: 'the store is not downloaded' }
+  const noStore = { waiting: [], answered: 0, handedIn: 0, error: 'the store is not downloaded' }
   expect(glance({ given: known, snapshot: one, proposals: noStore })).toEqual([
     'm2b could not look for proposals: the store is not downloaded',
   ])

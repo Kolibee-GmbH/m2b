@@ -9,7 +9,8 @@ from pathlib import Path
 from unittest import mock
 
 import test_commands
-from m2b import cli, proposal_answers, proposals
+from m2b import cli, handed_in, proposal_answers, proposals
+from m2b.store.base import StoreError
 from m2b.store.guard import DatalessGuard
 from test_proposal_answers import DANA_ID, LADDER_ID, NOBODYS_ID
 from test_proposals import DANA, DAY, LADDER, NOW, Said
@@ -30,6 +31,76 @@ class ProposalsCommandTest(test_commands.CommandTest):
 
     def not_downloaded(self, name: str) -> mock._patch[mock.MagicMock]:
         return mock.patch.object(DatalessGuard, "is_evicted", side_effect=lambda path: Path(path).name == name)
+
+
+class HandedInCountTest(ProposalsCommandTest):
+    WORDS = "words no check has seen"
+
+    def handed_in_file(self, name: str) -> None:
+        target = self.store_root / handed_in.FOLDER / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(self.WORDS, encoding="utf-8")
+
+    def folder_cannot_be_listed(self) -> mock._patch[mock.MagicMock]:
+        return mock.patch("m2b.handed_in.waiting", side_effect=StoreError("state/core/handed-in cannot be listed"))
+
+    def test_the_listing_says_how_many_handed_in_proposals_wait_for_a_run_and_never_their_words(self) -> None:
+        """Covers: B240"""
+        self.handed_in_file("s1.a1b2c3d4e5f6.json")
+
+        code, out, err = self.run_command("proposals")
+        self.assertEqual((code, err), (cli.EXIT_OK, ""))
+        self.assertEqual(
+            out.splitlines(),
+            [
+                "no proposal waits for an answer",
+                "1 proposal handed in by a session waits for the next curation run, which takes it in",
+            ],
+        )
+
+        self.assertNotIn(self.WORDS, out)
+
+        self.handed_in_file("s2.b2c3d4e5f6a1.json")
+        code, as_json, _ = self.run_command("proposals", "--json")
+        self.assertEqual(json.loads(as_json), {"proposals": [], "answered": 0, "handed_in": 2})
+        self.assertNotIn(self.WORDS, as_json)
+        listing = self.run_command("proposals")[1]
+        self.assertIn("2 proposals handed in by sessions wait for the next curation run", listing)
+
+    def test_a_folder_that_cannot_be_listed_is_said_for_itself_and_the_proposals_are_still_listed(self) -> None:
+        """Covers: B240"""
+        self.proposed(DANA)
+
+        with self.folder_cannot_be_listed():
+            code, out, err = self.run_command("proposals")
+            as_json = self.run_json("proposals")
+
+        self.assertEqual((code, err), (cli.EXIT_OK, ""))
+        self.assertIn("1 proposal waits for an answer", out)
+        self.assertIn("Dana runs IT at Northwind", out)
+        self.assertEqual(out.splitlines()[-1], "handed in: could not look: state/core/handed-in cannot be listed")
+        self.assertEqual([proposal["id"] for proposal in as_json["proposals"]], [DANA_ID])
+        self.assertIsNone(as_json["handed_in"])
+
+    def test_a_handed_in_file_that_is_not_downloaded_counts_like_one_that_is(self) -> None:
+        """Covers: B240"""
+        self.handed_in_file("s1.a1b2c3d4e5f6.json")
+        self.handed_in_file("s2.b2c3d4e5f6a1.json")
+
+        with self.not_downloaded("s1.a1b2c3d4e5f6.json"):
+            answer = self.run_json("proposals")
+
+        self.assertEqual(answer["handed_in"], 2)
+
+    def test_a_folder_of_handed_in_proposals_that_is_not_downloaded_counts_as_one(self) -> None:
+        """Covers: B240"""
+        self.handed_in_file("s1.a1b2c3d4e5f6.json")
+        self.handed_in_file("s2.b2c3d4e5f6a1.json")
+
+        with self.not_downloaded("handed-in"):
+            answer = self.run_json("proposals")
+
+        self.assertEqual(answer["handed_in"], 1)
 
 
 class ListTest(ProposalsCommandTest):
@@ -148,6 +219,7 @@ class ListTest(ProposalsCommandTest):
                     }
                 ],
                 "answered": 1,
+                "handed_in": 0,
             },
         )
 
@@ -165,7 +237,7 @@ class ListTest(ProposalsCommandTest):
         code, out, err = self.run_command("proposals")
 
         self.assertEqual((code, out, err), (cli.EXIT_OK, "no proposal waits for an answer\n", ""))
-        self.assertEqual(self.run_json("proposals"), {"proposals": [], "answered": 0})
+        self.assertEqual(self.run_json("proposals"), {"proposals": [], "answered": 0, "handed_in": 0})
 
     def test_a_proposals_file_that_is_not_downloaded_is_could_not_look_with_the_command_that_fetches_it(self) -> None:
         """Covers: B6, B122"""

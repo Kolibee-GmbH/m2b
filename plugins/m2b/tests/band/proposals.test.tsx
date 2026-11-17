@@ -6,6 +6,7 @@ import {
   BAND,
   CALM_ROW,
   CURATE_NOW,
+  CURATE_NOW_LINE,
   ENGINES_OWN_DRAWING,
   FakeM2b,
   HOME,
@@ -50,6 +51,7 @@ const NONE_WAITS = 'No proposal waits for an answer.'
 const LIST_AND_ANSWER =
   'list with: m2b proposals; keep with: m2b proposals keep <id>... (or keep --all); drop with: m2b proposals drop <id>...'
 const FILED_BY_THE_NEXT_RUN = 'for the next curation run, which files what you kept'
+const RUN_FILES_THE_KEPT = 'A curation run is under way: it files what you kept.'
 
 /** How a line to be read, one that may be skipped and one in the color of trouble are drawn. */
 const PLAIN = { color: undefined, dimColor: undefined, wrap: 'wrap' }
@@ -387,7 +389,9 @@ test('keep is written once the undo window is over, and the pane and the band fo
   expect(shown?.count).toBe('2')
   expect(await linesAt(ui, `proposal:${DANA}`)).toBeNull()
   expect(shown?.lines).not.toContain('Dana is head of IT at Northwind.')
-  expect(shown?.lines.at(-1)).toBe(`1 answer waits ${FILED_BY_THE_NEXT_RUN}`)
+  // Below the answer that waits stands curate now: a proposal still waits, so no run started by itself.
+  expect(shown?.lines.slice(-2)).toEqual([`1 answer waits ${FILED_BY_THE_NEXT_RUN}`, CURATE_NOW_LINE])
+  expect(fake.curateCalls()).toEqual([])
   expect(await lookOf(ui, `1 answer waits ${FILED_BY_THE_NEXT_RUN}`)).toEqual(DIM)
   expect(await shownBand(band)).toEqual(rowSaying('2 wait for you'))
   await band.unmount()
@@ -438,9 +442,10 @@ test('keep all keeps the proposals the pane showed, in one call, and can be undo
       '[keep] [drop] person',
       'said on 2026-03-12: "Robin moved to Lisbon."',
       `3 answers wait ${FILED_BY_THE_NEXT_RUN}`,
+      CURATE_NOW_LINE,
     ]),
   )
-  expect(await buttons(ui)).toEqual(['keep:d4d4d4d4d4d4', 'drop:d4d4d4d4d4d4'])
+  expect(await buttons(ui)).toEqual(['keep:d4d4d4d4d4d4', 'drop:d4d4d4d4d4d4', CURATE_NOW])
   await ui.unmount()
 })
 
@@ -511,6 +516,7 @@ test('an answer m2b refuses stands in the view of the proposals until the next p
       '[keep] [drop] personal',
       'said on 2026-03-05: "the spare key is in the shed"',
       `1 answer waits ${FILED_BY_THE_NEXT_RUN}`,
+      CURATE_NOW_LINE,
     ]),
   )
   expect(await lookOf(ui, refused)).toEqual(TROUBLE)
@@ -671,7 +677,8 @@ test('while keep all is being written its rows offer nothing, and it still says 
     'said on 2026-03-05: "the spare key is in the shed"',
   ])
   await clock.advance(1_000)
-  expect(await shownParts(ui)).toEqual(oneProposalsPart(null, [NONE_WAITS, `3 answers wait ${FILED_BY_THE_NEXT_RUN}`]))
+  // Every proposal is answered and kept: the run that files them started.
+  expect(await shownParts(ui)).toEqual(oneProposalsPart(null, [NONE_WAITS, RUN_FILES_THE_KEPT]))
   await ui.unmount()
 })
 
@@ -692,7 +699,7 @@ test('once m2b is no longer set up on this machine the count of the proposals go
 test('a shared answer whose proposals are of another shape is loaded again instead of drawn', async ($, on) => {
   // Covers: B127
   const fake = proposedFake()
-  const proposals = { waiting: [{ id: '--all', kind: 'person', text: 'Dana', quote: 'Dana', day: '2026-03-04', topic: null, due: null }], answered: 0, error: null }
+  const proposals = { waiting: [{ id: '--all', kind: 'person', text: 'Dana', quote: 'Dana', day: '2026-03-04', topic: null, due: null }], answered: 0, handedIn: 0, error: null }
   const snapshot = { ...NO_TASKS, shows: SHOWN_WITHOUT_ENTRY }
   const stored = { writtenAtMs: NOW - 1_000, value: { snapshot, status: null, version: '0.3.0', proposals } }
   const files: Files = new Map([[CACHE, JSON.stringify(stored)]])
@@ -775,7 +782,7 @@ test('keep all that m2b refuses for one proposal names that one, not all of them
     oneProposalsPart(null, [
       'keep all: "Call Sam about the ladder." is answered with drop already; that answer stands',
       NONE_WAITS,
-      `3 answers wait ${FILED_BY_THE_NEXT_RUN}`,
+      RUN_FILES_THE_KEPT,
     ]),
   )
   await ui.unmount()

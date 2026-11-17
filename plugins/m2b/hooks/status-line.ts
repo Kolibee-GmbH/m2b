@@ -75,18 +75,41 @@ export type RunStart = { isStarted: true } | { isStarted: false; refusal: Curate
 
 const REFUSALS: readonly CurateRefusal[] = ['running', 'not-curating', 'not-downloaded']
 
-/** What `m2b curate --detach --json` answered; null for anything that is not that answer. */
-export function parseRunStart(stdout: string): RunStart | null {
+/** The answer of `m2b curate --detach --json` with its kind; null for anything that is not that answer. */
+function startAnswer(stdout: string): (JsonObject & { kind: string }) | null {
   let answer: unknown
   try {
     answer = JSON.parse(stdout)
   } catch {
     return null
   }
-  if (!isObject(answer) || typeof answer['kind'] !== 'string') {
+  return isObject(answer) && typeof answer['kind'] === 'string' ? { ...answer, kind: answer['kind'] } : null
+}
+
+/**
+ * What a start after the answers to the proposals came to: a run, why none started, or `none-due`,
+ * where the answers call for none now and nothing is wrong.
+ */
+export type RunAfterAnswers = RunStart | { isStarted: false; refusal: 'none-due' }
+
+// The kinds with which the command says that no run is due now: the setting is off, curation is
+// paused, a proposal still waits for its answer, nothing is kept, a run is under way already, or
+// another machine curates. None of them is said: the answers wait, and the view says so.
+const NO_RUN_IS_DUE: readonly string[] = ['off', 'paused', 'proposals-wait', 'nothing-kept', 'running', 'not-curating']
+
+/** What `m2b curate --detach --after-answers --json` answered; null for anything that is not that answer. */
+export function parseRunAfterAnswers(stdout: string): RunAfterAnswers | null {
+  const answer = startAnswer(stdout)
+  return answer !== null && NO_RUN_IS_DUE.includes(answer.kind) ? { isStarted: false, refusal: 'none-due' } : parseRunStart(stdout)
+}
+
+/** What `m2b curate --detach --json` answered; null for anything that is not that answer. */
+export function parseRunStart(stdout: string): RunStart | null {
+  const answer = startAnswer(stdout)
+  if (answer === null) {
     return null
   }
-  const kind = answer['kind']
+  const { kind } = answer
   if (kind === 'started') {
     return { isStarted: true }
   }

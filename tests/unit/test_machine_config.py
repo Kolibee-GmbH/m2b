@@ -129,6 +129,14 @@ class ParseTest(unittest.TestCase):
             with self.subTest(written=written), self.assertRaises(InvalidConfigError):
                 machine.parse_machine_config(_config(curation={"git_directory": written}), HOME)
 
+    def test_a_run_after_the_answers_is_on_until_the_config_says_otherwise(self) -> None:
+        """Covers: B237"""
+        self.assertTrue(machine.parse_machine_config(_config(), HOME).curation.run_after_answers)
+        config = machine.parse_machine_config(_config(curation={"run_after_answers": False}), HOME)
+        self.assertFalse(config.curation.run_after_answers)
+        with self.assertRaises(InvalidConfigError):
+            machine.parse_machine_config(_config(curation={"run_after_answers": "no"}), HOME)
+
     def test_curation_is_not_paused_until_the_config_says_so(self) -> None:
         """Covers: B161"""
         self.assertFalse(machine.parse_machine_config(_config(), HOME).curation.paused)

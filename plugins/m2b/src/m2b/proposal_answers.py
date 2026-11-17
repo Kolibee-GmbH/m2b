@@ -49,10 +49,12 @@ class Waiting:
     """The open proposals without an answer, the earliest said first, and how many answers wait for a run.
 
     A keep for an expired proposal is such an answer; a drop of one is not, since the run does nothing with it.
+    ``kept`` are the keeps among them: what the run files, where a drop changes nothing a session sees.
     """
 
     proposals: tuple[tuple[str, Entry], ...]
     answered: int
+    kept: int = 0
 
 
 @dataclass(frozen=True)
@@ -91,7 +93,8 @@ def waiting(store: Store) -> Waiting:
         (key, entry) for key, entry in entries.items() if entry.state == proposals.OPEN and key not in answers
     ]
     unanswered.sort(key=lambda item: (item[1].day, item[0]))
-    return Waiting(tuple(unanswered), len(awaiting_a_run(entries, answers)))
+    awaiting = awaiting_a_run(entries, answers)
+    return Waiting(tuple(unanswered), len(awaiting), sum(answers[key] == KEEP for key in awaiting))
 
 
 def awaiting_a_run(entries: Mapping[str, Entry], answers: Mapping[str, str]) -> frozenset[str]:

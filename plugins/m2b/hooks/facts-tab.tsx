@@ -1,6 +1,7 @@
 import type { EngineInterface, ResolveInput } from 'claude-code'
 
 import type { PaneView } from '../types'
+import { currentItemRow } from './current-item'
 import { part, pressLine, said, topicLabel } from './look'
 import type { ButtonSpec } from './look'
 import { runM2b } from './m2b'
@@ -10,7 +11,8 @@ import { plainLine } from './plain-text'
 /*
  * The tab "Facts": what every session starts with, the facts and the current items outside any
  * topic, as `m2b distillate topics --json` answers at the press that opens the tab, each fact with
- * `details`; and the topics, each a button that opens its lines. `details` turns the pane to the
+ * `details` and each current item with a button for a note it names (`current-item.tsx`); and the
+ * topics, each a button that opens its lines. `details` turns the pane to the
  * fact's file under a tab of its own, read with `m2b source --json`.
  *
  * The facts are the owner's and often a customer's. As a topic's lines, they are this module's
@@ -250,6 +252,7 @@ export type FactFileActions = { show: (index: number, evidence: Evidence) => Pro
 
 export type FactsActions = {
   details: (file: string) => Promise<void>
+  showNote: (note: string) => Promise<void>
   showTopic: (name: string) => Promise<void>
 }
 
@@ -285,7 +288,7 @@ export function factsPane($: EngineInterface, e: ResolveInput, look: FactsLook, 
       )
     }),
     look.current.length > 0 && said(ui, CURRENT, 'strong'),
-    ...look.current.map(item => said(ui, plainLine(item))),
+    ...look.current.map((item, index) => currentItemRow($, e, index, item, actions.showNote)),
   ]
   const topics = look.topics.length === 0
     ? [said(ui, NO_TOPICS, 'quiet')]

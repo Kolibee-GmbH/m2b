@@ -444,6 +444,11 @@ def _parser() -> argparse.ArgumentParser:
     curate_parser.add_argument("--detach", action="store_true", help="start the run in the background")
     curate_parser.add_argument("--json", action="store_true", help="with --detach: answer the start as JSON")
     curate_parser.add_argument(
+        "--after-answers",
+        action="store_true",
+        help="with --detach: start the run only when every proposal is answered and one is kept",
+    )
+    curate_parser.add_argument(
         "--refresh-all",
         action="store_true",
         help="run now and also date the memory lines written without until or since, once",
