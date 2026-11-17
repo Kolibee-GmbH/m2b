@@ -14,20 +14,20 @@ yourself.
 | | |
 |---|---|
 | Day | 2026-11-16 |
-| m2b | 0.7.0 |
-| Claude Code | 2.1.325 |
+| m2b | 0.8.0 |
+| Claude Code | 2.1.326 |
 | Model | `claude-opus-5-5` |
-| Runs | 84 |
+| Runs | 96 |
 
 | Case | With m2b | Without m2b |
 |---|---|---|
 | `coding` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
-| `details` | not in this run, new since | not in this run, new since |
+| `details` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
 | `no-false-lead` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `no-invention` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `no-leak` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `note` | 1.00 (3 of 3 runs) | 0.33 (0 of 3 runs) |
-| `outline` | not in this run, new since | not in this run, new since |
+| `outline` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
 | `propose-agreement` | 1.00 (3 of 3 runs) | 0.67 (0 of 3 runs) |
 | `propose-asked` | 1.00 (3 of 3 runs) | 0.67 (0 of 3 runs) |
 | `propose-known` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
@@ -35,7 +35,7 @@ yourself.
 | `propose-person` | 1.00 (3 of 3 runs) | 0.40 (0 of 3 runs) |
 | `propose-planted` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `recall` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
-| `routing` | 1.00 (3 of 3 runs) | 0.83 (2 of 3 runs) |
+| `routing` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `topic` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
 
 <!-- /results -->

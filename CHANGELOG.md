@@ -7,42 +7,53 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-17
+
+From a fact to what it rests on. The pane has two new tabs, `Tasks` and `Facts`; a fact opens its
+file, and from there the note or the document behind it, a PDF or a picture in the system's
+viewer. A session reads those details too, a long PDF is read whole with an outline of its pages,
+and a file you name in a session goes into the inbox on your yes. What goes in from work is yours
+to decide. Nothing is to do after the update; a session that started before it keeps the pane it
+has until `/reload-plugins`.
+
 ### Added
 
 - A PDF of more than one page in the inbox is read whole, up to its 60th page, and its note in the
   archive says what stands on which page: `pp. 4-5: fees 240, due 31 January; locker 37`. Until now
   a curation run read the first pages of a long document and filed what stood there; the rest was
   in no fact and in nothing a search reads. `m2b search` finds the outline, and the note says where
-  the run stopped in a longer document ([A document in the inbox](docs/curation.md#a-document-in-the-inbox)).
+  the run stopped in a longer document ([A document in the inbox](docs/curation.md#a-document-in-the-inbox))
+  ([#32](https://github.com/Kolibee-GmbH/m2b/pull/32)).
 - A session reads what stands behind a fact. The search tool, called with the name a line of the
   distillate ends with (`dana.md`), answers that fact file whole: its lines, its last day, its
   earlier values and the notes it rests on, each with its day, what it is and its first line;
   called with one of those notes' names, it answers the note, and for a document its original
   name and the outline of what stands on which page. The new command behind it is
   `m2b source <name>`; it takes a name, never a path, and reads only fact files and notes of the
-  archive ([Noting and searching as tools of the model](docs/band.md#noting-and-searching-as-tools-of-the-model)).
-
+  archive ([Noting and searching as tools of the model](docs/band.md#noting-and-searching-as-tools-of-the-model))
+  ([#32](https://github.com/Kolibee-GmbH/m2b/pull/32)).
 - The pane has a tab `Tasks`: every open task of your list, in groups by when it is due
   (overdue, today, the next seven days, later, without a date), each with `done`, which ticks it
   after five seconds of `undo` ([All your open tasks](docs/band.md#all-your-open-tasks)). The tab
-  stands between `Review` and `Settings`.
+  stands between `Review` and `Facts` ([#32](https://github.com/Kolibee-GmbH/m2b/pull/32)).
 - The pane has a tab `Facts`: what every session starts with, each fact with `details`, and every
   topic with its counts. `details` opens the fact's file, with what it rests on: the notes and
   documents behind it ([What m2b knows](docs/band.md#what-m2b-knows)). Behind it is a new command,
-  `m2b distillate topics [--json]`.
+  `m2b distillate topics [--json]` ([#32](https://github.com/Kolibee-GmbH/m2b/pull/32)).
 - Below a fact's file, `show` on each note or document it rests on opens it: a note's words as you
   captured them and what the curation run added, a document's original name and what stands on
   which page. A PDF or a picture on this machine has `open the file`, which opens it in the
   system's viewer; any other kind is named with where it lies and never started, since a viewer for
   it could run what it holds. The tab of the fact file leads back. Behind the button is a new
   command, `m2b store open <name>`, which opens only a PDF or a picture of the archive whose bytes
-  are of that kind, and only where the session has a screen.
+  are of that kind, and only where the session has a screen
+  ([#32](https://github.com/Kolibee-GmbH/m2b/pull/32)).
 - A session keeps a file you name with its path: "keep this contract, ~/Documents/lease.pdf".
   The `capture` skill copies it into the inbox with your words, through the new command
   `m2b capture-file <path> [words]`, and Claude Code asks you before every copy: no skill may run
   it alone, since the file goes into a folder that syncs. A folder, a link, a text file and a file
   over 25 MB are refused; the size is the new setting `capture.file_limit_mb`
-  ([Capture](docs/using.md#capture)).
+  ([Capture](docs/using.md#capture)) ([#32](https://github.com/Kolibee-GmbH/m2b/pull/32)).
 
 ### Changed
 
@@ -50,7 +61,8 @@ All notable changes to this project are documented here. The format follows
   tools, the text every session starts with and the capture skill name what a note may hold from
   work, who is who, which role, what was agreed, and no longer tell a session never to keep a
   customer's document or what someone told you in confidence. [SECURITY.md](SECURITY.md#what-m2b-handles)
-  says where such a document then lies and who reads it.
+  says where such a document then lies and who reads it
+  ([#32](https://github.com/Kolibee-GmbH/m2b/pull/32)).
 
 ## [0.7.0] - 2026-11-16
 
