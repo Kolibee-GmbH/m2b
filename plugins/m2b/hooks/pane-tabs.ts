@@ -9,9 +9,9 @@ import type { SessionModel } from './session-view'
 
 /*
  * The tabs above every view of the m2b pane: six that stay, always in one order, and a seventh for
- * a topic's lines, a fact's file, a search or the settings that only inform, which stands there only while it is
- * shown. A source a fact rests on stands under an eighth, beside the seventh that bears its fact
- * file and leads back to it. A tab is the one way from a view to another, so no view has a button
+ * a topic's lines, a fact's file, a note a current item names, a search or the settings that only
+ * inform, which stands there only while it is shown. A source a fact rests on stands under an
+ * eighth, beside the seventh that bears its fact file and leads back to it. A tab is the one way from a view to another, so no view has a button
  * that leads back.
  */
 
@@ -83,6 +83,10 @@ function asideLabel(view: PaneView | null): string | null {
   if (view?.kind === 'fact') {
     return factTabLabel(factFileNameOf(view.press))
   }
+  // A note opened from a current item: no fact file stands above it, so its tab is the seventh.
+  if (view?.kind === 'source') {
+    return sourceLabelOf(view.press)
+  }
   if (view?.kind === 'settings' && view.aside !== null) {
     return topicLabel(view.aside.title)
   }
@@ -103,7 +107,7 @@ export function paneTabs(view: PaneView | null, waiting: number, onTurn: (to: Ta
     label: id === 'proposals' && waiting > 0 ? `${LABELS[id]} ${waiting}` : LABELS[id],
     turn: id === shown ? null : { key: tabKey(id, shown), onPress: () => onTurn(id) },
   }))
-  if (view?.kind === 'source') {
+  if (view?.kind === 'source' && view.from !== null) {
     const from = view.from
     return [
       ...staying,

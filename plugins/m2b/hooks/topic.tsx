@@ -1,6 +1,8 @@
 import type { EngineInterface, ResolveInput } from 'claude-code'
 
 import type { PaneView } from '../types'
+import { currentItemRow } from './current-item'
+import type { TabId } from './pane-tabs'
 import { part, said } from './look'
 import { runM2b } from './m2b'
 import { plainLine } from './plain-text'
@@ -30,11 +32,17 @@ export type TopicLook =
 // over with the module and is gone the moment the pane turns to anything else.
 // The topic's name too: opened from the tab Facts it can be one this session was never given, a
 // customer's among them, and the view in the session's state names only the press.
-let held: { press: string; name: string; look: TopicLook } | null = null
+// `origin` is the tab the topic was opened from, which leads back from it and from a note opened here.
+let held: { press: string; name: string; origin: TabId; look: TopicLook } | null = null
 
 /** Begins a look for a press, in place of whatever was kept before: m2b reads. */
-export function beginTopic(press: string, name: string): void {
-  held = { press, name, look: { state: 'reading' } }
+export function beginTopic(press: string, name: string, origin: TabId = 'overview'): void {
+  held = { press, name, origin, look: { state: 'reading' } }
+}
+
+/** The tab the press opened the topic from; the overview where nothing is kept for it. */
+export function topicOriginOf(press: string): TabId {
+  return held !== null && held.press === press ? held.origin : 'overview'
 }
 
 /** The name of the topic the press opened; empty where nothing is kept for it, as after a reload of the mod. */
@@ -50,7 +58,7 @@ export function fillTopic(press: string, look: TopicLook): boolean {
   if (held === null || held.press !== press) {
     return false
   }
-  held = { press, name: held.name, look }
+  held = { ...held, look }
   return true
 }
 
@@ -115,8 +123,18 @@ export function parseTopic(text: string): TopicLook {
   return found ? { state: 'read', facts, current } : { state: 'missing' }
 }
 
-/** The topic's view, one part under the topic's name, whole. `columns` is the width of the pane's body. */
-export function topicPane($: EngineInterface, e: ResolveInput, name: string, look: TopicLook, columns: number) {
+/**
+ * The topic's view, one part under the topic's name, whole: its facts, then its current items,
+ * each with a button for a note it names. `columns` is the width of the pane's body.
+ */
+export function topicPane(
+  $: EngineInterface,
+  e: ResolveInput,
+  name: string,
+  look: TopicLook,
+  onShowNote: (note: string) => Promise<void>,
+  columns: number,
+) {
   const ui = $.ui.resolve(e)
   const isEmpty = look.state === 'read' && look.facts.length === 0 && look.current.length === 0
   return part(ui, { key: 'topic', title: plainLine(name), waits: false, columns }, [
@@ -127,6 +145,6 @@ export function topicPane($: EngineInterface, e: ResolveInput, name: string, loo
     isEmpty && said(ui, NO_LINES, 'quiet'),
     ...(look.state === 'read' ? look.facts.map(fact => said(ui, plainLine(fact))) : []),
     look.state === 'read' && look.current.length > 0 && said(ui, CURRENT, 'strong'),
-    ...(look.state === 'read' ? look.current.map(item => said(ui, plainLine(item))) : []),
+    ...(look.state === 'read' ? look.current.map((item, index) => currentItemRow($, e, index, item, onShowNote)) : []),
   ])
 }

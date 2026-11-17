@@ -138,9 +138,9 @@ import {
 import type { Evidence, FactsActions } from './facts-tab'
 import { NO_LONGER_OPEN, beginTasks, fillTasks, forgetTasksUnless, heldTasks, isOpenIn, noteRefusal, readTasks, taskPressKey, tasksPane } from './tasks-tab'
 import type { OpenTask, TaskActions } from './tasks-tab'
-import { beginSource, evidenceIndexOf, fillSource, forgetSourceUnless, noteOpening, openFile, openingOf, readSource, sourcePane } from './source-view'
+import { beginNote, beginSource, evidenceIndexOf, fillSource, forgetSourceUnless, noteOpening, openFile, openingOf, readSource, sourcePane } from './source-view'
 import type { SourceActions } from './source-view'
-import { beginTopic, fillTopic, forgetTopicUnless, heldTopic, readTopic, topicNameOf, topicPane } from './topic'
+import { beginTopic, fillTopic, forgetTopicUnless, heldTopic, readTopic, topicNameOf, topicOriginOf, topicPane } from './topic'
 import {
   NOTE_COMMAND_LINE,
   NOTE_TOOL,
@@ -725,7 +725,7 @@ async function turnTo($: EngineInterface, view: PaneView | null): Promise<void> 
  */
 async function showTopic($: EngineInterface, name: string, from: TabId = 'overview'): Promise<void> {
   const press = await newPressToken($)
-  beginTopic(press, name)
+  beginTopic(press, name, from)
   await asDialog($, { kind: 'topic', press, isRead: false })
   // The read does not wait for the focus.
   const focusMoved = focusInPane($, tabKeyAfterTurn(from, 'aside'))
@@ -861,6 +861,23 @@ async function showSource($: EngineInterface, from: string, index: number, evide
 }
 
 /**
+ * A press on the button of a note a current item names, in the tab `Facts` or in a topic: the
+ * note under a tab of its own, read as a fact file's source is. No fact file stands above it, so
+ * the focus goes to `back`, the tab that leads back to where the item was drawn. The note's name
+ * goes to m2b and nowhere else: the view in the session's state names only the press.
+ */
+async function showNote($: EngineInterface, note: string, back: TabId): Promise<void> {
+  const opening = await newPressToken($)
+  beginNote(opening)
+  await asDialog($, { kind: 'source', press: opening, from: null, drawn: 0 })
+  const focusMoved = focusInPane($, tabKeyAfterTurn(back, 'aside'))
+  if (fillSource(opening, await readSource($, note))) {
+    await redrawn($, 'source', opening)
+  }
+  await focusMoved
+}
+
+/**
  * The tab of the fact file above a source: the fact file as it was drawn, which its module kept,
  * the focus on `show` of the row the source was opened from.
  */
@@ -896,6 +913,7 @@ async function redrawn($: EngineInterface, kind: 'facts' | 'fact' | 'source', op
 function factsActions($: EngineInterface): FactsActions {
   return {
     details: file => showFactFile($, file),
+    showNote: note => showNote($, note, 'facts'),
     showTopic: name => showTopic($, name, 'facts'),
   }
 }
@@ -1101,7 +1119,7 @@ async function viewOfPane(
     case 'proposals':
       return proposalsPane($, e, proposals, presses, await read($, proposalsNoticeAtom), proposalActions($), await answersCuration($, presses), bodyColumns)
     case 'topic':
-      return topicPane($, e, topicNameOf(view.press), heldTopic(view.press), bodyColumns)
+      return topicPane($, e, topicNameOf(view.press), heldTopic(view.press), note => showNote($, note, topicOriginOf(view.press)), bodyColumns)
     case 'search':
       return searchPane($, e, view.search, bodyColumns)
     case 'tasks':

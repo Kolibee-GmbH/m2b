@@ -42,7 +42,18 @@ export type SourceLook =
 /** A press on `open the file`: not made, under way, done, or refused with why. */
 export type Opening = { state: 'none' } | { state: 'opening' } | { state: 'opened' } | { state: 'failed'; error: string }
 
-type Held = { press: string; from: string; index: number; label: string; look: SourceLook; opening: Opening }
+// `from` and `index` are the fact file and its evidence row the source was opened from, null for
+// a note opened from a current item, which has no fact file above it. Such a note is named by its
+// file alone, so its tab says what it is only once it is read (`isLabelOfTheLook`).
+type Held = {
+  press: string
+  from: string | null
+  index: number | null
+  label: string
+  isLabelOfTheLook: boolean
+  look: SourceLook
+  opening: Opening
+}
 
 let held: Held | null = null
 
@@ -51,14 +62,33 @@ let held: Held | null = null
  * `from` names; the tab's label comes from the row, so it stands while the source is read.
  */
 export function beginSource(press: string, from: string, index: number, evidence: Evidence): void {
-  held = { press, from, index, label: sourceTabLabel(evidence), look: { state: 'reading' }, opening: { state: 'none' } }
+  held = {
+    press,
+    from,
+    index,
+    label: sourceTabLabel(evidence),
+    isLabelOfTheLook: false,
+    look: { state: 'reading' },
+    opening: { state: 'none' },
+  }
+}
+
+const A_NOTE = 'note'
+
+/**
+ * Keeps, for the opening `press`, a note a current item names. Its tab reads `note` while it is
+ * read and then what a fact file's row would have said of it: its day, or a document's name.
+ */
+export function beginNote(press: string): void {
+  held = { press, from: null, index: null, label: A_NOTE, isLabelOfTheLook: true, look: { state: 'reading' }, opening: { state: 'none' } }
 }
 
 export function fillSource(press: string, look: SourceLook): boolean {
   if (held === null || held.press !== press) {
     return false
   }
-  held = { ...held, look }
+  const label = held.isLabelOfTheLook && look.state === 'read' ? sourceTabLabel(look) : held.label
+  held = { ...held, look, label }
   return true
 }
 
@@ -179,7 +209,7 @@ export async function openFile($: EngineInterface, original: string): Promise<Op
 }
 
 /** The label of the tab a source stands under: a document's or picture's original name, else what it is and its day. */
-export function sourceTabLabel(evidence: Evidence): string {
+export function sourceTabLabel(evidence: Pick<Evidence, 'originalName' | 'kind' | 'day'>): string {
   if (evidence.originalName !== null) {
     return topicLabel(evidence.originalName)
   }

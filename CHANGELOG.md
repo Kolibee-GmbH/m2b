@@ -21,6 +21,12 @@ All notable changes to this project are documented here. The format follows
 - What a session handed in shows before the next run takes it in: `m2b status` and `m2b proposals`
   say how many such proposals wait, `m2b band --json` carries the number, and the overview of the
   m2b pane says it above `curate now`. Only the number, never the words.
+- A current item in the tab `Facts` and in a topic reads like a fact: its words and since when,
+  with `show` below it for the note it rests on, which opens that note in the pane.
+
+### Changed
+
+- A current item no longer shows the file name of its note in the line.
 
 ## [0.8.0] - 2026-11-17
 
