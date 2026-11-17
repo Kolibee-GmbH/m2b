@@ -217,26 +217,26 @@ def answering_beats() -> tuple[Beat, ...]:
     written, back to the start view by its tab.
 
     The tabs are the first buttons of every view: ``Proposals`` is one Tab into the start view, the
-    first ``keep`` four Tabs past ``Overview``, where the focus stands after the turn, and from the
-    row that moved up once the answer is written ``Overview`` is four back."""
+    first ``keep`` six Tabs past ``Overview``, where the focus stands after the turn, and from the
+    row that moved up once the answer is written ``Overview`` is six back."""
     return pane_beats(
         "/m2b-pane",
         (
             *pressed([TAB, ENTER], 2.0),
-            *pressed([TAB, TAB, TAB, TAB, ENTER], 2.5),
+            *pressed([*[TAB] * 6, ENTER], 2.5),
             Beat(1.5, ENTER),
             Beat(1.5, ENTER),
-            *pressed([SHIFT_TAB, SHIFT_TAB, SHIFT_TAB, SHIFT_TAB, ENTER], PRESS_SECONDS + 1.5),
+            *pressed([*[SHIFT_TAB] * 6, ENTER], PRESS_SECONDS + 1.5),
             Beat(3.0),
         ),
     )
 
 
 # How many Tabs lead from the prompt to ``sonnet`` of the model of curation in the settings of the
-# demo store: three tabs of the pane, then every value that is not in force of the settings above
+# demo store: five tabs of the pane, then every value that is not in force of the settings above
 # it (two each of where the band stands and of the tasks in the band, one each of the topics, of
 # reading the sessions and of handing in), then it.
-TABS_TO_THE_MODEL = 11
+TABS_TO_THE_MODEL = 13
 # How many Shift+Tabs lead back to it from the row of "About this setup", the last button of the
 # view: every value that is not in force of the settings below the model (one each of the pause,
 # of the git commit and of the language), then it.

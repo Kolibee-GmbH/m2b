@@ -25,7 +25,8 @@ The actions file: ``{"actions": [...], "outcome": "success"}``, or for a curatio
 model steps ``{"skills": {"/m2b:ingest": {"actions": [...]}, "/m2b:lint": {...}}}``, chosen by the
 prompt (a skill not listed does nothing and succeeds); a skill's entry may also be a list of such
 scripts, the n-th for its n-th call and the last for every later one. Actions:
-``{"tool": "Bash", "command": "..."}`` (run without a shell), ``{"tool": "Read", "file_path": "..."}``,
+``{"tool": "Bash", "command": "..."}`` (run without a shell; a ``"stdin"`` beside it stands for a
+heredoc), ``{"tool": "Read", "file_path": "..."}``,
 ``{"tool": "Write", "file_path": "...", "content": "..."}``, ``{"tool": "Edit", "file_path": "...",
 "old_string": "...", "new_string": "..."}`` (the old text must occur exactly once, as in the real
 tool), ``Glob`` and ``Grep`` with a ``path``
@@ -155,7 +156,9 @@ def _carry_out(action: dict[str, Any]) -> tuple[str, bool]:
     tool = action["tool"]
     try:
         if tool == "Bash":
-            result = subprocess.run(shlex.split(action["command"]), capture_output=True, text=True, check=False)
+            result = subprocess.run(
+                shlex.split(action["command"]), input=action.get("stdin"), capture_output=True, text=True, check=False
+            )
             return result.stdout + result.stderr, result.returncode != 0
         if tool == "Read":
             return Path(action["file_path"]).read_text(encoding="utf-8"), False

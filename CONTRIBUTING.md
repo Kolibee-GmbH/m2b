@@ -120,6 +120,8 @@ scripts/e2e --level model E18-remember-beside-auto-memory   # after each Claude 
 scripts/e2e --level model E22-recall-across-projects        # the same
 scripts/e2e --level model E26-tick-a-task                   # the same
 scripts/e2e --level model E27-session-hands-in              # the same
+scripts/e2e --level model E31-file-asks-first               # the same
+scripts/e2e --level model E32-file-captured                 # the same
 scripts/e2e --level model E17-planted-capture               # and after a change to the ingest skill
 scripts/e2e --level model E14-topics                        # after a change to the ingest skill
 ```
@@ -152,6 +154,14 @@ session's id to `m2b proposals add`, and the command found the quote in the tran
 headless session, where the result of `Read` stands on disk by the time the next call runs. The
 session is asked outright; how often one hands in unasked is what the evals measure. One session
 on Sonnet, well under a minute.
+
+`E31-file-asks-first` and `E32-file-captured` ask a session to remember a file it is given with
+its whole path. In E31 nobody answers Claude Code's question for `m2b capture-file`, which no
+skill's allowed tools cover: it passes when the session's result names that command among the
+calls it was denied and no copy of the file reached the inbox. In E32 the command is allowed, as
+when the owner says yes: it passes when the inbox holds one copy of the PDF and one note beside
+it with the owner's words and the file's original name. One session on Haiku each; run them also
+after a change to the capture skill or to the note tool's description.
 
 `E17-planted-capture` runs a real ingest step over two captures written to steer it, one with an
 instruction in invisible characters and one that addresses the assistant in plain words, and over
@@ -253,7 +263,7 @@ claude plugin eval . --ablation with-without --scaffold --trust-plugin --no-publ
 ../../scripts/evals-page
 ```
 
-It runs each case three times per arm, 84 runs in all, and takes a few minutes on your own login.
+It runs each case three times per arm, 96 runs in all, and takes a few minutes on your own login.
 The report prices the runs as the API would, about six dollars; on a Claude subscription nothing is
 billed and the runs count against the plan's usage limits instead. `--max-cost-usd` stops the
 suite once that price passes the ceiling. The report lands in
@@ -419,7 +429,7 @@ The screenshots in `docs/images/` come from real Claude Code sessions against a 
 invented data. After a change the README pictures show, record them again:
 
 ```bash
-scripts/readme-images                # all eight
+scripts/readme-images                # all nine
 scripts/readme-images --only todos   # one, with the one its store depends on
 ```
 
@@ -441,7 +451,10 @@ an invented session in a Claude Code folder of the demo's own. Its memory holds 
 customer the demo project's folder names, so the pane's start view lists a topic the session was
 given. Your sessions are never read, and the four pictures differ between recordings only in
 their dates and times. `pane` and `settings` each build that store themselves, so `--only` records
-one of them alone. The eighth, `band-below`, types nothing: on the everyday store with
+one of them alone. The eighth, `fact`, shows a fact's file: on the everyday store, with the pane
+beside the chat, it types `/m2b-pane` and presses its way to the tab `Facts` and to `details` of
+the first fact, whose file rests on a note and on a document of the demo store. The ninth,
+`band-below`, types nothing: on the everyday store with
 `band.place` set to `below`, on the main screen in a terminal of 130 columns, it shows the band
 at the end of the hint line below the prompt with every count. It builds its store itself.
 
@@ -454,7 +467,7 @@ scripts/readme-demo --only pane-answers    # no model
 scripts/readme-demo --only pane-settings   # no model
 ```
 
-The one at the top of the README, `docs/images/demo.gif`, follows one sentence from a prompt into
+The README's, `docs/images/demo.gif`, follows one sentence from a prompt into
 a later session. Record it again after a change it shows.
 
 It needs `claude` logged in, [`agg`](https://docs.asciinema.org/manual/agg/) and `git`. It builds
@@ -485,3 +498,19 @@ plain text only, so watch each picture through as well, for example frame by fra
 `ffmpeg -i docs/images/demo.gif -vf fps=2 /tmp/demo-%03d.png`, and keep each file under about
 2 MB; the script prints its size. With `--only`, `--cast <file>` also keeps the recording the
 picture is rendered from, in asciinema's format.
+
+The picture at the top of the README, how one sentence goes through m2b, is drawn, not recorded:
+`docs/images/overview-light.svg` and `overview-dark.svg`. Every label and line stands in
+`scripts/repo_tools/overview_picture.py`; change it there and write both files again:
+
+```bash
+scripts/overview-picture <folder of the .ttf files>
+```
+
+It needs `uv`, which brings fontTools for the run, and the two typefaces as files, Montserrat and
+JetBrains Mono (both under the SIL Open Font License; the script's docstring names the files and
+where they come from). The letters are drawn as outlines, because GitHub shows a picture without
+loading a font, so the picture looks the same on every machine; the script measures every text
+against the room it has and stops at one that does not fit. The picture says what m2b does, so
+hold each label against the code before changing it, and look at both files in a browser: there a
+dot travels the sentence's way once, and with reduced motion asked for it stands still.

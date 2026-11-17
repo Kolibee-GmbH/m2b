@@ -28,11 +28,18 @@ export type TopicLook =
 // The look the pane shows, with the press that asked for it. The module's own: the session's
 // state is one every plugin can read, and it stays over a reload of the mod, while this starts
 // over with the module and is gone the moment the pane turns to anything else.
-let held: { press: string; look: TopicLook } | null = null
+// The topic's name too: opened from the tab Facts it can be one this session was never given, a
+// customer's among them, and the view in the session's state names only the press.
+let held: { press: string; name: string; look: TopicLook } | null = null
 
 /** Begins a look for a press, in place of whatever was kept before: m2b reads. */
-export function beginTopic(press: string): void {
-  held = { press, look: { state: 'reading' } }
+export function beginTopic(press: string, name: string): void {
+  held = { press, name, look: { state: 'reading' } }
+}
+
+/** The name of the topic the press opened; empty where nothing is kept for it, as after a reload of the mod. */
+export function topicNameOf(press: string): string {
+  return held !== null && held.press === press ? held.name : ''
 }
 
 /**
@@ -43,7 +50,7 @@ export function fillTopic(press: string, look: TopicLook): boolean {
   if (held === null || held.press !== press) {
     return false
   }
-  held = { press, look }
+  held = { press, name: held.name, look }
   return true
 }
 

@@ -1,0 +1,10 @@
+#!/bin/sh
+# Writes the overview picture at the top of the README, docs/images/overview-light.svg and
+# overview-dark.svg. Needs uv, which brings fontTools for this run alone, and a folder with the
+# two typefaces the picture is drawn in (the script's docstring names the files). Look at both
+# pictures before committing them, in a browser too: there a dot travels the sentence's way once.
+set -eu
+
+repo_root=$(cd "$(dirname "$0")/.." && pwd)
+PYTHONPATH="$repo_root/scripts${PYTHONPATH:+:$PYTHONPATH}" exec uv run --quiet --no-project --with fonttools==4.68.0 \
+  python -m repo_tools.overview_picture "$@"

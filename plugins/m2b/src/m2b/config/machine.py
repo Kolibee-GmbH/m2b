@@ -41,6 +41,7 @@ KEYS = (
     "executables",
     "curation",
     "distillate",
+    "capture",
     "band",
     "sessions",
     "addons",
@@ -58,6 +59,10 @@ CURATION_KEYS = (
     "paused",
 )
 DISTILLATE_KEYS = ("skip_under",)
+CAPTURE_KEYS = ("file_limit_mb",)
+# A file captured from a session is copied into the synced store: a scan, a contract, a handbook
+# fit, a film does not.
+DEFAULT_FILE_LIMIT_MB = 25
 BAND_KEYS = ("place", "due_tasks", "topics")
 # Where the band stands: above the prompt and always there, at the end of the hint line below the
 # prompt, or above the prompt only while it has something to say.
@@ -78,6 +83,7 @@ SECTION_KEYS: Mapping[str, tuple[str, ...]] = MappingProxyType(
         "calendar": CALENDAR_KEYS,
         "curation": CURATION_KEYS,
         "distillate": DISTILLATE_KEYS,
+        "capture": CAPTURE_KEYS,
         "band": BAND_KEYS,
         "sessions": SESSIONS_KEYS,
     }
@@ -150,6 +156,12 @@ class DistillateSettings:
 
 
 @dataclass(frozen=True)
+class CaptureSettings:
+    # The largest file `m2b capture-file` copies into the inbox, in megabytes.
+    file_limit_mb: int = DEFAULT_FILE_LIMIT_MB
+
+
+@dataclass(frozen=True)
 class BandSettings:
     # One of BAND_PLACES.
     place: str = DEFAULT_BAND_PLACE
@@ -176,6 +188,7 @@ class MachineConfig:
     executables: Mapping[str, str]
     curation: CurationSettings
     distillate: DistillateSettings = field(default_factory=DistillateSettings)
+    capture: CaptureSettings = field(default_factory=CaptureSettings)
     band: BandSettings = field(default_factory=BandSettings)
     sessions: SessionsSettings = field(default_factory=SessionsSettings)
     # Each add-on's settings as written, ``on`` included; ``m2b.addons.is_on`` reads them.
@@ -197,6 +210,7 @@ def parse_machine_config(raw: object, home: Path) -> MachineConfig:
         executables=_executables(fields.section("executables", required=False)),
         curation=_curation(fields.section("curation", required=False), home),
         distillate=_distillate(fields.section("distillate", required=False), home),
+        capture=_capture(fields.section("capture", required=False)),
         band=_band(fields.section("band", required=False)),
         sessions=_sessions(fields.section("sessions", required=False)),
         addons=_addons(fields.section("addons", required=False)),
@@ -267,6 +281,11 @@ def _distillate(fields: Fields, home: Path) -> DistillateSettings:
             raise fields.error("skip_under", f"holds {written!r}; each folder must be absolute or start with ~/")
         folders.append(folder)
     return DistillateSettings(skip_under=tuple(folders))
+
+
+def _capture(fields: Fields) -> CaptureSettings:
+    fields.reject_unknown(SECTION_KEYS["capture"])
+    return CaptureSettings(file_limit_mb=fields.integer("file_limit_mb", default=DEFAULT_FILE_LIMIT_MB))
 
 
 def _band(fields: Fields) -> BandSettings:

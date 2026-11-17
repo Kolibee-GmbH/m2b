@@ -95,6 +95,7 @@ An example with invented values:
 | `store.path` | the store's folder, absolute or starting with `~/` | |
 | `calendar.backend` | `none` or `apple-calendar` (macOS) | `none` |
 | `calendar.timeout_seconds` | how long a calendar call may take | 20 |
+| `capture.file_limit_mb` | the largest file `m2b capture-file` copies into the store, in megabytes | 25 |
 | `executables` | absolute paths of `python3`, `claude`, `reminders` and `osascript`, for runs outside a terminal, whose `PATH` is short | what setup found |
 | `curation.model_timeout_minutes` | how long one model step may run before it is stopped | 15 |
 | `curation.model` | the model of each fenced model step, any name `claude --model` takes | `haiku` |

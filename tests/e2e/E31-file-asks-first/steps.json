@@ -1,0 +1,4 @@
+{
+  "description": "E31: a scenario for the model level, where a real session is asked to remember a file. At the stub level there is no session to run, so the store stays as given.",
+  "steps": []
+}

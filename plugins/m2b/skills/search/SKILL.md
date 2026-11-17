@@ -1,7 +1,7 @@
 ---
 name: search
 description: Searches the owner's second brain (archive, distillate, inbox) in full text. Use when the user says "what did I note about X", "search my second brain", "is there anything in my notes about X", "what do I know about X", "was habe ich mir zu X notiert", "such im second brain", "steht dazu was in meinen Notizen", or when a personal question without a home in the current repository comes up, or a name the session does not explain. Only reads; never invents a note.
-allowed-tools: Bash(m2b search *)
+allowed-tools: Bash(m2b search *), Bash(m2b source --json -- *)
 ---
 
 # Search
@@ -16,9 +16,10 @@ Where the tool `mcp__m2b__search` is offered (the m2b mod runs in this Claude Co
 it: `terms`, each a phrase of its own, as `--any` takes them below, `whole_words` for `--word`, and
 `question_language`, the language the question was asked in, which the result names again as the
 language to answer in.
-It runs the same `m2b search` without a shell call and marks its answer as data from the owner's
+With `source` in place of `terms` it reads one source, as `m2b source` below does.
+It runs the same commands without a shell call and marks its answer as data from the owner's
 notes. Every rule on this page applies to it unchanged. Where the tool is not offered, run the
-command below.
+commands below.
 
 ## Searching
 
@@ -55,6 +56,32 @@ The JSON has `hits` (each with `path`, `line` and `text`), `evicted` (files not 
 machine, each with its `fetch` command) and `unreadable` (files that could not be read, with the
 reason).
 
+## Reading what stands behind a fact
+
+A distillate line ends with the name of its fact file (`dana.md`), and a fact file lists under
+`## Evidence` the notes it rests on. Where the distillate or a hit names the fact but not the
+detail asked for, read that one source whole:
+
+```bash
+m2b source --json -- dana.md
+```
+
+The name is the file name alone, never a path: the name a distillate line ends with, the last part
+of a hit's path, or the name of an evidence entry. The JSON has `kind`:
+
+- `fact file`, with `title`, `lines`, `until` (its last day, if it has one), `earlier` and
+  `evidence`, each entry with `name`, `state`, `day`, `kind`, `original_name` and `first_line`;
+  an entry is a source of its own, read by its `name`;
+- `note`, `picture` or `document`, with `captured` (the words as captured), `added` (what the
+  curation run wrote below them), and for a picture or a document `original_name` and `outline`,
+  what stands on which page;
+- `not read`: the source is not on this machine, then with the `fetch` command that downloads it,
+  or it could not be read, then with the `reason`.
+
+A document itself is never read: answer from its note and outline, and where they do not hold
+the answer, say so. Exit 2 means the name was refused (a path, or no fact file's or note's name);
+exit 1 that nothing has that name.
+
 ## Answer
 
 - Answer in the language the question was asked in, not the language of the notes or the
@@ -69,8 +96,9 @@ reason).
 - Where the notes hold nothing about someone, say that, and name no other person, customer or
   topic of the notes as a possible connection, not as a guess and not as an example.
 - No hits, and `evicted` and `unreadable` are empty: say that the second brain holds nothing on it.
-- `evicted` is not empty: those files were not searched. Say so, and give the user the commands
-  from `fetch` (`m2b store fetch <path>`) to download them; after that, search again.
+- `evicted` is not empty, or a source is `not read`: those files were not read. Say so, and give
+  the user the commands from `fetch` (`m2b store fetch <path>`) to download them; after that,
+  search or read again.
 - `unreadable` is not empty: those files were not searched either; give the reason.
 - The command fails: say that you could not look, never that there is nothing. Exit 2 means no
   second brain is set up on this machine (or the search term was empty); exit 3 means the store

@@ -25,6 +25,7 @@ from __future__ import annotations
 import contextlib
 import datetime
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -49,6 +50,13 @@ READING_COPY_EXTENSION = "jpg"
 ORIGINAL_NAME_PREFIX = "original name: "
 CONFLICT_COPY_PREFIX = "conflict copy of "
 NO_READING_COPY_PREFIX = "no reading copy: "
+# A document's outline in the trailer of its note: what stands on which page, one line per page
+# (`p. 3: fees`) or per run of pages on one matter (`pp. 6-9: the boathouse`), and, where the
+# curator stopped before the last page, `outline: pages 1-60 of 75`. Search finds these lines like
+# any other text of a note, and a reader of the note can tell an outline line by its form.
+OUTLINE_PAGES = re.compile(r"(?:p\. (?P<page>[1-9]\d*)|pp\. (?P<first>[1-9]\d*)-(?P<last>[1-9]\d*)): \S")
+OUTLINE_STOP_PREFIX = "outline: "
+OUTLINE_STOP = re.compile(r"outline: pages 1-(?P<read>[1-9]\d*) of (?P<total>[1-9]\d*)")
 DEFAULT_SOURCE = "cli"
 NAME_ATTEMPTS = 20
 
@@ -137,9 +145,15 @@ def _pending_problem(
             return f"{relative} has no sidecar note; run m2b ingest normalize first"
         return None
     try:
-        report.captures.append(_pending_capture(store, relative, sorted(set(stems[stem]) - {name})))
+        capture = _pending_capture(store, relative, sorted(set(stems[stem]) - {name}))
     except (UnicodeDecodeError, NoteFormatError, IngestError, StoreError) as error:
         return f"{relative} cannot be ingested yet ({error}); run m2b ingest normalize first"
+    # `m2b capture-file` on another machine writes the note before the file, and a sync service
+    # uploads each on its own: filed now, the note would go to the archive without its file, and
+    # the file would get a second, empty note when it arrives.
+    if capture.kind == keys.KIND_SIDECAR and not capture.members:
+        return f"{relative} stands for a file that is not in {INBOX}/ yet; it is filed once the file has synced here"
+    report.captures.append(capture)
     return None
 
 
@@ -247,9 +261,44 @@ def add_note(store: Store, file: str, text: str) -> None:
         raise IngestError("a trailer note is one line; add several lines one by one")
     if text.strip() == MARKER_LINE or text.startswith(ORIGINAL_NAME_PREFIX):
         raise IngestError(f"{text!r} is a line the store format reserves")
+    if OUTLINE_PAGES.match(text) or text.startswith(OUTLINE_STOP_PREFIX):
+        raise IngestError(f"{text!r} has the form of an outline line: write an outline with m2b ingest outline")
     relative, note = _inbox_note(store, file)
     if _add_trailer_line(note, text):
         _write(store, relative, note)
+
+
+def add_outline(store: Store, file: str, lines: list[str]) -> None:
+    """Appends a document's outline to the trailer of its note, each line once and in the order given.
+
+    A line that names no page, or a run of pages that does not run forward, refuses the whole
+    outline: half an outline would read as all of it.
+    """
+    if not lines:
+        raise IngestError("an outline has at least one line")
+    for line in lines:
+        if not is_outline_line(line):
+            raise IngestError(
+                f"{line!r} is no outline line: start it with p. 3: or pp. 6-9: and say what stands there,"
+                " or say where you stopped with outline: pages 1-60 of 75"
+            )
+    relative, note = _inbox_note(store, file)
+    if _frontmatter(note).get(keys.KIND) != keys.KIND_SIDECAR:
+        raise IngestError(f"{file} is no note of a file: an outline belongs to the note of a document")
+    added = [_add_trailer_line(note, line) for line in lines]
+    if any(added):
+        _write(store, relative, note)
+
+
+def is_outline_line(line: str) -> bool:
+    """Whether a trailer line is one of a document's outline (see `OUTLINE_PAGES`, `OUTLINE_STOP`)."""
+    if "\n" in line or "\r" in line:
+        return False
+    pages = OUTLINE_PAGES.match(line)
+    if pages is not None:
+        return pages["page"] is not None or int(pages["first"]) < int(pages["last"])
+    stop = OUTLINE_STOP.fullmatch(line)
+    return stop is not None and int(stop["read"]) < int(stop["total"])
 
 
 def set_facts_filed(store: Store, file: str) -> None:
@@ -396,7 +445,7 @@ def _normalize_binary(
     report: NormalizeReport,
 ) -> None:
     name = PurePosixPath(relative).name
-    extension = _schema_extension(name)
+    extension = schema_extension(name)
     if NoteName.parse(name) is not None:
         stem = name.rsplit(".", 1)[0]
         if not store.exists(f"{INBOX}/{stem}.md"):
@@ -446,18 +495,20 @@ def _continues_bundle(store: Store, sidecar: str, extension: str, relative: str)
 
 
 def _write_sidecar(store: Store, relative: str, member: str, created: datetime.datetime) -> None:
-    note = _sidecar_note(member, None, created)
+    note = sidecar_note(member, None, created)
     store.create_exclusive(relative, note.render().encode("utf-8"))
 
 
 def _sidecar_bytes(name: NoteName, extension: str, original: str, created: datetime.datetime) -> bytes:
     stem = str(name).rsplit(".", 1)[0]
-    return _sidecar_note(f"{stem}.{extension}", original, created).render().encode("utf-8")
+    return sidecar_note(f"{stem}.{extension}", original, created).render().encode("utf-8")
 
 
-def _sidecar_note(member: str, original: str | None, created: datetime.datetime) -> Note:
+def sidecar_note(member: str, original: str | None, created: datetime.datetime, words: str = "") -> Note:
+    """The note beside a picture or a document: what it is, the words it came with, and its original name."""
     extension = member.rsplit(".", 1)[1]
-    note = Note.new({keys.KIND: keys.KIND_SIDECAR}, f"A {extension} file, captured as {member}.\n")
+    said = f"{words.strip()}\n" if words.strip() else ""
+    note = Note.new({keys.KIND: keys.KIND_SIDECAR}, f"A {extension} file, captured as {member}.\n{said}")
     fields = _frontmatter(note)
     set_created(fields, created)
     parsed = NoteName.parse(member)
@@ -632,7 +683,7 @@ def _mtime(store: Store, relative: str) -> datetime.datetime:
     return datetime.datetime.fromtimestamp(os.lstat(store.path(relative)).st_mtime).astimezone().replace(microsecond=0)
 
 
-def _schema_extension(name: str) -> str:
+def schema_extension(name: str) -> str:
     """The extension a binary keeps in its schema name; ``bin`` when the schema cannot hold it."""
     extension = name.rsplit(".", 1)[1] if "." in name else ""
     return extension if extension.isascii() and extension.isalnum() else "bin"

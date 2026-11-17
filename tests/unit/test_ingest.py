@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import io
 import os
 import tempfile
 import unittest
@@ -11,7 +12,7 @@ from typing import Any
 from unittest import mock
 
 import test_commands
-from m2b import cli, ingest
+from m2b import cli, ingest, search
 from m2b.config import profile
 from m2b.notes.frontmatter import Note
 from m2b.notes.names import NoteName
@@ -27,6 +28,13 @@ from m2b.tasks.markdown import MarkdownTasks
 MTIME = datetime.datetime(2026, 11, 6, 21, 30, 0).astimezone()
 CAPTURE = "20261107T091500Z-cli-a1b2.md"
 CAPTURED = "---\ncreated: 2026-11-07T10:15:00+01:00\nsource: cli\n---\nRenew the passport before the trip\n"
+# The note of a document in the inbox after normalize, as the curation run finds it.
+DOCUMENT = "20261107T091500Z-cli-b3c4.md"
+DOCUMENT_NOTE = (
+    "---\nkind: sidecar\ncreated: 2026-11-07T10:15:00+01:00\nsource: cli\ncurated: true\n---\n"
+    "A pdf file, captured as 20261107T091500Z-cli-b3c4.pdf.\n"
+    f"{MARKER_LINE}\noriginal name: club-handbook.pdf\n"
+)
 
 
 def files_holding(root: Path, word: str) -> list[str]:
@@ -636,6 +644,86 @@ class RefNoteAndFactsTest(IngestFixture):
         self.assertNotIn("facts_filed", self.read(f"inbox/{CAPTURE}"))
 
 
+class OutlineTest(IngestFixture):
+    def setUp(self) -> None:
+        super().setUp()
+        self.write(f"inbox/{DOCUMENT}", DOCUMENT_NOTE)
+
+    def notes(self, name: str = DOCUMENT) -> list[str]:
+        trailer = find_trailer(Note.parse(self.read(f"inbox/{name}")))
+        assert trailer is not None
+        return trailer.notes.strip().split("\n")
+
+    def test_an_outline_goes_into_the_note_of_a_document_line_by_line_in_its_order(self) -> None:
+        """Covers: B217"""
+        outline = ["p. 1: contents", "pp. 2-5: fees 240, due 31 January; locker 37", "outline: pages 1-60 of 75"]
+
+        ingest.add_outline(self.store, DOCUMENT, outline)
+
+        self.assertEqual(self.notes(), ["original name: club-handbook.pdf", *outline])
+        self.assertIn("A pdf file, captured as", self.read(f"inbox/{DOCUMENT}"))
+
+    def test_an_outline_given_again_is_not_written_twice(self) -> None:
+        """Covers: B217"""
+        ingest.add_outline(self.store, DOCUMENT, ["p. 1: contents"])
+        ingest.add_outline(self.store, DOCUMENT, ["p. 1: contents", "p. 2: fees"])
+
+        self.assertEqual(self.notes()[1:], ["p. 1: contents", "p. 2: fees"])
+
+    def test_a_line_that_names_no_page_or_no_matter_writes_nothing_of_the_outline(self) -> None:
+        """Covers: B217"""
+        before = self.read(f"inbox/{DOCUMENT}")
+        for line in (
+            "fees on page 4",
+            "p. 4 fees",
+            "p. 4:",
+            "p. 0: cover",
+            "pp. 5-3: backwards",
+            "pp. 4-4: one page as a run",
+            "page 4: fees",
+            "p. 2: two\nlines",
+            "outline: pages 1-75 of 60",
+            "outline: pages 1-60 of 60",
+            "outline: pages 2-60 of 75",
+        ):
+            with self.subTest(line=line), self.assertRaises(ingest.IngestError):
+                ingest.add_outline(self.store, DOCUMENT, ["p. 1: contents", line])
+
+        self.assertEqual(self.read(f"inbox/{DOCUMENT}"), before)
+
+    def test_an_outline_is_one_line_at_least(self) -> None:
+        """Covers: B217"""
+        with self.assertRaises(ingest.IngestError):
+            ingest.add_outline(self.store, DOCUMENT, [])
+
+    def test_an_outline_belongs_to_the_note_of_a_file_and_not_to_a_typed_capture(self) -> None:
+        """Covers: B217"""
+        self.write(f"inbox/{CAPTURE}", CAPTURED)
+
+        with self.assertRaises(ingest.IngestError):
+            ingest.add_outline(self.store, CAPTURE, ["p. 1: contents"])
+
+        self.assertEqual(self.read(f"inbox/{CAPTURE}"), CAPTURED)
+
+    def test_a_note_in_the_form_of_an_outline_line_is_refused_so_only_outline_writes_one(self) -> None:
+        """Covers: B217"""
+        for text in ("p. 3: fees", "pp. 9-4: backwards", "outline: pages 1-60 of 75"):
+            with self.subTest(text=text), self.assertRaises(ingest.IngestError):
+                ingest.add_note(self.store, DOCUMENT, text)
+
+        ingest.add_note(self.store, DOCUMENT, "no outline: the second call was refused too")
+
+        self.assertEqual(self.notes()[-1], "no outline: the second call was refused too")
+
+    def test_search_finds_a_word_that_stands_only_in_the_outline(self) -> None:
+        """Covers: B217"""
+        ingest.add_outline(self.store, DOCUMENT, ["pp. 16-20: training times; winter ergometer league"])
+
+        result = search.search(self.store, "ergometer")
+
+        self.assertEqual([hit.path for hit in result.hits], [f"inbox/{DOCUMENT}"])
+
+
 class FinishTest(IngestFixture):
     def test_a_capture_moves_to_the_month_of_its_created_time_in_utc(self) -> None:
         """Covers: B19"""
@@ -825,6 +913,26 @@ class PendingTest(IngestFixture):
         self.assertEqual(report.stuck, ["inbox/later/20261107T091500Z-cli-a1b2.md"])
         self.assertIn("subfolder", report.problems[0])
 
+    def test_a_sidecar_whose_file_has_not_synced_waits_with_a_line_and_is_filed_once_the_file_is_there(self) -> None:
+        """Covers: B236"""
+        stem = "20261116T210500Z-claude-5e6f"
+        self.write(
+            f"inbox/{stem}.md",
+            "---\ncreated: 2026-11-16T22:05:00+01:00\nsource: claude\nkind: sidecar\n---\n"
+            f"A pdf file, captured as {stem}.pdf.\nThe lease of the flat.\n",
+        )
+
+        before = ingest.pending(self.store)
+        self.write(f"inbox/{stem}.pdf", b"%PDF-1.4\n")
+        after = ingest.pending(self.store)
+
+        self.assertEqual((before.captures, before.stuck), ([], [f"inbox/{stem}.md"]))
+        self.assertIn("not in inbox/ yet", before.problems[0])
+        self.assertEqual(
+            [(capture.file, capture.members) for capture in after.captures], [(f"{stem}.md", (f"{stem}.pdf",))]
+        )
+        self.assertEqual(after.problems, [])
+
     def test_a_bundle_whose_sidecar_is_evicted_is_only_named_as_evicted(self) -> None:
         stem = "20261107T091600Z-cli-c3d4"
         scan = mock.Mock(files=[f"inbox/{stem}.HEIC", f"inbox/{stem}.jpg"], evicted=[f"inbox/{stem}.md"])
@@ -928,6 +1036,32 @@ class IngestCommandTest(test_commands.CommandTest):
         text = (self.store_root / "corpus" / "2026" / "11" / CAPTURE).read_text(encoding="utf-8")
         for expected in ("refs: [https://example.org/passport]", "facts_filed: true", "filed: passport task"):
             self.assertIn(expected, text)
+
+    def test_outline_writes_its_lines_and_refuses_a_line_without_a_page(self) -> None:
+        """Covers: B217"""
+        self.write(f"inbox/{DOCUMENT}", DOCUMENT_NOTE)
+
+        code, _, err = self.run_command("ingest", "outline", DOCUMENT, "p. 1: contents", "pp. 2-5: fees and lockers")
+        refused, _, refusal = self.run_command("ingest", "outline", DOCUMENT, "fees on page 4")
+
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertEqual(refused, cli.EXIT_PROBLEM, refusal)
+        self.assertIn("fees on page 4", refusal)
+        text = (self.store_root / "inbox" / DOCUMENT).read_text(encoding="utf-8")
+        self.assertIn("p. 1: contents\npp. 2-5: fees and lockers\n", text)
+        self.assertNotIn("fees on page 4", text)
+
+    def test_outline_reads_its_lines_from_standard_input_as_the_document_wrote_them(self) -> None:
+        """Covers: B217"""
+        self.write(f"inbox/{DOCUMENT}", DOCUMENT_NOTE)
+        lines = "p. 4: annual dues $240, paid by `standing order`\n\npp. 5-6: the locker\u2028key, 25\n"
+
+        with mock.patch("sys.stdin", io.StringIO(lines)):
+            code, _, err = self.run_command("ingest", "outline", DOCUMENT, "-")
+
+        self.assertEqual(code, cli.EXIT_OK, err)
+        text = (self.store_root / "inbox" / DOCUMENT).read_text(encoding="utf-8")
+        self.assertIn("p. 4: annual dues $240, paid by `standing order`\npp. 5-6: the locker\u2028key, 25\n", text)
 
     def test_a_missing_capture_and_a_taken_destination_are_problems(self) -> None:
         """Covers: X6"""

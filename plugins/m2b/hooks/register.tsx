@@ -44,7 +44,7 @@ import {
   showPane,
 } from './pane'
 import { CLOSED_BY_HAND, closeAnswer, docksFor, staysBesideChat } from './pane-seat'
-import { focusKeyAfterTab, paneTabs, tabKeyAfterTurn } from './pane-tabs'
+import { BACK_TO_THE_FACT_FILE_KEY, focusKeyAfterTab, paneTabs, tabKeyAfterTurn } from './pane-tabs'
 import type { TabId } from './pane-tabs'
 import { plainLine, wholePath } from './plain-text'
 import {
@@ -112,7 +112,25 @@ import {
   waits,
 } from './settings'
 import type { SettingsActions } from './settings'
-import { beginTopic, fillTopic, forgetTopicUnless, heldTopic, readTopic, topicPane } from './topic'
+import {
+  beginFactFile,
+  beginFacts,
+  factFilePane,
+  factsOf,
+  factsPane,
+  fillFactFile,
+  fillFacts,
+  forgetFactsUnless,
+  readFactFile,
+  readFacts,
+  showKey,
+} from './facts-tab'
+import type { Evidence, FactsActions } from './facts-tab'
+import { NO_LONGER_OPEN, beginTasks, fillTasks, forgetTasksUnless, heldTasks, isOpenIn, noteRefusal, readTasks, taskPressKey, tasksPane } from './tasks-tab'
+import type { OpenTask, TaskActions } from './tasks-tab'
+import { beginSource, evidenceIndexOf, fillSource, forgetSourceUnless, noteOpening, openFile, openingOf, readSource, sourcePane } from './source-view'
+import type { SourceActions } from './source-view'
+import { beginTopic, fillTopic, forgetTopicUnless, heldTopic, readTopic, topicNameOf, topicPane } from './topic'
 import {
   NOTE_COMMAND_LINE,
   NOTE_TOOL,
@@ -122,13 +140,13 @@ import {
   PROPOSE_COMMAND_LINE,
   PROPOSE_TOOL,
   PROPOSE_TOOL_NAME,
-  SEARCH_COMMAND_LINE,
   SEARCH_TOOL,
   SEARCH_TOOL_NAME,
   isHandingInOn,
   noteTextOf,
   noteTool,
   proposeTool,
+  searchCommandLineOf,
   searchTool,
   verdictFor,
 } from './tools'
@@ -637,6 +655,14 @@ async function turnByTab($: EngineInterface, to: TabId): Promise<void> {
     await showSettings($, focusKey)
     return
   }
+  if (to === 'tasks') {
+    await showTasks($, focusKey)
+    return
+  }
+  if (to === 'facts') {
+    await showFacts($, focusKey)
+    return
+  }
   await asDialog($, { kind: to })
   const focusMoved = focusInPane($, focusKey)
   $.clock.after(0, inBackground($, () => refresh($, true)))
@@ -675,6 +701,9 @@ async function asDialog($: EngineInterface, view: PaneView): Promise<void> {
 async function turnTo($: EngineInterface, view: PaneView | null): Promise<void> {
   forgetTopicUnless(view)
   forgetSettingsUnless(view)
+  forgetTasksUnless(view)
+  forgetFactsUnless(view)
+  forgetSourceUnless(view)
   await update($, paneViewAtom, () => view)
 }
 
@@ -684,17 +713,181 @@ async function turnTo($: EngineInterface, view: PaneView | null): Promise<void> 
  * asked: after a tab, a close, another view or a press on another topic nothing is kept for this
  * one, and an answer that arrives then is dropped. The focus goes to the tab that leads back.
  */
-async function showTopic($: EngineInterface, name: string): Promise<void> {
+async function showTopic($: EngineInterface, name: string, from: TabId = 'overview'): Promise<void> {
   const press = await newPressToken($)
-  beginTopic(press)
-  await asDialog($, { kind: 'topic', name, press, isRead: false })
+  beginTopic(press, name)
+  await asDialog($, { kind: 'topic', press, isRead: false })
   // The read does not wait for the focus.
-  const focusMoved = focusInPane($, tabKeyAfterTurn('overview', 'aside'))
+  const focusMoved = focusInPane($, tabKeyAfterTurn(from, 'aside'))
   if (fillTopic(press, await readTopic($, name))) {
     // The lines are the module's; this write is what draws the pane again.
     await update($, paneViewAtom, view => (view !== null && view.kind === 'topic' && view.press === press ? { ...view, isRead: true } : view))
   }
   await focusMoved
+}
+
+/**
+ * Turns the pane to the tab `Tasks` and reads the open tasks as the list holds them now. As a
+ * topic's lines, the titles are kept by the module that draws them, for this opening alone.
+ */
+async function showTasks($: EngineInterface, focusKey: string | null): Promise<void> {
+  const opening = await newPressToken($)
+  beginTasks(opening)
+  await asDialog($, { kind: 'tasks', press: opening, drawn: 0 })
+  const focusMoved = focusInPane($, focusKey)
+  await readTasksFor($, opening)
+  await focusMoved
+}
+
+/** Reads the tasks for the opening `opening` names and draws the tab again; an answer for a tab that was left is dropped. */
+async function readTasksFor($: EngineInterface, opening: string): Promise<void> {
+  if (fillTasks(opening, await readTasks($))) {
+    await drawTasks($, opening)
+  }
+}
+
+/** Draws the tab of the opening `opening` names again: what its module holds changed. */
+async function drawTasks($: EngineInterface, opening: string): Promise<void> {
+  await update($, paneViewAtom, view =>
+    view !== null && view.kind === 'tasks' && view.press === opening ? { ...view, drawn: view.drawn + 1 } : view,
+  )
+}
+
+/**
+ * `done` on a task: the same press as keep on a candidate, five seconds of undo, then
+ * `m2b tasks complete`. Written, the tab reads the list again and the band its counts; refused,
+ * the row stays and says why until the next press on it.
+ */
+function taskActions($: EngineInterface, opening: string): TaskActions {
+  return {
+    done: async task => {
+      noteRefusal(opening, task.id, null)
+      await press($, taskPressKey(task.id), 'complete', taskDoneWrite($, opening, task), undoKey(task.id))
+    },
+    undo: id => undo($, taskPressKey(id)),
+  }
+}
+
+function taskDoneWrite($: EngineInterface, opening: string, task: OpenTask): PressWrite {
+  return async () => {
+    let refused: string | null = null
+    try {
+      refused = await whyNotOpen($, task)
+      if (refused === null) {
+        // `--`: with the markdown backend a task id is a file name, and it may start with a dash.
+        const outcome = await runM2b($, ['tasks', 'complete', '--', task.id], WRITE_TIMEOUT_MS)
+        refused = outcome.ok ? null : outcome.error
+      }
+    } catch (error) {
+      refused = String(error)
+    }
+    if (refused !== null) {
+      noteRefusal(opening, task.id, refused)
+      await drawTasks($, opening)
+      return false
+    }
+    await readTasksFor($, opening)
+    return true
+  }
+}
+
+/**
+ * Why a task pressed five seconds ago is not to be completed now, or null where it is still open:
+ * another session may have ticked or dropped it meanwhile, and the markdown backend would write a
+ * dropped task as completed.
+ */
+async function whyNotOpen($: EngineInterface, task: OpenTask): Promise<string | null> {
+  const now = await readTasks($)
+  if (now.state === 'failed') {
+    return now.error
+  }
+  if (now.state === 'read' && isOpenIn(now, task.id)) {
+    return null
+  }
+  return NO_LONGER_OPEN
+}
+
+/**
+ * Turns the pane to the tab `Facts` and reads what every session starts with and the topics, as
+ * the distillate holds them now. Like a topic's lines, they are kept by the module that draws
+ * them, for this opening alone.
+ */
+async function showFacts($: EngineInterface, focusKey: string | null): Promise<void> {
+  const opening = await newPressToken($)
+  beginFacts(opening)
+  await asDialog($, { kind: 'facts', press: opening, drawn: 0 })
+  const focusMoved = focusInPane($, focusKey)
+  if (fillFacts(opening, await readFacts($))) {
+    await redrawn($, 'facts', opening)
+  }
+  await focusMoved
+}
+
+/** `details` on a fact: its file under a tab of its own, read with `m2b source --json`; the focus on the tab that leads back. */
+async function showFactFile($: EngineInterface, file: string): Promise<void> {
+  const opening = await newPressToken($)
+  beginFactFile(opening, file)
+  await asDialog($, { kind: 'fact', press: opening, drawn: 0 })
+  const focusMoved = focusInPane($, tabKeyAfterTurn('facts', 'aside'))
+  if (fillFactFile(opening, await readFactFile($, file))) {
+    await redrawn($, 'fact', opening)
+  }
+  await focusMoved
+}
+
+/**
+ * `show` on an evidence row of the fact file shown as `from`: that source under a tab of its own,
+ * read with `m2b source --json --viewer`; the focus on the tab of the fact file, which leads back.
+ */
+async function showSource($: EngineInterface, from: string, index: number, evidence: Evidence): Promise<void> {
+  const opening = await newPressToken($)
+  beginSource(opening, from, index, evidence)
+  await asDialog($, { kind: 'source', press: opening, from, drawn: 0 })
+  const focusMoved = focusInPane($, BACK_TO_THE_FACT_FILE_KEY)
+  if (fillSource(opening, await readSource($, evidence.name))) {
+    await redrawn($, 'source', opening)
+  }
+  await focusMoved
+}
+
+/**
+ * The tab of the fact file above a source: the fact file as it was drawn, which its module kept,
+ * the focus on `show` of the row the source was opened from.
+ */
+async function backToFactFile($: EngineInterface, from: string): Promise<void> {
+  const view = await read($, paneViewAtom)
+  const index = view?.kind === 'source' ? evidenceIndexOf(view.press) : null
+  await asDialog($, { kind: 'fact', press: from, drawn: 0 })
+  await focusInPane($, index === null ? tabKeyAfterTurn('facts', 'aside') : showKey(index))
+}
+
+function sourceActions($: EngineInterface, press: string): SourceActions {
+  return {
+    open: async original => {
+      // A second press while the viewer is asked for would ask twice.
+      if (openingOf(press).state === 'opening' || !noteOpening(press, { state: 'opening' })) {
+        return
+      }
+      await redrawn($, 'source', press)
+      if (noteOpening(press, await openFile($, original))) {
+        await redrawn($, 'source', press)
+      }
+    },
+  }
+}
+
+/** Draws the view of the opening `opening` names again, where it is still shown: what its module holds changed. */
+async function redrawn($: EngineInterface, kind: 'facts' | 'fact' | 'source', opening: string): Promise<void> {
+  await update($, paneViewAtom, view =>
+    view !== null && view.kind === kind && view.press === opening ? { ...view, drawn: view.drawn + 1 } : view,
+  )
+}
+
+function factsActions($: EngineInterface): FactsActions {
+  return {
+    details: file => showFactFile($, file),
+    showTopic: name => showTopic($, name, 'facts'),
+  }
 }
 
 type SettingsView = Extract<PaneView, { kind: 'settings' }>
@@ -898,9 +1091,17 @@ async function viewOfPane(
     case 'proposals':
       return proposalsPane($, e, proposals, presses, await read($, proposalsNoticeAtom), proposalActions($), bodyColumns)
     case 'topic':
-      return topicPane($, e, view.name, heldTopic(view.press), bodyColumns)
+      return topicPane($, e, topicNameOf(view.press), heldTopic(view.press), bodyColumns)
     case 'search':
       return searchPane($, e, view.search, bodyColumns)
+    case 'tasks':
+      return tasksPane($, e, heldTasks(view.press), presses, taskActions($, view.press), bodyColumns)
+    case 'facts':
+      return factsPane($, e, factsOf(view.press), factsActions($), bodyColumns)
+    case 'fact':
+      return factFilePane($, e, view.press, { show: (index, evidence) => showSource($, view.press, index, evidence) }, bodyColumns)
+    case 'source':
+      return sourcePane($, e, view.press, sourceActions($, view.press), bodyColumns)
     case 'review': {
       const model = {
         snapshot: await read($, snapshotAtom),
@@ -1164,14 +1365,16 @@ async function notSetUpLine($: EngineInterface, what: string): Promise<string | 
   }
 }
 
-/** Notes that this session runs the band, which `m2b doctor` reports; a failed write changes nothing. */
+/**
+ * Notes that this session runs the band, which `m2b doctor` reports; nothing that fails changes
+ * anything, a read of the environment Claude Code refuses once the mod is unloaded included.
+ */
 async function noteSeen($: EngineInterface): Promise<void> {
-  const home = await m2bHome($)
-  if (home === undefined) {
-    return
-  }
   try {
-    await $.fs.write(`${home}/${SEEN_FILE}`, JSON.stringify({ seenAt: new Date(await $.clock.now()).toISOString() }))
+    const home = await m2bHome($)
+    if (home !== undefined) {
+      await $.fs.write(`${home}/${SEEN_FILE}`, JSON.stringify({ seenAt: new Date(await $.clock.now()).toISOString() }))
+    }
   } catch {
     // The band runs all the same; doctor then says it has not seen it.
   }
@@ -1501,9 +1704,9 @@ export const register: Register = on => {
     lookTimers.clear()
     isOpeningDue = true
     await carryPressesOver($)
-    // A reload of the mod took the lines of a topic, and the values of the settings, with the old
-    // module: the pane starts over.
-    if (['topic', 'settings'].includes((await read($, paneViewAtom))?.kind ?? '')) {
+    // A reload of the mod took the lines of a topic, the values of the settings, the open tasks and
+    // the facts with the old module: the pane starts over.
+    if (['topic', 'settings', 'tasks', 'facts', 'fact', 'source'].includes((await read($, paneViewAtom))?.kind ?? '')) {
       await turnTo($, null)
     }
     loadedVersion = await readLoadedVersion($)
@@ -1718,7 +1921,7 @@ export const register: Register = on => {
     return verdictFor($, e, verdict, NOTE_COMMAND_LINE, isOwn)
   })
   on('tool.check', { tool: SEARCH_TOOL_NAME }, async ($, e, next) =>
-    verdictFor($, e, await next(e), SEARCH_COMMAND_LINE),
+    verdictFor($, e, await next(e), searchCommandLineOf(e.input)),
   )
   on('tool.check', { tool: PROPOSE_TOOL_NAME }, async ($, e, next) =>
     verdictFor($, e, await next(e), PROPOSE_COMMAND_LINE),
@@ -1772,10 +1975,13 @@ export const register: Register = on => {
     })
     return result
   }).catch(async (_, e, next) => {
-    // The pane closes without its view being turned: a topic's lines and the settings' values go
-    // all the same, and so do the seats, which the pane's next drawing notes anew.
+    // The pane closes without its view being turned: a topic's lines, the settings' values and the
+    // tasks go all the same, and so do the seats, which the pane's next drawing notes anew.
     forgetTopicUnless(null)
     forgetSettingsUnless(null)
+    forgetTasksUnless(null)
+    forgetFactsUnless(null)
+    forgetSourceUnless(null)
     paneSeats.clear()
     return next(e)
   })
@@ -1792,7 +1998,7 @@ export const register: Register = on => {
     const { Box } = ui
     return (
       <Box flexDirection="column">
-        <Box marginBottom={1}>{tabRow(ui, paneTabs(view, proposals?.waiting.length ?? 0, to => turnByTab($, to)))}</Box>
+        <Box marginBottom={1}>{tabRow(ui, paneTabs(view, proposals?.waiting.length ?? 0, to => turnByTab($, to), from => backToFactFile($, from)))}</Box>
         {await viewOfPane($, e, view, proposals, e.props.bodyColumns)}
       </Box>
     )

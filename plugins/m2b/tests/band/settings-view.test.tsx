@@ -62,11 +62,13 @@ const ABOUT_ROW_WRITING = 'settings:fold:about:writing'
 const BACK_TO_THE_CHOICES = 'tab:settings:in:aside'
 /** The title of the one part the view draws once it is turned to that group. */
 const ABOUT_TITLE = `6 settings ${FOLDED}`
-/** The row of tabs above that group: the four that stay, each a button, and a fifth that bears the group's title. */
+/** The row of tabs above that group: the six that stay, each a button, and a seventh that bears the group's title. */
 const TABS_ABOVE_ABOUT = [
   { label: 'Overview', key: 'tab:overview:in:aside' },
   { label: 'Proposals', key: 'tab:proposals:in:aside' },
   { label: 'Review', key: 'tab:review:in:aside' },
+  { label: 'Tasks', key: 'tab:tasks:in:aside' },
+  { label: 'Facts', key: 'tab:facts:in:aside' },
   { label: 'Settings', key: BACK_TO_THE_CHOICES },
   { label: 'About this setup', key: null },
 ]
@@ -539,7 +541,7 @@ for (const [phase, row] of [
 
     await ui.press({ key: row })
 
-    // The fifth tab bears the group's title and is the one shown; `Settings` is a button again, which leads back.
+    // The seventh tab bears the group's title and is the one shown; `Settings` is a button again, which leads back.
     expect(await shownTabs(ui)).toEqual(TABS_ABOVE_ABOUT)
     expect(await shownTab(ui)).toBe('aside')
     expect(await shownParts(ui)).toEqual([{ key: 'about', title: ABOUT_TITLE, count: null, lines: ABOUT_LINES }])
@@ -689,7 +691,7 @@ for (const [what, without] of [
     await clock.advance(1)
 
     expect(fake.settingCalls()).toEqual([LIST, ['settings', 'set', '--', 'curation.paused', 'true'], LIST])
-    // The tabs name what is drawn below them: the fifth is gone, and `Settings` is the one shown.
+    // The tabs name what is drawn below them: the seventh is gone, and `Settings` is the one shown.
     expect(await shownTab(ui)).toBe('settings')
     expect(await headings(ui)).toEqual([
       ['shows', 'What m2b shows'],
@@ -764,8 +766,8 @@ test('the tab of a folded group bears its title cut to 20 characters, a longer o
   expect(Array.from(label)).toHaveLength(20)
   expect((await shownTabs(cut)).filter(tab => tab.label.includes(long))).toEqual([])
   expect(await shownTab(cut)).toBe('aside')
-  // The four tabs that stay are as above every group.
-  expect((await shownTabs(cut)).slice(0, 4)).toEqual(TABS_ABOVE_ABOUT.slice(0, 4))
+  // The six tabs that stay are as above every group.
+  expect((await shownTabs(cut)).slice(0, 6)).toEqual(TABS_ABOVE_ABOUT.slice(0, 6))
   await cut.unmount()
 
   // What a terminal would run, and a line break, are gone before the title reaches the tab or the session's state.
@@ -1032,7 +1034,7 @@ test('in a pane 24 columns wide every line of a setting wraps, its values break 
   for (const line of [ABOUT_TITLE, ...ABOUT_LINES]) {
     expect((await lookOf(ui, line))?.wrap).toBe('wrap')
   }
-  // The row of five tabs breaks between its tabs.
+  // The row of six tabs breaks between its tabs.
   expect(await shownTabs(ui)).toEqual(TABS_ABOVE_ABOUT)
   expect((await ui.find({ key: 'tabs' }))?.props).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
   await ui.unmount()

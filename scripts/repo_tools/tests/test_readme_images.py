@@ -281,7 +281,9 @@ class ShotsTest(unittest.TestCase):
     def test_the_pane_docks_beside_the_chat_only_in_the_full_screen_layout_and_wide_enough(self) -> None:
         docked = {shot.name: shot.columns for shot in readme_images.SHOTS if shot.full_screen}
 
-        self.assertEqual(docked, {"pane": readme_images.WIDE, "settings": readme_images.WIDE})
+        self.assertEqual(
+            docked, {"pane": readme_images.WIDE, "settings": readme_images.WIDE, "fact": readme_images.WIDE}
+        )
         self.assertGreaterEqual(readme_images.WIDE, 110)
         on_the_main_screen = {shot.name: shot.columns for shot in readme_images.SHOTS if not shot.full_screen}
         # The hint line below the prompt has room for every count of the band only in a wide terminal.
@@ -307,6 +309,21 @@ class ShotsTest(unittest.TestCase):
     def test_a_shot_beside_the_chat_is_recorded_alone(self) -> None:
         self.assertEqual([shot.name for shot in readme_images.shots_for("pane")], ["pane"])
         self.assertEqual([shot.name for shot in readme_images.shots_for("settings")], ["settings"])
+        self.assertEqual([shot.name for shot in readme_images.shots_for("fact")], ["fact"])
+
+    def test_the_shot_of_a_facts_file_presses_its_way_from_the_pane_to_details(self) -> None:
+        (fact,) = [shot for shot in readme_images.SHOTS if shot.keys]
+
+        steps = readme_images.steps_for(fact)
+
+        self.assertEqual((fact.name, fact.prompt), ("fact", "/m2b-pane"))
+        # Four Tabs to the tab Facts, Enter, five Tabs to the first fact's details, Enter, then the wait.
+        self.assertEqual(
+            [keys for _, keys in steps[-5:]],
+            [readme_images.TAB * 4, readme_images.ENTER, readme_images.TAB * 5, readme_images.ENTER, ""],
+        )
+        self.assertEqual(steps[-5][0], fact.answer_seconds)
+        self.assertEqual(steps[-1][0], 5)
 
 
 class ToolsTest(unittest.TestCase):

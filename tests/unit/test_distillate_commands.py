@@ -155,5 +155,84 @@ class DistillateTopicTest(test_commands.CommandTest):
         self.assertEqual(code, cli.EXIT_USAGE)
 
 
+class DistillateTopicsTest(test_commands.CommandTest):
+    """``m2b distillate topics``: what every session starts with, and each topic with its counts."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.set_up(calendar="none")
+        self.index = self.store_root / "memory" / "MEMORY.md"
+        self.index.parent.mkdir()
+        self.index.write_text(MEMORY, encoding="utf-8")
+
+    def topics(self) -> dict[str, Any]:
+        code, out, err = self.run_command("distillate", "topics", "--json")
+        self.assertEqual(code, cli.EXIT_OK, err)
+        answer: dict[str, Any] = json.loads(out)
+        return answer
+
+    def test_the_facts_every_session_starts_with_come_with_their_fact_file_and_each_topic_with_its_counts(self) -> None:
+        """Covers: B225"""
+        self.assertEqual(
+            self.topics(),
+            {
+                "facts": [{"statement": "Dana likes old maps", "file": "dana.md"}],
+                "current": ["Shed"],
+                "topics": [
+                    {"name": "Acme Ltd", "facts": 2, "current": 1},
+                    {"name": "Riverside Choir", "facts": 1, "current": 0},
+                ],
+            },
+        )
+
+    def test_a_fact_line_without_a_fact_file_is_a_fact_without_one(self) -> None:
+        """Covers: B225"""
+        without_file = MEMORY.replace("- Dana likes old maps (dana.md)", "- Dana likes old maps")
+        self.index.write_text(without_file, encoding="utf-8")
+
+        self.assertEqual(self.topics()["facts"], [{"statement": "Dana likes old maps", "file": None}])
+
+    def test_a_store_without_a_distillate_starts_every_session_with_nothing(self) -> None:
+        """Covers: B225"""
+        self.index.unlink()
+
+        self.assertEqual(self.topics(), {"facts": [], "current": [], "topics": []})
+
+    def test_no_line_comes_with_a_character_that_draws_nothing(self) -> None:
+        """Covers: B225"""
+        self.index.write_text(MEMORY.replace("likes old maps", "likes​ old maps\U000e0041"), encoding="utf-8")
+
+        self.assertEqual(self.topics()["facts"][0]["statement"], "Dana likes old maps")
+
+    def test_without_json_the_lines_are_printed_under_what_they_are(self) -> None:
+        """Covers: B225"""
+        code, out, _ = self.run_command("distillate", "topics")
+
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertEqual(
+            out,
+            "Every session starts with\n"
+            "- Dana likes old maps (dana.md)\n"
+            "Current\n"
+            "- Shed\n"
+            "Topics, given to a session when a prompt names them\n"
+            "- Acme Ltd: 2 facts, 1 current\n"
+            "- Riverside Choir: 1 fact, 0 current\n",
+        )
+
+    def test_a_distillate_that_is_not_downloaded_is_said_and_never_one_without_lines(self) -> None:
+        """Covers: B225"""
+        eviction = FakeEviction()
+        eviction.evicted.add(self.index)
+        guard = DatalessGuard(True, lstat=eviction.lstat)
+
+        with mock.patch("m2b.store.factory.guard_for_platform", return_value=guard):
+            code, out, err = self.run_command("distillate", "topics", "--json")
+
+        self.assertEqual(code, cli.EXIT_UNREACHABLE)
+        self.assertEqual(out, "")
+        self.assertIn("memory/MEMORY.md is not downloaded to this machine", err)
+
+
 if __name__ == "__main__":
     unittest.main()

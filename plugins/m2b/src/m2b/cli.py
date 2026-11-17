@@ -39,6 +39,7 @@ from m2b.commands import rediscover as rediscover_commands
 from m2b.commands import refresh as refresh_commands
 from m2b.commands import search as search_commands
 from m2b.commands import setup as setup_commands
+from m2b.commands import source as source_commands
 from m2b.commands import status as status_commands
 from m2b.commands import todos as todos_commands
 from m2b.config.errors import ConfigError, NotSetUpError, StoreUnreachableError
@@ -267,6 +268,13 @@ def _parser() -> argparse.ArgumentParser:
         "the facts and current items of one topic, as the distillate holds them now",
         json_flag=True,
     ).add_argument("name", help="the topic's name, as its heading in the distillate has it")
+    _command(
+        distillate_group,
+        "topics",
+        distillate_commands.distillate_topics,
+        "what every session starts with, and each topic with its counts",
+        json_flag=True,
+    )
 
     addons_group = _group(commands, "addons", "the add-ons of m2b on this machine")
     _command(addons_group, "list", addons_commands.addons_list, "each add-on and whether it is on", json_flag=True)
@@ -294,11 +302,27 @@ def _parser() -> argparse.ArgumentParser:
     )
     capture.add_argument("--quiet", action="store_true", help="keep it out of everything proactive")
     capture.add_argument("--follow-up", help="YYYY-MM-DD: also create a task due that day")
+    capture_file = _command(
+        commands, "capture-file", capture_commands.capture_file_command, "copy a file into the inbox, with words"
+    )
+    capture_file.add_argument("path", help="the file's absolute path")
+    capture_file.add_argument("words", nargs="?", help="what to keep with it; - reads them from standard input")
+    capture_file.add_argument(
+        "--source", default=capture_commands.DEFAULT_SOURCE, help="claude from a session, cli otherwise"
+    )
 
     search = _command(commands, "search", search_commands.search_command, "full text over archive, memory, inbox", True)
     search.add_argument("terms", nargs="+", help="one phrase; with --any, one phrase per term")
     search.add_argument("--any", action="store_true", help="each term on its own; a line holding one of them is a hit")
     search.add_argument("--word", action="store_true", help="whole words only, not parts of words")
+
+    source = _command(
+        commands, "source", source_commands.source_command, "one fact file or note, read whole by its name", True
+    )
+    source.add_argument("name", help="the name a distillate line ends with, or a note's name; never a path")
+    source.add_argument(
+        "--viewer", action="store_true", help="with --json: whether `m2b store open` opens the file, and where it lies"
+    )
 
     again = _command(commands, "rediscover", rediscover_commands.rediscover_command, "old notes back into view", True)
     again.add_argument("--count", type=int, default=3, help="at most this many notes; 3 without it")
@@ -372,6 +396,8 @@ def _parser() -> argparse.ArgumentParser:
     fetch = _command(store_group, "fetch", store.store_fetch, "download evicted files")
     fetch.add_argument("paths", nargs="+")
     fetch.add_argument("--timeout", type=float, default=store.DEFAULT_FETCH_TIMEOUT_SECONDS)
+    opener = _command(store_group, "open", store.store_open, "open a PDF or a picture of the archive in its viewer")
+    opener.add_argument("name", help="the file's name, as a note or an evidence link names it; never a path")
 
     ingest_group = _group(commands, "ingest", "the curator's steps on inbox captures", listed=False)
     _command(
@@ -394,6 +420,13 @@ def _parser() -> argparse.ArgumentParser:
     )
     ingest_note.add_argument("file")
     ingest_note.add_argument("text", help="the note, or - to read it from standard input")
+    ingest_outline = _command(
+        ingest_group, "outline", ingest_commands.ingest_outline, "add a document's outline to its note", curator=True
+    )
+    ingest_outline.add_argument("file", help="the note of the document in the inbox")
+    ingest_outline.add_argument(
+        "lines", nargs="+", help="p. 3: …, pp. 6-9: …, outline: pages 1-60 of 75; - reads them from standard input"
+    )
     _command(
         ingest_group,
         "facts-filed",

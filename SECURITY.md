@@ -26,6 +26,17 @@ folder. All of it stays in folders you chose: the store, `~/.config/m2b/` and `~
 on each machine. m2b makes no network calls of its own; the model steps go
 through Claude Code like any session.
 
+What goes into the store is yours to decide, also from work: a session keeps what you ask it to,
+a customer's document or what someone told you in confidence among it. A file you name with its
+path goes in on your yes to Claude Code's question (`m2b capture-file`, which no skill runs without
+asking), unless a rule of yours such as `Bash(m2b:*)` or a permission mode that asks nothing
+(auto, `bypassPermissions`) lets the call through; then the skill's rule, to copy only a file you
+named, is all that stands before it. A document in the store lies in the folder that syncs to
+every machine and through the sync service; its copy and its note stay in the archive, and a curation run's model,
+through Claude Code on your login, reads it up to its 60th page to file facts from it. A press on
+`open the file` in the pane opens a PDF or a picture of the archive in the system's viewer, and
+nothing else: a page or a script someone sent is named with its path and never started.
+
 With the worklog add-on, the daily note in the store holds topics a model wrote from your prompts,
 and your commit subjects. Credentials in prompts, answers and commit subjects are redacted by
 pattern before the model sees them, which stays incomplete. Work that must not reach the store at
@@ -74,8 +85,8 @@ repository is therefore as trusted as your own, and where it lies decides who ca
 
 ## Untrusted input
 
-A capture is text from wherever it came: a share sheet, a shortcut, an integration writing into
-`inbox/`, a web page someone pasted. m2b treats it as data, but the ingest step is a model that
+A capture is text, or a file, from wherever it came: a share sheet, a shortcut, an integration
+writing into `inbox/`, a web page someone pasted, a PDF someone sent you. m2b treats it as data, but the ingest step is a model that
 reads it, and a capture can be written to steer that model. What such a capture can reach is what
 ingest is allowed: the `m2b ingest`, `m2b search` and `m2b curate report` commands, reading the
 inbox and `memory/`, and editing files in `memory/`. Two more steps read captures as evidence:
@@ -329,8 +340,8 @@ What it does not hold:
   dropping the session's keeps both away for 90 days. Within one run the reading comes first.
 - What a session read without a path. The rule of the folders covers what a call names by a path;
   what came through a connector, the web or a command that names no such path is covered only by
-  the rule in the tool's description (never documents of customers or confidential statements
-  about third parties) and by your answer. A path hidden in a variable is not seen.
+  the rule in the tool's description (from work only who is who, which role, what was agreed) and
+  by your answer. A path hidden in a variable is not seen.
 - Who called. `m2b proposals add` can be called from a shell by an agent you allowed
   `Bash(m2b:*)`, and such a call can name any session of this machine: a text of the caller's
   choosing over words that stand in another session. That is less than the same permission gives
@@ -363,6 +374,16 @@ for the distillate); that list cannot be complete, and a model may still follow 
 like an instruction. Where the tool is not offered, the `search` skill runs `m2b search` in a
 shell: a hit then comes without those invisible characters too, but with its escape sequences
 and without the line that marks it as data.
+
+With a source in place of search terms, the search tool reads one fact file or one note of the
+archive whole through `m2b source`, under the same line and with the same characters removed. It
+takes a file name and never a path, and refuses before it lists or reads anything a name that
+holds a separator or a line break, or that is neither a note's name nor the name of a fact file;
+the distillate itself is refused too. So the name a model chooses, after whatever it read, reaches
+only what `m2b search` reads anyway, apart from the inbox, and never the machine config, the
+state or the tasks. A file that is only in the cloud is named with the command that fetches it,
+and a symlink is not followed. The document behind a note is not read by the tool or the skill;
+the session gets the note and its outline.
 
 The mod lets a call of any of these tools run where Claude Code would only ask because no rule allows it,
 as the skills run their commands without asking; then neither the classifier of auto mode nor a

@@ -36,6 +36,14 @@ m2b capture "Dana's birthday is on 3 March"
 m2b capture --follow-up 2026-11-20 "Call the plumber about the shed"
 ```
 
+A file goes in two ways. Drop it into `inbox/` in the store, from the Finder or a phone's share
+sheet, and the next curation run makes a note beside it. Or, in a session, name it with its path:
+"keep this contract, ~/Documents/lease.pdf, it runs until March". The `capture` skill copies it
+into the inbox with your words through `m2b capture-file`, and Claude Code asks you before every
+such copy, since the file goes into a folder that syncs to every machine. A file over 25 MB, a
+folder, a link and a text file are refused; `capture.file_limit_mb` sets the size. A PDF is read
+up to its 60th page, and a picture as a picture ([A document in the inbox](curation.md#a-document-in-the-inbox)).
+
 ## The distillate at session start
 
 A session-start hook prints the distillate, at most 8 KB: lasting facts, each pointing to its
@@ -49,8 +57,8 @@ that folder turns it off for every session there and below, on this machine; the
 button for it ([The band](band.md#turning-m2b-off-in-a-folder)).
 
 Sessions capture what you learn about people and verbal agreements, at work too: who is who,
-which role, what was agreed. Documents of customers and what a third party told you in confidence
-are never captured. A customer's people land under that customer's topic, so their facts reach a
+which role, what was agreed. What else goes in is yours to decide, a customer's document among it
+([SECURITY.md](../SECURITY.md#what-m2b-handles) says where it then lies and who reads it). A customer's people land under that customer's topic, so their facts reach a
 session only when it is about that customer. What you are working on for that customer lands under
 the same topic in Current; what goes on in your own life stays above the topics there and reaches
 every session.
@@ -61,7 +69,10 @@ every session.
 `todos` and `rediscover` skills answer from the store. Search is full text over archive, memory
 and inbox; hits from memory come first, then the archive, then the inbox, in both the newest note
 first. The skill searches a word together with its translation, so a note written in German
-answers a question asked in English. Todos lists overdue, this week and undated tasks, ticks a task you say is done, and shows today's events when a calendar
+answers a question asked in English. Asked for a detail the fact does not hold, "what exactly
+does the rowing club's handbook say about lockers?", the session reads the fact's file whole, and
+from there the note of the document behind it, which says what stands on which page. It never
+reads the document itself: where the note and its outline do not hold the answer, it says so. Todos lists overdue, this week and undated tasks, ticks a task you say is done, and shows today's events when a calendar
 is set up. Rediscover brings one or a few old notes back, each with its reason, also for "what
 did I note last spring?". A file iCloud Drive has not downloaded is named, never read and never
 counted as missing.
@@ -111,7 +122,8 @@ it in the m2b pane, or delete the task, and it does not come back for 90 days.
 
 **Ticking a task.** Say in a session that a task is done, "I returned Sam's ladder, tick it
 off", and the `todos` skill ticks it: it finds the task in your list and asks when more than one
-fits. With Apple Reminders you can also tick in the Reminders app. In a terminal with Markdown
+fits. In the m2b pane, the tab `Tasks` lists every open task of yours, each with `done`
+([The band](band.md#all-your-open-tasks)). With Apple Reminders you can also tick in the Reminders app. In a terminal with Markdown
 tasks, `m2b tasks list` shows every open task with its id, the review task and these questions
 among them; `m2b tasks complete <id>` ticks one and `m2b tasks drop <id>` drops one. Keep and
 drop in the m2b pane call the same two commands.
@@ -151,7 +163,7 @@ What m2b has that Claude Code's memory does not:
 | Word | Meaning |
 |---|---|
 | store | the folder that holds your notes: `inbox/`, `corpus/` (the archive), `memory/` |
-| capture | one note as you said it, one file in `inbox/` |
+| capture | one note as you said it, one file in `inbox/`; for a file you gave m2b, the file and a note beside it |
 | inbox | `inbox/` in the store: the captures no run has filed yet |
 | archive | `corpus/` in the store: every filed capture, by the month it was captured in |
 | curation run | the background run that files the inbox, on one machine per store, the curating machine |
@@ -161,7 +173,7 @@ What m2b has that Claude Code's memory does not:
 | review task | the one task m2b keeps in your task list for what a run needs you to look at: a step that failed, a finding, a facts line it removed or rewrote. Ticking it, or `ok` in the m2b pane, closes it |
 | proposal | a fact a curation run suggests from what you typed and pasted in your sessions, or a session hands in by itself, with the words it stands on beside it. Each way is off until you turn it on, the reading in setup and handing in with `m2b config set sessions.propose true` in a terminal of your own or a press on its `on` in the pane's settings, and nothing is filed before you keep it |
 | memory candidate | a task "Remember? ..." that proposes one fact, put into your list by a script or an integration of yours: tick it and the next run files it |
-| band | m2b's row in a session, above the prompt unless `band.place` moves it: it counts what waits for your answer and has `open` for the m2b pane, where you keep or drop what curation proposes; below the prompt, a status line while something is wrong with m2b |
+| band | m2b's row in a session, above the prompt unless `band.place` moves it: it counts what waits for your answer and has `open` for the m2b pane, where you keep or drop what curation proposes, tick a task and see your facts with what they rest on; below the prompt, a status line while something is wrong with m2b |
 | mod | a module Claude Code loads with a plugin. m2b's mod is the band, with its `/m2b-...` commands and the tools of the model: note, search and, where you turn it on, handing in a proposal |
 | add-on | an optional piece of m2b, off until its own setup: `worklog` |
 | herdr | an [agent runtime](https://herdr.dev), a product of its own. Only the worklog add-on needs it; the rest of m2b runs without it |

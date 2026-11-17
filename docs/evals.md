@@ -14,18 +14,20 @@ yourself.
 | | |
 |---|---|
 | Day | 2026-11-16 |
-| m2b | 0.7.0 |
-| Claude Code | 2.1.325 |
+| m2b | 0.8.0 |
+| Claude Code | 2.1.326 |
 | Model | `claude-opus-5-5` |
-| Runs | 84 |
+| Runs | 96 |
 
 | Case | With m2b | Without m2b |
 |---|---|---|
 | `coding` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
+| `details` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
 | `no-false-lead` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `no-invention` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `no-leak` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `note` | 1.00 (3 of 3 runs) | 0.33 (0 of 3 runs) |
+| `outline` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
 | `propose-agreement` | 1.00 (3 of 3 runs) | 0.67 (0 of 3 runs) |
 | `propose-asked` | 1.00 (3 of 3 runs) | 0.67 (0 of 3 runs) |
 | `propose-known` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
@@ -33,7 +35,7 @@ yourself.
 | `propose-person` | 1.00 (3 of 3 runs) | 0.40 (0 of 3 runs) |
 | `propose-planted` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `recall` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
-| `routing` | 1.00 (3 of 3 runs) | 0.83 (2 of 3 runs) |
+| `routing` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `topic` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
 
 <!-- /results -->
@@ -52,6 +54,8 @@ sessions.
 |---|---|---|
 | `recall` | when Sam brings the plywood, where the shed key is | the answer names both, from the distillate |
 | `topic` | who runs IT at Northwind, when the contract renews | the topic's facts arrive with the prompt that names it |
+| `details` | how many sheets of plywood the shed roof takes, and how thick | the answer names both, from the house's fact file, which holds more than its line in the distillate |
+| `outline` | which pages of the home insurance policy cover storm damage, and the excess | the answer names the pages and the excess, from the outline in the note of the policy's PDF |
 | `no-invention` | Dana's favourite colour, which no note holds | no colour is named, not even as a guess |
 | `no-false-lead` | what to bring up with Ben Hart, whom no note names | no note about someone else is offered as possibly about him |
 | `note` | "Remember this: ..." | the note is saved in the user's words, "my" kept |
@@ -115,15 +119,17 @@ how to run it.
 
 | Model | Found | Right | Runs |
 |---|---|---|---|
-| haiku, the default | 1.00 | 1.00 | 3 |
+| haiku, the default | 0.97 | 0.97 | 3 |
 | sonnet | 1.00 | 1.00 | 3 |
 
-Measured on 2026-11-12 with Claude Code 2.1.322, which resolves both names to its current models.
-No run failed, left a capture in the inbox, filed a fact or a task from the capture that holds
-nothing or wrote a line no capture stands behind. `haiku` in each of its runs and `sonnet` in two
-of three started a topic for a single person, a neighbour, where the filing rules leave the place
-open, and in one run `haiku` wrote a facts line of its own for a new customer beside the two its
-captures bring.
+Measured on 2026-11-16 with Claude Code 2.1.325, after the ingest skill learned to read a long PDF
+whole and outline it; the inbox holds no document, so this is what the change does to plain
+captures. No run of these failed, left a capture in the inbox, filed a fact or a task from the
+capture that holds nothing or wrote a line no capture stands behind. In one run `haiku` wrote two
+facts lines of customers without the customer's name ("Office at Harbour Street 12"), which the
+eval does not count as the customer's facts. A run of `haiku` earlier that day, with the skill's
+outline still passed as arguments, filed a task `x` from the capture that holds nothing, and so
+missed the bar once in three runs. On 2026-11-12, before the change, both models were at 1.00.
 
 The same runs over a copy of the inbox dated a week earlier, so that the captures were ten days
 old, had `haiku` at 1.00 and `sonnet` at 0.98: in one of three runs `sonnet` wrote a phone number

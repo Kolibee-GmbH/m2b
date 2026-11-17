@@ -160,6 +160,15 @@ def _of_this_machine() -> tuple[Setting, ...]:
         ),
         _by_command(
             MACHINE,
+            "capture.file_limit_mb",
+            "Largest file to capture",
+            "How many megabytes a file a session hands m2b may have; it is copied into the store, which syncs it "
+            "to every machine.",
+            "m2b config set capture.file_limit_mb <megabytes>",
+            machine.DEFAULT_FILE_LIMIT_MB,
+        ),
+        _by_command(
+            MACHINE,
             "calendar.timeout_seconds",
             "Time limit of a calendar call",
             "How many seconds a call to the calendar may take.",
@@ -444,6 +453,7 @@ def groups() -> tuple[Group, ...]:
                 (STORE, "tasks.timeout_seconds"),
                 (MACHINE, "calendar.backend"),
                 (MACHINE, "calendar.timeout_seconds"),
+                (MACHINE, "capture.file_limit_mb"),
                 (MACHINE, "curation.model_timeout_minutes"),
                 (MACHINE, "curation.max_turns"),
                 (MACHINE, "curation.max_budget_usd"),
@@ -490,6 +500,7 @@ def _machine_values(config: MachineConfig) -> dict[str, Shown]:
         "store.path": _plain(str(config.store.path)),
         "calendar.backend": _plain(config.calendar.backend),
         "calendar.timeout_seconds": _plain(config.calendar.timeout_seconds),
+        "capture.file_limit_mb": _plain(config.capture.file_limit_mb),
         "executables": _counted(len(config.executables), "none named", "{} named", "{} named"),
         "curation.model_timeout_minutes": _plain(curation.model_timeout_minutes),
         "curation.model": _plain(curation.model),

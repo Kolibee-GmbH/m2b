@@ -107,6 +107,18 @@ export const RUN_STARTED = 'a curation run started in the background (process 47
 export const RUN_UNDER_WAY = 'a curation run is already running on this machine'
 export const CURATES_ELSEWHERE = 'this machine is not the curating machine; tower-2 is'
 
+/** An open task as `m2b todos --json` lists it; `due` a day, or a day with a time, as the core writes it. */
+export type FakeTodo = { id: string; title: string; notes: string; due: string | null }
+
+/** The groups of `m2b todos --json`, by their keys; the core counts today among the next seven days. */
+export type TodoGroup = 'overdue' | 'due_within_7_days' | 'later' | 'without_date'
+
+/** The answer of `m2b todos --json`: the day the core counts as today and the open tasks in its groups. */
+export type FakeTodos = { today: string } & Record<TodoGroup, FakeTodo[]>
+
+/** The day of `NOW` as the core counts it. */
+export const TODAY = '2026-03-14'
+
 /** A topic whose facts the core gave a session, with what its block held then. */
 export type FakeTopic = { name: string; facts: number | null; current: number | null }
 
@@ -119,6 +131,15 @@ export type FakeGiven = { topics: FakeTopic[]; atStart: string | null; offUnder:
 
 /** A topic's lines as `m2b distillate topic --json` answers them. */
 export type FakeTopicLines = { facts: string[]; current: string[] }
+
+/** A fact every session starts with, as `m2b distillate topics --json` names it: its line, and the fact file it names or null. */
+export type FakeStartFact = { statement: string; file: string | null }
+
+/** A topic of the distillate with how many facts and current items it holds now. */
+export type FakeTopicCount = { name: string; facts: number; current: number }
+
+/** The answer of `m2b distillate topics --json`: what every session starts with, and the topics. */
+export type FakeDistillate = { facts: FakeStartFact[]; current: string[]; topics: FakeTopicCount[] }
 
 /**
  * The `m2b` launcher, answered from memory; every call is recorded, the looks at what the session
@@ -150,7 +171,25 @@ export class FakeM2b {
   topicFails: string | null = null
   /** Unset, the installed core is one from before `distillate topic`: it refuses the action. */
   knowsTopics = true
+  /** What `m2b distillate topics --json` answers. */
+  distillate: FakeDistillate = { facts: [], current: [], topics: [] }
+  /** When set, `m2b distillate topics --json` prints this in place of its answer, whatever its shape. */
+  distillatePrints: string | null = null
+  /** When set, `m2b distillate topics` fails with this as its message. */
+  distillateTopicsFails: string | null = null
+  /** Set, `m2b distillate topics` is refused as a core from before the command refuses it. */
+  distillateTopicsOlder = false
   tasks: FakeTask[] = []
+  /** What `m2b todos --json` answers: the owner's open tasks, which hold none of the curator tasks. */
+  todos: FakeTodos = { today: TODAY, overdue: [], due_within_7_days: [], later: [], without_date: [] }
+  /** When set, `m2b todos --json` prints this in place of its answer, whatever its shape. */
+  todosPrints: string | null = null
+  /** When set, `m2b todos` fails with this as its message. */
+  todosFails: string | null = null
+  /** Task files `m2b todos --json` names as unreadable, each with its reason; it then ends with exit 1. */
+  todosUnreadable: { path: string; reason: string }[] = []
+  /** When set, `m2b tasks complete` fails with this as its message, and nothing is completed. */
+  completeFails: string | null = null
   status: unknown = STATUS
   failure: string | null = null
   statusFails = false
@@ -204,6 +243,15 @@ export class FakeM2b {
   searchCut = false
   /** When set, `m2b search` fails with this as its message. */
   searchFails: string | null = null
+  /** What `m2b source --json` answers for any name; `null` fails it with `sourceFails`. */
+  sourceAnswer: Record<string, unknown> | null = null
+  sourceFails = 'no fact file or note is named that'
+  /** What `m2b source --json --viewer` answers, by the name it is handed; a name not here fails it with `sourceFails`. */
+  viewerAnswers: Record<string, Record<string, unknown>> = {}
+  /** When set, `m2b source --json --viewer` ends with this whatever the name, as a core that does not know the option. */
+  viewerRefusal: ProcessRunResult | null = null
+  /** How `m2b store open` ends; how long it takes is `delayMs`'s. */
+  openAnswer: ProcessRunResult = ok("opened corpus/2026/11/20261116T165634Z-cli-7198.pdf in the system's viewer\n")
   /**
    * The machine's `band` settings as `m2b band --json` names them: where the band stands, how it
    * shows the tasks due, and whether it counts the topics. Null as a core before these settings
@@ -281,6 +329,12 @@ export class FakeM2b {
     return this
   }
 
+  /** Adds an open task to the group `group` of the owner's list. */
+  todo(group: TodoGroup, id: string, title: string, due: string | null = null): this {
+    this.todos[group].push({ id, title, notes: '', due })
+    return this
+  }
+
   proposal(id: string, text: string, quote = text, fields: Partial<FakeProposal> = {}): this {
     const proposed = { id, kind: 'person', text, quote, day: '2026-03-12', topic: null, due: null, ...fields }
     this.proposals = [...(this.proposals ?? []), proposed]
@@ -322,6 +376,19 @@ export class FakeM2b {
     }
     if (args[0] === 'band') {
       return this.bandAnswer(args.includes('--tasks-only'))
+    }
+    if (args[0] === 'source' && args.includes('--viewer')) {
+      if (this.viewerRefusal !== null) {
+        return this.viewerRefusal
+      }
+      const answer = this.viewerAnswers[args.at(-1) ?? '']
+      return answer === undefined ? fail(this.sourceFails) : ok(JSON.stringify(answer))
+    }
+    if (args[0] === 'source') {
+      return this.sourceAnswer === null ? fail(this.sourceFails) : ok(JSON.stringify(this.sourceAnswer))
+    }
+    if (args[0] === 'store' && args[1] === 'open') {
+      return this.openAnswer
     }
     if (args[0] === 'search') {
       if (this.searchFails !== null) {
@@ -366,6 +433,9 @@ export class FakeM2b {
     if (args[0] === 'distillate' && args[1] === 'topic') {
       return this.topicAnswer(args.at(-1) ?? '')
     }
+    if (args[0] === 'distillate' && args[1] === 'topics') {
+      return this.distillateAnswer()
+    }
     if (args[0] === 'settings') {
       const stderr = "usage: m2b [-h] [--version]\nm2b: error: argument command: invalid choice: 'settings'\n"
       return this.onSettings === null ? { ...fail(''), exitCode: 2, stderr } : this.onSettings(args.slice(1), env)
@@ -378,11 +448,20 @@ export class FakeM2b {
       this.given = this.given === null ? null : { ...this.given, offUnder: args[1] === 'off' ? (args.at(-1) ?? null) : null }
       return ok('')
     }
+    if (args[0] === 'todos') {
+      return this.todosAnswer()
+    }
     if (this.failure !== null) {
       return fail(this.failure)
     }
     const [, verb, ...rest] = args
     const id = rest[0] === '--' ? rest[1] : rest[0]
+    if (verb === 'complete' && this.completeFails !== null) {
+      return fail(this.completeFails)
+    }
+    if (verb === 'complete' && this.completeTodo(id)) {
+      return ok('')
+    }
     const task = this.tasks.find(open => open.id === id)
     if (task === undefined) {
       return fail(`no task with id ${id}`)
@@ -390,6 +469,35 @@ export class FakeM2b {
     task.completed = true
     task.dropped = verb === 'drop'
     return ok('')
+  }
+
+  /** As `m2b todos --json` answers: the open tasks by group, no unreadable file and no calendar. */
+  todosAnswer(): ProcessRunResult {
+    if (this.todosFails !== null) {
+      return fail(this.todosFails)
+    }
+    if (this.todosPrints !== null) {
+      return ok(this.todosPrints)
+    }
+    const events = { configured: false, message: 'no calendar is set up' }
+    const answer = `${JSON.stringify({ ...this.todos, unreadable: this.todosUnreadable, events })}\n`
+    return this.todosUnreadable.length === 0 ? ok(answer) : { ...ok(answer), exitCode: 1 }
+  }
+
+  /** Completes the open task `id` of the owner's list, as the core does; false where the list holds none of that id. */
+  completeTodo(id: string | undefined): boolean {
+    const groups: TodoGroup[] = ['overdue', 'due_within_7_days', 'later', 'without_date']
+    const group = groups.find(name => this.todos[name].some(open => open.id === id))
+    if (group === undefined) {
+      return false
+    }
+    this.todos[group] = this.todos[group].filter(open => open.id !== id)
+    return true
+  }
+
+  /** The calls that read the owner's open tasks. */
+  todosCalls(): string[][] {
+    return this.calls.filter(call => call[0] === 'todos')
   }
 
   /** As `m2b distillate topic --json -- <name>` answers: the topic's lines, or that the distillate holds none of the name. */
@@ -405,9 +513,41 @@ export class FakeM2b {
     return ok(JSON.stringify({ name, found: held !== undefined, facts: held?.facts ?? [], current: held?.current ?? [] }))
   }
 
+  /** As `m2b distillate topics --json` answers: what every session starts with, and each topic with its counts. */
+  distillateAnswer(): ProcessRunResult {
+    if (this.distillateTopicsOlder) {
+      const stderr = "usage: m2b distillate [-h] {off,on,topic} ...\nm2b distillate: error: argument action: invalid choice: 'topics'\n"
+      return { exitCode: 2, stdout: '', stderr, isStdoutTruncated: false, isStderrTruncated: false }
+    }
+    if (this.distillateTopicsFails !== null) {
+      return fail(this.distillateTopicsFails)
+    }
+    return ok(this.distillatePrints ?? `${JSON.stringify(this.distillate)}\n`)
+  }
+
+  /** The calls that read what every session starts with and the topics. */
+  factsCalls(): string[][] {
+    return this.calls.filter(call => call[0] === 'distillate' && call[1] === 'topics')
+  }
+
+  /** The calls that read a fact file or a note by its name. */
+  sourceCalls(): string[][] {
+    return this.calls.filter(call => call[0] === 'source')
+  }
+
+  /** The calls that read a source a fact rests on, for the pane. */
+  viewerCalls(): string[][] {
+    return this.calls.filter(call => call[0] === 'source' && call.includes('--viewer'))
+  }
+
+  /** The calls that opened a file of the archive in the system's viewer, or tried to. */
+  openCalls(): string[][] {
+    return this.calls.filter(call => call[0] === 'store' && call[1] === 'open')
+  }
+
   /** The calls that turned the distillate off or on for a folder. */
   folderCalls(): string[][] {
-    return this.calls.filter(call => call[0] === 'distillate' && call[1] !== 'topic')
+    return this.calls.filter(call => call[0] === 'distillate' && call[1] !== 'topic' && call[1] !== 'topics')
   }
 
   /** The calls that read a topic's lines. */
@@ -1051,7 +1191,7 @@ export async function answerKeys(ui: { findAll: (q: { type: string }) => Promise
 
 /** The key of the box that holds the pane's row of tabs. */
 const TABS = 'tabs'
-const TAB_IDS: readonly TabId[] = ['overview', 'proposals', 'review', 'settings']
+const TAB_IDS: readonly TabId[] = ['overview', 'proposals', 'review', 'tasks', 'facts', 'settings']
 
 /**
  * A tab of the pane's row as drawn: its label, and the key of its button; `key` is null for the
@@ -1072,7 +1212,7 @@ export async function shownTabs(ui: Drawn): Promise<ShownTab[]> {
   })
 }
 
-/** Which tab the row marks as the one shown: one of the four by its place, or the fifth beside them. */
+/** Which tab the row marks as the one shown: one of the six by its place, or the seventh beside them. */
 export async function shownTab(ui: Drawn): Promise<Shown> {
   const at = (await shownTabs(ui)).findIndex(tab => tab.key === null)
   if (at === -1) {
@@ -1154,10 +1294,27 @@ export async function linesAt(ui: Drawn, key: string): Promise<string[] | null> 
 export const PARTS = { waits: 'Waits for you', today: 'Today', session: 'This session', m2b: 'm2b' } as const
 /**
  * The key a part is drawn under, in whichever view: the overview's four, the one part of the
- * proposals, of a search and of a topic, the review's `run` beside its own `waits`, and the
- * settings' four, named like the core's groups.
+ * proposals, of a search and of a topic, the review's `run` beside its own `waits`, the
+ * settings' four, named like the core's groups, the two of the facts, the two of a fact's file and
+ * the three of a source a fact rests on.
  */
-export type PartKey = keyof typeof PARTS | 'proposals' | 'run' | 'search' | 'topic' | 'shows' | 'reads' | 'curation' | 'about'
+export type PartKey =
+  | keyof typeof PARTS
+  | 'proposals'
+  | 'run'
+  | 'search'
+  | 'topic'
+  | 'shows'
+  | 'reads'
+  | 'curation'
+  | 'about'
+  | 'facts:start'
+  | 'facts:topics'
+  | 'fact'
+  | 'fact:evidence'
+  | 'source'
+  | 'source:outline'
+  | 'source:added'
 
 const PART_KEY = /^part:/
 

@@ -638,12 +638,12 @@ class SearchSkillTest(unittest.TestCase):
         block = text.split("\n---\n", 1)[0].split("\n")[1:]
         return dict(line.split(": ", 1) for line in block if ": " in line)
 
-    def test_the_skill_may_only_run_the_search_command(self) -> None:
+    def test_the_skill_may_only_run_the_search_and_the_source_command(self) -> None:
         """Checks the skill's structure, not its prose."""
         fields = self.frontmatter()
 
         self.assertEqual(fields["name"], "search")
-        self.assertEqual(fields["allowed-tools"], "Bash(m2b search *)")
+        self.assertEqual(fields["allowed-tools"], "Bash(m2b search *), Bash(m2b source --json -- *)")
         self.assertTrue(fields["description"])
 
     def test_the_skill_searches_with_json_and_names_the_fetch_command(self) -> None:

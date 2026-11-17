@@ -136,9 +136,7 @@ class DistillateHookTest(HookFixture):
                 _, out, _ = self.hook("distillate")
                 self.assertTrue(out.endswith(f"{ROUTING_RULE} {WORK_PEOPLE_RULE}\n"), out[-200:])
         self.assertIn("people and verbal agreements may be captured", WORK_PEOPLE_RULE)
-        self.assertIn(
-            "documents and confidential statements of customers or other third parties never", WORK_PEOPLE_RULE
-        )
+        self.assertNotIn("never", WORK_PEOPLE_RULE)
 
     def test_a_project_turned_off_gets_nothing_at_session_start(self) -> None:
         """Covers: B65"""

@@ -124,7 +124,8 @@ on in Claude Code: `m2b doctor` says in its line `band` whether it ran, and
 `/m2b-note <text>`, which notes a text at once without a model turn, `/m2b-pane`, `/m2b-review`,
 `/m2b-proposals`, `/m2b-search <text>` and `/m2b-settings`, which show in a pane what waits for
 you, what is due today and what m2b gave this session, the last curation run, the proposals from
-your sessions, search hits and every setting of m2b, and two tools through which the model notes
+your sessions, search hits and every setting of m2b; two more tabs in that pane, `Tasks` with every
+open task and `Facts` with what m2b knows and what each fact rests on; and two tools through which the model notes
 and searches without a shell call; a third, with which a session hands in proposals by itself, is off until you
 turn it on ([The band](band.md#handing-in-a-proposal-a-tool-you-turn-on)). The worklog add-on is off until its own setup skill turns it on;
 [Add-ons](addons.md) describes it.

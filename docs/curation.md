@@ -38,7 +38,7 @@ flowchart LR
 | Migrate | code, only when the store's format is older than this m2b | brings `memory/` up to the rules of this m2b, one format at a time, each checked in code; a failing one puts `memory/` back, keeps the format and ends the run with the review |
 | Harvest | code | settles the memory candidates and "Still current? ..." questions you ticked or dropped, and the proposals you kept or dropped |
 | Glean | code and one model call without tools, only with `curation.read_sessions` | reads what you typed in Claude Code since the last reading and keeps what the model proposes for your memory ([Reading your sessions](#reading-your-sessions)) |
-| Ingest | model, only with captures in the inbox | files facts and what is going on into memory, under its topic what concerns one subject only, tasks into your list, each capture into `corpus/YYYY/MM/` |
+| Ingest | model, only with captures in the inbox | files facts and what is going on into memory, under its topic what concerns one subject only, tasks into your list, each capture into `corpus/YYYY/MM/`; reads a PDF whole up to its 60th page and writes what stands on which page into the note beside it ([A document in the inbox](#a-document-in-the-inbox)) |
 | Refresh | model, only when a fact is past its day | rewrites the facts whose `until` has passed |
 | Sort | model, only with `m2b curate --sort-facts` | moves facts lines of an older distillate into topics; code puts the file back if a statement changed |
 | Lint | code; the model only to repair a broken memory link with exactly one candidate | checks names, links, conflict copies and the distillate's size |
@@ -82,6 +82,35 @@ step:
   session-start and prompt hooks
   remove these characters and every other that draws nothing (soft hyphens, fillers, variation
   selectors) before the distillate reaches a session.
+
+## A document in the inbox
+
+A file that is no text note, dropped into `inbox/` (from the Finder, or synced from a phone),
+becomes a bundle at the next run: the file under the name the store gives it, a note beside it
+that names the original file name, and a JPEG copy of a HEIC picture. A file a session copied in
+with `m2b capture-file` ([Capture](using.md#capture)) is such a bundle from the start, with your
+words in its note. Where that note has reached the curating machine and its file has not synced
+there yet, the run leaves the note in the inbox and reports it; the first run that finds the file
+beside it files both. The ingest step reads the bundle and
+files its facts like those of any capture. A PDF of more than one page is read whole up to its
+60th page, and its note gets an outline, one line per page or run of pages, with the names, numbers
+and days that stand there:
+
+```text
+original name: club-handbook.pdf
+pp. 4-5: fees 240 full and 160 weekend, due 31 January, locker 30 more; Alex Example locker 37
+pp. 6-9: the boathouse: opening hours, boat bays A B C, cleaning, repairs by Sam on Tuesdays
+outline: pages 1-60 of 75
+filed: facts alex.md, rowing-club.md
+```
+
+`m2b search` finds a word of the outline as of any note, so what did not become a fact is still
+found, with the note that leads to the file. A session reads the note with its outline when a
+question goes beyond the fact, never the document itself, and the m2b pane shows both one press
+below the fact's file, with `open the file` for a PDF or a picture
+([What m2b knows](band.md#what-m2b-knows)). The last line above says the run stopped at page 60
+of 75. A file the step cannot read gets a line saying so, and the run goes on. A longer document
+makes the ingest step longer: every 20 pages are a read of their own, up to three per document.
 
 ## A commit per run
 

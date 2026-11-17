@@ -2,17 +2,20 @@ import { expect, test } from 'claude-code/testing'
 import type { CommandRunResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { FakeM2b, STATUS, pane, partLook, shownParts, shownTabs, start, texts } from './harness'
+import { FakeM2b, STATUS, pane, partLook, pressTab, shownParts, shownTabs, start, texts } from './harness'
 import type { PartKey } from './harness'
 
-// The form the pane's views share beside the overview: the proposals, the review, a topic and a
-// search are each drawn as parts under their titles, and the tab above a view is the one place
-// that names it. What each view holds is tested with the view.
+// The form the pane's views share beside the overview: the proposals, the review, a topic, a
+// search and a source a fact rests on are each drawn as parts under their titles, and the tab
+// above a view is the one place that names it. What each view holds is tested with the view.
 
 const PANE = 'm2b'
 const KIM = "Kim Lee leads Northwind's IT"
+const HANDBOOK = '20261116T165634Z-cli-7198.pdf'
+// Longer than a tab's label: the view names the document whole, its tab the first 20 characters.
+const HANDBOOK_NAME = 'riverside-choir-handbook.pdf'
 
-type View = 'proposals' | 'review' | 'topic' | 'search'
+type View = 'proposals' | 'review' | 'topic' | 'search' | 'source'
 
 /** A part as a view is expected to draw it: its key, its title and the count beside the title. */
 type Headed = [key: PartKey, title: string, count: string | null]
@@ -26,6 +29,11 @@ const PARTS: Readonly<Record<View, Headed[]>> = {
   ],
   topic: [['topic', 'Northwind', null]],
   search: [['search', '1 hit for tea', null]],
+  source: [
+    ['source', 'What it is', null],
+    ['source:outline', 'What stands on which page', null],
+    ['source:added', 'What the curation run added', null],
+  ],
 }
 /** The parts of each view where nothing waits and nothing is found. */
 const QUIET_PARTS: Readonly<Record<View, Headed[]>> = {
@@ -36,21 +44,46 @@ const QUIET_PARTS: Readonly<Record<View, Headed[]>> = {
   ],
   topic: [['topic', 'Northwind', null]],
   search: [['search', '1 hit for tea', null]],
+  source: [
+    ['source', 'What it is', null],
+    ['source:outline', 'What stands on which page', null],
+    ['source:added', 'What the curation run added', null],
+  ],
 }
 /** The label of the tab the row marks above each view. */
-const TAB: Readonly<Record<View, string>> = { proposals: 'Proposals 3', review: 'Review', topic: 'Northwind', search: 'Search' }
+const TAB: Readonly<Record<View, string>> = { proposals: 'Proposals 3', review: 'Review', topic: 'Northwind', search: 'Search', source: 'riverside-choir-han…' }
 const VIEWS = Object.keys(PARTS) as View[]
 
 function typed($: Engine, command: string, args = ''): Promise<CommandRunResult> {
   return $.command.run({ command, args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
 }
 
-/** A session given one topic, with a hit to search for and nothing that waits. */
+/** A session given one topic, with a hit to search for, a fact resting on a document, and nothing that waits. */
 function quietFake(): FakeM2b {
   const fake = new FakeM2b()
   fake.given = { topics: [{ name: 'Northwind', facts: 1, current: 0 }], atStart: 'whole', offUnder: null }
   fake.topicLines = { Northwind: { facts: [KIM], current: [] } }
   fake.searchHits = [{ path: 'memory/dana.md', line: 3, text: 'Dana prefers tea' }]
+  fake.distillate = { facts: [{ statement: 'Dana sings in the choir', file: 'dana.md' }], current: [], topics: [] }
+  const evidence = { name: HANDBOOK, state: 'read', day: '2026-11-16', kind: 'document', original_name: HANDBOOK_NAME, first_line: 'p. 1: club name', path: `corpus/2026/11/${HANDBOOK}`, fetch: null, reason: null }
+  fake.sourceAnswer = { name: 'dana.md', kind: 'fact file', path: 'memory/dana.md', title: 'Dana', until: null, lines: ['Sings in the choir.'], earlier: [], evidence: [evidence] }
+  fake.viewerAnswers = {
+    [HANDBOOK]: {
+      name: HANDBOOK,
+      kind: 'document',
+      path: 'corpus/2026/11/20261116T165634Z-cli-7198.md',
+      day: '2026-11-16',
+      captured: `A pdf file, captured as ${HANDBOOK}.\nThe choir's handbook.`,
+      added: ['Dana sings in the choir.'],
+      original_name: HANDBOOK_NAME,
+      outline: ['p. 1: club name', 'p. 4: rehearsal times'],
+      original: `corpus/2026/11/${HANDBOOK}`,
+      original_here: true,
+      opens: true,
+      not_opened: null,
+      file: `/home/alex/Notes/corpus/2026/11/${HANDBOOK}`,
+    },
+  }
   fake.status = { ...STATUS, run: { state: 'succeeded', started_at: '2026-03-14T18:00:05+01:00', finished_at: '2026-03-14T18:02:10+01:00' } }
   return fake
 }
@@ -68,18 +101,30 @@ function fullFake(): FakeM2b {
   return fake
 }
 
-/** The pane turned to `view`, at a width: by the view's command and, for a topic, the press on its button in the overview. */
+/**
+ * The pane turned to `view`, at a width: by the view's command and, for a topic, the press on its
+ * button in the overview, for a source the presses down from the tab Facts.
+ */
 async function shown($: Engine, view: View, columns = 80) {
-  await typed($, view === 'topic' ? 'm2b-pane' : `m2b-${view}`, view === 'search' ? 'tea' : '')
+  await typed($, view === 'topic' || view === 'source' ? 'm2b-pane' : `m2b-${view}`, view === 'search' ? 'tea' : '')
   const ui = await $.ui.mount({ ...pane(PANE, columns), surface: 'terminal' })
   if (view === 'topic') {
     await ui.press({ key: 'topic:0' })
   }
+  if (view === 'source') {
+    await pressTab(ui, 'facts')
+    await ui.press({ key: 'details:0' })
+    await ui.press({ key: 'show:0' })
+  }
   return ui
 }
 
+function named(view: View): string {
+  return view === 'review' ? 'the review' : view === 'proposals' ? 'the proposals' : `a ${view}`
+}
+
 for (const view of VIEWS) {
-  test(`the view of ${view === 'review' ? 'the review' : view === 'proposals' ? 'the proposals' : `a ${view}`} is drawn as parts, each under its title, and nothing of it stands outside a part`, async ($, on) => {
+  test(`the view of ${named(view)} is drawn as parts, each under its title, and nothing of it stands outside a part`, async ($, on) => {
     // Covers: B208
     await start($, on, fullFake())
 
@@ -95,7 +140,7 @@ for (const view of VIEWS) {
     await ui.unmount()
   })
 
-  test(`the view of ${view === 'review' ? 'the review' : view === 'proposals' ? 'the proposals' : `a ${view}`} has no heading that repeats its tab: below the row of tabs stands the title of its first part, and each title stands once`, async ($, on) => {
+  test(`the view of ${named(view)} has no heading that repeats its tab: below the row of tabs stands the title of its first part, and each title stands once`, async ($, on) => {
     // Covers: B208
     await start($, on, fullFake())
 

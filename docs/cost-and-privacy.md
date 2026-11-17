@@ -27,7 +27,8 @@ for more careful filing at a higher cost) and stops after `curation.max_turns` t
 and is billed like your sessions.
 
 **What reaches the model.** In a curation step: what the step's rules allow, nothing else. Ingest
-and lint read the captures and memory files; refresh reads the distillate, the fact files that are
+and lint read the captures and memory files, ingest also a picture or a document in the inbox, a
+PDF up to its 60th page; refresh reads the distillate, the fact files that are
 due and any archive file; sorting reads memory. Ingest, lint, `--refresh-all` and the worklog step
 also get `m2b search` results over inbox, archive and memory. The reading of your sessions sends
 the distillate, up to 30 proposals you kept and 30 you dropped lately, each with the words it
@@ -36,7 +37,9 @@ into them, redacted, to a model that can call
 nothing. With the worklog add-on, its step sees the period's prompts and last
 answers, commits and session folders, the inbox and memory (below). In every session:
 the distillate, the routing rule and the notices at session start; before a prompt that names a
-topic, that topic's facts.
+topic, that topic's facts; and what you ask it to look up, search hits or a fact's file or a note
+read whole. Of a document in the archive, m2b's search tool and skill hand a session the note and
+the outline in it, never the document.
 
 **What a session writes into the store when it hands in.** Off until you turn `sessions.propose`
 on. Then the agent of a session can hand in a proposal with words from what it read for you: a

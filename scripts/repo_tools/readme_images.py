@@ -69,6 +69,7 @@ DOWN = "\x1b[B"
 # What a terminal takes as a command, not as text: a title, a color or a cursor move, a single key.
 ESCAPES = re.compile(rb"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-?]*[ -/]*[@-~]|\x1b[@-Z\\-_]")
 ENTER = "\r"
+TAB = "\t"
 
 
 EVERYDAY = "everyday"
@@ -85,7 +86,9 @@ class Shot:
     starts. ``fresh_store`` builds the demo store named by ``store`` first; without it the shot runs
     on the store the shot before it left. ``full_screen`` is Claude Code's fullscreen layout, where
     m2b's pane sits beside the chat. ``settings`` are set on the demo machine before the session, so
-    a shot that names some builds its own store and no shot runs on the one it leaves."""
+    a shot that names some builds its own store and no shot runs on the one it leaves. ``keys`` are
+    typed once the prompt is answered, each with the seconds to wait after it: the presses that lead
+    from the view a command opens to the one the picture shows."""
 
     name: str
     rows: int
@@ -96,6 +99,7 @@ class Shot:
     columns: int = COLUMNS
     full_screen: bool = False
     settings: tuple[tuple[str, str], ...] = ()
+    keys: tuple[tuple[str, float], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -122,6 +126,8 @@ class Recording:
 # model: two on the main screen, and two with the pane beside the chat, each on a store of its own,
 # so recording one alone leaves the pictures before it as they are. The last asks nothing: it shows
 # the band at the end of the hint line below the prompt, in a terminal wide enough for every count.
+# Before it, the way from a fact to its file: the pane beside the chat, four Tabs from the tab the
+# pane opens on to `Facts`, then five to `details` of the first fact.
 SHOTS = (
     Shot("session-start", 30, 30, "When does Sam bring the plywood, and where is the spare key for the shed?", True),
     Shot(
@@ -136,6 +142,17 @@ SHOTS = (
     Shot("proposals", 46, 6, "/m2b-proposals", False, AFTER_A_RUN),
     Shot("pane", 25, 6, "/m2b-pane", True, AFTER_A_RUN, WIDE, True),
     Shot("settings", 50, 6, "/m2b-settings", True, AFTER_A_RUN, WIDE, True),
+    Shot(
+        "fact",
+        30,
+        6,
+        "/m2b-pane",
+        True,
+        EVERYDAY,
+        WIDE,
+        True,
+        keys=((TAB * 4, 1), (ENTER, 4), (TAB * 5, 1), (ENTER, 5)),
+    ),
     Shot("band-below", 12, 6, "", True, EVERYDAY, WIDE, settings=(("band.place", "below"),)),
 )
 
@@ -161,6 +178,30 @@ CORPUS = {
         "The spare key for the shed is under the blue pot by the back door.",
     ),
 }
+# A document in the archive, as a curation run leaves one: the file itself and the note beside it,
+# with what stands on which page. One fact file rests on it, so the pane shows the way from a fact
+# to a document.
+DOCUMENT_STEM = "2026/11/20261109T093000Z-cli-7198"
+DOCUMENT_NOTE = """---
+kind: sidecar
+created: 2026-11-09T10:30:00+01:00
+source: cli
+curated: true
+---
+A pdf file, captured as 20261109T093000Z-cli-7198.pdf.
+<!-- m2b:curation -->
+original name: harbour-rowing-club-handbook.pdf
+p. 1: the harbour rowing club, handbook 2026
+pp. 3-5: membership and fees, 240 a year, due 31 January
+pp. 27-30: the committee, Dana as treasurer
+filed: fact dana.md
+"""
+# One empty page: a viewer opens it, and no word of it is anyone's.
+DOCUMENT_BYTES = (
+    b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
+    b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\n"
+    b"trailer<</Root 1 0 R/Size 4>>\n%%EOF\n"
+)
 MEMORY = {
     "MEMORY.md": """# Memory
 
@@ -178,10 +219,12 @@ MEMORY = {
     "dana.md": """# Dana
 
 My sister. Birthday on 3 March. Would love a good fountain pen.
+Treasurer of the harbour rowing club; its fee is 240 a year, due 31 January.
 
 ## Evidence
 
 - [[20261012T081500Z-claude-3f2a.md]]
+- [[20261109T093000Z-cli-7198.pdf]]
 """,
     "sam.md": """# Sam
 
@@ -344,6 +387,8 @@ def _fill(store: Path, environ: Mapping[str, str], today: datetime.date) -> None
     """Filed notes, memory and tasks, the same in both demo stores."""
     for relative, (created, source, text) in CORPUS.items():
         _write(store / "corpus" / relative, f"---\ncreated: {created}\nsource: {source}\n---\n{text}\n")
+    _write(store / "corpus" / f"{DOCUMENT_STEM}.md", DOCUMENT_NOTE)
+    (store / "corpus" / f"{DOCUMENT_STEM}.pdf").write_bytes(DOCUMENT_BYTES)
     for name, text in MEMORY.items():
         _write(store / "memory" / name, text.replace("{recent}", _recent(today)))
     for title, days in TASKS:
@@ -495,7 +540,12 @@ def steps_for(shot: Shot, today: datetime.date | None = None) -> list[tuple[floa
     if not shot.prompt:
         return [*trust, (14 + shot.answer_seconds, "")]
     prompt = shot.prompt.replace(WEEKDAY, reminder_weekday(today or datetime.date.today()))
-    return [*trust, (14, prompt), (1, ENTER), (shot.answer_seconds, "")]
+    asked: list[tuple[float, str]] = [*trust, (14, prompt), (1, ENTER)]
+    wait: float = shot.answer_seconds
+    for keys, seconds in shot.keys:
+        asked.append((wait, keys))
+        wait = seconds
+    return [*asked, (wait, "")]
 
 
 def session_environment(environ: Mapping[str, str], shot: Shot) -> dict[str, str]:

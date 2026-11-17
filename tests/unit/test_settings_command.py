@@ -104,7 +104,7 @@ class SettingsListTest(SettingsFixture):
         scopes = [entry["scope"] for entry in answer["settings"]]
         self.assertEqual(sorted(scopes, key=["machine", "store", "owner"].index), scopes)
         self.assertEqual(answer["settings"][0]["key"], "version")
-        self.assertEqual(len(scopes), 33)
+        self.assertEqual(len(scopes), 34)
 
     def test_as_json_every_setting_names_its_group_and_its_place_and_the_groups_come_in_their_order(self) -> None:
         """Covers: B210"""
@@ -566,7 +566,7 @@ class RulesOfAChangeTest(SettingsFixture):
 class WhatAnotherDeviceWroteTest(SettingsFixture):
     """The store's files can be written from other devices; nothing in them forges a line or leaks a name."""
 
-    LINES = 33 * 3 + 3 + 2
+    LINES = 34 * 3 + 3 + 2
 
     def write_raw(self, name: str, raw: dict[str, Any]) -> None:
         (self.store_root / name).write_text(json.dumps(raw), encoding="utf-8")
