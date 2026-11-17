@@ -344,7 +344,7 @@ async function sourceTool($: EngineInterface, input: Record<string, unknown>): P
     shown.push(`${lines.length - shown.length} more lines not shown.`)
   }
   const language = questionLanguage(input)
-  return { text: [...shown, ...(language === undefined ? [] : [answerIn(language)])].join('\n') }
+  return { text: [...shown, ...(language === undefined ? [] : [answerIn(language, 'source')])].join('\n') }
 }
 
 function hasTerms(input: Record<string, unknown>): boolean {
@@ -419,7 +419,12 @@ function noteLines(answer: Record<string, unknown>, path: string): string[] {
     lines.push('Added by curation:', ...added)
   }
   if (typeof answer['original'] === 'string') {
-    lines.push('The document itself is not read by this tool; answer from this note and its outline.')
+    // A picture has no outline: its note is all there is to answer from.
+    lines.push(
+      answer['kind'] === 'picture'
+        ? 'The picture itself is not read by this tool; answer from this note.'
+        : 'The document itself is not read by this tool; answer from this note and its outline.',
+    )
   }
   return lines
 }
@@ -443,8 +448,8 @@ function questionLanguage(input: Record<string, unknown>): string | undefined {
  * another language: the model answered in theirs. A model that names the language before it reads
  * the notes, and reads that name back after them, kept to it.
  */
-function answerIn(language: string): string {
-  return `End of the search result. Answer in ${language}, the language the question was asked in.`
+function answerIn(language: string, read: 'search result' | 'source' = 'search result'): string {
+  return `End of the ${read}. Answer in ${language}, the language the question was asked in.`
 }
 
 function searchResultText(terms: readonly string[], hits: unknown[], evicted: unknown[], unreadable: unknown[]): string {

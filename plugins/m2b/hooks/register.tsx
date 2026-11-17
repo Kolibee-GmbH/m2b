@@ -1365,14 +1365,16 @@ async function notSetUpLine($: EngineInterface, what: string): Promise<string | 
   }
 }
 
-/** Notes that this session runs the band, which `m2b doctor` reports; a failed write changes nothing. */
+/**
+ * Notes that this session runs the band, which `m2b doctor` reports; nothing that fails changes
+ * anything, a read of the environment Claude Code refuses once the mod is unloaded included.
+ */
 async function noteSeen($: EngineInterface): Promise<void> {
-  const home = await m2bHome($)
-  if (home === undefined) {
-    return
-  }
   try {
-    await $.fs.write(`${home}/${SEEN_FILE}`, JSON.stringify({ seenAt: new Date(await $.clock.now()).toISOString() }))
+    const home = await m2bHome($)
+    if (home !== undefined) {
+      await $.fs.write(`${home}/${SEEN_FILE}`, JSON.stringify({ seenAt: new Date(await $.clock.now()).toISOString() }))
+    }
   } catch {
     // The band runs all the same; doctor then says it has not seen it.
   }

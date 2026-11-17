@@ -1,6 +1,6 @@
 ---
 name: capture
-description: Captures something into the owner's second brain - a note, a fact about a person, an idea, a task for later, a calendar entry. Use when the user says "remember this", "note that", "don't forget", "remind me to", "put it in my calendar", "merk dir das", "notier das", "denk dran", "erinnere mich an", "trag das in meinen Kalender ein", or when something personal without a home in the current repository comes up and the user wants to keep it. Only writes new notes; never curates.
+description: Captures something into the owner's second brain - a note, a fact about a person, an idea, a task for later, a calendar entry, a file the user names with its path. Use when the user says "remember this", "note that", "don't forget", "remind me to", "put it in my calendar", "keep this file", "remember this PDF", "merk dir das", "notier das", "denk dran", "erinnere mich an", "trag das in meinen Kalender ein", or when something personal without a home in the current repository comes up and the user wants to keep it. Only writes new notes and copies a file the user named; never curates.
 allowed-tools: Bash(m2b capture *), Bash(m2b calendar *)
 ---
 

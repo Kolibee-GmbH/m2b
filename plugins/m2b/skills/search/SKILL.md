@@ -75,7 +75,8 @@ of a hit's path, or the name of an evidence entry. The JSON has `kind`:
 - `note`, `picture` or `document`, with `captured` (the words as captured), `added` (what the
   curation run wrote below them), and for a picture or a document `original_name` and `outline`,
   what stands on which page;
-- `not read`, with the `fetch` command: the source is not on this machine.
+- `not read`: the source is not on this machine, then with the `fetch` command that downloads it,
+  or it could not be read, then with the `reason`.
 
 A document itself is never read: answer from its note and outline, and where they do not hold
 the answer, say so. Exit 2 means the name was refused (a path, or no fact file's or note's name);
