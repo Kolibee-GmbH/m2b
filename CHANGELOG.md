@@ -7,26 +7,38 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-17
+
+From a said sentence to memory. What you keep is filed without a second step: a curation run
+starts once you have answered the proposals. Before a run, m2b says how many proposals your
+sessions handed in, and a current item opens the note it rests on. The run after your answers is
+on from the update, and `curation.run_after_answers` turns it off; a session that started before
+the update keeps the pane it has until `/reload-plugins`.
+
 ### Added
 
 - What you keep reaches the memory without a second step: once you have answered every proposal
   that waits and kept at least one, a curation run starts in the background and files what you
   kept. The view of the proposals says that it runs. `curation.run_after_answers` turns that off;
   a paused machine starts no such run, and on a machine that does not curate the view names the
-  machine whose run the answers wait for.
+  machine whose run the answers wait for
+  ([The proposals from your sessions, in the pane](docs/band.md#the-proposals-from-your-sessions-in-the-pane))
+  ([#35](https://github.com/Kolibee-GmbH/m2b/pull/35)).
 - While answers to proposals wait for a run, the view of the proposals and the overview say how
-  many, with `curate now` below them on the machine that curates.
+  many, with `curate now` below them on the machine that curates ([#35](https://github.com/Kolibee-GmbH/m2b/pull/35)).
 - `m2b curate --detach --after-answers` starts a run only where the answers call for one, and
-  with `--json` says why none started.
+  with `--json` says why none started ([When it runs](docs/curation.md#when-it-runs)) ([#35](https://github.com/Kolibee-GmbH/m2b/pull/35)).
 - What a session handed in shows before the next run takes it in: `m2b status` and `m2b proposals`
   say how many such proposals wait, `m2b band --json` carries the number, and the overview of the
-  m2b pane says it above `curate now`. Only the number, never the words.
+  m2b pane says it above `curate now`. Only the number, never the words
+  ([What a session hands in](docs/curation.md#what-a-session-hands-in)) ([#35](https://github.com/Kolibee-GmbH/m2b/pull/35)).
 - A current item in the tab `Facts` and in a topic reads like a fact: its words and since when,
-  with `show` below it for the note it rests on, which opens that note in the pane.
+  with `show` below it for the note it rests on, which opens that note in the pane
+  ([What m2b knows](docs/band.md#what-m2b-knows)) ([#35](https://github.com/Kolibee-GmbH/m2b/pull/35)).
 
 ### Changed
 
-- A current item no longer shows the file name of its note in the line.
+- A current item no longer shows the file name of its note in the line ([#35](https://github.com/Kolibee-GmbH/m2b/pull/35)).
 
 ## [0.8.0] - 2026-11-17
 

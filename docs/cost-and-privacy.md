@@ -11,7 +11,11 @@ A curation run uses your Claude Code login, with Haiku by default. Measured on
 2026-11-08 with Claude Code 2.1.319: a run over five captures took 48 seconds and 31 turns,
 read about 365,000 input tokens (338,000 of them from Claude Code's prompt cache) and wrote 8,000;
 Claude Code put it at US$0.013 at API prices. A run with nothing to read (an empty inbox, nothing
-expiring, no memory link to repair) uses no model. m2b does not record what a run used:
+expiring, no memory link to repair) uses no model. A run that starts after your answers to
+proposals ([When it runs](curation.md#when-it-runs)) is a whole run with every step: it files a
+capture for each proposal you kept and, where your sessions are read, reads what you typed since
+the last reading; `curation.run_after_answers` set to `false` keeps it from starting. m2b does
+not record what a run used:
 `curation.max_turns` and `curation.max_budget_usd` cap a model step, and `curation.paused` stops
 the runs that start by themselves ([Configuration](configuration.md)).
 

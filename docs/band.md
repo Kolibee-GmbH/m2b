@@ -203,6 +203,8 @@ As text, another session:
 │ ╭──────────────────────────────────────────────────────────╮ │
 │ │ m2b                                                      │ │
 │ │ 2 in inbox · curated 18:02                               │ │
+│ │ Waiting for the next curation run: 1 proposal handed in  │ │
+│ │ by a session, 1 answer of yours.                         │ │
 │ │ [ curate now ]                                           │ │
 │ ╰──────────────────────────────────────────────────────────╯ │
 └──────────────────────────────────────────────────────────────┘
@@ -279,6 +281,16 @@ what you can press.
   (`Curation runs on tower-1.`); where m2b cannot tell which machine curates, it has neither.
   The button says nothing of what a run costs ([Cost and privacy](cost-and-privacy.md)).
 
+  Between the line about curation and the button, one sentence says what waits for the next run:
+  the proposals sessions handed in, which the run takes in, and your answers to proposals, which
+  it files, each only where it waits
+  (`Waiting for the next curation run: 2 proposals handed in by sessions, 1 answer of yours.`).
+  It stands there on every machine and not while a run is under way. Of what sessions handed in
+  it says the number alone: they are no row of "Waits for you" and the band does not count them,
+  since they wait for the run, not for you
+  ([What a session hands in](curation.md#what-a-session-hands-in)). Where m2b could not count
+  them, the part says `m2b could not look at what sessions handed in.` in the error color.
+
 What **This session** says is asked for each session by itself, with
 `m2b band --json --session <id> --session-only`, which reads one small file on this machine and
 no task list, and is told the session's project root: when the session starts, and once more five seconds later if m2b did not know the
@@ -292,7 +304,8 @@ m2b and to run `/reload-plugins`.
 
 Where Claude Code cannot show a pane, `/m2b-pane` answers with the same lines as text, at most 20 of
 them and without any character that draws nothing, and names `/m2b-proposals` and `/m2b-review`
-where the pane names their tabs. It waits up to two seconds for a fresh answer about the session, and
+where the pane names their tabs; the sentence about what waits for the next run is not among
+them. It waits up to two seconds for a fresh answer about the session, and
 without one the text says that m2b has not looked yet.
 
 ### A topic's lines
@@ -300,7 +313,9 @@ without one the text says that m2b has not looked yet.
 A topic's button turns the pane to that topic: its facts and its current items, read with
 `m2b distillate topic` at the press. m2b keeps the names and counts of what it gave a session and
 not the lines, so these are the lines the distillate holds now; a curation run since the session
-got the topic may have changed them, and the view says so. The topic stands under a seventh tab
+got the topic may have changed them, and the view says so. A current item is its words and since
+when it holds, with `show` below it for the note it rests on
+([What m2b knows](#what-m2b-knows)). The topic stands under a seventh tab
 that bears its name while the pane shows it; the tab `Overview`, Escape or `/m2b-pane` lead
 [back](#back-to-the-start-view).
 
@@ -407,11 +422,12 @@ sets nothing, the tab `Overview` above the first setting or the row of `About th
 the last, so Enter pressed once more never sets a value. After a press on that row it is on the
 tab `Settings`. Escape hands the keyboard back to the prompt.
 
-![The pane beside the chat, driven with the keyboard. After /m2b-settings, thirteen Tabs put the focus on "sonnet" beside the marked "haiku" under "Model of curation"; Enter puts "undo" and "changing to sonnet" where the values stood, and Enter on "undo" takes the press back, with the focus on "23 settings", the row of "About this setup" below the settings. Four Shift+Tabs lead back to "sonnet"; pressed again and left alone, it is written after five seconds: the row reads "haiku" as a button and "sonnet" marked, and the focus is on "23 settings" again. Enter there opens the seventh tab "About this setup" with 23 settings that only inform or are changed by a command, the store folder, the kind of store and the machine's name among them, each with what changes it](images/pane-settings.gif)
+![The pane beside the chat, driven with the keyboard. After /m2b-settings, thirteen Tabs put the focus on "sonnet" beside the marked "haiku" under "Model of curation"; Enter puts "undo" and "changing to sonnet" where the values stood, and Enter on "undo" takes the press back, with the focus on "23 settings", the row of "About this setup" below the settings. Five Shift+Tabs lead back to "sonnet"; pressed again and left alone, it is written after five seconds: the row reads "haiku" as a button and "sonnet" marked, and the focus is on "23 settings" again. Enter there opens the seventh tab "About this setup" with 23 settings that only inform or are changed by a command, the store folder, the kind of store and the machine's name among them, each with what changes it](images/pane-settings.gif)
 
 <sub>One real Claude Code session on a demo machine with invented notes, recorded by `scripts/readme-demo --only pane-settings`. Only keys are typed and no model is asked; the five seconds a press waits run as recorded.</sub>
 
-Nine settings are switches: `curation.read_sessions`, `curation.paused`, `curation.git_commit`,
+Ten settings are switches: `curation.read_sessions`, `curation.paused`,
+`curation.run_after_answers`, `curation.git_commit`,
 `band.place`, `band.due_tasks`, `band.topics`, `sessions.propose`, `curation.model` and your
 `language`. Their
 values are the buttons. A press on one writes nothing for five seconds: where the values stood
@@ -503,8 +519,8 @@ click may not reach it: `open` in the band shows the pane with its buttons.
 One row of tabs stands above every view of the pane, always in this order: `Overview`, the view
 the pane starts in; `Proposals`, with the number that wait; `Review`; `Tasks`; `Facts`; `Settings`. The tab of the
 view you look at is marked and is no button, every other turns the pane to its view. A topic's
-lines, a fact's file, the hits of a search and the settings of `About this setup` stand under a
-seventh tab, which
+lines, a fact's file, a note a current item rests on, the hits of a search and the settings of
+`About this setup` stand under a seventh tab, which
 is there only while the pane shows them. A note or a document a fact rests on stands under an
 eighth, beside the seventh, which then bears the fact's file and leads back to it. No view has a
 button that leads back: the tabs are the one way from a view to another. `Tasks` and `Facts` have
@@ -531,7 +547,7 @@ as long as the tab is shown, and never in the session's state, which other plugi
 The tab `Facts` shows what m2b knows, read with `m2b distillate topics --json` the moment you
 turn the pane to it, in two parts named by when a session gets them. **Every session starts
 with** holds the facts outside any topic, each with `details` where its line names a fact file,
-and the current items. **When a prompt names them** holds every topic as a button with its
+and the current items, each as its words and since when it holds. **When a prompt names them** holds every topic as a button with its
 counts (`2 facts, 1 current`); a press opens [its lines](#a-topics-lines) as the button in "This
 session" does, with the focus on the tab `Facts`, which leads back.
 
@@ -548,6 +564,25 @@ is** says what it is and when it was captured and holds the words as you capture
 stands on which page** holds a document's outline, and **What the curation run added** the lines
 the run wrote below your words. The tab of the fact's file leads back to the file as it was drawn,
 with the focus on the `show` you pressed.
+
+A current item has such a button too, here and in a topic's lines: `show` below it where it rests
+on a note, `show 1` and `show 2` where it rests on several, in the order the distillate names
+them, and none where it names no note. The note's file name is not drawn in the line.
+
+```text
+ Current
+ Alex builds the shed with Sam, the roof is next (since
+ 2026-11-17)
+ [ show ]
+ Sorting the old photos for the family album (since
+ 2026-11-10)
+```
+
+The press opens the note, document or picture in the same view under a seventh tab, which reads
+`note` while m2b reads it and then what it is and its day, or a document's or a picture's
+original file name. No fact file
+stands above it: the tab `Facts` leads back, and from a topic's lines the tab the topic was
+opened from.
 
 A PDF or a picture has `open the file` in **What it is**, where a press would open it: the file is
 on this machine and the session has a screen (on a Mac a session that does not run over SSH, on
@@ -579,7 +614,9 @@ With the keyboard in the pane, the band asks Claude Code to put the focus where 
 writes nothing: after a press on a tab, on the tab that leads back to the view you left, so Enter
 pressed again returns there; after a press on a topic's button on `Overview`, and from there back
 on that topic's button; after `details` or a topic's button in the tab `Facts` on that tab; after
-`show` on the tab of the fact's file, and from there back on that `show`; after keep, drop, `ok`,
+`show` on the tab of the fact's file, and from there back on that `show`; after `show` below a
+current item on the tab `Facts`, or for an item in a topic's lines on the tab the topic was
+opened from; after keep, drop, `ok`,
 `done`, `turn off here` or `curate now` on the row's `undo`. After `open the file` it stays on
 that button, which writes nothing. Once an answer is written its
 row is gone, and the focus stands on the row that moved up.
@@ -679,6 +716,7 @@ As text, other proposals, one of them within its undo:
 │ │   said on 2026-03-05: "the spare key is in the shed"     │ │
 │ │ 1 answer waits for the next curation run, which files    │ │
 │ │ what you kept                                            │ │
+│ │ [ curate now ]                                           │ │
 │ ╰──────────────────────────────────────────────────────────╯ │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -687,12 +725,29 @@ Keep and drop work as on a candidate: a click writes nothing for 5 seconds and o
 the band runs `m2b proposals keep <id>` or `m2b proposals drop <id>`, which adds your answer to
 the store. `keep all` keeps the proposals the pane showed when you clicked it, without those a
 session handed in, which you keep or drop on their own, and without those you
-clicked on their own; one a curation run added a moment before is not kept unseen. Nothing is
-filed by the click: the next curation run writes a capture for each proposal you kept and files
-it, and the last line says how many answers wait for it. The count in the band and the pane
-follow at once.
+clicked on their own; one a curation run added a moment before is not kept unseen. The count in
+the band and the pane follow at once.
 
-![The pane beside the chat, driven with the keyboard. After /m2b-pane the overview counts 3 proposals from your sessions; Tab and Enter on the tab "Proposals 3" turn the pane to them. Six Tabs reach "keep" of the first, "Send Dana the photos of the shed."; Enter puts "undo" and "keeping" where keep and drop stood, and Enter on "undo" brings them back. Kept again and left alone, the proposal is written after five seconds and the tab reads "Proposals 2". Six Shift+Tabs and Enter on the tab "Overview" return to the overview, which now counts 2 proposals and 4 things that wait, and the band left of the pane reads "4 wait for you"](images/pane-answers.gif)
+Nothing is filed by the click: a curation run writes a capture for each proposal you kept and
+files it. Once an answer is written and no proposal waits any more, with at least one keep among
+the answers that wait, the band asks m2b for that run
+(`m2b curate --detach --after-answers --json`), and the view says
+`A curation run is under way: it files what you kept.` The store decides, so answers given in
+other sessions and on other machines count like this one's. Drops alone start no run, a machine
+you [paused](curation.md#pausing) starts none, and `curation.run_after_answers` set to `false`
+turns the start off ([When it runs](curation.md#when-it-runs)). Such a run is a whole curation
+run, with every step ([Cost and privacy](cost-and-privacy.md#what-a-run-costs)).
+
+While answers wait and no run is under way, the last line says how many, and on the machine that
+curates `curate now` stands below it, whatever the setting says: a round answered in part, a
+paused machine and the setting turned off all leave answers waiting, and the press files them
+now, as it does [in the overview](#this-session-what-waits-and-today-in-the-pane). A start that
+began no run says why above the line (`No curation run started: …`). On a machine that does not
+curate, the line names the machine whose run the answers wait for
+(`1 answer waits for the next curation run on tower-1, which files what you kept`) and there is
+no button.
+
+![The pane beside the chat, driven with the keyboard. After /m2b-pane the overview counts 3 proposals from your sessions; Tab and Enter on the tab "Proposals 3" turn the pane to them. Six Tabs reach "keep" of the first, "Send Dana the photos of the shed."; Enter puts "undo" and "keeping" where keep and drop stood, and Enter on "undo" brings them back. Kept again and left alone, the proposal is written after five seconds, the tab reads "Proposals 2", and below the two proposals left the view says "1 answer waits for the next curation run, which files what you kept" with the button "curate now". Six Shift+Tabs and Enter on the tab "Overview" return to the overview, which now counts 2 proposals and 4 things that wait, and the band left of the pane reads "4 wait for you"](images/pane-answers.gif)
 
 <sub>One real Claude Code session on a demo machine with invented notes, recorded by `scripts/readme-demo --only pane-answers`. Only keys are typed and no model is asked; the five seconds a press waits run as recorded.</sub>
 
@@ -897,7 +952,9 @@ reading the list again with `m2b band --json --tasks-only`; keep and drop on a p
 one stands. `turn off here` and `turn on here` in the pane call `m2b distillate off` and
 `m2b distillate on` with the folder, which change `distillate.skip_under` in the machine config.
 `curate now` calls `m2b curate --force --detach --json`, which starts a curation run in the
-background; what that run reads and writes is in [The curation run](curation.md).
+background; once an answer to a proposal is written and none waits any more, the band calls
+`m2b curate --detach --after-answers --json`, which starts one only where a kept proposal waits
+for a run. What that run reads and writes is in [The curation run](curation.md).
 A topic's button calls `m2b distillate topic --json`, which reads `memory/MEMORY.md`, and so does
 `m2b distillate topics --json` for the tab `Facts`. `details` and `show` call `m2b source --json`,
 which reads one fact file in `memory/` or one note in `corpus/`, and `open the file` calls

@@ -83,7 +83,7 @@ command answers as JSON with it.
 | `m2b source [--json [--viewer]] <name>` | one fact file or note, read whole by its name: the name a distillate line ends with (`dana.md`), or a note's name from the archive (a document's or picture's name answers its note); a fact file with its lines, last day, earlier values and evidence, a note with its words and what curation added, a document's note with its original name and outline. A path or any other name is refused with exit 2; a file not on this machine is named with the command that fetches it. `--viewer` adds for a note whether `m2b store open` opens its file, why not, and where it lies; the pane passes it, the skill `m2b:search` cannot |
 | `m2b todos [--json]` | open tasks by due date, and today's events |
 | `m2b rediscover [--count <n>] [--month <YYYY-MM>] [--today <day>] [--json]` | old notes back into view, three without `--count`; `--today YYYY-MM-DD` sets the day that counts as today |
-| `m2b status [--json]` | the inbox, the last curation run, whether one is due, the backends |
+| `m2b status [--json]` | the inbox, the last curation run, whether one is due, the backends, and how many proposals sessions handed in wait for the next run |
 | `m2b doctor [--json]` | checks every backend and the programs m2b starts; the first thing to run when something looks wrong |
 
 ### Tasks and calendar
@@ -110,7 +110,7 @@ so does `done` on its row in the m2b pane's tab `Tasks`.
 |---|---|
 | `m2b curate [--force] [--detach [--json] [--after-answers]]` | the curation run: without `--force` only when one is due, as a schedule calls it; `--detach` starts it in the background and says in one line whether a run started, with `--json` as data (`kind` and `message`), which is how `curate now` in the m2b pane starts one ([Curation](curation.md#when-it-runs)). `--detach --after-answers` starts one only where every proposal is answered and one is kept, which is what the pane asks for after an answer; `curation.run_after_answers` turns it off. `--refresh-all` and `--sort-facts` run now and do one more step, once ([Curation](curation.md#moving-over-an-older-distillate)) |
 | `m2b curate take-over` | makes this machine the curating machine ([Several machines](several-machines.md)) |
-| `m2b proposals [--json]` | what the reading of your sessions proposed and what sessions handed in, as far as it waits for your answer |
+| `m2b proposals [--json]` | what the reading of your sessions proposed and what sessions handed in, as far as it waits for your answer, and below it how many handed-in proposals wait for the next run to take them in |
 | `m2b proposals keep [--all] <ids>` | files these proposals with the next curation run; `--all` leaves those a session handed in, which you keep by id |
 | `m2b proposals drop <ids>` | forgets these proposals |
 | `m2b proposals add` | hands in a proposal of a session, read as one JSON object from standard input: `kind`, `text`, `quote`, `session`, optionally `due`. Off until `sessions.propose` is `true`. Refuses with one line when the quote does not stand in that session's transcript or the session worked where m2b does not read. The next curation run takes the proposal in |

@@ -22,6 +22,16 @@ machine curates the store), `not-downloaded` (`store.json` is not on this machin
 `--force`, `paused` or `not-due`.
 In a session, the button `curate now` in the m2b pane starts a run in the background on the
 curating machine ([The band](band.md#this-session-what-waits-and-today-in-the-pane)).
+There a run also starts by itself once you have answered every proposal that waits and kept at
+least one, so what you kept is filed without a second step
+([Your answer](#reading-your-sessions)). The band asks for it with
+`m2b curate --detach --after-answers`, which starts a run where no proposal waits for its answer
+any more and a keep waits for a run, whatever the inbox holds and whenever the last run was. It
+decides that from the store, so an answer from another session or machine counts like the
+caller's. Where it starts none, `kind` is `off` (`curation.run_after_answers` is `false` on this
+machine), `paused`, `proposals-wait` (a proposal still waits for its answer), `nothing-kept`
+(drops alone, which change nothing a session sees), or `running`, `not-curating` and
+`not-downloaded` as above. It goes with `--detach` alone.
 On a machine you paused, a run starts only when you ask for one, with `--force`, `--refresh-all`
 or `--sort-facts`, or with `curate now` ([Pausing](#pausing)).
 
@@ -335,7 +345,14 @@ are buttons ([the band](band.md#the-proposals-from-your-sessions-in-the-pane));
 they add the same answers as the commands.
 
 An answer is filed by the next curation run: harvest writes a capture with the proposal's text
-(source `proposal`, `from_proposal` in its frontmatter), and ingest files it like any capture. A
+(source `proposal`, `from_proposal` in its frontmatter), and ingest files it like any capture.
+After answers given in the m2b pane on the machine that curates, that run starts by itself, once
+no proposal waits any more and one is kept ([When it runs](#when-it-runs));
+`curation.run_after_answers` set to `false` turns that off, and the answers then wait for the
+next run that is due or for `curate now`. Answers given on a machine that does not curate wait
+for the curating machine's next run.
+Answers given with `m2b proposals keep` in a terminal start no run by themselves:
+`m2b curate --detach --after-answers` starts it. A
 commitment that names its day gets its task with the capture. A dropped proposal is remembered for
 90 days and not proposed again. Where a keep and a drop for one proposal meet, from two machines,
 keep stands.
@@ -489,8 +506,8 @@ nearly used up or while you look at what the last run did:
 m2b config set curation.paused true
 ```
 
-From then on no session start on this machine starts a run, and a scheduled `m2b curate` does
-nothing and exits 0. Everything else goes on: captures reach the inbox, sessions get the
+From then on no session start on this machine starts a run, none starts after your answers to
+proposals, and a scheduled `m2b curate` does nothing and exits 0. Everything else goes on: captures reach the inbox, sessions get the
 distillate, and `m2b curate --force` files the inbox when you ask for it, as do `curate now` in
 the m2b pane and the one-off runs `--refresh-all` and `--sort-facts`. `m2b status` has a line
 `paused` while the setting is on, and shows a scheduled attempt as `last attempt: paused at ...`.
