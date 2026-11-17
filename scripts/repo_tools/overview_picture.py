@@ -111,7 +111,7 @@ TRUNK = 344
 # The typographic apostrophe, as the typefaces draw it.
 APOSTROPHE = "\u2019"
 CORNER = 9
-# The dot's way, once, on the thick line alone: (percent, x, y, opacity).
+# The dot's way on the thick line alone: (percent of the travel, x, y, opacity).
 PATH = [
     (0, 264, 98, 0),
     (3, 264, 98, 1),
@@ -133,8 +133,15 @@ PATH = [
     (93, 692, 98, 0),
     (100, 692, 98, 0),
 ]
-LIT = {"curator": (25, 43), "memory": (53, 65), "answer": (89, 100)}
-SECONDS = 9
+# When a shape glows, in percent of the travel; the answer goes on glowing into the rest.
+LIT = {"curator": (25, 43), "memory": (53, 65), "answer": (89, 125)}
+# The dot travels, the picture rests, and the dot sets out again: a reader who scrolls to the
+# picture later still sees it move, and the rest keeps it from fidgeting beside the recording.
+TRAVEL_SECONDS = 9
+REST_SECONDS = 6
+SECONDS = TRAVEL_SECONDS + REST_SECONDS
+# Through the rest the dot stays hidden where it arrived; a round's percent 100 is this one's.
+REST = (100 * SECONDS / TRAVEL_SECONDS, 692, 98, 0)
 
 
 class Type:
@@ -293,11 +300,20 @@ def folder(type_: Type) -> list[str]:
     return parts
 
 
+def of_the_round(percent_of_the_travel: float) -> str:
+    """A moment of the travel as a percent of one round, the travel and the rest after it."""
+    return f"{percent_of_the_travel * TRAVEL_SECONDS / SECONDS:.1f}".rstrip("0").rstrip(".")
+
+
 def svg(theme: dict[str, str], type_: Type) -> str:
-    keyframes = " ".join(f"{p}%{{transform:translate({x}px,{y}px);opacity:{o}}}" for p, x, y, o in PATH)
+    keyframes = " ".join(
+        f"{of_the_round(p)}%{{transform:translate({x}px,{y}px);opacity:{o}}}" for p, x, y, o in [*PATH, REST]
+    )
     lit = "".join(
-        f"@keyframes lit-{name}{{0%,{start - 1}%{{stroke-opacity:0}}{start}%,{end - 1}%{{stroke-opacity:1}}"
-        f"{end}%,100%{{stroke-opacity:0}}}}.lit-{name}{{animation:lit-{name} {SECONDS}s linear 1s 1 both}}"
+        f"@keyframes lit-{name}{{0%,{of_the_round(start - 1)}%{{stroke-opacity:0}}"
+        f"{of_the_round(start)}%,{of_the_round(end - 1)}%{{stroke-opacity:1}}"
+        f"{of_the_round(end)}%,100%{{stroke-opacity:0}}}}"
+        f".lit-{name}{{animation:lit-{name} {SECONDS}s linear 1s infinite backwards}}"
         for name, (start, end) in LIT.items()
     )
     fills = "".join(
@@ -317,7 +333,7 @@ def svg(theme: dict[str, str], type_: Type) -> str:
         f".main{{stroke:{theme['petrol']};stroke-width:5}}.quiet{{stroke:{theme['line']};stroke-width:2}}"
         f".dotted{{stroke:{theme['line']};stroke-width:2.4;stroke-dasharray:0.1 6.5}}"
         f".dot circle:first-child{{fill:{theme['petrol']}}}.dot circle:last-child{{stroke:{theme['petrol']}}}"
-        f".dot{{animation:travel {SECONDS}s linear 1s 1 both}}@keyframes travel{{{keyframes}}}"
+        f".dot{{animation:travel {SECONDS}s linear 1s infinite backwards}}@keyframes travel{{{keyframes}}}"
         + lit
         + "@media (prefers-reduced-motion:reduce){.dot{animation:none;opacity:0}.glow{animation:none}}"
     )
