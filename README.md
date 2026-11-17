@@ -12,6 +12,9 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/Claude%20Code-2.1.319%2B-c96442?style=flat-square" alt="Claude Code 2.1.319 or later">
   <img src="https://img.shields.io/badge/Python-3.9%2B-3776ab?style=flat-square" alt="Python 3.9 or later">
+  <br>
+  <a href="https://github.com/TeleAI-UAGI/Awesome-Agent-Memory"><img src="https://awesome.re/mentioned-badge-flat.svg" alt="Mentioned in Awesome Agent Memory"></a>
+  <a href="https://mods.aidojo.si/mods/Kolibee-GmbH--m2b--m2b/"><img src="https://img.shields.io/badge/listed%20on-mods.aidojo.si-788c5d?style=flat-square" alt="Listed on mods.aidojo.si, the Awesome Claude Code Mods catalogue"></a>
 </p>
 
 <p align="center">
@@ -243,6 +246,17 @@ receives your sessions.
 A store in a synced folder also goes where that service takes it; m2b has no sync of its own.
 Tasks in Apple Reminders and events in a calendar go wherever that list or calendar syncs. In a
 store that is a git repository a run commits and never pushes.
+
+The band runs inside Claude Code as a mod. An independent community scan of public mods,
+[Awesome Claude Code Mods](https://mods.aidojo.si/mods/Kolibee-GmbH--m2b--m2b/), records what a
+mod's calls can touch, on a scale from L0 to L3, where L3 reaches the network. It puts the band
+at L2: it writes files, runs processes and drives Claude. The scan is static and covers the mod's
+own calls; what they and the `m2b` commands behind them read and write is in
+[What it reads and writes](docs/band.md#what-it-reads-and-writes). The badges show the latest
+result of the scan and of its run of `claude plugin validate`:
+
+[![Reach of the m2b mod in the Awesome Claude Code Mods scan](https://raw.githubusercontent.com/karanb192/awesome-claude-code-mods/main/badges/Kolibee-GmbH--m2b--m2b-reach.svg)](https://mods.aidojo.si/mods/Kolibee-GmbH--m2b--m2b/)
+[![Result of claude plugin validate in the Awesome Claude Code Mods scan](https://raw.githubusercontent.com/karanb192/awesome-claude-code-mods/main/badges/Kolibee-GmbH--m2b--m2b-validates.svg)](https://mods.aidojo.si/mods/Kolibee-GmbH--m2b--m2b/)
 
 [Cost and privacy](docs/cost-and-privacy.md) says what each step hands the model.
 [SECURITY.md](SECURITY.md) says what a hostile note can do and how the model's step is fenced.
