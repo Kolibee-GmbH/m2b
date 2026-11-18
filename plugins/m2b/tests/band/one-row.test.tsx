@@ -35,6 +35,7 @@ import {
   shownTabs,
   start,
   texts,
+  widthsOfTheRow,
 } from './harness'
 import type { Files } from './harness'
 
@@ -130,7 +131,7 @@ const OVERVIEW_PARTS = ['waits', 'today', 'session', 'm2b']
 const REVIEW_PARTS = ['run', 'waits']
 
 function model(fields: Partial<BandModel> = {}): BandModel {
-  return { snapshot: null, proposals: null, notice: null, topics: 0, ...fields }
+  return { snapshot: null, proposals: null, notice: null, topics: 0, health: null, ...fields }
 }
 
 test('with nothing waiting, no task due and nothing wrong the band draws nothing of its own, whatever the session was given', async ($, on) => {
@@ -442,6 +443,16 @@ test('four things wait and five tasks are due, with count: one row of m2b, what 
   const [name] = await band.findAll({ type: 'Text', text: 'm2b' })
   expect(name?.text).toBe('m2b')
   expect(name?.props).toEqual({ color: 'remember', weight: 'bold' })
+  await band.unmount()
+})
+
+test('in a row too long for its line m2b keeps its name whole, and the counts are cut at their end', async ($, on) => {
+  // Covers: B191
+  await start($, on, busyFake())
+
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+
+  expect(await widthsOfTheRow(band)).toEqual({ nameShrinks: 0, countsWrap: 'truncate-end' })
   await band.unmount()
 })
 

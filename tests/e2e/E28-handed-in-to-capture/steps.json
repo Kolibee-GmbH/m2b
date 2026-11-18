@@ -1,5 +1,5 @@
 {
- "description": "E28 a session hands in, from the file to the capture (stub level): the owner turned handing in on, in a terminal of their own, which the empty CLAUDECODE of that step stands for. A session's transcript holds a note that Read returned; `m2b proposals add` is called as the mod's tool calls it and takes the proposal, because its quote stands in that result. A curation run that reads no sessions takes the file in: `m2b proposals` shows the proposal as handed in by a session, with the tool its words came from. `keep --all` leaves it, the person keeps it by its id, the next run writes its capture, the scripted ingest moves it into the archive, and `m2b status` counts one kept of what sessions handed in.",
+ "description": "E28 a session hands in, from the file to the capture (stub level): the owner turned handing in on, in a terminal of their own, which the empty CLAUDECODE of that step stands for. A session's transcript holds a note that Read returned; `m2b proposals add` is called as the mod's tool calls it and takes the proposal, because its quote stands in that result. Before any run `m2b status`, `m2b proposals` and `m2b band --json` say that one proposal was handed in and waits for a run, and list none to answer. A curation run that reads no sessions takes the file in: `m2b proposals` shows the proposal as handed in by a session, with the tool its words came from. `keep --all` leaves it, the person keeps it by its id, the next run writes its capture, the scripted ingest moves it into the archive, and `m2b status` counts one kept of what sessions handed in.",
  "steps": [
   {
    "run": [
@@ -32,6 +32,28 @@
    ],
    "stdin": "{\"kind\": \"person\", \"text\": \"Dana Whitfield runs purchasing at Acme.\", \"quote\": \"Dana Whitfield runs purchasing at Acme\", \"session\": \"0a1b2c3d-1111-4222-8333-444455556666\"}",
    "stdout": "\\Ahanded in before: "
+  },
+  {
+   "run": [
+    "m2b",
+    "status"
+   ],
+   "stdout": "\\nhanded in: 1 waiting for the next curation run\\n"
+  },
+  {
+   "run": [
+    "m2b",
+    "proposals"
+   ],
+   "stdout": "\\Ano proposal waits for an answer\\n1 proposal handed in by a session waits for the next curation run, which takes it in\\n\\Z"
+  },
+  {
+   "run": [
+    "m2b",
+    "band",
+    "--json"
+   ],
+   "stdout": "\"proposals\": \\[\\],\\s*\"answered\": 0,\\s*\"handed_in\": 1\\s*\\}"
   },
   {
    "run": [

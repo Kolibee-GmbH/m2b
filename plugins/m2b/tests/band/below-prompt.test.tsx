@@ -96,7 +96,7 @@ const PIECES = [colored('1 waits for you', 'warning'), colored('  1 overdue', 'e
 const MARK = dim('  …')
 
 function model(fields: Partial<BandModel> = {}): BandModel {
-  return { snapshot: null, proposals: null, notice: null, topics: 0, ...fields }
+  return { snapshot: null, proposals: null, notice: null, topics: 0, health: null, ...fields }
 }
 
 function lineOf(fields: Partial<BandLine>): BandLine {

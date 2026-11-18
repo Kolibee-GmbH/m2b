@@ -17,13 +17,20 @@ its own; it starts once m2b is set up on the machine.
 The row begins with `m2b` and has one button, `open`, which shows
 [the m2b pane](#this-session-what-waits-and-today-in-the-pane). Everything you answer is there:
 the band holds no button that writes. Claude Code lets you fold the band away (Ctrl+X, then
-Ctrl+A) and no plugin can unfold it, so nothing stands only in the band.
+Ctrl+A) and no plugin can unfold it, so nothing stands only in the band. Where the row is longer
+than its line, its counts are cut at their end and `m2b` stays whole.
 
 - **How many things wait for your answer**, `4 wait for you`: memory candidates
   ("Remember? ...", proposed with `m2b tasks add --candidate`), "Still current?" questions about
   items of the distillate that have gone quiet, proposals from your sessions
   ([curation](curation.md#reading-your-sessions)) and the open review of the last curation run,
   each counted as one. The pane lists them with keep, drop and `ok`.
+- **How many proposals your sessions handed in**, `1 handed in`, while they wait for a curation
+  run to take them in ([What a session hands in](curation.md#what-a-session-hands-in)). They
+  are counted apart from what waits for you: nothing of them can be answered before that run.
+  On the machine that curates the count stands at full strength, and `curate now` in the pane
+  starts the run; on any other machine it is stepped back. While a run is under way the row
+  says nothing of them, and after it they are among what waits for you.
 - **Your tasks due today or overdue**, your own, not the curator's, as this machine shows them:
 
   | `band.due_tasks` | The band |
@@ -286,8 +293,8 @@ what you can press.
   it files, each only where it waits
   (`Waiting for the next curation run: 2 proposals handed in by sessions, 1 answer of yours.`).
   It stands there on every machine and not while a run is under way. Of what sessions handed in
-  it says the number alone: they are no row of "Waits for you" and the band does not count them,
-  since they wait for the run, not for you
+  it says the number alone: they are no row of "Waits for you", since they wait for the run, not
+  for you, and the band's row counts them apart, `1 handed in`
   ([What a session hands in](curation.md#what-a-session-hands-in)). Where m2b could not count
   them, the part says `m2b could not look at what sessions handed in.` in the error color.
 

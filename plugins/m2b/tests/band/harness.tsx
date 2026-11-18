@@ -1134,17 +1134,19 @@ export async function enginesHint(ui: Drawn): Promise<EnginesHint | null> {
 }
 
 /** The line of the band's row: the one text that is cut where the row is too narrow, with its pieces inside. */
-async function bandLineOf(ui: Drawn): Promise<{ texts: Element[]; line: Element | undefined } | null> {
+async function bandLineOf(ui: Drawn): Promise<{ isNamed: boolean; line: Element | undefined } | null> {
   const row = await ui.find({ key: BAND_ROW })
   if (row === undefined) {
     return null
   }
-  const texts = elementsIn(row.children, 'Text')
-  return { texts, line: texts.find(text => text.props['wrap'] === 'truncate-end') }
+  const line = elementsIn(row.children, 'Text').find(text => text.props['wrap'] === 'truncate-end')
+  // The name stands in a box of its own, which keeps it whole where the row is too narrow.
+  return { isNamed: elementsIn(row.children, 'Box').some(box => shownText(box) === 'm2b'), line }
 }
 
 /**
- * The band as m2b drew it. `isNamed`: `m2b` stands before the row as a text of its own. `says`:
+ * The band as m2b drew it. `isNamed`: `m2b` stands before the row in a box of its own, which
+ * keeps it whole. `says`:
  * the row's pieces as the one line they are drawn in. `below`: the lines under the row, a task as
  * its word and its title. `buttons`: the keys of every button of the band.
  */
@@ -1158,7 +1160,7 @@ export async function shownBand(ui: Drawn): Promise<ShownBand | null> {
   }
   const below = elementsIn((await ui.find({ key: BAND_TASKS }))?.children)
   return {
-    isNamed: row.texts.some(text => text !== row.line && shownText(text) === 'm2b'),
+    isNamed: row.isNamed,
     says: row.line === undefined ? '' : shownText(row.line),
     below: below.map(under =>
       under.type === 'Box'
@@ -1182,6 +1184,14 @@ export const CALM_ROW: ShownBand = { isNamed: true, says: '', below: [], buttons
 /** A band whose row is a sentence that names m2b itself, so no `m2b` stands before it. */
 export function sentenceOfM2b(says: string): ShownBand {
   return { isNamed: false, says, below: [], buttons: [OPEN] }
+}
+
+/** How far the box of m2b's name may shrink where the band's row is too narrow, and how the row's counts are cut. */
+export async function widthsOfTheRow(ui: Drawn): Promise<{ nameShrinks: unknown; countsWrap: unknown } | null> {
+  const row = await ui.find({ key: BAND_ROW })
+  const name = elementsIn(row?.children, 'Box').find(box => shownText(box) === 'm2b')
+  const line = (await bandLineOf(ui))?.line
+  return name === undefined || line === undefined ? null : { nameShrinks: name.props['flexShrink'], countsWrap: line.props['wrap'] }
 }
 
 /** A piece of text in the band with the props it is drawn by. */

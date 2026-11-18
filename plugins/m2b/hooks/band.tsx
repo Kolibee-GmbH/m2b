@@ -1,7 +1,7 @@
 import type { ElementTable, EngineInterface, ResolveInput } from 'claude-code'
 
-import type { BandDueTask, BandProposals, BandSession, BandSnapshot } from '../types'
-import { M2B, button, dueCounts, styleOf, taskLine, topicsCount, waitForYou } from './look'
+import type { BandDueTask, BandHealth, BandProposals, BandSession, BandSnapshot } from '../types'
+import { M2B, button, dueCounts, handedInCount, styleOf, taskLine, topicsCount, waitForYou } from './look'
 import type { Tone } from './look'
 import { plainLine } from './plain-text'
 import { couldNotLookLine, errorBesideTasks } from './proposals'
@@ -12,8 +12,10 @@ import { SHOWS_BY_DEFAULT } from './tasks'
  * What the band draws: one row, in m2b's name, that says how many things wait for an answer and
  * has one button, which shows the pane. Everything that is answered, and every row with a button
  * that writes, is in the pane: the person can fold the band away, and nothing may stand only
- * there. The tasks due are in the row as counts, below it by name, or not in the band at all, as
- * the machine's `band.due_tasks` says, and the count of topics only with `band.topics` on.
+ * there. What sessions handed in is counted beside what waits: it waits for a curation run, and
+ * the row is where the person sees that a run is worth starting. The tasks due are in the row
+ * as counts, below it by name, or not in the band at all, as the machine's `band.due_tasks`
+ * says, and the count of topics only with `band.topics` on.
  *
  * Where the row stands is the machine's `band.place`. Above the prompt it is always there, calm
  * while it has nothing to say, so the pane is one press away in every session; or it is there only
@@ -43,13 +45,14 @@ const MORE: BandPart = { text: '…', tone: 'quiet' }
 
 /**
  * Everything the band draws from. `topics` is the number of topics m2b gave this session, `notice`
- * why the band's own button showed no pane.
+ * why the band's own button showed no pane, `health` how m2b itself stands, null before it said so.
  */
 export type BandModel = {
   snapshot: BandSnapshot | null
   proposals: BandProposals | null
   notice: string | null
   topics: number
+  health: BandHealth | null
 }
 
 /** A piece of the band's row, and what it is. */
@@ -77,6 +80,20 @@ function sentence(text: string, tone: Tone): BandLine {
   return { parts: [{ text: line, tone }], isNamed: !line.startsWith(`${M2B} `), isCalm: false, listed: [], more: 0 }
 }
 
+/**
+ * The proposals sessions handed in that wait for a curation run, as a piece of the row. At full
+ * strength on the machine that curates, where `curate now` in the pane starts that run; stepped
+ * back on every other one and where m2b has not said which machine curates. None while a run is
+ * under way, which takes them in, and none where m2b could not count them: the pane says that.
+ */
+function handedInParts(model: BandModel): BandPart[] {
+  const count = model.proposals?.handedIn ?? 0
+  if (count === 0 || model.health?.isCurating === true) {
+    return []
+  }
+  return [{ text: handedInCount(count), tone: model.health?.curates === true ? 'plain' : 'quiet' }]
+}
+
 /** Whether the band is the end of the hint line below the prompt; above the prompt until m2b's answer says where. */
 export function standsBelow(model: BandModel): boolean {
   return (model.snapshot?.shows ?? SHOWS_BY_DEFAULT).place === 'below'
@@ -86,9 +103,9 @@ export function standsBelow(model: BandModel): boolean {
  * What the band's row says, or null where the band draws nothing. First why its own button showed
  * no pane: a press that did nothing is said where it was pressed. Then what keeps m2b from
  * counting, the task list or the store it could not read. Else the counts: what waits for an
- * answer, the tasks due as the machine shows them, the topics where it shows them. With none of
- * these the row is calm, or there is none: before m2b's first answer, and on a machine whose band
- * is there only while something waits.
+ * answer, what sessions handed in for the next curation run, the tasks due as the machine shows
+ * them, the topics where it shows them. With none of these the row is calm, or there is none:
+ * before m2b's first answer, and on a machine whose band is there only while something waits.
  */
 export function bandLine(model: BandModel): BandLine | null {
   const { snapshot, proposals } = model
@@ -110,6 +127,7 @@ export function bandLine(model: BandModel): BandLine | null {
   const dueTasks = shows.place === 'below' && shows.dueTasks === 'list' ? 'count' : shows.dueTasks
   const parts: BandPart[] = [
     ...(waiting > 0 ? [{ text: waitForYou(waiting), tone: 'waits' as const }] : []),
+    ...handedInParts(model),
     ...(dueTasks === 'count' ? dueCounts(due) : []),
     ...(shows.topics && model.topics > 0 ? [{ text: topicsCount(model.topics), tone: 'quiet' as const }] : []),
   ]
@@ -132,10 +150,17 @@ function piecesOf(ui: Pick<ElementTable, 'Text'>, parts: readonly BandPart[]) {
   )
 }
 
-/** m2b's name before a row, and the row's one button: both stepped back while the row is calm. */
-function nameOf(ui: Pick<ElementTable, 'Text'>, line: BandLine) {
-  const { Text } = ui
-  return <Text {...styleOf(line.isCalm ? 'quiet' : 'brand')}>{M2B}</Text>
+/**
+ * m2b's name before a row, and the row's one button: both stepped back while the row is calm.
+ * The name is whole at any width: a row too long for its line cuts its counts, never the name.
+ */
+function nameOf(ui: Pick<ElementTable, 'Box' | 'Text'>, line: BandLine) {
+  const { Box, Text } = ui
+  return (
+    <Box flexShrink={0}>
+      <Text {...styleOf(line.isCalm ? 'quiet' : 'brand')}>{M2B}</Text>
+    </Box>
+  )
 }
 
 function openButton(ui: Pick<ElementTable, 'Button'>, line: BandLine, onOpen: () => void) {
