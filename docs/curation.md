@@ -457,8 +457,9 @@ What a session handed in is one of these proposals only once a run took it in. U
 handed in: 2 waiting for the next curation run
 ```
 
-`m2b proposals` says the same below its listing, and the overview of the m2b pane says it above
-`curate now`, so you see that a session proposed something and that a run is worth starting.
+`m2b proposals` says the same below its listing, the band's row counts them (`1 handed in`), and
+the overview of the m2b pane says it above `curate now`, so you see that a session proposed
+something and that a run is worth starting.
 
 Where the store is a git repository, a handed-in file is committed with the waiting captures
 before a run's first step, and the run takes in only what a commit holds, so taking that run back

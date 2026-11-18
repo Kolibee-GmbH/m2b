@@ -1,6 +1,9 @@
 import { expect, test } from 'claude-code/testing'
 
+import { bandLine, belowPrompt } from '../../hooks/band'
+import type { BandModel } from '../../hooks/band'
 import { parseProposals } from '../../hooks/proposals'
+import type { BandHealth } from '../../types'
 import {
   BAND,
   CALM_ROW,
@@ -9,12 +12,15 @@ import {
   FakeM2b,
   HOME,
   NOW,
+  ONLY_WHILE_WAITING,
   SHOWN_WITHOUT_ENTRY,
   STATUS,
   STATUS_ELSEWHERE,
+  bandPieces,
   buttonsAt,
   lookOf,
   partLines,
+  rowSaying,
   shownBand,
   start,
   startView,
@@ -53,11 +59,8 @@ test('while proposals a session handed in wait for a run, the part "m2b" of the 
   expect(await partLines(ui, 'm2b')).toEqual([CURATED, TWO_HANDED_IN, CURATE_NOW_LINE])
   expect(await lookOf(ui, TWO_HANDED_IN)).toEqual(DIM)
   expect((await buttonsAt(ui, ROW)).map(button => button.key)).toEqual([CURATE_NOW])
-  // They wait for the run, not for the person: the part of what waits has no row for them, and the band does not count them.
+  // They wait for the run, not for the person: the part of what waits has no row for them.
   expect(await partLines(ui, 'waits')).toEqual(['Nothing waits for you.'])
-  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(await shownBand(band)).toEqual(CALM_ROW)
-  await band.unmount()
 
   // One is said in the singular, and once a run took them in the line is gone.
   fake.handedInWaiting = 1
@@ -208,4 +211,117 @@ test('a shared answer that carries the count is taken without asking m2b', async
   expect(looks(fake)).toEqual([])
   expect(await partLines(ui, 'm2b')).toEqual([CURATED, ONE_HANDED_IN, CURATE_NOW_LINE])
   await ui.unmount()
+})
+
+const CURATES: BandHealth = { curation: CURATED, troubles: [], curates: true, isCurating: false }
+const ONE_WAITS = { candidates: [{ id: 'c1', title: 'Remember? Dana prefers tea' }], review: null, error: null }
+const NOTHING_WAITS = { candidates: [], review: null, error: null }
+
+function handedIn(count: number | null, fields: Partial<BandModel> = {}): BandModel {
+  return {
+    snapshot: NOTHING_WAITS,
+    proposals: { waiting: [], answered: 0, handedIn: count, error: null },
+    notice: null,
+    topics: 0,
+    health: CURATES,
+    ...fields,
+  }
+}
+
+test('while proposals sessions handed in wait for a run, the band counts them in its row, at full strength on the machine that curates, and the count is gone once a run took them in', async ($, on) => {
+  // Covers: B243
+  const fake = new FakeM2b()
+  fake.handedInWaiting = 2
+  const { clock } = await start($, on, fake)
+
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+
+  expect(await shownBand(band)).toEqual(rowSaying('2 handed in'))
+  expect(await bandPieces(band)).toEqual([{ text: '2 handed in', color: undefined, dimColor: undefined }])
+  fake.handedInWaiting = 1
+  await clock.advance(60_000)
+  expect(await shownBand(band)).toEqual(rowSaying('1 handed in'))
+  fake.handedInWaiting = 0
+  await clock.advance(60_000)
+  expect(await shownBand(band)).toEqual(CALM_ROW)
+  await band.unmount()
+})
+
+test('on a machine that does not curate the band counts what sessions handed in stepped back: no run can be started there', async ($, on) => {
+  // Covers: B243
+  const fake = new FakeM2b()
+  fake.status = STATUS_ELSEWHERE
+  fake.handedInWaiting = 1
+  await start($, on, fake)
+
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+
+  expect(await shownBand(band)).toEqual(rowSaying('1 handed in'))
+  expect(await bandPieces(band)).toEqual([{ text: '1 handed in', color: undefined, dimColor: true }])
+  await band.unmount()
+})
+
+test('while a run is under way the band says nothing of what sessions handed in, as the overview does', async ($, on) => {
+  // Covers: B243
+  const fake = new FakeM2b()
+  fake.status = RUNNING
+  fake.handedInWaiting = 2
+  await start($, on, fake)
+
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+
+  expect(await shownBand(band)).toEqual(CALM_ROW)
+  await band.unmount()
+})
+
+test('what sessions handed in draws a band that is there only while something waits', async ($, on) => {
+  // Covers: B243, B213
+  const fake = new FakeM2b()
+  fake.shows = ONLY_WHILE_WAITING
+  const { clock } = await start($, on, fake)
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await shownBand(band)).toBeNull()
+
+  fake.handedInWaiting = 1
+  await clock.advance(60_000)
+
+  expect(await shownBand(band)).toEqual(rowSaying('1 handed in'))
+  await band.unmount()
+})
+
+test('in the row what sessions handed in stands after what waits for the person and before the tasks due and the topics', () => {
+  // Covers: B243
+  const due = [
+    { id: 'd1', title: 'Return the ladder to Sam', overdue: true },
+    { id: 'd2', title: 'Call Dana', overdue: false },
+  ]
+  const snapshot = { ...ONE_WAITS, due, shows: { place: 'above' as const, dueTasks: 'count' as const, topics: true } }
+
+  expect(bandLine(handedIn(2, { snapshot, topics: 1 }))?.parts).toEqual([
+    { text: '1 waits for you', tone: 'waits' },
+    { text: '2 handed in', tone: 'plain' },
+    { text: '1 overdue', tone: 'overdue' },
+    { text: '1 due today', tone: 'dueToday' },
+    { text: '1 topic', tone: 'quiet' },
+  ])
+  // Where the row below the prompt has no room for every count, the last go first: what was handed in stays beside what waits.
+  const line = bandLine(handedIn(2, { snapshot: { ...snapshot, shows: { ...snapshot.shows, place: 'below' } }, topics: 1 }))
+  expect(line).not.toBeNull()
+  const narrow = line === null ? null : belowPrompt(line, '? for shortcuts', 100, 'm2b-pane')
+  expect(narrow).toEqual({
+    kind: 'row',
+    line: { ...line, parts: [{ text: '1 waits for you', tone: 'waits' }, { text: '2 handed in', tone: 'plain' }, { text: '…', tone: 'quiet' }] },
+  })
+})
+
+test('the row counts nothing handed in where none waits, where m2b could not count them, and before m2b said how it stands it counts them stepped back', () => {
+  // Covers: B243
+  const calm = { parts: [], isNamed: true, isCalm: true, listed: [], more: 0 }
+
+  expect(bandLine(handedIn(0))).toEqual(calm)
+  // Could not count is said in the pane, in the color of trouble: the row does not turn it into a number.
+  expect(bandLine(handedIn(null))).toEqual(calm)
+  expect(bandLine(handedIn(1, { health: null }))?.parts).toEqual([{ text: '1 handed in', tone: 'quiet' }])
+  expect(bandLine(handedIn(1, { health: { ...CURATES, curates: null } }))?.parts).toEqual([{ text: '1 handed in', tone: 'quiet' }])
+  expect(bandLine(handedIn(1, { health: { ...CURATES, isCurating: true } }))).toEqual(calm)
 })

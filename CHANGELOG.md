@@ -7,6 +7,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-18
+
+The band says that a session handed something in, so you see that a curation run is worth
+starting.
+
+### Added
+
+- The band's row counts what your sessions handed in while it waits for a curation run:
+  `m2b  1 handed in  [ open ]`. Until now the row said nothing between a session's "handed in" and
+  the run, and the hint stood only in the last part of the pane's overview. On the machine that
+  curates the count stands at full strength, on any other it is stepped back, and after the run
+  the proposal is among what waits for you ([What it shows](docs/band.md#what-it-shows))
+  ([#36](https://github.com/Kolibee-GmbH/m2b/pull/36)).
+
+### Fixed
+
+- In a narrow terminal the band's name no longer breaks over two lines (`m2` and `b`) where the
+  row is longer than its line: `m2b` stays whole, and the counts are cut at their end
+  ([#36](https://github.com/Kolibee-GmbH/m2b/pull/36)).
+
 ## [0.9.0] - 2026-11-17
 
 From a said sentence to memory. What you keep is filed without a second step: a curation run

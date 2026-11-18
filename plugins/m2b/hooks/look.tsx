@@ -100,6 +100,11 @@ export function waitForYou(count: number): string {
   return `${counted(count, 'waits', 'wait')} for you`
 }
 
+/** `1 handed in`, `2 handed in`: the proposals sessions handed in that wait for a curation run, in the band's row. */
+export function handedInCount(count: number): string {
+  return `${count} handed in`
+}
+
 // As long as a button and a tab can be in the narrowest pane; the topic's view names it whole in its heading.
 const TOPIC_LABEL_LENGTH = 20
 

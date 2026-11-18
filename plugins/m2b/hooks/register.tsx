@@ -1191,6 +1191,7 @@ async function bandModel($: EngineInterface): Promise<BandModel> {
     proposals: await read($, proposalsAtom),
     notice: await read($, noticeAtom),
     topics: snapshot?.shows?.topics === true ? topicsGiven(givenTo(await read($, sessionAtom), await sessionIdOf($))) : 0,
+    health: await read($, healthAtom),
   }
 }
 
