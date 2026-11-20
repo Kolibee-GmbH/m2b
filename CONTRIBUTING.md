@@ -515,3 +515,8 @@ against the room it has and stops at one that does not fit. The picture says wha
 hold each label against the code before changing it, and look at both files in a browser: there a
 dot travels the sentence's way, rests for a few seconds and sets out again, and with reduced motion
 asked for it stands still.
+
+The README shows the logo and this picture twice, a light and a dark file, and GitHub hides one of
+them by the theme chosen on GitHub: the address of each ends in `#gh-light-mode-only` or
+`#gh-dark-mode-only`. A `<picture>` with `prefers-color-scheme` follows the system's setting
+instead, so with the system dark and GitHub light it put the dark file on a white page.

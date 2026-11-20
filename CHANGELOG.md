@@ -7,6 +7,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-11-20
+
+The README shows its logo and its picture of how m2b works in the theme you chose on GitHub.
+
+### Fixed
+
+- The README picked the light or the dark logo and overview picture by your system's setting, not
+  by the theme you chose on GitHub, so with the two set differently it showed the dark files on a
+  white page, their headings white and the logo's m almost invisible. It now follows GitHub's
+  theme, and the m of the light logo is grey
+  ([#39](https://github.com/Kolibee-GmbH/m2b/pull/39)).
+
 ## [0.10.0] - 2026-11-20
 
 In a terminal the band moves below the prompt, where it leaves the space above to the session; in
