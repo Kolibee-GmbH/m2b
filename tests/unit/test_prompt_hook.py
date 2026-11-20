@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import datetime
 import io
 import json
 import os
@@ -14,7 +15,7 @@ from typing import Any
 from unittest import mock
 
 from locations import PLUGIN_ROOT
-from m2b import cli, paths, prompt_hook, topic_state
+from m2b import cli, paths, prompt_hook, session_remotes, topic_state
 from m2b.config import machine
 from m2b.hooks import DISTILLATE_HEADER
 from m2b.store.guard import DatalessGuard
@@ -70,6 +71,28 @@ class PromptHookFixture(unittest.TestCase):
 
 
 class PromptHookTest(PromptHookFixture):
+    def test_a_named_project_topic_says_where_its_repository_lies_on_this_machine(self) -> None:
+        """Covers: B247"""
+        portal = "### Acme portal (Acme portal)\n- Repository: github.com/acme/portal (acme-portal.md)\n"
+        self.write_memory(MEMORY.replace("## Current", f"{portal}\n## Current", 1))
+        self.assertIn(
+            f"{portal}  not cloned on this machine", self.added("What did we decide for the Acme portal?") or ""
+        )
+
+        clone = Path(self.environ["HOME"]) / "code" / "acme-portal"
+        clone.mkdir(parents=True)
+        session_remotes.note(
+            self.machine.state_dir / session_remotes.NOTES_FOLDER,
+            str(clone),
+            frozenset({"https://github.com/acme/portal.git"}),
+            datetime.datetime.now(datetime.timezone.utc),
+            lambda path, text: path.write_text(text, encoding="utf-8"),
+        )
+        added = self.prompt("Where is the Acme portal?", session_id=OTHER_SESSION)
+
+        self.assertIsNotNone(added)
+        self.assertIn(f"{portal}  on this machine: {clone}", added["hookSpecificOutput"]["additionalContext"])
+
     def test_the_folder_the_band_is_told_for_a_session_is_the_one_whose_prompts_get_no_more_topics(self) -> None:
         """Covers: B183"""
         environ = {**self.environ, "CLAUDE_PROJECT_DIR": self.project}

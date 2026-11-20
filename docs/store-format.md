@@ -127,6 +127,14 @@ starts with aims at 2 KB, and so does each topic; lint reports more. A topic ove
 with no prompt, because a prompt brings whole topics only: lint reports it as something to act on,
 to shorten the topic or split it in two.
 
+A topic about a project may name the project's repository in one line of its own,
+`- Repository: github.com/acme/portal (acme-portal.md)`: the address of its git remote, host and
+path, which is the same on every machine. The store never names a folder on a machine. Where the
+topic comes into a session, the line comes with one more below it, `  on this machine:` and the
+folder the repository lies in here, or `  not cloned on this machine`; the folder is found in the
+notes the session start keeps in this machine's state of the remotes of every folder a session
+starts in, the one seen last that is still there.
+
 `## Current` holds topics under the same headings: a current item above its first `###` heading
 reaches every session, one under a topic comes in with that topic, below its facts under
 `#### Current`. Headings with the same name, in either section, are one topic, and a word of any of

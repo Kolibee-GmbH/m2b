@@ -225,7 +225,7 @@ m2b config set executables.claude "$(command -v claude)"
 | `<store>/memory/MEMORY.md` | the distillate every session sees |
 | `<store>/tasks/` | your tasks, with the `markdown` backend |
 | `~/.config/m2b/config.json` | this machine's settings |
-| `~/.local/state/m2b/` | lock, run log, temp files, the worklog's recordings, which topics each session of the last seven days was given, and while sessions are read the git remotes of the folders they start in |
+| `~/.local/state/m2b/` | lock, run log, temp files, the worklog's recordings, which topics each session of the last seven days was given, and the git remotes of the folders sessions start in |
 | `~/.local/state/m2b/memory-before-run/` | copies of `memory/` from before a run's model steps: the latest run's copy until the next run, and an older one while a review task still names it for a facts line a run removed or rewrote ([The curation run](curation.md)). They hold what your facts say, outside the store folder |
 | `~/.local/share/m2b/` | the copy of the worklog's herdr recorder, with the worklog add-on |
 | `~/.local/bin/m2b` | the launcher scripts and schedules call |

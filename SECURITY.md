@@ -43,11 +43,12 @@ pattern before the model sees them, which stays incomplete. Work that must not r
 all, such as a customer's under a confidentiality agreement, can be left out by folder or by a
 git remote of its repository
 ([docs/addons/worklog.md](docs/addons/worklog.md#leaving-work-out), with what the setting does not
-cover). For that, on a machine that reads sessions (the worklog add-on on, or
-`curation.read_sessions`), every session start notes the URLs of the git remotes of the folder it
-starts in, without the user name or token a URL may carry, in
-`~/.local/state/m2b/session-remotes/`. A note reaches neither the store nor a model, and one that
-no session start renewed for 30 days is removed at the next session start on the machine.
+cover). For that, and so that a project topic can name the folder its repository lies in on this
+machine, every session start notes the URLs of the git remotes of the folder it starts in, without
+the user name or token a URL may carry, in `~/.local/state/m2b/session-remotes/`. A note reaches
+neither the store nor a model. For leaving work out it counts for 30 days after it was last
+renewed; the note itself stays while its folder is there and is removed at a session start once
+the folder is gone and no session start renewed it for 30 days.
 
 The model runs only fenced: from an empty folder, without your settings or other plugins, with
 exactly the commands and store paths its step lists, and nothing else allowed. A tool call outside

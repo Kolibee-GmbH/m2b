@@ -29,8 +29,7 @@ import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from m2b import launcher, session_remotes, topic_state
-from m2b.addons import names_on
+from m2b import launcher, repository_places, session_remotes, topic_state
 from m2b.atomic_file import write_text_atomically
 from m2b.config.errors import SETUP_COMMAND
 from m2b.config.machine import MachineConfig
@@ -99,8 +98,15 @@ def now() -> datetime.datetime:
 def distillate(
     config: MachineConfig, machine: MachinePaths, environ: Mapping[str, str], hook_input: HookInput | None = None
 ) -> None:
-    """Prints nothing at all in a project the owner turned it off for (``distillate.skip_under``)."""
+    """Prints nothing at all in a project the owner turned it off for (``distillate.skip_under``).
+
+    It notes the git remotes of the session's folder first, also where the distillate is off: a
+    project topic it prints names the folder its repository lies in from those notes (B247), and
+    Claude Code starts the session-start hooks side by side, so a note written by another of them
+    could land after this one has read the notes.
+    """
     hook_input = hook_input or HookInput()
+    note_remotes(machine, environ, hook_input)
     folder = project_folder(environ, hook_input)
     if config.distillate.covering(folder) is not None:
         return
@@ -134,7 +140,11 @@ def _print_distillate(
     rule = f"\n{ROUTING_RULE} {WORK_PEOPLE_RULE}\n"
     room = OUTPUT_LIMIT - len(notices) - len(head) - len(rule) - len(CUT_LINE) - 2
     split = split_topics(text)
-    named = _named_by_path(split.blocks, folder, environ)
+    notes = machine.state_dir / session_remotes.NOTES_FOLDER
+    named = [
+        TopicBlock(block.topic, repository_places.with_places(block.text, notes))
+        for block in _named_by_path(split.blocks, folder, environ)
+    ]
     body, shown, cut = _session_view(split.general, split.blocks, named, room)
     print(head + body + (f"{CUT_LINE}\n" if cut else "") + rule, end="")
     return shown, topic_state.CUT if cut else topic_state.WHOLE
@@ -216,29 +226,25 @@ def launcher_hook(
     config: MachineConfig, machine: MachinePaths, environ: Mapping[str, str], hook_input: HookInput | None = None
 ) -> None:
     """The session-start hook: notes the session for ``m2b doctor``, which compares it with the band's
-    note, and the git remotes of the session's folder, then checks the launcher."""
+    note, then checks the launcher. The git remotes of the session's folder are noted by the
+    distillate hook, which reads them."""
     note_session(machine)
-    note_remotes(config, machine, environ, hook_input or HookInput())
     launcher_check(config, machine, environ, hook_input)
 
 
-def note_remotes(
-    config: MachineConfig, machine: MachinePaths, environ: Mapping[str, str], hook_input: HookInput
-) -> None:
+def note_remotes(machine: MachinePaths, environ: Mapping[str, str], hook_input: HookInput) -> None:
     """Notes the git remotes of the folder the session starts in, while the folder is there to ask.
 
-    Whoever reads the session later leaves it out by them (``session_remotes``). Noted only where
-    sessions are read at all: with ``curation.read_sessions``, or with an add-on on, which may read
-    them. The notes that are too old go at every session start, before anything else, so neither
-    a machine that stopped reading nor one whose git is gone keeps one for longer. A git that is
-    missing, fails or does not answer in time notes nothing, and nothing here holds or fails the
-    session start.
+    Whoever reads the session later leaves it out by them (``session_remotes``), and a project
+    topic names the folder its repository lies in on this machine by them (``repository_places``),
+    so they are noted in every session, with the top of the repository. The notes of folders that
+    are gone and that nobody renewed for ``KEEP_FOR`` go at every session start, before anything
+    else, also where git is gone. A git that is missing, fails or does not answer in time notes
+    nothing, and nothing here holds or fails the session start.
     """
     notes = machine.state_dir / session_remotes.NOTES_FOLDER
     with contextlib.suppress(OSError):
         session_remotes.forget_old_notes(notes, now())
-    if not (config.curation.read_sessions or names_on(config.addons)):
-        return
     git = usable_git(environ, timeout=REMOTES_TIMEOUT_SECONDS)
     if git is None:
         return
@@ -248,12 +254,14 @@ def note_remotes(
         if remotes is None:
             return
         machine.temp_dir.mkdir(parents=True, exist_ok=True)
+        top = session_remotes.repository_top(Path(folder))
         session_remotes.note(
             notes,
             folder,
             remotes,
             now(),
             lambda path, text: write_text_atomically(path, text, machine.temp_dir),
+            top=None if top is None else str(top),
         )
 
 

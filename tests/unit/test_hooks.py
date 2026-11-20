@@ -6,13 +6,15 @@ import contextlib
 import datetime
 import io
 import json
+import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from locations import PLUGIN_ROOT
-from m2b import addons, cli, launcher, paths, topic_state
+from m2b import addons, cli, launcher, paths, session_remotes, topic_state
 from m2b.config import machine
 from m2b.curate import machine_state
 from m2b.hooks import (
@@ -459,6 +461,38 @@ class DistillateTopicsTest(HookFixture):
         _, out, _ = self.hook("distillate", CLAUDE_PROJECT_DIR=project)
 
         self.assertEqual(self.body(out), f"{GENERAL}{TOPIC_LINE}Acme Ltd, Riverside Choir.\n{ACME_BLOCK}")
+
+    def test_a_project_topic_the_path_names_says_where_its_repository_lies_on_this_machine(self) -> None:
+        """Covers: B247"""
+        clone = self.home / "code" / "acme-portal"
+        clone.mkdir(parents=True)
+        portal = "### Acme portal (acme-portal)\n- Repository: github.com/acme/portal (acme-portal.md)\n"
+        self.write("memory/MEMORY.md", TOPICS.replace("## Current", f"{portal}\n## Current", 1))
+        session_remotes.note(
+            self.machine.state_dir / session_remotes.NOTES_FOLDER,
+            str(clone),
+            frozenset({"git@github.com:acme/portal.git"}),
+            datetime.datetime.now(datetime.timezone.utc),
+            lambda path, text: path.write_text(text, encoding="utf-8"),
+        )
+
+        _, out, _ = self.hook("distillate", {"session_id": SESSION}, CLAUDE_PROJECT_DIR=str(clone))
+
+        self.assertIn(f"{portal}  on this machine: {clone}\n", out)
+
+    def test_the_first_session_in_a_clone_names_that_clone_although_no_note_was_written_before(self) -> None:
+        """Covers: B247"""
+        clone = self.home / "code" / "acme-portal"
+        clone.mkdir(parents=True)
+        environ = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+        for arguments in (["init", "-q"], ["remote", "add", "origin", "git@github.com:acme/portal.git"]):
+            subprocess.run(["git", "-C", str(clone), *arguments], check=True, env=environ, capture_output=True)
+        portal = "### Acme portal (acme-portal)\n- Repository: github.com/acme/portal (acme-portal.md)\n"
+        self.write("memory/MEMORY.md", TOPICS.replace("## Current", f"{portal}\n## Current", 1))
+
+        _, out, _ = self.hook("distillate", {"session_id": SESSION, "cwd": str(clone)}, CLAUDE_PROJECT_DIR=str(clone))
+
+        self.assertIn(f"{portal}  on this machine: {clone}\n", out)
 
     def test_a_current_item_under_a_topic_stays_out_until_the_project_path_names_the_topic(self) -> None:
         """Covers: B136"""

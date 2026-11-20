@@ -7,6 +7,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A topic about a project can name its repository (`- Repository: github.com/acme/portal (...)`);
+  where the topic comes into a session, it says which folder that repository lies in on this
+  machine, or that it is not cloned here, so a session reads the project's files itself
+  ([Store format](docs/store-format.md)).
+
+### Changed
+
+- The session start notes the git remotes of its folder in every session, not only where sessions
+  are read, and keeps a note while its folder is there; for leaving work out a note still counts
+  for 30 days.
+
 ## [0.11.0] - 2026-11-20
 
 A message you send while Claude is still working counts as your prompt, and the reading of your

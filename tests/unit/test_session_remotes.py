@@ -200,7 +200,7 @@ class NotesTest(Fixture):
         [written] = self.notes.glob("*.json")
         self.assertEqual(list(json.loads(written.read_text(encoding="utf-8"))["remotes"]), [moved])
 
-    def test_a_note_nobody_renewed_for_thirty_days_says_nothing_and_is_forgotten(self) -> None:
+    def test_a_note_nobody_renewed_for_thirty_days_says_nothing_and_goes_once_its_folder_is_gone(self) -> None:
         """Covers: B151"""
         self.note(self.repo, GLOBEX)
         [old] = self.notes.glob("*.json")
@@ -213,6 +213,9 @@ class NotesTest(Fixture):
         session_remotes.forget_old_notes(self.notes, late)
         session_remotes.forget_old_notes(self.base / "no-notes-yet", late)
 
+        self.assertTrue(old.exists(), "a note whose folder is there is kept")
+        shutil.rmtree(self.repo)
+        session_remotes.forget_old_notes(self.notes, late)
         self.assertFalse(old.exists())
         self.assertEqual(len(list(self.notes.glob("*.json"))), 1)
 

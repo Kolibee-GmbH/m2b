@@ -7,6 +7,10 @@ so the remotes are noted while the folder is there: the session-start hook asks 
 the answer per folder in machine state, never in the store. A remote stays noted for ``KEEP_FOR``
 after it was last seen, so a repository pointed elsewhere since is still known by its old remote.
 
+The same notes say where a project's repository lies on this machine (``repository_places``): a
+note names its folder and the top of the repository it lies in. For that a note is kept while its
+folder is there, however old; only for leaving work out does it say nothing after ``KEEP_FOR``.
+
 Known of a folder is what was noted for it and what git says there now. When neither says anything
 the folder's repository is unknown, and whoever leaves work out by remote leaves it out: work that
 cannot be shown to be other work is not read.
@@ -126,16 +130,83 @@ def _spellings(remote: str) -> tuple[str, ...]:
     return lowered, _PORT.sub(r"\1", lowered)
 
 
-def note(notes: Path, folder: str, remotes: frozenset[str], now: datetime.datetime, write: Writer) -> None:
+def note(
+    notes: Path,
+    folder: str,
+    remotes: frozenset[str],
+    now: datetime.datetime,
+    write: Writer,
+    top: str | None = None,
+) -> None:
     """Notes that ``folder``'s repository has ``remotes`` now, beside those seen there in the last ``KEEP_FOR``.
 
-    ``write`` puts a text in a file as a whole.
+    ``top`` is the folder the repository's checkout begins at, where it is known. ``write`` puts a
+    text in a file as a whole.
     """
     notes.mkdir(mode=0o700, parents=True, exist_ok=True)
     still_known = _last_seen(notes, folder, now) or {}
     seen = {**still_known, **dict.fromkeys(sorted(remotes), now.isoformat(timespec="seconds"))}
-    noted_now = {"folder": folder, "noted": now.isoformat(timespec="seconds"), "remotes": seen}
+    noted_now: dict[str, object] = {"folder": folder, "noted": now.isoformat(timespec="seconds"), "remotes": seen}
+    if top is not None:
+        noted_now["top"] = top
     write(_note_path(notes, folder), json.dumps(noted_now, ensure_ascii=False) + "\n")
+
+
+def repository_top(folder: Path) -> Path | None:
+    """The nearest folder at or above ``folder`` that holds ``.git``, a clone's folder or a worktree's
+    file; None in no repository. Read from the file system alone, so no git is started for it."""
+    for candidate in (folder, *folder.parents):
+        with contextlib.suppress(OSError):
+            if (candidate / ".git").exists():
+                return candidate
+    return None
+
+
+@dataclass(frozen=True)
+class NotedFolder:
+    """A folder a session started in, as its note says, whatever its age."""
+
+    folder: str
+    # The top of its repository where the note says it, else the folder itself.
+    top: str
+    noted: datetime.datetime
+    remotes: frozenset[str]
+
+
+def noted_folders(notes: Path) -> list[NotedFolder]:
+    """Every note that can be read, old ones included; no folder is looked at."""
+    found: list[NotedFolder] = []
+    for path in notes.glob("*.json"):
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(raw, dict) or not isinstance(raw.get("remotes"), dict):
+            continue
+        folder, top, written = raw.get("folder"), raw.get("top"), _moment(raw.get("noted"))
+        if not isinstance(folder, str) or written is None:
+            continue
+        found.append(
+            NotedFolder(folder, top if isinstance(top, str) else folder, written, frozenset(map(str, raw["remotes"])))
+        )
+    return found
+
+
+def address_of(remote: str) -> str:
+    """A remote's address as host and path, the same for every spelling of it: no scheme, user,
+    password or port, no ``.git`` and no slash at the end, letters in lower case.
+    ``git@github.com:acme/portal.git`` and ``https://github.com/acme/portal`` are both
+    ``github.com/acme/portal``."""
+    lowered = remote.strip().casefold()
+    if "://" in lowered:
+        rest = lowered.split("://", 1)[1]
+        host, _, path = rest.partition("/")
+        host = host.rsplit("@", 1)[-1].split(":", 1)[0]
+    else:
+        short = _SHORT_SSH.match(lowered)
+        host, path = (short.group(1).rsplit("@", 1)[-1], short.group(2)) if short else ("", lowered)
+    path = path.strip("/").removesuffix(".git")
+    return f"{host}/{path}" if host else path
 
 
 def noted(notes: Path, folder: str, now: datetime.datetime) -> frozenset[str] | None:
@@ -180,12 +251,25 @@ def _note_path(notes: Path, folder: str) -> Path:
 
 
 def forget_old_notes(notes: Path, now: datetime.datetime) -> None:
-    """Removes the notes nobody renewed for ``KEEP_FOR``; a folder that is not there holds none."""
+    """Removes the notes nobody renewed for ``KEEP_FOR`` whose folder is not there any more.
+
+    A note whose folder is there stays, however old: it still says where that repository lies on
+    this machine. For leaving work out it says nothing after ``KEEP_FOR`` all the same (``noted``).
+    """
     oldest = (now - KEEP_FOR).timestamp()
     for path in notes.glob("*.json"):
         with contextlib.suppress(OSError):
-            if path.stat().st_mtime < oldest:
-                path.unlink()
+            if path.stat().st_mtime >= oldest or _folder_is_there(path):
+                continue
+            path.unlink()
+
+
+def _folder_is_there(path: Path) -> bool:
+    try:
+        folder = json.loads(path.read_text(encoding="utf-8")).get("folder")
+    except (OSError, ValueError, AttributeError):
+        return False
+    return isinstance(folder, str) and Path(folder).is_dir()
 
 
 class ByRemote(enum.Enum):
