@@ -7,18 +7,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-20
+
+A message you send while Claude is still working counts as your prompt, and the reading of your
+sessions knows which of its proposals still wait for your answer.
+
 ### Added
 
 - The reading of your sessions is shown the proposals that wait for your answer, up to 30, so it
   does not propose one of them again in other words
-  ([Reading your sessions](docs/curation.md#reading-your-sessions)).
+  ([Reading your sessions](docs/curation.md#reading-your-sessions))
+  ([#40](https://github.com/Kolibee-GmbH/m2b/pull/40)).
 
 ### Fixed
 
 - A message you send while Claude is working, which Claude Code takes into the running turn, is
   read as your prompt: by the reading of your sessions, which proposes facts from it, by the
-  worklog, and when a session hands in a proposal that quotes it. Claude Code writes such a message as an attachment of the turn, not as a prompt, and
-  until now neither saw it ([Reading your sessions](docs/curation.md#reading-your-sessions)).
+  worklog, and when a session hands in a proposal that quotes it. Claude Code writes such a
+  message as an attachment of the turn, not as a prompt, and until now none of the three saw it
+  ([Reading your sessions](docs/curation.md#reading-your-sessions))
+  ([#40](https://github.com/Kolibee-GmbH/m2b/pull/40)).
 
 ## [0.10.1] - 2026-11-20
 
