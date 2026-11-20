@@ -16,6 +16,7 @@ need none of it: you say what you want kept or want to know, and the session doe
 | "remind me to call the plumber on Friday" | the same | the note, and a task due that day in your task list |
 | "keep this contract, ~/Documents/lease.pdf" | the `capture` skill, and Claude Code asks you before the copy | a copy of the file in `inbox/` with a note beside it that holds your words; the next curation run reads it |
 | "put it in my calendar: dentist, Tuesday at 10" | the `capture` skill | an event in the calendar you name (macOS, with a calendar set up) |
+| "keep this as a fix: CLAUDE.md, the line about the whole proof is out of date, it should say ..." | the `capture` skill | `m2b fix add` keeps the fix in the store; the next session in a clone of that repository, or on this machine for a file under `~/.claude/`, names it, applies it with you and marks it done on your word |
 | "what did I note about the shed?" | the search tool, or the `search` skill | the lines that match, each with its file |
 | "what exactly does the rowing club's handbook say about lockers?" | the same, called with the fact file's name | the whole fact file, then the note of the document behind it with its outline |
 | "what's open?", "what's on today?" | the `todos` skill | open tasks by due date, and today's events where a calendar is set up |
@@ -85,6 +86,20 @@ command answers as JSON with it.
 | `m2b rediscover [--count <n>] [--month <YYYY-MM>] [--today <day>] [--json]` | old notes back into view, three without `--count`; `--today YYYY-MM-DD` sets the day that counts as today |
 | `m2b status [--json]` | the inbox, the last curation run, whether one is due, the backends, and how many proposals sessions handed in wait for the next run |
 | `m2b doctor [--json]` | checks every backend and the programs m2b starts; the first thing to run when something looks wrong |
+
+### Fixes for the files Claude reads
+
+A fix changes a file Claude reads, a `CLAUDE.md` or a rule file, where it says something wrongly.
+m2b keeps it and never writes that file: a session in its place applies it, where you see and
+commit the change ([Using m2b](using.md#fixes-for-the-files-claude-reads)).
+
+| Command | What it does |
+|---|---|
+| `m2b fix add` | keeps a fix, read as one JSON object from standard input: `file` (its path), `wording` (the new text), `why` (what is wrong, one line) and `line` (the line it replaces), which a fix that only adds leaves out. A file under `~/.claude/` waits for this machine; a file in a repository waits for a clone of it, found by its remote. A file in neither, in a repository without a remote, or one that does not hold the line, is refused with exit 2 |
+| `m2b fix list [--json]` | every kept fix and what became of it: waiting, done or dropped |
+| `m2b fix show <name>` | one fix, whole: the file, what is wrong, the line it replaces and the new wording |
+| `m2b fix done <name>` | marks the fix applied, once you confirmed it |
+| `m2b fix drop <name>` | gives the fix up |
 
 ### Tasks and calendar
 

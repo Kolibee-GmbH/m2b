@@ -596,12 +596,16 @@ class CaptureSkillTest(unittest.TestCase):
         block = text.split("\n---\n", 1)[0].split("\n")[1:]
         return dict(line.split(": ", 1) for line in block if ": " in line)
 
-    def test_the_skill_may_only_run_capture_and_calendar_commands(self) -> None:
-        """Checks the skill's structure, not its prose."""
+    def test_the_skill_may_only_run_capture_calendar_and_keeping_or_showing_a_fix(self) -> None:
+        """Checks the skill's structure, not its prose. Marking a fix done waits for Claude Code to ask:
+        the owner confirms that the fix is applied."""
         fields = self.frontmatter()
 
         self.assertEqual(fields["name"], "capture")
-        self.assertEqual(fields["allowed-tools"], "Bash(m2b capture *), Bash(m2b calendar *)")
+        self.assertEqual(
+            fields["allowed-tools"],
+            "Bash(m2b capture *), Bash(m2b calendar *), Bash(m2b fix add *), Bash(m2b fix show *)",
+        )
         self.assertTrue(fields["description"])
 
     def test_the_skill_captures_with_the_source_claude_on_standard_input(self) -> None:

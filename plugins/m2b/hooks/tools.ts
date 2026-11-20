@@ -42,6 +42,7 @@ const NOTE_RULES = [
   'A calendar entry is not a note: the skill m2b:capture adds those.',
   'A file the user names with its path, a PDF, a scan or a picture, is not a note either: the skill m2b:capture copies it into the inbox, and Claude Code asks the user first.',
   'A task the user says is done is not a note either: the skill m2b:todos ticks it.',
+  'A fix for a file Claude reads, a CLAUDE.md or a rule file under ~/.claude/, is not a note either: the skill m2b:capture keeps it as a fix.',
 ] as const
 
 const SEARCH_RULES = [

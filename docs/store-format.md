@@ -260,6 +260,29 @@ and is null otherwise; `at` is the time of the call. The file holds no folder. T
 `format` is 3, and an m2b that knows format 2 answers "update m2b on this machine" where it would
 show the proposal as said or under a source it does not know and write it back without the fields.
 
+## Fixes for the files Claude reads
+
+A fix you keep is one file a client adds, `state/core/fixes/<name>.json`:
+
+```json
+{
+  "version": 1,
+  "name": "fix-3f9c2a71b0de",
+  "file": {"repositories": ["github.com/acme/portal"], "path": "CLAUDE.md"},
+  "line": "- Run the whole proof before every commit.",
+  "wording": "- Run the checks the change touches; the whole proof only before a release.",
+  "why": "The whole proof takes twenty minutes and a small change does not need it.",
+  "kept": "2026-11-20"
+}
+```
+
+A repository is named by the addresses of its remotes, host and path in lower case, and the file
+by its path in the repository; a file under `~/.claude/` by `{"home": "~/.claude/CLAUDE.md",
+"machine": "<machine id>"}`. `line` is null for a fix that only adds. The name is `fix-` and twelve
+letters and digits drawn from the file, the line and the wording. What became of a fix is an empty
+file a client adds beside it, `<name>.done` or `<name>.dropped`; where both are there, done stands.
+The session start only reads the fixes.
+
 ## Who writes what
 
 | What | Created by | Changed by | Removed by |
@@ -267,7 +290,7 @@ show the proposal as said or under a source it does not know and write it back w
 | `inbox/` | clients, integrations, harvest (a ticked candidate, a kept proposal), the worklog | the curating machine (name, frontmatter, trailer; never the text) | ingest moves files into the archive; normalize removes conflict copies identical to their original |
 | `corpus/` | ingest, the journal | the journal (appends to the month's file) | lint, only conflict copies identical to their original |
 | `memory/` | ingest | ingest, refresh, the sorting step, a migration after an update, harvest (only `## Current`, from "Still current?" answers), lint (a broken link it repairs) | nobody |
-| `state/core/` | the curation run; any client adds an answer to a proposal under `proposal-answers/` and a proposal a session hands in under `handed-in/` | the curating machine | harvest prunes settled candidates and removes the answers it settled; the run removes the handed-in proposals it took in; every curation run removes the proposals kept, dropped or expired 90 days ago or longer |
+| `state/core/` | the curation run; any client adds an answer to a proposal under `proposal-answers/`, a proposal a session hands in under `handed-in/`, and a fix and what became of it under `fixes/` | the curating machine | harvest prunes settled candidates and removes the answers it settled; the run removes the handed-in proposals it took in; every curation run removes the proposals kept, dropped or expired 90 days ago or longer |
 | tasks (`tasks/` with the `markdown` backend, or the Reminders list) | you, integrations, capture (a follow-up), ingest, `m2b tasks add --candidate` (a memory candidate), the curation run (review, "Still current?" questions, the task for waiting proposals) | you, also through the todos skill, which ticks a task you say is done, and through the m2b pane, which ticks one of your tasks with `done` and ticks or drops a curator task with keep, drop or `ok`; the curation run completes its review task when nothing needs you, and the task for waiting proposals when none waits | harvest and the refresh step, once a curator task is settled or its item is gone; lint, with the `markdown` backend, only conflict copies of task files identical to their original; you |
 | `state/addons/<a>/`, `state/integrations/<i>/` | that add-on or integration | the same | the same |
 

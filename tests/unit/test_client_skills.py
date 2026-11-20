@@ -332,6 +332,26 @@ class CaptureFileSkillTest(unittest.TestCase):
                 with self.subTest(skill=skill, pattern=pattern):
                     self.assertFalse(covers(pattern, command))
 
+    def test_the_capture_skill_keeps_a_fix_for_a_file_claude_reads_with_the_fix_command(self) -> None:
+        """Covers: B248"""
+        text = one_line(skill_text("capture"))
+
+        self.assertTrue(any(block.startswith("m2b fix add -") for block in bash_examples("capture")))
+        for said in (
+            "merk dir als Fix",
+            "it is no note: keep it with `m2b fix add`, even where the tool is offered",
+            "the line it replaces exactly as the file has it",
+            "Do not edit the file here",
+            "run `m2b fix done <name>` only once they confirm the change",
+        ):
+            with self.subTest(said=said):
+                self.assertIn(said, text)
+        self.assertIn(
+            "A fix for a file Claude reads, a CLAUDE.md or a rule file under ~/.claude/, is not a note either: the "
+            "skill m2b:capture keeps it as a fix.",
+            tool_description("NOTE_RULES"),
+        )
+
     def test_the_capture_skill_copies_a_file_the_user_named_with_the_command_and_their_words(self) -> None:
         """Covers: B235"""
         text = one_line(skill_text("capture"))

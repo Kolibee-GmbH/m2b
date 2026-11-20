@@ -63,6 +63,19 @@ session only when it is about that customer. What you are working on for that cu
 the same topic in Current; what goes on in your own life stays above the topics there and reaches
 every session.
 
+## Fixes for the files Claude reads
+
+When a `CLAUDE.md` or a rule file says something wrongly, say so in a session: "keep this as a
+fix: CLAUDE.md, the line about the whole proof is out of date, it should say: run the checks the
+change touches". The session keeps it with `m2b fix add`. m2b never writes that file, which is
+yours and often committed. The next session that starts in a clone of that repository, on any of
+your machines, gets one line before the distillate: a fix waits for this file, with its name. A
+fix for a file under `~/.claude/` waits in every session on the machine it was kept on. The
+session reads the fix with `m2b fix show`, applies it with you, and marks it done once you confirm
+it. Where the file in that checkout holds neither the line the fix replaces nor its new wording,
+the session tells you: the checkout may be on another branch, so the fix waits on until you give it
+up with `m2b fix drop`. `m2b fix list` shows every fix you kept.
+
 ## Search, todos, rediscover
 
 "What did I note about the shed?", "what's open?", "show me something old": the `search`,

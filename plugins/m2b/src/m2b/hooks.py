@@ -16,6 +16,12 @@ Characters that draw nothing are taken out of the distillate and of the notices 
 printed (B143, B144): a curation run refuses the lines that hide or reorder text with them (B56),
 and this catches one written past it, by hand or by another tool, and the characters a run lets
 stand.
+
+A fix the owner kept for a file Claude reads is named before the distillate in a session whose
+place it is for (B249): a clone of its repository, or any folder of the machine for a file under
+``~/.claude/``. The session start names the file and the fix's name, never its text: the session
+reads it with ``m2b fix show`` when it takes it up. It looks into the file and writes nothing: a fix
+whose line the file lacks is said to be so, one that looks applied waits for the owner's word.
 """
 
 from __future__ import annotations
@@ -27,9 +33,10 @@ import os
 import re
 import sys
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
-from m2b import launcher, repository_places, session_remotes, topic_state
+from m2b import fixes, launcher, repository_places, session_remotes, topic_state
 from m2b.atomic_file import write_text_atomically
 from m2b.config.errors import SETUP_COMMAND
 from m2b.config.machine import MachineConfig
@@ -106,7 +113,7 @@ def distillate(
     could land after this one has read the notes.
     """
     hook_input = hook_input or HookInput()
-    note_remotes(machine, environ, hook_input)
+    place = note_remotes(machine, environ, hook_input)
     folder = project_folder(environ, hook_input)
     if config.distillate.covering(folder) is not None:
         return
@@ -114,7 +121,7 @@ def distillate(
     # How the distillate was printed; None when the printing itself failed.
     printed: str | None = None
     try:
-        shown, printed = _print_distillate(config, machine, environ, folder)
+        shown, printed = _print_distillate(config, machine, environ, folder, place)
     finally:
         # Also when nothing could be printed: after a compaction the list must start over, or the
         # prompt hook would skip topics the context no longer holds. Without the note it may bring a
@@ -125,13 +132,14 @@ def distillate(
 
 
 def _print_distillate(
-    config: MachineConfig, machine: MachinePaths, environ: Mapping[str, str], folder: Path
+    config: MachineConfig, machine: MachinePaths, environ: Mapping[str, str], folder: Path, place: Place
 ) -> tuple[list[TopicBlock], str]:
     """Prints the notices and the session's view of the distillate; gives back the topics it showed
     and whether the distillate came whole, cut or not at all."""
     store = open_store(config.store, machine.temp_dir)
     # A notice can name a machine or a file, and neither is m2b's own text.
-    notices = "".join(f"m2b: {without_hidden(line)}\n" for line in _run_notices(store, machine, config.machine_id))
+    lines = [*_run_notices(store, machine, config.machine_id), *_fix_notices(store, config.machine_id, place, environ)]
+    notices = "".join(f"m2b: {without_hidden(line)}\n" for line in lines)
     print(notices, end="")
     text = _distillate_text(store)
     if text is None:
@@ -232,7 +240,16 @@ def launcher_hook(
     launcher_check(config, machine, environ, hook_input)
 
 
-def note_remotes(machine: MachinePaths, environ: Mapping[str, str], hook_input: HookInput) -> None:
+@dataclass(frozen=True)
+class Place:
+    """Where a session starts, as far as the session start found out: the top of its repository and
+    that repository's remotes; neither where the folder is in none or git could not say."""
+
+    top: Path | None = None
+    remotes: frozenset[str] = frozenset()
+
+
+def note_remotes(machine: MachinePaths, environ: Mapping[str, str], hook_input: HookInput) -> Place:
     """Notes the git remotes of the folder the session starts in, while the folder is there to ask.
 
     Whoever reads the session later leaves it out by them (``session_remotes``), and a project
@@ -240,21 +257,23 @@ def note_remotes(machine: MachinePaths, environ: Mapping[str, str], hook_input: 
     so they are noted in every session, with the top of the repository. The notes of folders that
     are gone and that nobody renewed for ``KEEP_FOR`` go at every session start, before anything
     else, also where git is gone. A git that is missing, fails or does not answer in time notes
-    nothing, and nothing here holds or fails the session start.
+    nothing, and nothing here holds or fails the session start. What it found is given back.
     """
     notes = machine.state_dir / session_remotes.NOTES_FOLDER
     with contextlib.suppress(OSError):
         session_remotes.forget_old_notes(notes, now())
     git = usable_git(environ, timeout=REMOTES_TIMEOUT_SECONDS)
     if git is None:
-        return
+        return Place()
     folder = hook_input.cwd or environ.get(PROJECT_DIR_VARIABLE) or os.getcwd()
+    found = Place()
     with contextlib.suppress(OSError):
         remotes = session_remotes.remotes_in(Path(folder), git, timeout=REMOTES_TIMEOUT_SECONDS, environ=environ)
         if remotes is None:
-            return
-        machine.temp_dir.mkdir(parents=True, exist_ok=True)
+            return found
         top = session_remotes.repository_top(Path(folder))
+        found = Place(top, remotes)
+        machine.temp_dir.mkdir(parents=True, exist_ok=True)
         session_remotes.note(
             notes,
             folder,
@@ -263,6 +282,46 @@ def note_remotes(machine: MachinePaths, environ: Mapping[str, str], hook_input: 
             lambda path, text: write_text_atomically(path, text, machine.temp_dir),
             top=None if top is None else str(top),
         )
+    return found
+
+
+def _fix_notices(store: Store, machine_id: str, place: Place, environ: Mapping[str, str]) -> list[str]:
+    """One line per kept fix that waits for this session's place (B249); none where the fixes cannot
+    be read, and none for a fix that cannot be looked at: neither may cost the session its distillate.
+
+    The file is looked into and nothing is written. A checkout can be on any branch, so a fix whose
+    line this one lacks is said to be so and left waiting: the owner knows whether it is right for
+    another checkout, or gives it up.
+    """
+    try:
+        kept = fixes.read_all(store)
+    except (StoreError, OSError):
+        return []
+    home = environ.get("HOME")
+    addresses = {session_remotes.address_of(remote) for remote in place.remotes}
+    lines: list[str] = []
+    for fix in fixes.waiting_for(kept, addresses, machine_id):
+        file = fixes.local_file(fix, place.top, Path(home) if home else None)
+        if file is None:
+            continue
+        found = fixes.look(fix, file)
+        if found == fixes.GONE:
+            lines.append(
+                f"the kept fix {fix.name} for {file} replaces a line that this file does not hold, nor its new "
+                f"wording; tell the owner, who keeps it waiting for another checkout or gives it up with "
+                f"m2b fix drop {fix.name}."
+            )
+        elif found == fixes.APPLIED:
+            lines.append(
+                f"the kept fix {fix.name} for {file} looks applied; once the owner confirms it, "
+                f"run m2b fix done {fix.name}."
+            )
+        else:
+            lines.append(
+                f"a kept fix waits for {file}: read it with m2b fix show {fix.name}, apply it there with the owner, "
+                f"and once they confirm it, run m2b fix done {fix.name}."
+            )
+    return lines
 
 
 def note_session(machine: MachinePaths) -> None:

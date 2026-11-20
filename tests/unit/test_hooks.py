@@ -14,7 +14,7 @@ from pathlib import Path
 from unittest import mock
 
 from locations import PLUGIN_ROOT
-from m2b import addons, cli, launcher, paths, session_remotes, topic_state
+from m2b import addons, cli, fixes, launcher, paths, session_remotes, topic_state
 from m2b.config import machine
 from m2b.curate import machine_state
 from m2b.hooks import (
@@ -32,6 +32,8 @@ from m2b.store.guard import DatalessGuard
 from store_contract import FakeEviction
 
 NOW = datetime.datetime(2026, 11, 7, 9, 0).astimezone()
+FIX_LINE = "- Run the whole proof before every commit."
+FIX_WORDING = "- Run the checks the change touches; the whole proof only before a release."
 MEMORY = "# Memory\n\n## Facts\n\n- Dana likes old maps (dana.md)\n\n## Current\n\n- Building the garden shed\n"
 
 
@@ -623,6 +625,145 @@ class DistillateTopicsTest(HookFixture):
         _, out, _ = self.hook("distillate", CLAUDE_PROJECT_DIR=project)
         self.assertNotIn(TOPIC_LINE, out)
         self.assertIn(f"\n{CUT_LINE}\n", out)
+
+
+class FixNoticeTest(HookFixture):
+    """A kept fix is named at the session start of the place it is for, never brought whole."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.set_up()
+        self.write("memory/MEMORY.md", MEMORY)
+        self.git_environ = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+
+    def clone(self, name: str, remote: str, claude_md: str) -> Path:
+        folder = self.home / "code" / name
+        folder.mkdir(parents=True)
+        for arguments in (["init", "-q"], ["remote", "add", "origin", remote]):
+            subprocess.run(
+                ["git", "-C", str(folder), *arguments], check=True, env=self.git_environ, capture_output=True
+            )
+        (folder / "CLAUDE.md").write_text(claude_md, encoding="utf-8")
+        return folder
+
+    def keep(self, **changed: object) -> fixes.Fix:
+        given: dict[str, object] = {
+            "path": "CLAUDE.md",
+            "repositories": ("github.com/acme/portal",),
+            "machine": None,
+            "line": FIX_LINE,
+            "wording": FIX_WORDING,
+            "why": "The whole proof is too slow for a small change.",
+            "kept": "2026-11-20",
+        }
+        given.update(changed)
+        fix = fixes.new_fix(**given)  # type: ignore[arg-type]
+        fixes.keep(self.store(), fix)
+        return fix
+
+    def store(self) -> FolderStore:
+        return FolderStore(self.store_root, self.home / "tmp", DatalessGuard(False))
+
+    def start_in(self, folder: Path) -> str:
+        _, out, _ = self.hook("distillate", {"session_id": SESSION, "cwd": str(folder)}, CLAUDE_PROJECT_DIR=str(folder))
+        return out
+
+    def test_a_session_in_a_clone_hears_that_a_fix_waits_for_its_file_and_not_the_fix_itself(self) -> None:
+        """Covers: B249"""
+        clone = self.clone("acme-portal", "git@github.com:acme/portal.git", f"# Portal\n{FIX_LINE}\n")
+        fix = self.keep()
+
+        out = self.start_in(clone)
+
+        self.assertIn(f"m2b: a kept fix waits for {clone / 'CLAUDE.md'}: read it with m2b fix show {fix.name}", out)
+        self.assertIn(f"m2b fix done {fix.name}", out)
+        self.assertNotIn(FIX_WORDING, out)
+        self.assertLess(out.index(fix.name), out.index(DISTILLATE_HEADER))
+
+    def test_a_session_in_another_repository_hears_nothing_of_it(self) -> None:
+        """Covers: B249"""
+        shop = self.clone("acme-shop", "git@github.com:acme/shop.git", f"# Shop\n{FIX_LINE}\n")
+        fix = self.keep()
+
+        self.assertNotIn(fix.name, self.start_in(shop))
+
+    def test_a_fix_for_the_global_claude_md_waits_in_any_folder_of_its_machine(self) -> None:
+        """Covers: B249"""
+        claude = Path(self.environ["HOME"]) / ".claude"
+        claude.mkdir(parents=True)
+        (claude / "CLAUDE.md").write_text(f"{FIX_LINE}\n", encoding="utf-8")
+        fix = self.keep(path="~/.claude/CLAUDE.md", repositories=(), machine="sb-test-m1")
+        elsewhere = self.home / "notes"
+        elsewhere.mkdir()
+
+        self.assertIn(
+            f"a kept fix waits for {claude / 'CLAUDE.md'}: read it with m2b fix show {fix.name}",
+            self.start_in(elsewhere),
+        )
+        other = self.keep(path="~/.claude/rules/style.md", repositories=(), machine="sb-test-m2", line=None)
+        self.assertNotIn(other.name, self.start_in(elsewhere))
+
+    def test_a_fix_whose_line_the_file_lacks_is_said_to_the_owner_and_left_waiting(self) -> None:
+        """Covers: B249"""
+        clone = self.clone("acme-portal", "git@github.com:acme/portal.git", "# Portal\n- Something else now.\n")
+        fix = self.keep()
+
+        out = self.start_in(clone)
+
+        self.assertIn(f"the kept fix {fix.name} for {clone / 'CLAUDE.md'} replaces a line that this file does not", out)
+        self.assertIn(
+            f"tell the owner, who keeps it waiting for another checkout or gives it up with m2b fix drop {fix.name}",
+            out,
+        )
+        self.assertEqual(fixes.find(self.store(), fix.name).state, fixes.WAITING)
+
+    def test_a_fix_done_is_named_by_no_later_session_start(self) -> None:
+        """Covers: B250"""
+        clone = self.clone("acme-portal", "git@github.com:acme/portal.git", f"# Portal\n{FIX_WORDING}\n")
+        fix = self.keep()
+        self.assertIn(fix.name, self.start_in(clone))
+
+        fixes.settle(self.store(), fix.name, fixes.DONE)
+
+        self.assertNotIn(fix.name, self.start_in(clone))
+
+    def test_a_fix_that_looks_applied_asks_for_the_owners_word_before_it_is_done(self) -> None:
+        """Covers: B250"""
+        clone = self.clone("acme-portal", "git@github.com:acme/portal.git", f"# Portal\n{FIX_WORDING}\n")
+        fix = self.keep()
+
+        out = self.start_in(clone)
+
+        self.assertIn(f"the kept fix {fix.name} for {clone / 'CLAUDE.md'} looks applied", out)
+        self.assertEqual(fixes.find(self.store(), fix.name).state, fixes.WAITING)
+
+    def test_the_session_start_writes_no_file_outside_the_store_and_state(self) -> None:
+        """Covers: B250"""
+        clone = self.clone("acme-portal", "git@github.com:acme/portal.git", "# Portal\n- Something else now.\n")
+        claude = Path(self.environ["HOME"]) / ".claude"
+        claude.mkdir(parents=True)
+        (claude / "CLAUDE.md").write_text(f"{FIX_LINE}\n", encoding="utf-8")
+        self.keep()
+        self.keep(path="~/.claude/CLAUDE.md", repositories=(), machine="sb-test-m1")
+        fixes_folder = self.store_root / fixes.FOLDER
+        watched = (clone, claude, fixes_folder)
+        before = {path: path.read_bytes() for folder in watched for path in folder.rglob("*") if path.is_file()}
+
+        self.start_in(clone)
+
+        after = {path: path.read_bytes() for folder in watched for path in folder.rglob("*") if path.is_file()}
+        self.assertEqual(after, before)
+
+    def test_a_fixes_folder_that_is_not_downloaded_costs_the_session_start_nothing(self) -> None:
+        """Covers: B249"""
+        clone = self.clone("acme-portal", "git@github.com:acme/portal.git", f"# Portal\n{FIX_LINE}\n")
+        self.keep()
+        self.eviction.evicted.add(self.store_root / fixes.FOLDER)
+
+        out = self.start_in(clone)
+
+        self.assertIn(DISTILLATE_HEADER, out)
+        self.assertNotIn("kept fix", out)
 
 
 class RunNoticeTest(HookFixture):
