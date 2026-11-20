@@ -78,6 +78,8 @@ about that, also run
 m2b config get band.place
 ```
 
+With `null` there is no entry: the band is the end of the hint line below the prompt in a
+terminal, as with `below`, and a row above the prompt in the desktop app, as with `above`.
 With `above` the band is one row above the prompt in every session, `m2b` and `open` alone while
 it has nothing to say, so no row there means the band does not run or m2b has not answered yet.
 With `below` it is the end of the hint line below the prompt. With `waiting` it draws a row only

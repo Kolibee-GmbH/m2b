@@ -42,6 +42,8 @@ ON_OFF = (True, False)
 SETUP_SKILL = "/m2b:setup"
 CURATION_SECTION = "curation."
 SHOWS, READS, CURATION, ABOUT = "shows", "reads", "curation", "about"
+# What a band place the config names none of reads as.
+PLACE_BY_SURFACE = "below in a terminal, else above"
 
 
 @dataclass(frozen=True)
@@ -279,7 +281,8 @@ def _of_this_machine() -> tuple[Setting, ...]:
             "prompt, also while nothing waits; waiting draws it there only while something waits or a task is "
             "due; below puts it at the end of the hint line under the prompt and leaves the space above free. "
             "Below the prompt no key reaches the button and a mouse click only under the fullscreen layout: "
-            "/m2b-pane opens the pane.",
+            "/m2b-pane opens the pane. Not set, it is below in a terminal and above in the desktop app, where "
+            "nothing draws the hint line's end; a value you set holds everywhere.",
             machine.DEFAULT_BAND_PLACE,
             machine.BAND_PLACES,
         ),
@@ -522,7 +525,7 @@ def _machine_values(config: MachineConfig) -> dict[str, Shown]:
         "curation.paused": _plain(curation.paused),
         "curation.run_after_answers": _plain(curation.run_after_answers),
         "distillate.skip_under": _counted(len(config.distillate.skip_under), "no folders", "{} folder", "{} folders"),
-        "band.place": _plain(config.band.place),
+        "band.place": _plain(config.band.place) if config.band.place is not None else Shown(None, PLACE_BY_SURFACE),
         "band.due_tasks": _plain(config.band.due_tasks),
         "band.topics": _plain(config.band.topics),
         "sessions.propose": _plain(config.sessions.propose),

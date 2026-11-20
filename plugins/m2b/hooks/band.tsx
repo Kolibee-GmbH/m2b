@@ -1,6 +1,6 @@
 import type { ElementTable, EngineInterface, ResolveInput } from 'claude-code'
 
-import type { BandDueTask, BandHealth, BandProposals, BandSession, BandSnapshot } from '../types'
+import type { BandDueTask, BandHealth, BandPlace, BandProposals, BandSession, BandShows, BandSnapshot } from '../types'
 import { M2B, button, dueCounts, handedInCount, styleOf, taskLine, topicsCount, waitForYou } from './look'
 import type { Tone } from './look'
 import { plainLine } from './plain-text'
@@ -20,7 +20,8 @@ import { SHOWS_BY_DEFAULT } from './tasks'
  * Where the row stands is the machine's `band.place`. Above the prompt it is always there, calm
  * while it has nothing to say, so the pane is one press away in every session; or it is there only
  * while something waits. Below the prompt it is the end of the hint line: the same pieces after
- * the engine's own text, on one line, so the tasks are counted there and never listed.
+ * the engine's own text, on one line, so the tasks are counted there and never listed. Where the
+ * config names no place, the row is below the prompt in a terminal and above it elsewhere.
  */
 
 const DUE_SHOWN = 3
@@ -94,9 +95,18 @@ function handedInParts(model: BandModel): BandPart[] {
   return [{ text: handedInCount(count), tone: model.health?.curates === true ? 'plain' : 'quiet' }]
 }
 
-/** Whether the band is the end of the hint line below the prompt; above the prompt until m2b's answer says where. */
-export function standsBelow(model: BandModel): boolean {
-  return (model.snapshot?.shows ?? SHOWS_BY_DEFAULT).place === 'below'
+/**
+ * Where the band stands on `surface`: the machine's place, or where the config names none, below
+ * the prompt in a terminal and above it everywhere else. Only a terminal draws the words the band
+ * adds to the hint line, so below the prompt the desktop app would show nothing of m2b.
+ */
+export function placeOn(shows: BandShows, surface: string): BandPlace {
+  return shows.place ?? (surface === 'terminal' ? 'below' : 'above')
+}
+
+/** Whether the band is the end of the hint line below the prompt on `surface`; before m2b's answer it stands where a machine without an entry has it. */
+export function standsBelow(model: BandModel, surface: string): boolean {
+  return placeOn(model.snapshot?.shows ?? SHOWS_BY_DEFAULT, surface) === 'below'
 }
 
 /**
@@ -107,7 +117,7 @@ export function standsBelow(model: BandModel): boolean {
  * them, the topics where it shows them. With none of these the row is calm, or there is none:
  * before m2b's first answer, and on a machine whose band is there only while something waits.
  */
-export function bandLine(model: BandModel): BandLine | null {
+export function bandLine(model: BandModel, surface: string): BandLine | null {
   const { snapshot, proposals } = model
   if (model.notice !== null) {
     return sentence(model.notice, 'trouble')
@@ -121,10 +131,11 @@ export function bandLine(model: BandModel): BandLine | null {
     return sentence(couldNotLookLine(storeError), 'trouble')
   }
   const shows = snapshot?.shows ?? SHOWS_BY_DEFAULT
+  const place = placeOn(shows, surface)
   const due = snapshot?.due ?? []
   const waiting = waitCount(snapshot, proposals)
   // The hint line is one line: a machine that lists the tasks counts them there.
-  const dueTasks = shows.place === 'below' && shows.dueTasks === 'list' ? 'count' : shows.dueTasks
+  const dueTasks = place === 'below' && shows.dueTasks === 'list' ? 'count' : shows.dueTasks
   const parts: BandPart[] = [
     ...(waiting > 0 ? [{ text: waitForYou(waiting), tone: 'waits' as const }] : []),
     ...handedInParts(model),
@@ -133,7 +144,7 @@ export function bandLine(model: BandModel): BandLine | null {
   ]
   const listed = dueTasks === 'list' ? dueFirst(due).slice(0, DUE_SHOWN) : []
   if (parts.length === 0 && listed.length === 0) {
-    return snapshot === null || shows.place === 'waiting' ? null : CALM
+    return snapshot === null || place === 'waiting' ? null : CALM
   }
   return { parts, isNamed: true, isCalm: false, listed, more: dueTasks === 'list' ? due.length - listed.length : 0 }
 }

@@ -271,15 +271,18 @@ test('before m2b is set up there is no calm row: the band draws nothing', async 
   await band.unmount()
 })
 
-test('a core that names no place has the band above the prompt: calm with nothing to say, and with the settings it does name', async ($, on) => {
+test('a core that names no place has the band above the prompt in the desktop app and below it in a terminal: calm with nothing to say, and with the settings it does name', async ($, on) => {
   // Covers: B213
   const fake = new FakeM2b()
   fake.knowsPlace = false
   fake.shows = { place: 'waiting', dueTasks: 'list', topics: false }
   const { clock } = await start($, on, fake)
-  const band = await drawBand($, clock, MAIN_SCREEN)
+  const band = await drawBand($, clock, MAIN_SCREEN, 'desktop')
   expect(fake.calls).toEqual([['band', '--json']])
   expect(await shownBand(band)).toEqual(CALM_ROW)
+  const inTerminal = await drawBand($, clock, MAIN_SCREEN, 'terminal')
+  expect(await everyText(inTerminal)).toEqual([ENGINES_OWN_DRAWING])
+  await inTerminal.unmount()
 
   // The rest of the part is read as it stands: the tasks are listed below the row.
   fake.dueTasks = [{ id: 'd1', title: 'Send the offer to Acme', due: '2026-03-14', overdue: false }]
@@ -288,18 +291,18 @@ test('a core that names no place has the band above the prompt: calm with nothin
   await band.unmount()
 })
 
-test('a place this band does not know leaves the band as a machine without an entry has it: above, the tasks counted, no topics', async ($, on) => {
+test('a place this band does not know leaves the band as a machine without an entry has it: above in the desktop app, the tasks counted, no topics', async ($, on) => {
   // Covers: B213
   const fake = busyFake()
   fake.shows = { place: 'above', dueTasks: 'list', topics: true }
   fake.bandPart = { place: 'beside', due_tasks: 'list', topics: true }
   const { clock } = await start($, on, fake)
 
-  const band = await drawBand($, clock, MAIN_SCREEN)
+  const band = await drawBand($, clock, MAIN_SCREEN, 'desktop')
 
   expect(await shownBand(band)).toEqual(ROW)
 
-  // With nothing to say it is the calm row, not nothing: above is what a machine without an entry has.
+  // With nothing to say it is the calm row, not nothing: above is what a machine without an entry has there.
   fake.tasks = []
   fake.proposals = []
   fake.dueTasks = []
@@ -538,7 +541,8 @@ test('a core before the setting names none, and the row counts no topics', async
   fake.shows = null
   const { clock } = await start($, on, fake)
 
-  const band = await drawBand($, clock, MAIN_SCREEN)
+  // Nor does it name a place: in the desktop app the band is above the prompt.
+  const band = await drawBand($, clock, MAIN_SCREEN, 'desktop')
 
   expect(await shownBand(band)).toEqual(ROW)
   await band.unmount()
@@ -815,26 +819,26 @@ test('the row is a sentence where there is one: why open showed no pane, then th
   const sentence = (text: string, tone: string, isNamed: boolean) => ({ parts: [{ text, tone }], isNamed, isCalm: false, listed: [], more: 0 })
   const idle = { candidates: [], review: null, error: null, shows: ONLY_WHILE_WAITING }
 
-  expect(bandLine(model())).toBeNull()
-  expect(bandLine(model({ snapshot: idle }))).toBeNull()
+  expect(bandLine(model(), 'terminal')).toBeNull()
+  expect(bandLine(model({ snapshot: idle }), 'terminal')).toBeNull()
   // A session's topics alone are nothing to draw where the machine does not show them.
-  expect(bandLine(model({ snapshot: idle, topics: 0 }))).toBeNull()
-  expect(bandLine(model({ snapshot: idle, topics: 2 }))).toBeNull()
-  expect(bandLine(model(waits))).toEqual(counts('2 wait for you'))
-  expect(bandLine(model(unread))).toEqual(sentence('m2b could not read the tasks: no answer', 'trouble', false))
-  expect(bandLine(model({ ...waits, ...noStore }))).toEqual(
+  expect(bandLine(model({ snapshot: idle, topics: 0 }), 'terminal')).toBeNull()
+  expect(bandLine(model({ snapshot: idle, topics: 2 }), 'terminal')).toBeNull()
+  expect(bandLine(model(waits), 'terminal')).toEqual(counts('2 wait for you'))
+  expect(bandLine(model(unread), 'terminal')).toEqual(sentence('m2b could not read the tasks: no answer', 'trouble', false))
+  expect(bandLine(model({ ...waits, ...noStore }), 'terminal')).toEqual(
     sentence('m2b could not look for proposals: the store is not downloaded', 'trouble', false),
   )
   // Beside a task list that could not be read, the store is most often the same reason.
-  expect(bandLine(model({ ...unread, ...noStore }))?.parts).toEqual([{ text: 'm2b could not read the tasks: no answer', tone: 'trouble' }])
+  expect(bandLine(model({ ...unread, ...noStore }), 'terminal')?.parts).toEqual([{ text: 'm2b could not read the tasks: no answer', tone: 'trouble' }])
   const notShown = 'the m2b pane cannot be shown here: no surface attached places panes; /m2b-pane answers with the lines'
-  expect(bandLine(model({ ...unread, ...noStore, notice: notShown }))).toEqual(sentence(notShown, 'trouble', true))
-  expect(bandLine(model({ ...waits, notice: notShown }))).toEqual(sentence(notShown, 'trouble', true))
+  expect(bandLine(model({ ...unread, ...noStore, notice: notShown }), 'terminal')).toEqual(sentence(notShown, 'trouble', true))
+  expect(bandLine(model({ ...waits, notice: notShown }), 'terminal')).toEqual(sentence(notShown, 'trouble', true))
   // One line, whatever a text from the store holds.
-  expect(bandLine(model({ notice: 'first\nsecond\u001b[2J' }))?.parts).toEqual([{ text: 'first second', tone: 'trouble' }])
+  expect(bandLine(model({ notice: 'first\nsecond\u001b[2J' }), 'terminal')?.parts).toEqual([{ text: 'first second', tone: 'trouble' }])
   // Only a sentence that begins with m2b's name as a word stands without it.
-  expect(bandLine(model({ notice: 'm2b could not open its pane: the session is closing' }))?.isNamed).toBe(false)
-  expect(bandLine(model({ notice: 'm2bis not m2b' }))?.isNamed).toBe(true)
+  expect(bandLine(model({ notice: 'm2b could not open its pane: the session is closing' }), 'terminal')?.isNamed).toBe(false)
+  expect(bandLine(model({ notice: 'm2bis not m2b' }), 'terminal')?.isNamed).toBe(true)
 })
 
 test('the counts of the row: what waits, then the tasks due as the machine shows them, then the topics where it shows them', () => {
@@ -848,7 +852,7 @@ test('the counts of the row: what waits, then the tasks due as the machine shows
   ]
   const snapshot = { candidates: [{ id: 'c1', title: 'Remember? Dana prefers tea' }], review: null, error: null, due }
   const showing = (dueTasks: 'off' | 'count' | 'list', topics: boolean) =>
-    bandLine(model({ snapshot: { ...snapshot, shows: { place: 'above', dueTasks, topics } }, topics: 2 }))
+    bandLine(model({ snapshot: { ...snapshot, shows: { place: 'above', dueTasks, topics } }, topics: 2 }), 'terminal')
   const waits = { text: '1 waits for you', tone: 'waits' }
   const topics = { text: '2 topics', tone: 'quiet' }
 
@@ -863,28 +867,28 @@ test('the counts of the row: what waits, then the tasks due as the machine shows
   expect(showing('list', true)).toEqual({ parts: [waits, topics], isNamed: true, isCalm: false, listed: [due[2], due[3], due[4]], more: 2 })
   expect(showing('off', false)).toEqual({ parts: [waits], isNamed: true, isCalm: false, listed: [], more: 0 })
   // An answer that names no settings is drawn as a machine without an entry shows it.
-  expect(bandLine(model({ snapshot, topics: 2 }))).toEqual(showing('count', false))
+  expect(bandLine(model({ snapshot, topics: 2 }), 'terminal')).toEqual(showing('count', false))
   // Tasks to list, or topics, draw the band where nothing waits; with off and no topics there is nothing to draw.
   const idle = { candidates: [], review: null, error: null, due: due.slice(0, 1) }
   for (const place of ['above', 'waiting'] as const) {
-    expect(bandLine(model({ snapshot: { ...idle, shows: { place, dueTasks: 'list', topics: false } } }))).toEqual({
+    expect(bandLine(model({ snapshot: { ...idle, shows: { place, dueTasks: 'list', topics: false } } }), 'terminal')).toEqual({
       parts: [],
       isNamed: true,
       isCalm: false,
       listed: [due[0]],
       more: 0,
     })
-    expect(bandLine(model({ snapshot: { ...idle, shows: { place, dueTasks: 'off', topics: true } }, topics: 1 }))?.parts).toEqual([
+    expect(bandLine(model({ snapshot: { ...idle, shows: { place, dueTasks: 'off', topics: true } }, topics: 1 }), 'terminal')?.parts).toEqual([
       { text: '1 topic', tone: 'quiet' },
     ])
   }
-  expect(bandLine(model({ snapshot: { ...idle, shows: { place: 'waiting', dueTasks: 'off', topics: true } } }))).toBeNull()
+  expect(bandLine(model({ snapshot: { ...idle, shows: { place: 'waiting', dueTasks: 'off', topics: true } } }), 'terminal')).toBeNull()
 })
 
 test('with nothing to say the row is calm where the band is always there, and there is none where it is there only while something waits or before the first answer', () => {
   // Covers: B213
   const idle = { candidates: [], review: null, error: null, due: [{ id: 'd1', title: 'Call Dana', overdue: false }] }
-  const showing = (shows: BandShows, topics = 0) => bandLine(model({ snapshot: { ...idle, shows }, topics }))
+  const showing = (shows: BandShows, topics = 0) => bandLine(model({ snapshot: { ...idle, shows }, topics }), 'terminal')
   const calm = { parts: [], isNamed: true, isCalm: true, listed: [], more: 0 }
 
   expect(showing({ place: 'above', dueTasks: 'off', topics: false })).toEqual(calm)
@@ -892,15 +896,15 @@ test('with nothing to say the row is calm where the band is always there, and th
   // The session's topics do not draw the row where the machine does not count them.
   expect(showing({ place: 'above', dueTasks: 'off', topics: false }, 2)).toEqual(calm)
   // An answer that names no settings is a machine without an entry: above.
-  expect(bandLine(model({ snapshot: { candidates: [], review: null, error: null } }))).toEqual(calm)
-  expect(bandLine(model({ snapshot: { candidates: [], review: null, error: null, due: [] } }))).toEqual(calm)
+  expect(bandLine(model({ snapshot: { candidates: [], review: null, error: null } }), 'terminal')).toEqual(calm)
+  expect(bandLine(model({ snapshot: { candidates: [], review: null, error: null, due: [] } }), 'terminal')).toEqual(calm)
   // No answer yet is not an answer that nothing waits: no row, though the band is above until m2b says where.
-  expect(bandLine(model())).toBeNull()
-  expect(bandLine(model({ proposals: { waiting: [], answered: 0, handedIn: 0, error: null } }))).toBeNull()
+  expect(bandLine(model(), 'terminal')).toBeNull()
+  expect(bandLine(model({ proposals: { waiting: [], answered: 0, handedIn: 0, error: null } }), 'terminal')).toBeNull()
   // Anything to say takes the calm away, also a sentence.
   expect(showing({ place: 'above', dueTasks: 'count', topics: false })?.isCalm).toBe(false)
   expect(showing({ place: 'above', dueTasks: 'off', topics: true }, 1)?.isCalm).toBe(false)
-  expect(bandLine(model({ snapshot: { ...idle, shows: { place: 'above', dueTasks: 'off', topics: false } }, notice: 'the m2b pane cannot be shown here' }))).toEqual({
+  expect(bandLine(model({ snapshot: { ...idle, shows: { place: 'above', dueTasks: 'off', topics: false } }, notice: 'the m2b pane cannot be shown here' }), 'terminal')).toEqual({
     parts: [{ text: 'the m2b pane cannot be shown here', tone: 'trouble' }],
     isNamed: true,
     isCalm: false,

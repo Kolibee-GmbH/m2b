@@ -417,7 +417,8 @@ class SettingsSetTest(SettingsFixture):
                 self.assertEqual(load_machine_config(self.machine).band.due_tasks, way)
                 self.assertEqual(self.entry("band.due_tasks")["value"], way)
 
-        self.assertEqual(self.entry("band.place")["value"], "above")
+        self.assertIsNone(self.entry("band.place")["value"])
+        self.assertEqual(self.entry("band.place")["shows"], "below in a terminal, else above")
         for place in ("below", "waiting", "above"):
             with self.subTest(place=place):
                 self.assertEqual(self.run_command("settings", "set", "band.place", place)[0], cli.EXIT_OK)

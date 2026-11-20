@@ -480,7 +480,7 @@ function isSnapshot(value: unknown): value is BandSnapshot {
 function isShows(value: unknown): value is BandShows {
   return (
     isObject(value) &&
-    (value['place'] === 'above' || value['place'] === 'below' || value['place'] === 'waiting') &&
+    (value['place'] === null || value['place'] === 'above' || value['place'] === 'below' || value['place'] === 'waiting') &&
     (value['dueTasks'] === 'off' || value['dueTasks'] === 'count' || value['dueTasks'] === 'list') &&
     typeof value['topics'] === 'boolean'
   )
@@ -2153,7 +2153,7 @@ export const register: Register = on => {
       return next(e)
     }
     const model = await bandModel($)
-    const line = standsBelow(model) ? null : bandLine(model)
+    const line = standsBelow(model, e.surface) ? null : bandLine(model, e.surface)
     if (line === null) {
       return next(e)
     }
@@ -2165,7 +2165,7 @@ export const register: Register = on => {
   // engine's text where the line has room for it, else as words the engine adds to its own line.
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
     const model = await bandModel($)
-    const line = standsBelow(model) ? bandLine(model) : null
+    const line = standsBelow(model, e.surface) ? bandLine(model, e.surface) : null
     if (line === null) {
       return next(e)
     }

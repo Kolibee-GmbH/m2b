@@ -176,7 +176,8 @@ test('an answer without the band part, as of a core before it, shows the tasks i
   fake.shows = null
   const { clock } = await start($, on, fake)
 
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  // That core names no place either: in the desktop app the band stands above the prompt.
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await shownBand(ui)).toEqual(rowSaying('1 waits for you  2 overdue  2 due today'))
 
   // That core names no task while its setting is off: none is known, and none is counted.
@@ -225,9 +226,9 @@ test('a shared answer whose settings of the band are of another shape is loaded 
 
 test('the band part is read whole or not at all: a value this band does not know leaves what a machine without an entry shows', () => {
   // Covers: B102
-  expect(parseBandShows({ due_tasks: 'list', topics: true })).toEqual({ place: 'above', dueTasks: 'list', topics: true })
-  expect(parseBandShows({ due_tasks: 'off', topics: false })).toEqual({ place: 'above', dueTasks: 'off', topics: false })
-  expect(parseBandShows({ due_tasks: 'count', topics: false })).toEqual({ place: 'above', dueTasks: 'count', topics: false })
+  expect(parseBandShows({ due_tasks: 'list', topics: true })).toEqual({ place: null, dueTasks: 'list', topics: true })
+  expect(parseBandShows({ due_tasks: 'off', topics: false })).toEqual({ place: null, dueTasks: 'off', topics: false })
+  expect(parseBandShows({ due_tasks: 'count', topics: false })).toEqual({ place: null, dueTasks: 'count', topics: false })
   expect(parseBandShows(undefined)).toBeUndefined()
   expect(parseBandShows({ due_tasks: 'rows', topics: true })).toBeUndefined()
   expect(parseBandShows({ due_tasks: true, topics: true })).toBeUndefined()
@@ -239,14 +240,15 @@ test('the band part is read whole or not at all: a value this band does not know
   expect(parseBandShows({ place: 'below', due_tasks: 'list', topics: 'yes' })).toBeUndefined()
 })
 
-test('the place of the band is one of three; a core that names none has the band above, and a place this band does not know leaves the part unread', () => {
+test('the place of the band is one of three; a core that names none, or null, leaves it to the surface, and a place this band does not know leaves the part unread', () => {
   // Covers: B213
   const rest = { due_tasks: 'list', topics: true }
   for (const place of ['above', 'below', 'waiting'] as const) {
     expect(parseBandShows({ place, ...rest })).toEqual({ place, dueTasks: 'list', topics: true })
   }
-  expect(parseBandShows(rest)).toEqual({ place: 'above', dueTasks: 'list', topics: true })
-  for (const unknown of ['beside', 'Above', '', true, null, ['above']]) {
+  expect(parseBandShows(rest)).toEqual({ place: null, dueTasks: 'list', topics: true })
+  expect(parseBandShows({ place: null, ...rest })).toEqual({ place: null, dueTasks: 'list', topics: true })
+  for (const unknown of ['beside', 'Above', '', true, 0, ['above']]) {
     expect(parseBandShows({ place: unknown, ...rest })).toBeUndefined()
   }
 })

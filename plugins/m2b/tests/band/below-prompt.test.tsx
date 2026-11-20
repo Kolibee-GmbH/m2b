@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { bandLine, belowPrompt } from '../../hooks/band'
+import { bandLine, belowPrompt, placeOn } from '../../hooks/band'
 import type { BandLine, BandModel } from '../../hooks/band'
 import type { BandShows } from '../../types'
 import {
@@ -580,17 +580,21 @@ for (const [situation, arrange, sentence] of SECOND_LOOK_FAILS) {
   })
 }
 
-test('a first look that fails says its sentence above the prompt, on a machine whose band is below it too; once m2b answers the band is below', async ($, on) => {
+test('a first look that fails says its sentence where a machine without an entry has the band: below the prompt in a terminal, above it in the desktop app; once m2b answers the band is below', async ($, on) => {
   // Covers: B213, B214
   const fake = belowFake()
   fake.statusFails = true
   const { clock } = await start($, on, fake)
   const above = await $.ui.mount({ ...BAND, surface: 'terminal', viewport: mainScreen(200) })
+  const inDesktop = await $.ui.mount({ ...BAND, surface: 'desktop', viewport: mainScreen(200) })
   const hint = await drawHint($, null)
 
-  // No answer said where the band stands yet: above, where a machine without an entry has it.
-  expect(await shownBand(above)).toEqual(sentenceOfM2b('m2b could not read the tasks: could not read the machine config'))
-  expect(await enginesHint(hint)).toEqual({ hint: HINT, tail: null })
+  // No answer said where the band stands yet.
+  const sentence = 'm2b could not read the tasks: could not read the machine config'
+  expect(await everyText(above)).toEqual([ENGINES_OWN_DRAWING])
+  expect(await enginesHint(hint)).toEqual({ hint: HINT, tail: sentence })
+  expect(await shownBand(inDesktop)).toEqual(sentenceOfM2b(sentence))
+  await inDesktop.unmount()
 
   fake.statusFails = false
   await clock.advance(60_000)
@@ -868,7 +872,7 @@ test('the line of a band below the prompt: a machine that lists the tasks counts
     { id: 'd3', title: 'Water the plants', overdue: false },
   ]
   const snapshot = { candidates: [{ id: 'c1', title: 'Remember? Dana prefers tea' }], review: null, error: null, due }
-  const showing = (dueTasks: 'off' | 'count' | 'list') => bandLine(model({ snapshot: { ...snapshot, shows: { place: 'below', dueTasks, topics: false } } }))
+  const showing = (dueTasks: 'off' | 'count' | 'list') => bandLine(model({ snapshot: { ...snapshot, shows: { place: 'below', dueTasks, topics: false } } }), 'terminal')
   const waits = { text: '1 waits for you', tone: 'waits' as const }
   const counted = lineOf({ parts: [waits, { text: '1 overdue', tone: 'overdue' }, { text: '2 due today', tone: 'dueToday' }] })
 
@@ -877,9 +881,23 @@ test('the line of a band below the prompt: a machine that lists the tasks counts
   expect(showing('off')).toEqual(lineOf({ parts: [waits] }))
   // Tasks due alone are counts there too, where above the prompt they are a row that says nothing with their names below it.
   const idle = { candidates: [], review: null, error: null, due }
-  expect(bandLine(model({ snapshot: { ...idle, shows: { place: 'below', dueTasks: 'list', topics: false } } }))).toEqual(
+  expect(bandLine(model({ snapshot: { ...idle, shows: { place: 'below', dueTasks: 'list', topics: false } } }), 'terminal')).toEqual(
     lineOf({ parts: [{ text: '1 overdue', tone: 'overdue' }, { text: '2 due today', tone: 'dueToday' }] }),
   )
-  expect(bandLine(model({ snapshot: { ...idle, shows: { place: 'below', dueTasks: 'off', topics: false } } }))).toEqual(lineOf({ isCalm: true }))
-  expect(bandLine(model())).toBeNull()
+  expect(bandLine(model({ snapshot: { ...idle, shows: { place: 'below', dueTasks: 'off', topics: false } } }), 'terminal')).toEqual(lineOf({ isCalm: true }))
+  expect(bandLine(model(), 'terminal')).toBeNull()
+})
+
+test('a machine without an entry has the band below the prompt in a terminal and above it on every other surface; a place the machine names holds on all of them', () => {
+  // Covers: B213
+  const unset = { place: null, dueTasks: 'count', topics: false } as const
+  expect(placeOn(unset, 'terminal')).toBe('below')
+  for (const surface of ['desktop', 'mobile', 'web', '']) {
+    expect(placeOn(unset, surface)).toBe('above')
+  }
+  for (const place of ['above', 'below', 'waiting'] as const) {
+    for (const surface of ['terminal', 'desktop', 'mobile']) {
+      expect(placeOn({ ...unset, place }, surface)).toBe(place)
+    }
+  }
 })

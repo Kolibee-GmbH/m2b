@@ -30,8 +30,11 @@ export type BandDueTask = { id: string; title: string; overdue: boolean }
  */
 export type BandPlace = 'above' | 'below' | 'waiting'
 
-/** Where the band stands and what it shows of the tasks due and of the topics, as the machine's `band` settings say. */
-export type BandShows = { place: BandPlace; dueTasks: 'off' | 'count' | 'list'; topics: boolean }
+/**
+ * Where the band stands and what it shows of the tasks due and of the topics, as the machine's `band`
+ * settings say. `place` is null where the config names none: the band then picks it by its surface.
+ */
+export type BandShows = { place: BandPlace | null; dueTasks: 'off' | 'count' | 'list'; topics: boolean }
 
 export type BandSnapshot = {
   candidates: BandCandidate[]

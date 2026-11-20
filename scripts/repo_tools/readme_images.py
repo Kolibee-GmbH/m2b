@@ -505,6 +505,9 @@ def set_up_machine(environ: Mapping[str, str]) -> Path:
     _m2b(environ, "setup", "apply", "--answers", json.dumps(answers))
     # The pictures show the tasks due by name; a machine without the entry shows how many.
     _m2b(environ, "settings", "set", "band.due_tasks", "list")
+    # And the band's row above the prompt, with its button and the tasks listed below it; in a
+    # terminal a machine without the entry has it at the end of the hint line, which one shot shows.
+    _m2b(environ, "settings", "set", "band.place", "above")
     return store
 
 
