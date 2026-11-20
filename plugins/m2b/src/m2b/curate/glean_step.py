@@ -21,11 +21,13 @@ and at most ``MOST_PARTS`` times, which the run's deadline counts. What lies beh
 asked is read by the next run, from the first prompt of the part after it. With the prompts and
 Claude's answers each part gets the distillate and what the person kept and dropped of earlier
 proposals (``proposals.examples``); harvest has settled the answers by then, so the last ones are
-among them. Code checks the proposals of all parts (``glean.check``) against the sessions and
-against the captures of the period, and ``proposals`` keeps what is new and counts,
-per kind, what was added and what stood on no words of the person. The counts go to the run as
-information, never into the review: nothing here asks the person to act. What the reader left out of
-the sessions it read is among them, so a day's reading shows what it did not take.
+among them. Each part also gets the proposals that still wait (``proposals.waiting_examples``), so
+that none of them is proposed again in other words. Code checks the proposals of all parts
+(``glean.check``) against the sessions and against the captures of the period, and ``proposals``
+keeps what is new and counts, per kind, what was added and what stood on no words of the person.
+The counts go to the run as information, never into the review: nothing here asks the person to
+act. What the reader left out of the sessions it read is among them, so a day's reading shows what
+it did not take.
 
 When anything fails, the transcripts that cannot be looked at, a model without an answer, an
 answer that cannot be read, nothing is saved and ``read_until`` stays, so the next run reads the
@@ -123,6 +125,9 @@ def propose(
             f"the model was shown {len(examples.kept)} kept and "
             f"{_count(len(examples.dropped), 'dropped proposal')} as examples"
         )
+    waiting = proposals.waiting_examples(kept)
+    if waiting:
+        notes.append(f"the model was shown {_count(len(waiting), 'proposal')} that {_wait(len(waiting))} for an answer")
     parts = glean.in_parts(read, glean.PART_LENGTH)
     asked, behind = parts[:MOST_PARTS], parts[MOST_PARTS:]
     read_until = behind[0].since.astimezone(zone) if behind else started
@@ -152,7 +157,7 @@ def propose(
     proposed: list[glean.Proposal] = []
     malformed = 0
     for part in asked:
-        given = glean.step_input(part.sessions, distillate, zone, examples)
+        given = glean.step_input(part.sessions, distillate, zone, examples, waiting)
         run = model.text_step(config, machine, environ, glean.instruction(), given, pass_fds)
         if run.answer is None:
             raise GleanStepError(run.failure())
@@ -251,6 +256,10 @@ def _distillate(store: Store) -> str:
 
 def _count(number: int, noun: str) -> str:
     return f"{number} {noun}" if number == 1 else f"{number} {noun}s"
+
+
+def _wait(number: int) -> str:
+    return "waits" if number == 1 else "wait"
 
 
 def _were(number: int) -> str:

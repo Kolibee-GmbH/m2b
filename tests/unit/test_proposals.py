@@ -727,6 +727,29 @@ class ExamplesTest(ProposalsFixture):
             ),
         )
 
+    def test_what_a_reading_found_that_waits_is_shown_apart_the_last_added_first(self) -> None:
+        """Covers: B246"""
+        self.write(
+            {
+                "format": 3,
+                "proposals": {
+                    **self.settled_entries("open", 31),
+                    **self.settled_entries("kept", 1),
+                    "f" * 12: {
+                        **_entry(),
+                        "text": "handed in",
+                        "state": "open",
+                        "by": "session",
+                        "since": (NOW + datetime.timedelta(hours=1)).isoformat(),
+                    },
+                },
+            }
+        )
+
+        waiting = proposals.waiting_examples(proposals.load(self.store))
+
+        self.assertEqual([example.text for example in waiting], [f"open {index}" for index in range(30, 0, -1)])
+
     def test_a_proposal_that_waits_or_expired_is_no_example(self) -> None:
         self.kept(DANA, LADDER)
         self.settle(proposals.proposal_id(LADDER), proposals.EXPIRED)

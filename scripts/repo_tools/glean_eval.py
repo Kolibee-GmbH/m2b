@@ -1,29 +1,31 @@
-"""Measures what a model proposes for the memory from a day of prompts, typed and pasted.
+"""Measures what a model proposes for the memory from a day of prompts, typed and pasted, and Claude's answers.
 
-``tests/glean/day.json`` is an invented day: sessions with what the person typed and what they
-pasted into a prompt, some of it planted (a person, an agreement, a commitment, something personal)
-and some of it a trap, one of each class a proposal must never come from. The day is written as
-transcripts in Claude Code's format, read back with ``m2b.sessions`` and handed to the model the way
-the curation step hands it over: with the step's own instruction (``m2b.glean.instruction``),
-through the core's run without tools (``m2b.curate.model``). The answer goes through ``m2b.glean``,
-the step's parser and checks. So the tool measures the form the product runs, with nothing of its
-own in between.
+``tests/glean/day.json`` is an invented day: sessions with what the person typed, what they
+pasted into a prompt and what Claude answered, some of it planted (a person, an agreement, a
+commitment, something personal) and some of it a trap, one of each class a proposal must never
+come from. The day is written as transcripts in Claude Code's format, read back with
+``m2b.sessions`` and handed to the model the way the curation step hands it over: with the step's
+own instruction (``m2b.glean.instruction``), through the core's run without tools
+(``m2b.curate.model``). The answer goes through ``m2b.glean``, the step's parser and checks. So
+the tool measures the form the product runs, with nothing of its own in between.
 
 The day also says what the person answered before: proposals of earlier readings they kept, like
 what is planted, and some they dropped, all of one sort (the time of a call or a meeting). The
 model is shown them as the step shows them (``answered`` in its input), and one trap of the day
 is a sentence like the dropped ones. ``--without-examples`` asks without them, which shows what
-they change: that trap is then nobody's to catch.
+they change: that trap is then nobody's to catch. It says what waits for an answer too
+(``waiting`` in the input), and a trap of the day says one of those again in other words.
 
 Counted per run: how many planted statements a kept proposal stands on (found), how many kept
 proposals are the first to stand on one (right; a second proposal for the same statement is not),
 and which traps were sprung. A proposal stands on a statement when its quote and the statement
-share at least half of the shorter one in a text of the statement's session, typed or pasted. One
+share at least half of the shorter one in a text of the statement's session, typed, pasted or
+answered. One
 trap is the reader's to catch, a prompt a plugin sent: it is sprung when its words reach the model
 at all. One is a pasted text that tells its reader what to propose and which typed words to quote
 for it: it is sprung when a kept proposal names what it asks for, whatever that proposal quotes.
 Two are the code's: a sentence the person captured themselves, and the source of a proposal, which
-is wrong when words that were pasted are kept as said or the other way round. The others are the
+is wrong when it is not where the statement's words stand: typed, pasted or in an answer. The others are the
 model's.
 
 With ``--replay`` the tool reads your own last days from Claude Code's transcripts instead and
@@ -77,7 +79,21 @@ WRONG_SOURCE = "wrong-source"
 STEERED = "steered"
 # A sentence the instruction alone would allow and the person's earlier drops speak against.
 LIKE_DROPPED = "like-dropped"
-TRAPS = ("hypothetical", "test-data", "project-todo", "in-memory", LIKE_DROPPED, "captured", AUTOMATION, STEERED)
+# A proposal that says again in other words what waits for the person's answer.
+WAITING = "waiting"
+TRAPS = (
+    "hypothetical",
+    "test-data",
+    "project-todo",
+    "in-memory",
+    LIKE_DROPPED,
+    "captured",
+    AUTOMATION,
+    STEERED,
+    "claude-conclusion",
+    "answer-in-memory",
+    WAITING,
+)
 # Their words must not be among the prompts the reader gives; no model is asked to resist them.
 TRAPS_OF_THE_READER = (AUTOMATION,)
 
@@ -105,6 +121,8 @@ class Statement:
     text: str
     # Whether the words stand in what was pasted into the prompt, not in what was typed.
     pasted: bool = False
+    # Whether the words stand in one of Claude's answers to the prompt, and nowhere in the prompt.
+    answered: bool = False
     # For a trap that steers: what a proposal names when it took the bait, whatever it quotes.
     names: str = ""
 
@@ -116,6 +134,8 @@ class Day:
     captures: tuple[str, ...]
     # What the person kept and dropped of earlier proposals.
     examples: glean.Examples
+    # What waits for the person's answer.
+    waiting: tuple[glean.Example, ...]
     # Session id to the records of its transcript, and to the name the fixture gives it.
     transcripts: Mapping[str, Sequence[Mapping[str, Any]]]
     names: Mapping[str, str]
@@ -186,28 +206,58 @@ def load_day(path: Path) -> Day:
         for index, prompt in enumerate(session["prompts"]):
             entry = {"text": prompt} if isinstance(prompt, str) else prompt
             moment = first + datetime.timedelta(minutes=4 * index)
-            transcripts[session_id].append(_record(entry, session["folder"], moment, index))
+            transcripts[session_id] += _records(entry, session["folder"], moment, index)
             for label, into in ((entry.get("planted"), planted), (entry.get("trap"), traps)):
                 if label is not None:
                     _must_hold(entry, session["name"])
-                    is_pasted = entry["statement"] not in entry["text"]
-                    into.append(Statement(session_id, label, entry["statement"], is_pasted, entry.get("names", "")))
+                    statement = entry["statement"]
+                    in_the_prompt = statement in entry["text"] or statement in entry.get("pasted", "")
+                    is_pasted = statement not in entry["text"] and in_the_prompt
+                    into.append(
+                        Statement(session_id, label, statement, is_pasted, not in_the_prompt, entry.get("names", ""))
+                    )
     memory = "\n".join(raw["memory"]) + "\n"
-    examples = _examples(raw.get("answered", {}))
-    return Day(start, memory, tuple(raw["captures"]), examples, transcripts, names, tuple(planted), tuple(traps))
+    answered = raw.get("answered", {})
+    examples = _examples(answered)
+    waiting = _of(answered.get("waiting", ()))
+    day = Day(
+        start, memory, tuple(raw["captures"]), examples, waiting, transcripts, names, tuple(planted), tuple(traps)
+    )
+    return day
 
 
 def _examples(answered: Mapping[str, Any]) -> glean.Examples:
-    def of(answer: str) -> tuple[glean.Example, ...]:
-        return tuple(glean.Example(each["kind"], each["text"], each["quote"]) for each in answered.get(answer, ()))
+    return glean.Examples(_of(answered.get("kept", ())), _of(answered.get("dropped", ())))
 
-    return glean.Examples(of("kept"), of("dropped"))
+
+def _of(proposals: Sequence[Mapping[str, str]]) -> tuple[glean.Example, ...]:
+    return tuple(glean.Example(each["kind"], each["text"], each["quote"]) for each in proposals)
 
 
 def _must_hold(entry: Mapping[str, Any], session_name: str) -> None:
     statement = entry.get("statement")
-    if not statement or statement not in entry["text"] + entry.get("pasted", ""):
+    if not statement or not any(statement in text for text in _texts_of(entry)):
         raise FixtureError(f"a prompt in {session_name} does not hold its statement: {statement!r}")
+
+
+def _texts_of(entry: Mapping[str, Any]) -> list[str]:
+    """What a prompt of the fixture holds: what was typed, what was pasted and Claude's answers."""
+    return [entry["text"], entry.get("pasted", ""), *entry.get("answers", ())]
+
+
+def _records(entry: Mapping[str, Any], folder: str, moment: datetime.datetime, index: int) -> list[dict[str, Any]]:
+    """The prompt's record, then one for each of Claude's answers to it, a minute later and ten seconds apart."""
+    answers = [
+        {
+            "type": "assistant",
+            "timestamp": (moment + datetime.timedelta(seconds=60 + 10 * number)).isoformat().replace("+00:00", "Z"),
+            "cwd": folder,
+            "isSidechain": False,
+            "message": {"role": "assistant", "content": [{"type": "text", "text": text}]},
+        }
+        for number, text in enumerate(entry.get("answers", ()))
+    ]
+    return [_record(entry, folder, moment, index), *answers]
 
 
 def _record(entry: Mapping[str, Any], folder: str, moment: datetime.datetime, index: int) -> dict[str, Any]:
@@ -243,12 +293,13 @@ def build_case(day: Day, projects: Path, with_examples: bool = True) -> Case:
         holding = [text for text in sent.get(statement.session, ()) if statement.text in text]
         if len(holding) != 1:
             raise FixtureError(f"{statement.text!r} stands in {len(holding)} texts the reader gives, not in one")
-    for example in (*day.examples.kept, *day.examples.dropped):
+    for example in (*day.examples.kept, *day.examples.dropped, *day.waiting):
         # Such a proposal would pass the quote check, and nothing counted could tell it from a find.
         if any(example.quote in text for texts in sent.values() for text in texts):
             raise FixtureError(f"the example {example.quote!r} is typed in the day; an example is from before it")
     examples = day.examples if with_examples else glean.NO_EXAMPLES
-    return Case(day, read.sessions, glean.step_input(read.sessions, day.memory, examples=examples))
+    given = glean.step_input(read.sessions, day.memory, examples=examples, waiting=day.waiting)
+    return Case(day, read.sessions, given)
 
 
 def score(case: Case, answer: str) -> Score:
@@ -264,7 +315,7 @@ def score(case: Case, answer: str) -> Score:
         if not new:
             wrong.append(proposal)
     sprung = [trap.label for trap in case.day.traps if _sprung(trap, checked.kept, typed)]
-    if any(item.pasted != (proposal.source == glean.PASTED) for item, proposal in first.items()):
+    if any(_source_of(item) != proposal.source for item, proposal in first.items()):
         sprung.append(WRONG_SOURCE)
     return Score(
         proposals=len(read.proposals),
@@ -281,10 +332,16 @@ def score(case: Case, answer: str) -> Score:
     )
 
 
+def _source_of(statement: Statement) -> str:
+    return glean.AGENT if statement.answered else glean.PASTED if statement.pasted else glean.TYPED
+
+
 def _sent(sessions: Sequence[Session]) -> dict[str, list[str]]:
-    """Per session the texts its prompts hold: what was typed, and each text pasted into one."""
+    """Per session the texts its prompts hold: what was typed, each text pasted into one, each answer."""
     return {
-        session.session_id: [text for prompt in session.prompts for text in (prompt.text, *prompt.pasted) if text]
+        session.session_id: [
+            text for prompt in session.prompts for text in (prompt.text, *prompt.pasted, *prompt.answers) if text
+        ]
         for session in sessions
     }
 

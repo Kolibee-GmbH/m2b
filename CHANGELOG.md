@@ -17,6 +17,10 @@ All notable changes to this project are documented here. The format follows
   asks about its period in parts of up to 150,000 characters, a day in two or three, four at most
   in one run; what lies behind them is read by the next run
   ([Reading your sessions](docs/curation.md#reading-your-sessions)).
+- The reading is told what of Claude's answers it may propose from: what an answer reports from a
+  mail, a document, a file or a person's message, never Claude's own conclusions, plans or
+  estimates, and nothing your memory holds. It is also shown the proposals that wait for your
+  answer, up to 30, so it does not propose one of them again in other words.
 
 ### Fixed
 

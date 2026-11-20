@@ -385,7 +385,8 @@ how you say that such things do not belong in your memory. It is a rule a model 
 check in code. An expired proposal is not shown: you did not look at it, which says nothing about
 it. A proposal is no example any more 90 days after a run settled your answer to it. The model is
 also told never to propose an example itself, and code would refuse one: its words stand in no
-prompt of the period.
+prompt of the period. The model is shown what a reading found that still waits for your answer too, up to 30
+proposals, and told not to propose any of them again in other words.
 
 **How much you keep.** `m2b status` says what share you kept of the proposals you answered in the
 last 30 days, and how many expired in that time:

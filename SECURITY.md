@@ -237,9 +237,10 @@ or another agent sent, each prompt and each answer cut at 2,000 characters, with
 redacted by pattern, which stays incomplete. Pasted text may be anyone's words: a mail, a
 document, an agent's answer; Claude's answers repeat what it read, a mail or a web page among it. A session you left out,
 by its folder or by a git remote of its repository, does not reach it. With the prompts the model gets the distillate and, from
-`state/core/proposals.json` in the store, up to 30 proposals you kept and 30 you dropped, each
-with the words it stood on, typed, pasted or Claude's; so words of an earlier period go to the model again
-while such a proposal is among them, until 90 days after a run settled your answer to it.
+`state/core/proposals.json` in the store, up to 30 proposals of a reading you kept, 30 you dropped and
+30 that wait, none a session handed in, each with the words it stood on, typed, pasted or Claude's;
+so words of an earlier period go to the model again while such a proposal waits or until 90 days
+after a run settled your answer to it.
 
 That model can call nothing: it reads its input and answers once. Code keeps a proposal of a
 reading only when the words it quotes stand in a prompt of the period, and nothing is filed before

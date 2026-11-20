@@ -665,6 +665,19 @@ class ExamplesTest(GleanStepTest):
         self.assertEqual(asked["answered"], {"kept": [KIM, MIA], "dropped": [TEA]})
         self.assertIn("the model was shown 2 kept and 1 dropped proposal as examples", self.info())
 
+    def test_a_reading_shows_the_model_what_waits_for_an_answer_and_says_so(self) -> None:
+        """Covers: B246"""
+        self.reading()
+        self.answered_before()
+        self.typed(DANA_SAID, START - HOUR)
+        self.answers(DANA)
+
+        self.run_curate()
+
+        (asked,) = self.asked()
+        self.assertEqual(asked["waiting"], [BOAT])
+        self.assertIn("the model was shown 1 proposal that waits for an answer", self.info())
+
     def test_a_reading_before_any_answer_shows_no_example_and_says_nothing_of_it(self) -> None:
         """Covers: B134"""
         self.reading()
@@ -675,7 +688,8 @@ class ExamplesTest(GleanStepTest):
 
         (asked,) = self.asked()
         self.assertEqual(asked["answered"], {"kept": [], "dropped": []})
-        self.assertEqual([note for note in self.info() if "examples" in note], [])
+        self.assertEqual(asked["waiting"], [])
+        self.assertEqual([note for note in self.info() if "examples" in note or "for an answer" in note], [])
 
     def test_a_proposal_that_quotes_an_example_and_no_prompt_is_refused_by_the_quote_check(self) -> None:
         """Covers: B134"""

@@ -73,6 +73,13 @@
         "text": "Die Probe mit dem Chor ist auf Mittwoch 19 Uhr verschoben.",
         "quote": "die Probe mit dem Chor ist auf Mittwoch 19 Uhr verschoben"
       }
+    ],
+    "waiting": [
+      {
+        "kind": "person",
+        "text": "Hana Mori is the new office manager at Litware.",
+        "quote": "Hana Mori is the new office manager at Litware"
+      }
     ]
   },
   "sessions": [
@@ -410,6 +417,61 @@
           "planted": "person",
           "statement": "Ines Roth leads the warehouse at Globex"
         }
+      ]
+    },
+    {
+      "name": "woodgrove-hosting",
+      "folder": "/home/alex/projects/woodgrove-hosting",
+      "starts": "18:50",
+      "prompts": [
+        {
+          "text": "check the build log",
+          "answers": [
+            "The build log shows two warnings and no error."
+          ]
+        },
+        {
+          "text": "what did Priya write in the mail I saved as inbox.eml?",
+          "answers": [
+            "I read inbox.eml.",
+            "Priya Nair writes that she has taken over the infrastructure team at Woodgrove and is your contact for the hosting from now on."
+          ],
+          "planted": "person",
+          "statement": "Priya Nair writes that she has taken over the infrastructure team at Woodgrove"
+        },
+        {
+          "text": "and what does she say about the servers?",
+          "answers": [
+            "She confirms that Woodgrove hosts the staging servers free of charge until 31 May; after that the regular rate applies."
+          ],
+          "planted": "agreement",
+          "statement": "Woodgrove hosts the staging servers free of charge until 31 May"
+        },
+        {
+          "text": "who should review the change to the billing module?",
+          "answers": [
+            "Judging by the commit history, Noor Haddad probably owns the billing module, so she is likely the one to review your change."
+          ],
+          "trap": "claude-conclusion",
+          "statement": "Noor Haddad probably owns the billing module"
+        },
+        {
+          "text": "can Sam help with the trailer hitch?",
+          "answers": [
+            "Your notes say that Sam repairs boats at the harbour, so he can probably look at the trailer hitch too."
+          ],
+          "trap": "answer-in-memory",
+          "statement": "Sam repairs boats at the harbour"
+        },
+        {
+          "text": "by the way, Hana Mori now runs the office at Litware, she has the spare keys",
+          "answers": [
+            "Noted. Do you want me to add the key handover to the checklist?"
+          ],
+          "trap": "waiting",
+          "statement": "Hana Mori now runs the office at Litware"
+        },
+        "run the tests again"
       ]
     }
   ]
