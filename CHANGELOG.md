@@ -21,6 +21,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The rule every session starts with sends a correction that holds in every project to
+  `~/.claude/CLAUDE.md`, not into the memory of the project it was made in, and one that a
+  `CLAUDE.md` says wrongly to a fix of that file.
 - The session start notes the git remotes of its folder in every session, not only where sessions
   are read, and keeps a note while its folder is there; for leaving work out a note still counts
   for 30 days.

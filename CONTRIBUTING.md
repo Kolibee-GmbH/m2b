@@ -263,7 +263,7 @@ claude plugin eval . --ablation with-without --scaffold --trust-plugin --no-publ
 ../../scripts/evals-page
 ```
 
-It runs each case three times per arm, 96 runs in all, and takes a few minutes on your own login.
+It runs each case three times per arm, 102 runs in all, and takes a few minutes on your own login.
 The report prices the runs as the API would, about six dollars; on a Claude subscription nothing is
 billed and the runs count against the plan's usage limits instead. `--max-cost-usd` stops the
 suite once that price passes the ceiling. The report lands in

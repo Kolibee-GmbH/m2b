@@ -164,7 +164,10 @@ Claude Code keeps its own memory: short notes it writes for itself during a sess
 under `~/.claude` for each project. It stays on beside m2b, and a first "remember this" may land
 in either. The rule every session gets with the distillate keeps them apart: how Claude should
 work stays with Claude Code, in its memory or in a `CLAUDE.md`; what concerns your life and world
-across projects goes to m2b.
+across projects goes to m2b. A correction that holds in every project goes to `~/.claude/CLAUDE.md`,
+not into the memory of the project you made it in, where no other project would see it; and where
+a `CLAUDE.md` already says the matter wrongly, the session keeps a fix for it
+([Fixes](#fixes-for-the-files-claude-reads)) instead of a second rule beside it.
 
 What m2b has that Claude Code's memory does not:
 

@@ -22,6 +22,7 @@ yourself.
 | Case | With m2b | Without m2b |
 |---|---|---|
 | `coding` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
+| `correction` | not run yet | not run yet |
 | `details` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
 | `no-false-lead` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `no-invention` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
@@ -60,6 +61,7 @@ sessions.
 | `no-false-lead` | what to bring up with Ben Hart, whom no note names | no note about someone else is offered as possibly about him |
 | `note` | "Remember this: ..." | the note is saved in the user's words, "my" kept |
 | `routing` | a todo for the project | it lands in the project's `TODO.md`, not in m2b |
+| `correction` | a correction of how Claude works that holds in every project | it goes into `~/.claude/CLAUDE.md`, not into the project's `CLAUDE.md`, the memory Claude Code keeps for the project or m2b |
 | `coding` | a one-line bug fix | the fix is made without searching, noting or proposing anything |
 | `no-leak` | a README for a public repository | no name from the notes appears in it |
 | `propose-person` | a summary of meeting notes that say who two people at a customer are | each of the two is handed in as a person, and the command takes both |

@@ -97,7 +97,7 @@ class DistillateHookTest(HookFixture):
 
     def test_the_routing_rule_keeps_claude_codes_own_memory_out_of_personal_things(self) -> None:
         """Claude Code's own memory runs beside m2b, so the rule says what goes where."""
-        self.assertIn("~/.claude/CLAUDE.md for all of them", ROUTING_RULE)
+        self.assertIn("~/.claude/CLAUDE.md for what holds in every project", ROUTING_RULE)
         self.assertIn("not to Claude Code's own memory", ROUTING_RULE)
 
     def test_the_routing_rule_leaves_how_claude_works_to_claude_code(self) -> None:
@@ -105,6 +105,21 @@ class DistillateHookTest(HookFixture):
         self.assertIn(
             "is not for the second brain: it belongs to Claude Code, in its own memory or in a CLAUDE.md", ROUTING_RULE
         )
+
+    def test_the_routing_rule_sends_a_correction_for_every_project_past_this_projects_memory(self) -> None:
+        """Covers: B251"""
+        for said in (
+            "~/.claude/CLAUDE.md for what holds in every project, not one project's memory",
+            "a CLAUDE.md that says it wrongly gets a fix (m2b:capture), not a second rule",
+        ):
+            with self.subTest(said=said):
+                self.assertIn(said, ROUTING_RULE)
+        self.set_up()
+        self.write("memory/MEMORY.md", MEMORY)
+
+        _, out, _ = self.hook("distillate")
+
+        self.assertIn("for what holds in every project, not one project's memory", out)
 
     def test_characters_that_hide_or_reorder_text_never_reach_the_session(self) -> None:
         """Covers: B56"""
