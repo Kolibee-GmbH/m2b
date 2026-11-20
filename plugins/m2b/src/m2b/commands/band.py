@@ -15,9 +15,10 @@ list, whatever the band shows of them. ``tasks.due`` holds the same tasks only w
 names, so it stays what such a band may list.
 ``band`` is the machine config's section of that name as it reads, so the band need not ask for
 the config: ``place``, where the band stands (``above`` the prompt, ``below`` it or above it only
-while something is ``waiting``), ``due_tasks``, how the band shows the tasks due (``off``,
-``count`` or ``list``), and ``topics``, whether it names how many topics the session was given. A
-band from before ``place`` reads the other two and stands where it always stood.
+while something is ``waiting``; ``null`` without an entry, where the band picks by its surface),
+``due_tasks``, how the band shows the tasks due (``off``, ``count`` or ``list``), and ``topics``,
+whether it names how many topics the session was given. A band from before ``place`` reads the
+other two and stands where it always stood.
 ``tasks.review`` holds, while a review task is open, the changes of the facts it names as data:
 each with its fact file, a short topic, the whole lines before and after and the words that
 differ, each copy of ``memory/`` from before a run, and the review's paragraphs these stand for,

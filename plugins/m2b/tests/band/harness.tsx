@@ -41,7 +41,7 @@ export const PROMPT_HINT = {
 } as const
 
 /** The band's settings on a machine without an entry for them, as a session shares them beside the tasks it read. */
-export const SHOWN_WITHOUT_ENTRY: BandShows = { place: 'above', dueTasks: 'count', topics: false }
+export const SHOWN_WITHOUT_ENTRY: BandShows = { place: null, dueTasks: 'count', topics: false }
 
 /** A machine whose band is there only while it has something to say. */
 export const ONLY_WHILE_WAITING: BandShows = { place: 'waiting', dueTasks: 'count', topics: false }

@@ -185,7 +185,8 @@ test('an answer another session stored within 55 seconds is used without startin
   ])
   const fake = new FakeM2b()
   const { clock, statuses } = await start($, on, fake, {}, files)
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  // The answer names no place: in the desktop app the band's row is above the prompt.
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   const inPane = await startView($)
   expect(await shownBand(ui)).toEqual(rowSaying('2 wait for you'))
   expect(await texts(inPane)).toContain('Remember? From the other session')

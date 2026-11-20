@@ -392,8 +392,12 @@ button that sets it. The top of the view:
 │ │ end of the hint line under the prompt and leaves the     │ │
 │ │ space above free. Below the prompt no key reaches the    │ │
 │ │ button and a mouse click only under the fullscreen       │ │
-│ │ layout: /m2b-pane opens the pane.                        │ │
-│ │ ● above [ below ] [ waiting ]                            │ │
+│ │ layout: /m2b-pane opens the pane. Not set, it is below   │ │
+│ │ in a terminal and above in the desktop app, where        │ │
+│ │ nothing draws the hint line's end; a value you set holds │ │
+│ │ everywhere.                                              │ │
+│ │ ● below in a terminal, else above [ above ] [ below ]    │ │
+│ │ [ waiting ]                                              │ │
 │ │                                                          │ │
 │ │ Tasks in the band                                        │ │
 │ │ Your tasks due today or overdue in the band: off shows   │ │

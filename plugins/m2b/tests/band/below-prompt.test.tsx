@@ -14,6 +14,7 @@ import {
   NOW,
   OPEN,
   PROMPT_HINT,
+  SHOWN_WITHOUT_ENTRY,
   buttonsAt,
   enginesHint,
   everyText,
@@ -641,6 +642,28 @@ test('a shared answer that names the place below is taken, and the band is below
   expect(fake.calls).toEqual([])
   expect(await enginesHint(hint)).toEqual({ hint: HINT, tail: 'm2b 1 waits for you · /m2b-pane' })
   await hint.unmount()
+})
+
+test('a shared answer of a machine without an entry for the place is taken, and each surface draws it where such a machine has the band', async ($, on) => {
+  // Covers: B213, B214
+  const candidates = [{ id: 'c8', title: 'Remember? From the other session' }]
+  const snapshot = { candidates, review: null, error: null, due: [], shows: SHOWN_WITHOUT_ENTRY }
+  const stored = { writtenAtMs: NOW - 1_000, value: { snapshot, status: null, version: '0.3.0' } }
+  const files: Files = new Map([[SHARED_ANSWER, JSON.stringify(stored)]])
+  const fake = new FakeM2b()
+  await start($, on, fake, {}, files)
+
+  const above = await $.ui.mount({ ...BAND, surface: 'terminal', viewport: mainScreen(200) })
+  const hint = await drawHint($, null)
+  const inDesktop = await $.ui.mount({ ...BAND, surface: 'desktop', viewport: mainScreen(200) })
+
+  expect(fake.calls).toEqual([])
+  expect(await everyText(above)).toEqual([ENGINES_OWN_DRAWING])
+  expect(await enginesHint(hint)).toEqual({ hint: HINT, tail: 'm2b 1 waits for you · /m2b-pane' })
+  expect(await shownBand(inDesktop)).toEqual({ isNamed: true, says: '1 waits for you', below: [], buttons: [OPEN] })
+  await inDesktop.unmount()
+  await hint.unmount()
+  await above.unmount()
 })
 
 /** A machine whose band is below the prompt and counts the topics, with one thing of each kind the row counts. */

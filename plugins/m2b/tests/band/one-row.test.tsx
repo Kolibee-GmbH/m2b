@@ -866,8 +866,12 @@ test('the counts of the row: what waits, then the tasks due as the machine shows
   // Today's first, then the overdue ones, the most recent first.
   expect(showing('list', true)).toEqual({ parts: [waits, topics], isNamed: true, isCalm: false, listed: [due[2], due[3], due[4]], more: 2 })
   expect(showing('off', false)).toEqual({ parts: [waits], isNamed: true, isCalm: false, listed: [], more: 0 })
-  // An answer that names no settings is drawn as a machine without an entry shows it.
-  expect(bandLine(model({ snapshot, topics: 2 }), 'terminal')).toEqual(showing('count', false))
+  // An answer that names no settings is drawn as a machine without an entry shows it: above in the desktop app.
+  expect(bandLine(model({ snapshot, topics: 2 }), 'desktop')).toEqual(showing('count', false))
+  // Without an entry a terminal has the band below the prompt, where a list is counted.
+  const unset = { snapshot: { ...snapshot, shows: { place: null, dueTasks: 'list', topics: false } as const } }
+  expect(bandLine(model(unset), 'terminal')).toEqual(showing('count', false))
+  expect(bandLine(model(unset), 'desktop')?.listed).toEqual([due[2], due[3], due[4]])
   // Tasks to list, or topics, draw the band where nothing waits; with off and no topics there is nothing to draw.
   const idle = { candidates: [], review: null, error: null, due: due.slice(0, 1) }
   for (const place of ['above', 'waiting'] as const) {
@@ -895,12 +899,12 @@ test('with nothing to say the row is calm where the band is always there, and th
   expect(showing({ place: 'waiting', dueTasks: 'off', topics: false })).toBeNull()
   // The session's topics do not draw the row where the machine does not count them.
   expect(showing({ place: 'above', dueTasks: 'off', topics: false }, 2)).toEqual(calm)
-  // An answer that names no settings is a machine without an entry: above.
-  expect(bandLine(model({ snapshot: { candidates: [], review: null, error: null } }), 'terminal')).toEqual(calm)
-  expect(bandLine(model({ snapshot: { candidates: [], review: null, error: null, due: [] } }), 'terminal')).toEqual(calm)
+  // An answer that names no settings is a machine without an entry: above in the desktop app.
+  expect(bandLine(model({ snapshot: { candidates: [], review: null, error: null } }), 'desktop')).toEqual(calm)
+  expect(bandLine(model({ snapshot: { candidates: [], review: null, error: null, due: [] } }), 'desktop')).toEqual(calm)
   // No answer yet is not an answer that nothing waits: no row, though the band is above until m2b says where.
-  expect(bandLine(model(), 'terminal')).toBeNull()
-  expect(bandLine(model({ proposals: { waiting: [], answered: 0, handedIn: 0, error: null } }), 'terminal')).toBeNull()
+  expect(bandLine(model(), 'desktop')).toBeNull()
+  expect(bandLine(model({ proposals: { waiting: [], answered: 0, handedIn: 0, error: null } }), 'desktop')).toBeNull()
   // Anything to say takes the calm away, also a sentence.
   expect(showing({ place: 'above', dueTasks: 'count', topics: false })?.isCalm).toBe(false)
   expect(showing({ place: 'above', dueTasks: 'off', topics: true }, 1)?.isCalm).toBe(false)
