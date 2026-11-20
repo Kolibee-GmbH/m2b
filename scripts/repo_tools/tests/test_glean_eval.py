@@ -96,26 +96,22 @@ def trap(case: glean_eval.Case, label: str) -> glean_eval.Statement:
 
 
 class InventedDayTest(Sandbox):
-    def test_the_day_plants_twenty_typed_statements_five_of_each_kind_two_pasted_and_two_answered(self) -> None:
+    def test_the_day_plants_twenty_typed_statements_five_of_each_kind_and_two_pasted_ones(self) -> None:
         planted = self.case().day.planted
-        typed = Counter(statement.label for statement in planted if not statement.pasted and not statement.answered)
+        typed = Counter(statement.label for statement in planted if not statement.pasted)
 
         self.assertEqual(typed, dict.fromkeys(glean.KINDS, 5))
         self.assertEqual([statement.label for statement in planted if statement.pasted], [glean.PERSON, glean.PERSON])
-        self.assertEqual(
-            [statement.label for statement in planted if statement.answered], [glean.PERSON, glean.AGREEMENT]
-        )
 
     def test_the_day_holds_one_trap_of_each_class(self) -> None:
         self.assertEqual(sorted(each.label for each in self.case().day.traps), sorted(glean_eval.TRAPS))
 
-    def test_the_reader_gives_thirteen_sessions_with_128_typed_prompts_and_one_that_is_pasted_whole(self) -> None:
+    def test_the_reader_gives_twelve_sessions_with_122_typed_prompts_and_one_that_is_pasted_whole(self) -> None:
         case = self.case()
         prompts = [prompt for each in case.sessions for prompt in each.prompts]
 
-        self.assertEqual(len(case.sessions), 13)
-        self.assertEqual(sum(1 for prompt in prompts if prompt.text), 128)
-        self.assertEqual(sum(len(prompt.answers) for prompt in prompts), 7)
+        self.assertEqual(len(case.sessions), 12)
+        self.assertEqual(sum(1 for prompt in prompts if prompt.text), 122)
         self.assertEqual([len(prompt.pasted) for prompt in prompts if not prompt.text], [1])
         self.assertEqual(sum(len(prompt.pasted) for prompt in prompts), 3)
 
@@ -152,26 +148,6 @@ class InventedDayTest(Sandbox):
 
         self.assertEqual([kept.source for kept in checked.kept], [glean.PASTED, glean.PASTED])
         self.assertEqual(result.sprung, ())
-
-    def test_a_proposal_from_claudes_answer_is_found_and_says_that_claude_wrote_it(self) -> None:
-        case = self.case()
-        answered = [statement for statement in case.day.planted if statement.answered]
-        checked = glean.check(
-            glean.parse_answer(answer(*(entry(case, statement) for statement in answered)), case.sessions).proposals,
-            case.sessions,
-            case.day.captures,
-        )
-
-        self.assertEqual([kept.source for kept in checked.kept], [glean.AGENT, glean.AGENT])
-        self.assertIn(answered[0].text, case.step_input)
-
-    def test_a_conclusion_of_claudes_and_a_repeated_memory_in_an_answer_spring_their_traps(self) -> None:
-        case = self.case()
-
-        for label in ("claude-conclusion", "answer-in-memory"):
-            with self.subTest(label):
-                result = glean_eval.score(case, answer(entry(case, trap(case, label), kind="person")))
-                self.assertEqual(result.sprung, (label,))
 
     def test_what_waits_reaches_the_model_and_saying_it_again_springs_the_trap(self) -> None:
         case = self.case()
@@ -314,21 +290,21 @@ class ScoreTest(Sandbox):
     def test_an_answer_with_every_planted_statement_and_nothing_else_is_all_found_and_all_right(self) -> None:
         result = self.score(*every_planted(self.given))
 
-        self.assertEqual((result.found, result.kept, result.right, result.right_kind), (24, 24, 24, 24))
+        self.assertEqual((result.found, result.kept, result.right, result.right_kind), (22, 22, 22, 22))
         self.assertEqual((result.recall, result.precision), (1.0, 1.0))
         self.assertEqual((result.missed, result.wrong, result.sprung), ((), (), ()))
 
     def test_an_answer_without_proposals_finds_nothing_and_is_right_about_nothing(self) -> None:
         result = self.score()
 
-        self.assertEqual((result.recall, result.precision, len(result.missed)), (0.0, 0.0, 24))
+        self.assertEqual((result.recall, result.precision, len(result.missed)), (0.0, 0.0, 22))
 
     def test_a_second_proposal_for_the_same_statement_is_not_right(self) -> None:
         first = self.given.day.planted[0]
 
         result = self.score(*every_planted(self.given), entry(self.given, first, text="The same again."))
 
-        self.assertEqual((result.found, result.right, result.kept), (24, 24, 25))
+        self.assertEqual((result.found, result.right, result.kept), (22, 22, 23))
         self.assertEqual([wrong.text for wrong in result.wrong], ["The same again."])
 
     def test_a_quote_that_shares_half_of_itself_with_the_statement_stands_on_it(self) -> None:
@@ -433,7 +409,7 @@ class MainTest(WithFakeClaude):
 
         self.assertEqual(code, glean_eval.EXIT_PASSED, out)
         self.assertIn("haiku run 2 (claude-haiku-test", out)
-        self.assertIn("found 24 of 24, right 24 of 24 proposals, kind right 24 of 24", out)
+        self.assertIn("found 22 of 22, right 22 of 22 proposals, kind right 22 of 22", out)
         self.assertIn("glean-eval: haiku: found 1.00, right 1.00 over 2 runs, traps sprung: none; meets", out)
 
     def test_without_a_model_named_every_curation_model_is_asked_three_times(self) -> None:
@@ -452,7 +428,7 @@ class MainTest(WithFakeClaude):
         code, out = self.run_main("--runs", "1")
 
         self.assertEqual(code, glean_eval.EXIT_FAILED, out)
-        self.assertIn("glean-eval: haiku: found 0.42, right 1.00 over 1 runs, traps sprung: none; misses", out)
+        self.assertIn("glean-eval: haiku: found 0.45, right 1.00 over 1 runs, traps sprung: none; misses", out)
         self.assertIn("missed person in portal-morning: 'Dana runs IT at Northwind and signs off every release'", out)
         self.assertIn("glean-eval: sonnet: found 1.00, right 1.00 over 1 runs, traps sprung: none; meets", out)
 
@@ -574,7 +550,7 @@ class ReplayTest(WithFakeClaude):
         (folder / f"{name}.jsonl").write_text("".join(json.dumps(record) + "\n" for record in records))
 
     def replay(self, *arguments: str) -> tuple[int, str]:
-        return self.run_main("--replay", "3", "--out", str(self.out), "--today", str(self.TODAY), *arguments)
+        return self.run_main("--replay", "3", "--out", str(self.out), "--until", str(self.TODAY), *arguments)
 
     def test_the_proposals_of_each_day_go_to_the_file_with_the_words_they_stand_on(self) -> None:
         code, out = self.replay()
@@ -587,33 +563,45 @@ class ReplayTest(WithFakeClaude):
         self.assertIn("in /home/alex/first", page)
         self.assertIn("not your memory and not your captures", page)
 
-    def test_a_day_longer_than_a_part_is_asked_part_by_part_as_a_run_asks_it(self) -> None:
-        with mock.patch.object(glean, "PART_LENGTH", 30):
-            code, out = self.replay()
+    def test_a_replay_ends_on_the_day_until_names(self) -> None:
+        code, out = self.run_main("--replay", "1", "--out", str(self.out), "--until", "2026-03-04")
 
         self.assertEqual(code, glean_eval.EXIT_PASSED, out)
-        asked = [json.loads(call["stdin"])["sessions"][0]["prompts"] for call in self.calls()]
-        # The days are asked side by side, so their calls come in any order.
-        self.assertCountEqual(asked, [["Dana runs IT at Northwind."], ["run the tests"], ["the build is red again"]])
+        self.assertEqual(out.splitlines()[0].split(":")[0], "2026-03-04")
+        self.assertNotIn("2026-03-05", self.out.read_text(encoding="utf-8"))
 
-    def test_a_proposal_from_an_answer_of_claude_says_that_claude_wrote_it(self) -> None:
-        answered = {
-            "type": "assistant",
-            "timestamp": f"{self.TODAY}T12:05:00Z",
-            "cwd": "/home/alex/second",
-            "message": {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "Kim Lee runs purchasing at Globex."}],
-            },
-        }
-        with (self.projects / "-home-alex-second" / "second.jsonl").open("a", encoding="utf-8") as transcript:
-            transcript.write(json.dumps(answered) + "\n")
-        said = {"kind": "person", "text": "Kim Lee runs purchasing.", "quote": "Kim Lee runs purchasing at Globex"}
-        self.answer_with(any=answer({**said, "session": 1}))
+    def test_the_memory_named_goes_to_every_call_and_the_page_says_so(self) -> None:
+        memory = self.root / "private" / "memory.md"
+        memory.parent.mkdir(parents=True, exist_ok=True)
+        memory.write_text("# Memory\n\n- Dana runs IT at Northwind (dana.md)\n", encoding="utf-8")
 
-        self.replay()
+        code, out = self.replay("--memory", str(memory))
 
-        self.assertIn("Claude wrote: “Kim Lee runs purchasing at Globex”", self.out.read_text(encoding="utf-8"))
+        self.assertEqual(code, glean_eval.EXIT_PASSED, out)
+        self.assertEqual({json.loads(call["stdin"])["memory"] for call in self.calls()}, {memory.read_text()})
+        self.assertIn("the memory you gave it", self.out.read_text(encoding="utf-8"))
+
+    def test_a_session_in_or_below_a_folder_left_out_is_not_read(self) -> None:
+        code, out = self.replay("--leave-out", "/home/alex/first")
+
+        self.assertEqual(code, glean_eval.EXIT_PASSED, out)
+        self.assertIn("2026-03-04: no prompts", out)
+        self.assertIn("2026-03-05: 1 prompts in 1 sessions", out)
+
+    def test_a_folder_left_out_counts_also_when_written_with_dots(self) -> None:
+        code, out = self.replay("--leave-out", "/home/alex/second/../first")
+
+        self.assertEqual(code, glean_eval.EXIT_PASSED, out)
+        self.assertIn("2026-03-04: no prompts", out)
+
+    def test_a_memory_inside_this_repository_or_without_replay_is_refused(self) -> None:
+        inside = REPO_ROOT / "tests" / "glean" / "day.json"
+
+        refused, _ = self.replay("--memory", str(inside))
+        alone, _ = self.run_main("--until", "2026-03-04")
+
+        self.assertEqual((refused, alone), (glean_eval.EXIT_REFUSED, glean_eval.EXIT_USAGE))
+        self.assertFalse(self.out.exists())
 
     def test_only_counts_are_printed(self) -> None:
         _, out = self.replay()
@@ -697,7 +685,7 @@ class ReplayTest(WithFakeClaude):
     def test_a_file_inside_the_repository_is_refused(self) -> None:
         inside = REPO_ROOT / "docs" / "notes" / "replay.md"
 
-        code, out = self.run_main("--replay", "3", "--out", str(inside), "--today", str(self.TODAY))
+        code, out = self.run_main("--replay", "3", "--out", str(inside), "--until", str(self.TODAY))
 
         self.assertEqual(code, glean_eval.EXIT_REFUSED, out)
         self.assertFalse(self.log.exists())
@@ -713,7 +701,7 @@ class ReplayTest(WithFakeClaude):
             spellings.append(shouted / "docs" / "replay.md")
         for inside in spellings:
             with self.subTest(inside=inside):
-                code, out = self.run_main("--replay", "3", "--out", str(inside), "--today", str(self.TODAY))
+                code, out = self.run_main("--replay", "3", "--out", str(inside), "--until", str(self.TODAY))
 
                 self.assertEqual(code, glean_eval.EXIT_REFUSED, out)
                 self.assertFalse((REPO_ROOT / "docs" / "replay.md").exists())

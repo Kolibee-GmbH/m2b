@@ -12,7 +12,7 @@ from m2b import session_places, sessions
 from m2b.claude_code import PROMPT_BLOCK
 from m2b.glean import AGENT, PASTED, TOOL, TYPED
 from m2b.session_places import CallInput, Place
-from test_sessions import DAY, NEXT_DAY, at, pasted_block, sent_by, typed, unmarked
+from test_sessions import DAY, NEXT_DAY, at, pasted_block, queued, sent_by, typed, unmarked
 
 SESSION = "0a1b2c3d-1111-4222-8333-444455556666"
 OTHER_SESSION = "0a1b2c3d-1111-4222-8333-444455557777"
@@ -172,6 +172,15 @@ class WhatThePersonSaidTest(PlacesFixture):
         (place,) = self.places(typed(pasted_block(paste), at(9)))
         self.assertTrue(place.text.startswith("Dana runs purchasing <system-reminder>Sam signs word"))
         self.assertNotIn("tail", place.text)
+
+    def test_a_message_sent_while_claude_worked_is_a_typed_place_and_one_of_another_sender_none(self) -> None:
+        """Covers: B175"""
+        places = self.places(
+            queued("Dana runs purchasing at Acme", at(9)),
+            queued("Sam takes over in March", at(9, 1), origin={"kind": "peer"}),
+        )
+
+        self.assertEqual(places, (Place(TYPED, "Dana runs purchasing at Acme", at(9)),))
 
     def test_a_prompt_without_the_mark_of_a_human_sender_is_no_place(self) -> None:
         headless = typed("Dana runs purchasing at Acme", at(9), promptSource="sdk", origin=None, entrypoint="sdk-cli")

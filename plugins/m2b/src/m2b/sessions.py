@@ -1,4 +1,4 @@
-"""What the person typed in Claude Code and what Claude answered, session by session, read from its transcripts.
+"""What the person typed in Claude Code, session by session, read from its transcripts.
 
 Claude Code writes each session as a JSON Lines file and marks on every prompt who sent it. A
 prompt is the person's when its ``origin`` is ``human``: typed in the terminal or in the desktop
@@ -20,18 +20,8 @@ words, so it never passes as typed, and whoever proposes from it says so. The bl
 writes into a prompt (``claude_code.PROMPT_BLOCK``: its reminders, the output of hooks) are left
 out. Credentials are redacted (``redaction``), white space is collapsed, and a prompt ends after
 ``PROMPT_LENGTH`` characters, which keeps nearly every typed prompt whole: the typed text comes
-first and the pasted texts get what is left, so a paste pushes out no typed word. No tool result
-is read: text from web pages, mails and documents stands there.
-
-Claude's answers come with the prompt they follow (``Prompt.answers``), text by text up to the
-person's next prompt: what Claude wrote in the main conversation, not its thinking, its tool calls,
-a subagent's answers or the text Claude Code writes in its place (an answer it marks as
-``<synthetic>``, such as one after an error). Claude often says what it read in a mail or a file,
-and a fact said there is in no prompt. A turn a plugin started is answered after the person's last
-prompt, which the answers follow then. An answer is redacted and collapsed like a prompt and ends
-after ``ANSWER_LENGTH`` characters: of the longer ones, nearly all name what they report at their
-start. An answer in the period that follows no prompt of the person's in it, the end of a turn that
-began before, is left out: the reading before read that prompt.
+first and the pasted texts get what is left, so a paste pushes out no typed word. No answer of
+Claude and no tool result is read: text from web pages, mails and documents stands there.
 
 A slash command is only its name. Its record names no source and often no origin, so it is taken
 by its form, a record that starts with the command's tags, unless its origin is another sender.
@@ -44,7 +34,6 @@ began are opened.
 
 from __future__ import annotations
 
-import dataclasses
 import datetime
 import json
 import re
@@ -57,13 +46,10 @@ from m2b.claude_code import HUMAN, PROMPT_BLOCK, as_prompt_record, sender_of
 from m2b.redaction import REDACTED, is_removed_behind, redact
 
 PROMPT_LENGTH = 2000
-ANSWER_LENGTH = 2000
 # The flags of a record Claude Code wrote itself or that belongs to a subagent's conversation.
 NOT_THE_MAIN_CONVERSATION = ("isMeta", "isCompactSummary", "isSidechain")
 
 _HEADLESS = "sdk-cli"
-# The model Claude Code names on an answer it wrote itself, such as the note after an error.
-_SYNTHETIC = "<synthetic>"
 _SUGGESTION = "suggestion_accepted"
 # What Claude Code writes into the transcript when the person stops a turn.
 _INTERRUPTED = "[Request interrupted"
@@ -113,8 +99,6 @@ class Prompt:
     text: str
     # What they pasted into it, block by block: their own words written elsewhere, or anyone's.
     pasted: tuple[str, ...] = ()
-    # What Claude answered after it, text by text, up to the person's next prompt.
-    answers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -177,23 +161,13 @@ class _Reading:
     folder: str = ""
     first: datetime.datetime | None = None
     prompts: list[Prompt] = field(default_factory=list)
-    # The answers that follow each prompt, one list per prompt in their order.
-    answers: list[list[str]] = field(default_factory=list)
     sent_by_others: int = 0
     suggested: int = 0
     unmarked: int = 0
 
-    def add(self, prompt: Prompt) -> None:
-        self.prompts.append(prompt)
-        self.answers.append([])
-
     def session(self) -> Session:
         left_out = LeftOut(self.sent_by_others, self.suggested, self.unmarked)
-        prompts = tuple(
-            dataclasses.replace(prompt, answers=tuple(answers)) if answers else prompt
-            for prompt, answers in zip(self.prompts, self.answers)
-        )
-        return Session(self.session_id, self.folder, prompts, left_out)
+        return Session(self.session_id, self.folder, tuple(self.prompts), left_out)
 
 
 def _read(path: Path, start: datetime.datetime, end: datetime.datetime) -> _Reading:
@@ -216,13 +190,7 @@ def _read(path: Path, start: datetime.datetime, end: datetime.datetime) -> _Read
             if folder is None and isinstance(record.get("cwd"), str):
                 folder = record["cwd"]
             moment = _time(record.get("timestamp"))
-            if moment is None or not start <= moment < end:
-                continue
-            if _is_an_answer(record):
-                if reading.answers:
-                    reading.answers[-1] += _answer_texts(record)
-                continue
-            if not _may_be_a_prompt(record):
+            if moment is None or not start <= moment < end or not _may_be_a_prompt(record):
                 continue
             if _take(record, moment, reading):
                 reading.first = reading.first or moment
@@ -235,20 +203,6 @@ def _read(path: Path, start: datetime.datetime, end: datetime.datetime) -> _Read
 def _may_be_a_prompt(record: Mapping[str, Any]) -> bool:
     """A record of the main conversation in the user's place that Claude Code did not write itself."""
     return record.get("type") == "user" and not any(record.get(flag) for flag in NOT_THE_MAIN_CONVERSATION)
-
-
-def _is_an_answer(record: Mapping[str, Any]) -> bool:
-    """A record of Claude's in the main conversation that Claude Code did not write in its place."""
-    message = record.get("message")
-    if record.get("type") != "assistant" or not isinstance(message, dict) or message.get("model") == _SYNTHETIC:
-        return False
-    return not any(record.get(flag) for flag in NOT_THE_MAIN_CONVERSATION)
-
-
-def _answer_texts(record: Mapping[str, Any]) -> list[str]:
-    """The texts Claude wrote in the record, as they are read: no thinking and no tool call."""
-    shown = (_shown(text, ANSWER_LENGTH) for text in _text_parts_of(record["message"].get("content")))
-    return [text for text in shown if text]
 
 
 def _is_only_blocks(text: str) -> bool:
@@ -285,7 +239,7 @@ def _take(record: Mapping[str, Any], moment: datetime.datetime, reading: _Readin
     if sender not in (None, HUMAN):
         reading.sent_by_others += 1
     elif command is not None:
-        reading.add(Prompt(moment, f"/{command.group(1)}"))
+        reading.prompts.append(Prompt(moment, f"/{command.group(1)}"))
     elif sender is None:
         if _WRAPPED.match(text) or _is_only_blocks(text) or text.lstrip().startswith(_INTERRUPTED):
             return False
@@ -297,7 +251,7 @@ def _take(record: Mapping[str, Any], moment: datetime.datetime, reading: _Readin
         pasted = _as_far_as_fits(_pasted(text), PROMPT_LENGTH - len(shown))
         if not shown and not pasted:
             return False
-        reading.add(Prompt(moment, shown, pasted))
+        reading.prompts.append(Prompt(moment, shown, pasted))
     return True
 
 
@@ -431,12 +385,11 @@ def _as_far_as_fits(blocks: Sequence[str], room: int) -> tuple[str, ...]:
     return tuple(fitting)
 
 
-def _shown(text: str, length: int | None = None) -> str:
-    """The text redacted, collapsed and cut after ``length`` characters, a prompt's length when None."""
+def _shown(text: str) -> str:
     # A transcript can hold half a character (a lone surrogate); as a question mark the text can be
     # written and sent like any other.
     text = text.encode("utf-8", errors="replace").decode("utf-8")
-    return " ".join(redact(_start_of(text, _REDACT_WINDOW)).split())[: PROMPT_LENGTH if length is None else length]
+    return " ".join(redact(_start_of(text, _REDACT_WINDOW)).split())[:PROMPT_LENGTH]
 
 
 def _start_of(text: str, length: int) -> str:

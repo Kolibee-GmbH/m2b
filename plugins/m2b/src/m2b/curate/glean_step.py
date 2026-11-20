@@ -15,19 +15,16 @@ its repository's git remotes: a session is left out when a remote noted for its 
 session start, or one git names there now, holds a part the profile names, and also when neither
 says anything of the folder, since it is then not shown to be other work (``session_remotes``).
 
-The model is asked with nothing to call (``model.text_step``), and only when a session left has a
-prompt of the person's, typed or pasted: once for each part of the period (``glean.in_parts``),
-and at most ``MOST_PARTS`` times, which the run's deadline counts. What lies behind the last part
-asked is read by the next run, from the first prompt of the part after it. With the prompts and
-Claude's answers each part gets the distillate and what the person kept and dropped of earlier
-proposals (``proposals.examples``); harvest has settled the answers by then, so the last ones are
-among them. Each part also gets the proposals that still wait (``proposals.waiting_examples``), so
-that none of them is proposed again in other words. Code checks the proposals of all parts
-(``glean.check``) against the sessions and against the captures of the period, and ``proposals``
-keeps what is new and counts, per kind, what was added and what stood on no words of the person.
-The counts go to the run as information, never into the review: nothing here asks the person to
-act. What the reader left out of the sessions it read is among them, so a day's reading shows what
-it did not take.
+The model is asked once, with nothing to call (``model.text_step``), and only when a session left
+has a prompt of the person's, typed or pasted. With the prompts it gets the distillate and what the
+person kept and dropped of earlier proposals (``proposals.examples``); harvest has settled the
+answers by then, so the last ones are among them. It also gets the proposals that still wait
+(``proposals.waiting_examples``), so that none of them is proposed again in other words. Code
+checks its answer (``glean.check``) against
+the prompts and against the captures of the period, and ``proposals`` keeps what is new and counts,
+per kind, what was added and what stood on no words of the person. The counts go to the run as
+information, never into the review: nothing here asks the person to act. What the reader left out of
+the sessions it read is among them, so a day's reading shows what it did not take.
 
 When anything fails, the transcripts that cannot be looked at, a model without an answer, an
 answer that cannot be read, nothing is saved and ``read_until`` stays, so the next run reads the
@@ -45,7 +42,7 @@ import dataclasses
 import datetime
 import re
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from m2b import claude_code, folders_left_out, glean, proposals, sessions
@@ -57,8 +54,6 @@ from m2b.store.base import Store
 
 FIRST_PERIOD = datetime.timedelta(hours=24)
 LONGEST_PERIOD = datetime.timedelta(days=7)
-# The model calls of one reading: a day of answers is two or three parts.
-MOST_PARTS = 4
 
 _MOMENT = "%Y-%m-%d %H:%M"
 # A slash command as the reader gives it: only its name.
@@ -128,43 +123,15 @@ def propose(
     waiting = proposals.waiting_examples(kept)
     if waiting:
         notes.append(f"the model was shown {_count(len(waiting), 'proposal')} that {_wait(len(waiting))} for an answer")
-    parts = glean.in_parts(read, glean.PART_LENGTH)
-    asked, behind = parts[:MOST_PARTS], parts[MOST_PARTS:]
-    read_until = behind[0].since.astimezone(zone) if behind else started
-    if len(asked) > 1:
-        notes.append(f"the sessions were read in {len(asked)} parts, one model call each")
-    if behind:
-        notes.append(
-            f"what was typed from {behind[0].since.astimezone(zone).strftime(_MOMENT)} on is read by the next run: "
-            f"a reading asks the model {MOST_PARTS} times at most"
-        )
-    prompts_asked = [prompt for part in asked for session in part.sessions for prompt in session.prompts]
-    pasted = sum(len(prompt.pasted) for prompt in prompts_asked)
+    pasted = sum(len(prompt.pasted) for session in read for prompt in session.prompts)
     if pasted:
         notes.append(f"{_count(pasted, 'pasted text')} {_were(pasted)} read with the prompts they stand in")
-    answers = sum(len(prompt.answers) for prompt in prompts_asked)
-    if answers:
-        notes.append(f"{_count(answers, 'answer')} of Claude {_were(answers)} read with the prompts they follow")
-    cut = _answers_in(prompt for session in read for prompt in session.prompts) - _answers_in(
-        prompt for part in parts for session in part.sessions for prompt in session.prompts
-    )
-    if cut:
-        notes.append(
-            f"{_count(cut, 'answer')} of Claude {_were(cut)} left out: "
-            "they followed one prompt and took up more than a part"
-        )
-    distillate = _distillate(store)
-    proposed: list[glean.Proposal] = []
-    malformed = 0
-    for part in asked:
-        given = glean.step_input(part.sessions, distillate, zone, examples, waiting)
-        run = model.text_step(config, machine, environ, glean.instruction(), given, pass_fds)
-        if run.answer is None:
-            raise GleanStepError(run.failure())
-        answer = glean.parse_answer(run.answer, part.sessions)
-        proposed += answer.proposals
-        malformed += answer.malformed
-    checked = glean.check(proposed, read, captures.texts)
+    given = glean.step_input(read, _distillate(store), zone, examples, waiting)
+    run = model.text_step(config, machine, environ, glean.instruction(), given, pass_fds)
+    if run.answer is None:
+        raise GleanStepError(run.failure())
+    answer = glean.parse_answer(run.answer, read)
+    checked = glean.check(answer.proposals, read, captures.texts)
     said = [
         proposals.Said(proposal, typed_at.astimezone(zone).date())
         for proposal, typed_at in zip(checked.kept, checked.kept_at)
@@ -173,21 +140,16 @@ def propose(
     counted = added.proposals
     for refused in checked.not_quoted:
         counted = proposals.counted(counted, refused.kind, "not_quoted")
-    proposals.save(store, dataclasses.replace(counted, read_until=read_until))
-    sessions_asked = {session.session_id for part in asked for session in part.sessions}
+    proposals.save(store, dataclasses.replace(counted, read_until=started))
+    sent = sum(len(session.prompts) for session in read)
     summary = (
-        f"read {_count(len(sessions_asked), 'session')} with {_count(len(prompts_asked), 'prompt')} "
-        f"since {start.strftime(_MOMENT)}: "
+        f"read {_count(len(read), 'session')} with {_count(sent, 'prompt')} since {start.strftime(_MOMENT)}: "
         f"{_count(added.added, 'proposal')} added, "
         f"{added.added_before} like one that waits, is answered or expired, "
         f"{len(checked.not_quoted)} without the person's words, "
-        f"{len(checked.already_captured)} captured already, {malformed} not in the form"
+        f"{len(checked.already_captured)} captured already, {answer.malformed} not in the form"
     )
     return Reading(None, (summary, *notes, *period_captures.capture_notes(captures)))
-
-
-def _answers_in(prompts: Iterable[sessions.Prompt]) -> int:
-    return sum(len(prompt.answers) for prompt in prompts)
 
 
 def _nothing_marked(found: Sequence[sessions.Session]) -> int:

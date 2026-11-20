@@ -72,10 +72,9 @@ Ask in the owner's language, one short question at a time, with the choices:
 - **May the curation runs read your sessions?** (only when this machine curates, and only when
   `machine_config` has no `curation.read_sessions`): a run then reads what the owner typed in
   Claude Code since the last reading and proposes what belongs in the memory although nobody said
-  "remember this". Before asking, say what a yes means: what the owner typed is read, with what
-  they pasted into a prompt and the text of Claude's answers, never a tool's result; pasted text and
-  Claude's answers can be someone else's words and can try to lead the model, a proposal says
-  whether the words it quotes were said, pasted or Claude's, and
+  "remember this". Before asking, say what a yes means: only what the owner typed is read, with
+  what they pasted into a prompt, and never Claude's answers; pasted text can be someone else's and
+  can try to lead the model, a proposal says whether the words it quotes were said or pasted, and
   every proposal is to be read before it is kept; nothing is filed before the owner says keep to a
   proposal (`m2b proposals` lists them); and of a session in a folder the profile leaves out of
   the worklog (`worklog_leave_out`) or that `m2b distillate off` was run in, nothing reaches the

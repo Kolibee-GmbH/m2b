@@ -9,24 +9,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- The reading of your sessions also reads what Claude answered, beside the prompt each answer
-  follows: Claude often says what a mail, a document or a file it read holds, and a fact said only
-  there was in none of your prompts. Claude's thinking, its tool calls and tool results stay out,
-  and each answer ends after 2,000 characters. A proposal whose words stand only in an answer says
-  `Claude wrote on <day>`. Because a day's answers are more than one model call reads well, a run
-  asks about its period in parts of up to 150,000 characters, a day in two or three, four at most
-  in one run; what lies behind them is read by the next run
+- The reading of your sessions is shown the proposals that wait for your answer, up to 30, so it
+  does not propose one of them again in other words
   ([Reading your sessions](docs/curation.md#reading-your-sessions)).
-- The reading is told what of Claude's answers it may propose from: what an answer reports from a
-  mail, a document, a file or a person's message, never Claude's own conclusions, plans or
-  estimates, and nothing your memory holds. It is also shown the proposals that wait for your
-  answer, up to 30, so it does not propose one of them again in other words.
 
 ### Fixed
 
 - A message you send while Claude is working, which Claude Code takes into the running turn, is
-  read as your prompt: by the reading of your sessions, which proposes facts from it, and by the
-  worklog. Claude Code writes such a message as an attachment of the turn, not as a prompt, and
+  read as your prompt: by the reading of your sessions, which proposes facts from it, by the
+  worklog, and when a session hands in a proposal that quotes it. Claude Code writes such a message as an attachment of the turn, not as a prompt, and
   until now neither saw it ([Reading your sessions](docs/curation.md#reading-your-sessions)).
 
 ## [0.10.1] - 2026-11-20

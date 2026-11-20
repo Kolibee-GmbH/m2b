@@ -11,7 +11,7 @@ import test_runner
 import test_sessions
 from m2b import folders_left_out, glean, proposal_answers, proposals, session_remotes
 from m2b.config.profile import save_profile
-from m2b.curate import glean_step, machine_state, model
+from m2b.curate import machine_state, model
 from m2b.run_record import SUCCEEDED, load_run_record
 from m2b.tasks import markers
 from m2b.tasks.base import TasksError
@@ -19,7 +19,6 @@ from m2b.tasks.markdown import MarkdownTasks
 from test_proposals import counts
 from test_runner import INGEST_FILES_THE_CAPTURE, START
 
-MINUTE = datetime.timedelta(minutes=1)
 HOUR = datetime.timedelta(hours=1)
 DAY = datetime.timedelta(days=1)
 DANA_SAID = "Dana runs IT at Northwind and signs the renewals."
@@ -67,11 +66,6 @@ class GleanStepTest(test_runner.RunnerTest):
         self, text: str, when: datetime.datetime, session: str = "shed", folder: str = "/home/alex/projects/shed"
     ) -> None:
         self.record(test_sessions.typed(text, when.astimezone(datetime.timezone.utc), cwd=folder), session)
-
-    def answer(
-        self, text: str, when: datetime.datetime, session: str = "shed", folder: str = "/home/alex/projects/shed"
-    ) -> None:
-        self.record(test_sessions.answered(text, when=when.astimezone(datetime.timezone.utc), cwd=folder), session)
 
     def record(self, record: dict[str, Any], session: str = "shed") -> None:
         path = self.projects / "-project" / f"{session}.jsonl"
@@ -209,89 +203,6 @@ class ReadingTest(GleanStepTest):
         self.assertEqual((kept["text"], kept["source"]), ("Dana runs IT at Northwind.", "pasted"))
         self.assertIn("1 pasted text was read with the prompts they stand in", self.info())
 
-    def test_claudes_answers_reach_the_model_and_a_proposal_from_one_says_that_claude_wrote_it(self) -> None:
-        """Covers: B172, B245"""
-        self.reading()
-        self.typed("what does the mail from Dana say?", START - 2 * HOUR)
-        self.answer("The mail says that Dana runs IT at Northwind and signs the renewals.", START - 2 * HOUR + MINUTE)
-        self.answers(DANA)
-
-        outcome = self.run_curate()
-
-        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
-        (asked,) = self.asked()
-        self.assertEqual(
-            asked["sessions"][0]["prompts"],
-            [
-                {
-                    "typed": "what does the mail from Dana say?",
-                    "claude_answers": ["The mail says that Dana runs IT at Northwind and signs the renewals."],
-                }
-            ],
-        )
-        (kept,) = self.kept()["proposals"].values()
-        self.assertEqual((kept["text"], kept["source"]), ("Dana runs IT at Northwind.", "agent"))
-        self.assertIn("1 answer of Claude was read with the prompts they follow", self.info())
-
-    def test_a_period_longer_than_a_part_is_asked_part_by_part_and_checked_together(self) -> None:
-        """Covers: B245"""
-        self.reading()
-        self.typed(DANA_SAID, START - 2 * HOUR)
-        self.typed("run the tests again", START - HOUR)
-        self.answers(DANA)
-
-        with mock.patch.object(glean, "PART_LENGTH", 60):
-            outcome = self.run_curate()
-
-        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
-        self.assertEqual(self.prompts_asked(), [[DANA_SAID], ["run the tests again"]])
-        self.assertEqual(list(self.kept()["proposals"]), [DANA_ID])
-        self.assertEqual(self.kept()["read_until"], START.isoformat())
-        self.assertIn("the sessions were read in 2 parts, one model call each", self.info())
-
-    def test_answers_of_one_prompt_that_outgrow_a_part_are_cut_and_counted(self) -> None:
-        """Covers: B245"""
-        self.reading()
-        self.typed(DANA_SAID, START - 2 * HOUR)
-        self.record(
-            test_sessions.sent_by("plugin", "next task", (START - 2 * HOUR + MINUTE).astimezone(datetime.timezone.utc))
-        )
-        for minute in range(2, 12):
-            self.answer(f"step {minute} is done", START - 2 * HOUR + minute * MINUTE)
-        self.answers(DANA)
-
-        with mock.patch.object(glean, "PART_LENGTH", 120):
-            outcome = self.run_curate()
-
-        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
-        (asked,) = self.asked()
-        (prompt,) = asked["sessions"][0]["prompts"]
-        shown = len(prompt["claude_answers"])
-        self.assertEqual(prompt["claude_answers"], [f"step {minute} is done" for minute in range(2, 2 + shown)])
-        self.assertIn(
-            f"{10 - shown} answers of Claude were left out: they followed one prompt and took up more than a part",
-            self.info(),
-        )
-
-    def test_what_lies_behind_the_parts_a_reading_may_ask_is_read_by_the_next_run(self) -> None:
-        """Covers: B245"""
-        self.reading()
-        self.typed(DANA_SAID, START - 2 * HOUR)
-        self.typed("run the tests again", START - HOUR)
-        self.answers(DANA)
-
-        with mock.patch.object(glean, "PART_LENGTH", 60), mock.patch.object(glean_step, "MOST_PARTS", 1):
-            outcome = self.run_curate()
-
-        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
-        self.assertEqual(self.prompts_asked(), [[DANA_SAID]])
-        self.assertEqual(self.kept()["read_until"], (START - HOUR).isoformat())
-        moment = (START - HOUR).astimezone(START.tzinfo).strftime("%Y-%m-%d %H:%M")
-        self.assertIn(
-            f"what was typed from {moment} on is read by the next run: a reading asks the model 1 times at most",
-            self.info(),
-        )
-
     def test_a_period_in_which_everything_was_pasted_shows_that_claude_code_marks_who_sent_it(self) -> None:
         self.reading()
         self.typed(
@@ -366,8 +277,7 @@ class ReadingTest(GleanStepTest):
         self.assertEqual(self.calls(), [])
         self.assertEqual(self.kept()["read_until"], (START + HOUR).isoformat())
 
-    def test_the_deadline_of_the_run_counts_each_model_call_the_reading_may_make(self) -> None:
-        """Covers: B245"""
+    def test_the_deadline_of_the_run_counts_the_reading_as_one_more_model_step(self) -> None:
         self.reading()
         seen = self.addon("worklog", "before_ingest")
 
@@ -375,9 +285,7 @@ class ReadingTest(GleanStepTest):
 
         (step,) = [json.loads(line) for line in seen.read_text(encoding="utf-8").splitlines()]
         deadline = datetime.datetime.fromisoformat(step["record"]["deadline_at"])
-        supervised = (4 + glean_step.MOST_PARTS) * (
-            datetime.timedelta(minutes=15) + datetime.timedelta(seconds=model.DEFAULT_GRACE_SECONDS)
-        )
+        supervised = 5 * (datetime.timedelta(minutes=15) + datetime.timedelta(seconds=model.DEFAULT_GRACE_SECONDS))
         fetch = 2 * datetime.timedelta(seconds=5)
         self.assertEqual(deadline - START, fetch + supervised + test_runner.runner.CODE_STEPS_MARGIN)
 
@@ -395,7 +303,6 @@ class FoldersLeftOutTest(GleanStepTest):
         self.typed(
             "Kim Lee leads Acme's IT and wants the report on Friday", START - 3 * HOUR, "acme", str(client / "app")
         )
-        self.answer("Kim Lee approved the Acme budget.", START - 3 * HOUR + MINUTE, "acme", str(client / "app"))
         self.typed("the doctor moved my appointment to Tuesday", START - 2 * HOUR, "private", str(private))
         self.typed(DANA_SAID, START - HOUR)
         self.answers()
@@ -403,7 +310,6 @@ class FoldersLeftOutTest(GleanStepTest):
         self.run_curate()
 
         self.assertEqual(self.prompts_asked(), [[DANA_SAID]])
-        self.assertNotIn("Acme budget", json.dumps(self.asked()))
         self.assertIn("2 sessions in a folder that is left out were not read", self.info())
 
     def test_a_session_whose_folder_cannot_be_compared_is_left_out(self) -> None:
@@ -965,23 +871,6 @@ class FailingReadingTest(GleanStepTest):
         assert record is not None
         self.assertEqual(record.last_success, record.finished_at)
         self.assertIsNone(machine_state.load_backoff(self.machine))
-
-    def test_when_a_later_part_gives_no_answer_the_whole_reading_fails(self) -> None:
-        """Covers: B119, B245"""
-        self.reading()
-        self.typed(DANA_SAID, START - 2 * HOUR)
-        self.typed("run the tests again", START - HOUR)
-        self.answers(skills={"m2b:ingest": INGEST_FILES_THE_CAPTURE})
-        answered = model.TextRun(json.dumps({"proposals": [DANA]}), "haiku", None, "", 1.0)
-        silent = model.TextRun(None, None, "the model gave no answer", "", 1.0)
-
-        with (
-            mock.patch.object(glean, "PART_LENGTH", 60),
-            mock.patch.object(model, "text_step", side_effect=[answered, silent]) as text_step,
-        ):
-            self.failed_reading()
-
-        self.assertEqual(text_step.call_count, 2)
 
     def test_a_model_that_gives_no_answer_fails_the_reading_alone(self) -> None:
         """Covers: B13, B119"""

@@ -103,17 +103,16 @@ distillate.
 
 **Proposals from your sessions.** Much of what belongs in a second brain you say in passing,
 without "remember this": who runs what at a customer, what was agreed, what you promised by
-Friday. A curation run can read what you typed in Claude Code and what Claude answered since the
-last reading and propose it, each proposal with the words it stands on beside it, said, pasted or
-Claude's. It is off until you say yes in setup
+Friday. A curation run can read what you typed in Claude Code since the last reading and propose
+it, each proposal with the words it stands on beside it, said or pasted. It is off until you say yes in setup
 (`curation.read_sessions` in the machine config), and nothing is filed before you say keep: in
 the m2b pane, which `/m2b-proposals` turns to them, or with `m2b proposals`, `m2b proposals keep <id>`
 and `m2b proposals drop <id>`. Once you have answered every proposal in the pane and kept at least
 one, a curation run starts in the background on the machine that curates and files what you kept,
 so the next session knows it; on another machine, or with `curation.run_after_answers` off, your
 answers wait for the next run. Only the prompts you typed are read, with what you pasted into them
-and the text of Claude's answers to them, with credentials redacted: no tool result, nothing a
-plugin or another agent sent, and no session you left out by its folder or its git remote ([Reading your sessions](curation.md#reading-your-sessions)).
+and with credentials redacted: no answer of Claude, no tool result, nothing a plugin or another
+agent sent, and no session you left out by its folder or its git remote ([Reading your sessions](curation.md#reading-your-sessions)).
 
 A session can also hand in a proposal by itself, with words from what its agent read for you, a
 mail or a document. That is off until you turn `sessions.propose` on, and such a proposal says in

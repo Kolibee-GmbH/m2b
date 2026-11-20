@@ -85,7 +85,7 @@ class LeftOutRule:
             where_it_leads = Path(os.path.realpath(expanded))
             as_written = Path(os.path.normpath(expanded))
             folder = _nearest_folder_that_is_there(where_it_leads)
-            if _lies_in_one_of(as_written, folders) or _lies_in_one_of(where_it_leads, folders):
+            if lies_in_one_of(as_written, folders) or lies_in_one_of(where_it_leads, folders):
                 return IN_A_FOLDER_LEFT_OUT
         except (OSError, RuntimeError, ValueError):
             return IN_A_FOLDER_LEFT_OUT
@@ -113,7 +113,7 @@ def _nearest_folder_that_is_there(path: Path) -> Path:
     raise OSError(f"no folder above {path} is there")
 
 
-def _lies_in_one_of(path: Path, folders: Iterable[Path]) -> bool:
+def lies_in_one_of(path: Path, folders: Iterable[Path]) -> bool:
     """Whether ``path`` is one of the folders or lies below one, as written or as the disk has it.
 
     On the disk a folder is known by its device and number, so a name in other case, where the

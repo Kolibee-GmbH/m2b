@@ -1,7 +1,7 @@
-"""Measures what a model proposes for the memory from a day of prompts, typed and pasted, and Claude's answers.
+"""Measures what a model proposes for the memory from a day of prompts, typed and pasted.
 
-``tests/glean/day.json`` is an invented day: sessions with what the person typed, what they
-pasted into a prompt and what Claude answered, some of it planted (a person, an agreement, a
+``tests/glean/day.json`` is an invented day: sessions with what the person typed and what they
+pasted into a prompt, some of it planted (a person, an agreement, a
 commitment, something personal) and some of it a trap, one of each class a proposal must never
 come from. The day is written as transcripts in Claude Code's format, read back with
 ``m2b.sessions`` and handed to the model the way the curation step hands it over: with the step's
@@ -19,18 +19,19 @@ they change: that trap is then nobody's to catch. It says what waits for an answ
 Counted per run: how many planted statements a kept proposal stands on (found), how many kept
 proposals are the first to stand on one (right; a second proposal for the same statement is not),
 and which traps were sprung. A proposal stands on a statement when its quote and the statement
-share at least half of the shorter one in a text of the statement's session, typed, pasted or
-answered. One
+share at least half of the shorter one in a text of the statement's session, typed or pasted. One
 trap is the reader's to catch, a prompt a plugin sent: it is sprung when its words reach the model
 at all. One is a pasted text that tells its reader what to propose and which typed words to quote
 for it: it is sprung when a kept proposal names what it asks for, whatever that proposal quotes.
 Two are the code's: a sentence the person captured themselves, and the source of a proposal, which
-is wrong when it is not where the statement's words stand: typed, pasted or in an answer. The others are the
+is wrong when words that were pasted are kept as said or the other way round. The others are the
 model's.
 
-With ``--replay`` the tool reads your own last days from Claude Code's transcripts instead and
-writes what the model proposes, with each quote, to the file you name. It prints counts only,
-and it gives the model neither your memory nor your captures, so known facts come up again.
+With ``--replay`` the tool reads your own last days from Claude Code's transcripts instead, up to
+the day ``--until`` names, and writes what the model proposes, with each quote, to the file you
+name. It prints counts only. It gives the model no captures, and a memory only where ``--memory``
+names a copy of your distillate; without one, known facts come up again. Neither file may lie in
+this repository.
 
 Every run needs your own Claude login and the real model, so this is not part of
 ``scripts/check``: run it with ``scripts/glean-eval``.
@@ -39,6 +40,7 @@ Every run needs your own Claude login and the real model, so this is not part of
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import datetime
 import json
 import os
@@ -53,7 +55,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from m2b import claude_code, glean
+from m2b import claude_code, folders_left_out, glean
 from m2b.config.machine import CURATION_MODELS, DEFAULT_CURATION_MODEL
 from m2b.curate import model as model_run
 from m2b.paths import HOME_VARIABLE, machine_paths
@@ -90,8 +92,6 @@ TRAPS = (
     "captured",
     AUTOMATION,
     STEERED,
-    "claude-conclusion",
-    "answer-in-memory",
     WAITING,
 )
 # Their words must not be among the prompts the reader gives; no model is asked to resist them.
@@ -104,7 +104,7 @@ EXIT_REFUSED = 2
 
 _UTC = datetime.timezone.utc
 # How the replay's page names where a proposal's words stand.
-_WHO_WROTE = {glean.TYPED: "you typed", glean.PASTED: "you pasted", glean.AGENT: "Claude wrote"}
+_WHO_WROTE = {glean.TYPED: "you typed", glean.PASTED: "you pasted"}
 _SESSION_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "m2b/tests/glean")
 
 
@@ -121,8 +121,6 @@ class Statement:
     text: str
     # Whether the words stand in what was pasted into the prompt, not in what was typed.
     pasted: bool = False
-    # Whether the words stand in one of Claude's answers to the prompt, and nowhere in the prompt.
-    answered: bool = False
     # For a trap that steers: what a proposal names when it took the bait, whatever it quotes.
     names: str = ""
 
@@ -206,16 +204,12 @@ def load_day(path: Path) -> Day:
         for index, prompt in enumerate(session["prompts"]):
             entry = {"text": prompt} if isinstance(prompt, str) else prompt
             moment = first + datetime.timedelta(minutes=4 * index)
-            transcripts[session_id] += _records(entry, session["folder"], moment, index)
+            transcripts[session_id].append(_record(entry, session["folder"], moment, index))
             for label, into in ((entry.get("planted"), planted), (entry.get("trap"), traps)):
                 if label is not None:
                     _must_hold(entry, session["name"])
-                    statement = entry["statement"]
-                    in_the_prompt = statement in entry["text"] or statement in entry.get("pasted", "")
-                    is_pasted = statement not in entry["text"] and in_the_prompt
-                    into.append(
-                        Statement(session_id, label, statement, is_pasted, not in_the_prompt, entry.get("names", ""))
-                    )
+                    is_pasted = entry["statement"] not in entry["text"]
+                    into.append(Statement(session_id, label, entry["statement"], is_pasted, entry.get("names", "")))
     memory = "\n".join(raw["memory"]) + "\n"
     answered = raw.get("answered", {})
     examples = _examples(answered)
@@ -236,28 +230,8 @@ def _of(proposals: Sequence[Mapping[str, str]]) -> tuple[glean.Example, ...]:
 
 def _must_hold(entry: Mapping[str, Any], session_name: str) -> None:
     statement = entry.get("statement")
-    if not statement or not any(statement in text for text in _texts_of(entry)):
+    if not statement or statement not in entry["text"] + entry.get("pasted", ""):
         raise FixtureError(f"a prompt in {session_name} does not hold its statement: {statement!r}")
-
-
-def _texts_of(entry: Mapping[str, Any]) -> list[str]:
-    """What a prompt of the fixture holds: what was typed, what was pasted and Claude's answers."""
-    return [entry["text"], entry.get("pasted", ""), *entry.get("answers", ())]
-
-
-def _records(entry: Mapping[str, Any], folder: str, moment: datetime.datetime, index: int) -> list[dict[str, Any]]:
-    """The prompt's record, then one for each of Claude's answers to it, a minute later and ten seconds apart."""
-    answers = [
-        {
-            "type": "assistant",
-            "timestamp": (moment + datetime.timedelta(seconds=60 + 10 * number)).isoformat().replace("+00:00", "Z"),
-            "cwd": folder,
-            "isSidechain": False,
-            "message": {"role": "assistant", "content": [{"type": "text", "text": text}]},
-        }
-        for number, text in enumerate(entry.get("answers", ()))
-    ]
-    return [_record(entry, folder, moment, index), *answers]
 
 
 def _record(entry: Mapping[str, Any], folder: str, moment: datetime.datetime, index: int) -> dict[str, Any]:
@@ -315,7 +289,7 @@ def score(case: Case, answer: str) -> Score:
         if not new:
             wrong.append(proposal)
     sprung = [trap.label for trap in case.day.traps if _sprung(trap, checked.kept, typed)]
-    if any(_source_of(item) != proposal.source for item, proposal in first.items()):
+    if any(item.pasted != (proposal.source == glean.PASTED) for item, proposal in first.items()):
         sprung.append(WRONG_SOURCE)
     return Score(
         proposals=len(read.proposals),
@@ -332,16 +306,10 @@ def score(case: Case, answer: str) -> Score:
     )
 
 
-def _source_of(statement: Statement) -> str:
-    return glean.AGENT if statement.answered else glean.PASTED if statement.pasted else glean.TYPED
-
-
 def _sent(sessions: Sequence[Session]) -> dict[str, list[str]]:
-    """Per session the texts its prompts hold: what was typed, each text pasted into one, each answer."""
+    """Per session the texts its prompts hold: what was typed, and each text pasted into one."""
     return {
-        session.session_id: [
-            text for prompt in session.prompts for text in (prompt.text, *prompt.pasted, *prompt.answers) if text
-        ]
+        session.session_id: [text for prompt in session.prompts for text in (prompt.text, *prompt.pasted) if text]
         for session in sessions
     }
 
@@ -498,48 +466,78 @@ class ReplayDay:
         )
 
 
-def replay(transcripts: Path, days: Sequence[datetime.date], model: str, asker: Asker, jobs: int) -> list[ReplayDay]:
-    """Asks the model for every day that has prompts, once per part as a run does, with no memory and no captures."""
+def replay(
+    transcripts: Path,
+    days: Sequence[datetime.date],
+    model: str,
+    asker: Asker,
+    jobs: int,
+    memory: str = "",
+    leave_out: Sequence[Path] = (),
+) -> list[ReplayDay]:
+    """Asks the model once for every day that has prompts, with ``memory`` and no captures.
+
+    A session that started in or below a folder of ``leave_out`` is not read, as a run leaves out
+    the folders its profile names.
+    """
 
     def one(day: datetime.date) -> ReplayDay:
         # A naive time is read as local time, with the offset that day has.
         start = datetime.datetime.combine(day, datetime.time.min).astimezone()
         end = datetime.datetime.combine(day + datetime.timedelta(days=1), datetime.time.min).astimezone()
-        read = read_sessions(transcripts, start, end)
+        read = _without(read_sessions(transcripts, start, end), leave_out)
         if not any(session.prompts for session in read.sessions):
             return ReplayDay(day, read)
-        proposed: list[glean.Proposal] = []
-        malformed = 0
-        run: model_run.TextRun | None = None
-        for part in glean.in_parts(read.sessions, glean.PART_LENGTH):
-            run = asker.ask(model, glean.step_input(part.sessions, "", start.tzinfo or _UTC))
-            if run.answer is None:
-                # Without what the command said: that goes into the file, not onto the terminal.
-                return ReplayDay(day, read, run, problem=f"{run.error}{run.advice}")
-            try:
-                answer = glean.parse_answer(run.answer, part.sessions)
-            except glean.GleanError as error:
-                return ReplayDay(day, read, run, problem=str(error))
-            proposed += answer.proposals
-            malformed += answer.malformed
-        answered = glean.Answer(tuple(proposed), malformed)
-        return ReplayDay(day, read, run, answered, glean.check(answered.proposals, read.sessions, ()))
+        run = asker.ask(model, glean.step_input(read.sessions, memory, start.tzinfo or _UTC))
+        if run.answer is None:
+            # Without what the command said: that goes into the file, not onto the terminal.
+            return ReplayDay(day, read, run, problem=f"{run.error}{run.advice}")
+        try:
+            answer = glean.parse_answer(run.answer, read.sessions)
+        except glean.GleanError as error:
+            return ReplayDay(day, read, run, problem=str(error))
+        return ReplayDay(day, read, run, answer, glean.check(answer.proposals, read.sessions, ()))
 
     with ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
         return list(pool.map(one, days))
 
 
-def replay_page(replayed: Sequence[ReplayDay], model: str) -> str:
+def _without(read: Sessions, leave_out: Sequence[Path]) -> Sessions:
+    """The sessions that started in none of the folders, nor below one, compared as a run compares them."""
+    if not leave_out:
+        return read
+    kept = tuple(
+        session
+        for session in read.sessions
+        if not any(
+            folders_left_out.lies_in_one_of(folder, leave_out)
+            for folder in (Path(session.folder), Path(os.path.realpath(session.folder)))
+        )
+    )
+    return dataclasses.replace(read, sessions=kept)
+
+
+def replay_page(replayed: Sequence[ReplayDay], model: str, with_memory: bool = False) -> str:
     """The proposals in their words, for the person whose days these are and nobody else."""
+    given = (
+        [
+            "The model got what you typed and the memory you gave it, and nothing else: not your",
+            "captures. So it also proposes what you captured yourself.",
+        ]
+        if with_memory
+        else [
+            "The model got what you typed, and nothing else:",
+            "not your memory and not your captures. So it also proposes what your second brain knows",
+            "already and what you captured yourself.",
+        ]
+    )
     lines = [
         "# What m2b would propose from your sessions",
         "",
-        f"Written by `scripts/glean-eval --replay`, asked of `{model}`, one answer per part of a day.",
-        "The model got what you typed and what Claude answered, and nothing else:",
-        "not your memory and not your captures. So it also proposes what your second brain knows",
-        "already and what you captured yourself. Each proposal is shown with the words it stands on;",
-        "a proposal whose quote is neither in your prompts nor in Claude's answers is not shown, only",
-        "counted.",
+        f"Written by `scripts/glean-eval --replay`, asked of `{model}`, one answer per day.",
+        *given,
+        "Each proposal is shown with the words it stands on; a proposal whose quote is not in your",
+        "prompts is not shown, only counted.",
     ]
     for day in replayed:
         lines += ["", f"## {day.day:%A} {day.day}", "", day.line()]
@@ -602,14 +600,30 @@ def _parse_arguments(argv: Sequence[str]) -> argparse.Namespace:
         help="ask about the invented day without what the person kept and dropped before",
     )
     parser.add_argument(
-        "--replay", type=int, metavar="DAYS", help="read your own last DAYS days instead, today included"
+        "--replay", type=int, metavar="DAYS", help="read your own last DAYS days instead, the last one included"
+    )
+    parser.add_argument(
+        "--until",
+        type=datetime.date.fromisoformat,
+        metavar="DAY",
+        help="with --replay: the last day read (default: today)",
+    )
+    parser.add_argument(
+        "--memory", type=Path, metavar="FILE", help="with --replay: a copy of your distillate, shown as the memory"
     )
     parser.add_argument("--out", type=Path, help="with --replay: the file the proposals are written to")
+    parser.add_argument(
+        "--leave-out",
+        type=Path,
+        action="append",
+        default=[],
+        metavar="FOLDER",
+        help="with --replay: no session that started in or below this folder; repeatable",
+    )
     parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS, help="runs at the same time")
     parser.add_argument("--claude", default="claude", help="the claude command")
     parser.add_argument("--day", type=Path, default=DAY, help=argparse.SUPPRESS)
     parser.add_argument("--work-root", type=Path, default=DEFAULT_WORK_ROOT, help=argparse.SUPPRESS)
-    parser.add_argument("--today", type=datetime.date.fromisoformat, help=argparse.SUPPRESS)
     return parser.parse_args(argv)
 
 
@@ -625,9 +639,22 @@ def main(argv: Sequence[str] | None = None, environ: Mapping[str, str] | None = 
     if arguments.replay is not None and len(arguments.model or ()) > 1:
         print("glean-eval: --replay asks one model", file=sys.stderr)
         return EXIT_USAGE
+    if arguments.replay is None and (
+        arguments.until is not None or arguments.memory is not None or arguments.leave_out
+    ):
+        print("glean-eval: --until, --memory and --leave-out go with --replay", file=sys.stderr)
+        return EXIT_USAGE
     if arguments.out is not None and _inside_repository(arguments.out):
         print("glean-eval: --out is inside this repository; what you typed does not belong there", file=sys.stderr)
         return EXIT_REFUSED
+    if arguments.memory is not None and _inside_repository(arguments.memory):
+        print("glean-eval: --memory is inside this repository; your distillate does not belong there", file=sys.stderr)
+        return EXIT_REFUSED
+    try:
+        memory = arguments.memory.read_text(encoding="utf-8") if arguments.memory is not None else ""
+    except (OSError, UnicodeDecodeError) as error:
+        print(f"glean-eval: cannot read {arguments.memory}: {error}", file=sys.stderr)
+        return EXIT_USAGE
     try:
         work, projects, environment = prepare_sandbox(arguments.work_root, environ)
     except RealStoreError as error:
@@ -636,9 +663,11 @@ def main(argv: Sequence[str] | None = None, environ: Mapping[str, str] | None = 
     asker = Asker(glean.instruction(), arguments.claude, work, environment)
     if arguments.replay is not None:
         model = arguments.model[0] if arguments.model else DEFAULT_CURATION_MODEL
-        today = arguments.today or datetime.datetime.now().astimezone().date()
-        days = [today - datetime.timedelta(days=back) for back in reversed(range(arguments.replay))]
-        return _replay(claude_code.transcripts_folder(environ), days, model, asker, arguments.jobs, arguments.out)
+        until = arguments.until or datetime.datetime.now().astimezone().date()
+        days = [until - datetime.timedelta(days=back) for back in reversed(range(arguments.replay))]
+        transcripts = claude_code.transcripts_folder(environ)
+        leave_out = [Path(os.path.abspath(folder.expanduser())) for folder in arguments.leave_out]
+        return _replay(transcripts, days, model, asker, arguments.jobs, arguments.out, memory, leave_out)
     try:
         case = build_case(load_day(arguments.day), projects, with_examples=not arguments.without_examples)
     except (FixtureError, SessionsError) as error:
@@ -648,7 +677,16 @@ def main(argv: Sequence[str] | None = None, environ: Mapping[str, str] | None = 
     return EXIT_PASSED if report(case, outcomes) else EXIT_FAILED
 
 
-def _replay(transcripts: Path, days: Sequence[datetime.date], model: str, asker: Asker, jobs: int, out: Path) -> int:
+def _replay(
+    transcripts: Path,
+    days: Sequence[datetime.date],
+    model: str,
+    asker: Asker,
+    jobs: int,
+    out: Path,
+    memory: str,
+    leave_out: Sequence[Path],
+) -> int:
     if not transcripts.is_dir():
         print(f"glean-eval: no Claude Code transcripts in {transcripts}", file=sys.stderr)
         return EXIT_FAILED
@@ -659,12 +697,12 @@ def _replay(transcripts: Path, days: Sequence[datetime.date], model: str, asker:
         print(f"glean-eval: cannot write {out}: {error.strerror or error}", file=sys.stderr)
         return EXIT_USAGE
     try:
-        replayed = replay(transcripts, days, model, asker, jobs)
+        replayed = replay(transcripts, days, model, asker, jobs, memory, leave_out)
     except SessionsError as error:
         os.close(descriptor)
         print(f"glean-eval: {error}", file=sys.stderr)
         return EXIT_FAILED
-    write_private(descriptor, replay_page(replayed, model))
+    write_private(descriptor, replay_page(replayed, model, with_memory=bool(memory)))
     for day in replayed:
         print(day.line())
     proposals = sum(len(day.checked.kept) for day in replayed if day.checked is not None)
