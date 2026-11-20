@@ -7,6 +7,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A message you send while Claude is working, which Claude Code takes into the running turn, is
+  read as your prompt: by the reading of your sessions, which proposes facts from it, and by the
+  worklog. Claude Code writes such a message as an attachment of the turn, not as a prompt, and
+  until now neither saw it ([Reading your sessions](docs/curation.md#reading-your-sessions)).
+
 ## [0.10.1] - 2026-11-20
 
 The README shows its logo and its picture of how m2b works in the theme you chose on GitHub.

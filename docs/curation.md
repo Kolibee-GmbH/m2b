@@ -297,20 +297,19 @@ nothing is filed before you say keep. It is off by default. Setup asks on the ma
 curates, and `m2b config set curation.read_sessions true` or `false` changes the answer later.
 
 **What is read.** Claude Code's transcripts on this machine, and of them only the prompts Claude
-Code marks as typed by a human, in the terminal or the desktop app, with what you pasted into one
-kept apart from what you typed. Left out: Claude's answers and tool results, what a plugin, a
-finished task or another agent sent, a suggested prompt you only accepted, and the blocks Claude
-Code writes into a prompt. Credentials are redacted, and a prompt ends after 2,000 characters,
-what you typed first and what you pasted in the room that is left. A longer text you wrote
-elsewhere reaches a prompt as pasted text, and so does a mail or a piece of an agent's answer, so
-a proposal says which of the two it stands on (below). A session that started in or
-below a folder of `worklog_leave_out` in the profile, or one where you ran `m2b distillate off`,
-does not reach the model, and neither does a headless run such as a curation run itself. The same
-setting names work by a git remote of its repository
-([Leaving work out](addons/worklog.md#by-git-remote)): a session in such a repository does not
-reach the model, and while you name a remote, neither does one whose repository nobody can tell,
-because its folder is gone and nothing was noted for it or git does not answer. The run's
-information counts both.
+Code marks as typed by a human, in the terminal or the desktop app, also a message you send while
+Claude is working, with what you pasted into one kept apart from what you typed. Left out: Claude's
+answers and tool results, what a plugin, a finished task or another agent sent, a suggested prompt
+you only accepted, and the blocks Claude Code writes into a prompt. Credentials are redacted, and a
+prompt ends after 2,000 characters, what you typed first and what you pasted in the room that is
+left. A longer text you wrote elsewhere reaches a prompt as pasted text, and so does a mail or a
+piece of an agent's answer, so a proposal says which of the two it stands on (below). A session
+that started in or below a folder of `worklog_leave_out` in the profile, or one where you ran `m2b
+distillate off`, does not reach the model, and neither does a headless run such as a curation run
+itself. The same setting names work by a git remote of its repository ([Leaving work
+out](addons/worklog.md#by-git-remote)): a session in such a repository does not reach the model,
+and while you name a remote, neither does one whose repository nobody can tell, because its folder
+is gone and nothing was noted for it or git does not answer. The run's information counts both.
 
 **When.** The step `glean` runs after harvest and before ingest, so what you captured yourself is
 in the store by then. It covers the time since the last reading ended: the last 24 hours at the

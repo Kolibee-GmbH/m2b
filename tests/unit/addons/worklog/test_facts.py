@@ -1502,6 +1502,36 @@ class WhoSentAPromptTest(Fixture):
 
         self.assertEqual(found, ["Also round per line", "Run the tests"])
 
+    def test_a_message_sent_while_claude_worked_and_taken_into_its_turn_is_the_owners(self) -> None:
+        """Covers: B130"""
+        found = self.prompts_of(
+            self.sent(1, "Fix the invoice export", origin={"kind": "human"}, promptSource="typed"),
+            self.queued(2, "Also round per line", origin={"kind": "human"}),
+            self.queued(3, "Build the next step of the plan", origin={"kind": "plugin"}),
+        )
+
+        self.assertEqual(found, ["Fix the invoice export", "Also round per line"])
+
+    def test_a_queued_notice_of_a_finished_task_is_no_sign_of_work(self) -> None:
+        """Covers: B130"""
+        self.transcript(
+            "s1",
+            self.repo,
+            [
+                self.sent(1, "Fix the invoice export", origin={"kind": "human"}),
+                self.queued(2, "The background tests finished", commandMode="task-notification"),
+            ],
+        )
+
+        [found] = read_transcripts(self.projects, at(9), NOW).transcripts
+
+        self.assertEqual(([p.text for p in found.prompts], len(found.stamps)), (["Fix the invoice export"], 1))
+
+    def queued(self, minute: int, text: str, **attachment: Any) -> dict[str, Any]:
+        stamp = f"2026-03-14T09:{minute:02d}:00Z"
+        fields = {"type": "queued_command", "prompt": text, "commandMode": "prompt", "timestamp": stamp, **attachment}
+        return {"type": "attachment", "timestamp": stamp, "attachment": fields}
+
     def test_a_prompt_without_the_mark_counts_as_the_owners(self) -> None:
         """Covers: B130"""
         found = self.prompts_of(
