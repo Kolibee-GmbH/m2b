@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-20
+
+In a terminal the band moves below the prompt, where it leaves the space above to the session; in
+the desktop app it stays above the prompt.
+
 ### Changed
 
 - Without an entry for `band.place`, the band picks its place by where the session is drawn: in a
@@ -14,7 +19,8 @@ All notable changes to this project are documented here. The format follows
   the prompt stays the session's; in the desktop app and on the other surfaces it is the row above
   the prompt, as with `above`, because only a terminal draws the hint line's end. A value you set
   holds everywhere; `m2b config get band.place` answers `null` without an entry
-  ([Where it stands](docs/band.md#where-it-stands)).
+  ([Where it stands](docs/band.md#where-it-stands))
+  ([#37](https://github.com/Kolibee-GmbH/m2b/pull/37)).
 
 ## [0.9.1] - 2026-11-18
 
