@@ -6,7 +6,7 @@ import re
 import unittest
 
 from locations import PLUGIN_ROOT
-from m2b import glean
+from m2b import glean, project_capture
 from m2b.notes.memory_index import MemoryIndex
 
 SKILLS = PLUGIN_ROOT / "skills"
@@ -331,6 +331,42 @@ class CaptureFileSkillTest(unittest.TestCase):
             for pattern in allowed_patterns(skill):
                 with self.subTest(skill=skill, pattern=pattern):
                     self.assertFalse(covers(pattern, command))
+
+    def test_the_capture_skill_keeps_the_project_of_the_session_with_its_remote(self) -> None:
+        """Covers: B252"""
+        text = one_line(skill_text("capture"))
+
+        self.assertTrue(
+            any(block.startswith("m2b capture --project --source claude -") for block in bash_examples("capture"))
+        )
+        for said in (
+            "merk dir dieses Projekt",
+            "capture it with `--project`, even where the tool is offered",
+            "a folder without a remote, which m2b needs to know the project on another machine",
+        ):
+            with self.subTest(said=said):
+                self.assertIn(said, text)
+        self.assertIn(
+            "The project a session works in, when the user asks to keep it, is not a note either: the skill "
+            "m2b:capture keeps it with its repository.",
+            tool_description("NOTE_RULES"),
+        )
+
+    def test_ingest_files_a_project_capture_as_one_topic_with_its_repository_line(self) -> None:
+        """Covers: B253"""
+        text = one_line(skill_text("ingest"))
+
+        for said in (
+            "A capture that begins `Keep this project:` is the owner making a project known",
+            "among its two to five words the repository's name",
+            "where it has 3 to 40 characters, and what the owner calls it",
+            "`- Repository: <address> (<file>.md)` for each `Repository:` line of the capture",
+            "Where a topic already has a `- Repository:` line with one of those addresses, it is that project: "
+            "add to that topic and start no second one.",
+        ):
+            with self.subTest(said=said[:40]):
+                self.assertIn(said, text)
+        self.assertIn(project_capture.FIRST_LINE.strip(), text)
 
     def test_the_capture_skill_keeps_a_fix_for_a_file_claude_reads_with_the_fix_command(self) -> None:
         """Covers: B248"""

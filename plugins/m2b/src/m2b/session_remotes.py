@@ -36,7 +36,7 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from m2b.git_program import git_command, git_environment
+from m2b.git_program import git_command, git_environment, usable_git
 
 NOTES_FOLDER = "session-remotes"
 KEEP_FOR = datetime.timedelta(days=30)
@@ -160,6 +160,52 @@ def repository_top(folder: Path) -> Path | None:
             if (candidate / ".git").exists():
                 return candidate
     return None
+
+
+class RepositoryNotKnownError(Exception):
+    """A folder's repository cannot be named by its remotes; ``reason`` says why, ``top`` is the
+    repository's folder where there is one."""
+
+    def __init__(self, reason: str, top: Path | None = None) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.top = top
+
+
+NOT_IN_A_REPOSITORY = "not in a repository"
+REMOTES_NOT_SAID = "git could not say the remotes"
+NO_REMOTE = "no remote"
+
+
+@dataclass(frozen=True)
+class Repository:
+    """The repository a folder lies in: the folder its checkout begins at, and the addresses of its
+    remotes (``address_of``), which name it on every machine."""
+
+    top: Path
+    addresses: tuple[str, ...]
+
+    @property
+    def name(self) -> str:
+        """The repository's own name, the last part of its first address: ``portal`` for
+        ``github.com/acme/portal``."""
+        return self.addresses[0].rsplit("/", 1)[-1]
+
+
+def repository_of(folder: Path, environ: Mapping[str, str], timeout: float = GIT_TIMEOUT_SECONDS) -> Repository:
+    """The repository ``folder`` lies in, named by its remotes, or ``RepositoryNotKnownError``: in
+    no repository, git missing or silent, or a repository without a remote, which no other machine
+    could find again."""
+    top = repository_top(folder)
+    if top is None:
+        raise RepositoryNotKnownError(NOT_IN_A_REPOSITORY)
+    git = usable_git(environ, timeout=timeout)
+    remotes = None if git is None else remotes_in(folder, git, timeout=timeout, environ=environ)
+    if remotes is None:
+        raise RepositoryNotKnownError(REMOTES_NOT_SAID, top)
+    if not remotes:
+        raise RepositoryNotKnownError(NO_REMOTE, top)
+    return Repository(top, tuple(sorted({address_of(remote) for remote in remotes})))
 
 
 @dataclass(frozen=True)

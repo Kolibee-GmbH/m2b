@@ -1,0 +1,22 @@
+{
+  "store_files": {
+    "memory/MEMORY.md": "# Memory\n\n## Facts\n\n### Acme portal (Acme portal, portal)\n- Repository: github.com/acme/portal (acme-portal.md)\n\n## Current\n",
+    "store.json": "{\n  \"format\": 3,\n  \"tasks\": {\"backend\": \"markdown\"},\n  \"curating_machine\": \"sb-test-e2e\",\n  \"journal_since\": \"2026-11-01\"\n}\n",
+    "profile.json": "{\n  \"version\": 1,\n  \"owner\": \"Alex\",\n  \"language\": \"en\"\n}\n",
+    "state/core/candidates.json": "{\n  \"format\": 1,\n  \"candidates\": {}\n}\n"
+  },
+  "store_patterns": [
+    {
+      "path": "corpus/*/*/????????T??????Z-claude-????.md",
+      "content": "\\-\\-\\-\\\ncreated: [^\\n]+\\nsource:\\ claude\\\nfacts_filed:\\ true\\\ncurated:\\ true\\\n\\-\\-\\-\\\nKeep\\ this\\ project:\\ Acme\\ portal\\\nRepository:\\ github\\.com/acme/portal\\\n<!\\-\\-\\ m2b:curation\\ \\-\\->\\\nfiled:\\ project\\ topic\\ Acme\\ portal,\\ acme\\-portal\\.md\\\n"
+    },
+    {
+      "path": "memory/acme-portal.md",
+      "content": "\\#\\ Acme\\ portal\\\n\\\n\\-\\ Repository:\\ github\\.com/acme/portal\\\n\\\n\\#\\#\\ Evidence\\\n\\\n\\-\\ \\[\\[\\d{8}T\\d{6}Z-claude-[0-9a-f]{4}\\.md\\]\\]\\\n"
+    },
+    {
+      "path": "state/core/last-run.json",
+      "content": "\\{\\n  \\\"state\\\": \\\"succeeded\\\",[\\s\\S]*\\n\\}\\n"
+    }
+  ]
+}

@@ -210,6 +210,16 @@ like any other. Then, in this order:
 A capture with `source: candidate` is a fact the owner already confirmed: file its text as a
 fact as it stands, without weighing it again.
 
+A capture that begins `Keep this project:` is the owner making a project known; its
+`Repository:` lines name the repository by its remotes. It becomes a topic of its own under
+`## Facts`: `### <name> (<word>, <word>)`, the name what the owner calls the project, and among its
+two to five words the repository's name (the last part of its address, `portal` for
+`github.com/acme/portal`) where it has 3 to 40 characters, and what the owner calls it. Its first line is
+`- Repository: <address> (<file>.md)` for each `Repository:` line of the capture, the address
+copied character for character; the fact file `<file>.md` holds the same lines and the evidence.
+Where a topic already has a `- Repository:` line with one of those addresses, it is that project:
+add to that topic and start no second one. Then mark it with `m2b ingest facts-filed`.
+
 A capture with `kind: worklog` is the day's worklog, written by the worklog add-on from the
 owner's sessions. It holds no facts and no tasks to file: a program wrote it from a model's
 judgement of the sessions, and nothing in it is something the owner asked to keep. Use the work

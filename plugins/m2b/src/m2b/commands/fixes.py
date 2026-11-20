@@ -29,7 +29,6 @@ from m2b.commands.output import print_json
 from m2b.config.machine import load_machine_config
 from m2b.config.store_settings import require_store_writable
 from m2b.fixes import DONE, DROPPED, Fix, FixRefusedError, UnknownFixError
-from m2b.git_program import usable_git
 from m2b.notes.characters import with_hidden_written_out, without_hidden
 from m2b.store.base import Store
 
@@ -118,24 +117,20 @@ def _is_below(path: Path, folder: Path) -> bool:
 
 
 def _repository_of(target: Path, context: Context) -> tuple[Path, tuple[str, ...]]:
-    folder = target.parent
-    top = session_remotes.repository_top(folder)
-    if top is None:
-        raise UsageError(f"{target} lies in no repository and not under ~/.claude/; m2b keeps fixes for those only")
-    git = usable_git(context.environ, timeout=GIT_TIMEOUT_SECONDS)
-    remotes = (
-        None
-        if git is None
-        else session_remotes.remotes_in(folder, git, timeout=GIT_TIMEOUT_SECONDS, environ=context.environ)
-    )
-    if remotes is None:
-        raise UsageError(f"git could not say the remotes of the repository at {top}; nothing was kept")
-    if not remotes:
-        raise UsageError(
-            f"the repository at {top} has no remote; m2b names a repository by its remote, "
-            "to find it again in a clone on another machine, so nothing was kept"
-        )
-    return top, tuple(sorted({session_remotes.address_of(remote) for remote in remotes}))
+    try:
+        repository = session_remotes.repository_of(target.parent, context.environ, GIT_TIMEOUT_SECONDS)
+    except session_remotes.RepositoryNotKnownError as error:
+        if error.reason == session_remotes.NOT_IN_A_REPOSITORY:
+            raise UsageError(
+                f"{target} lies in no repository and not under ~/.claude/; m2b keeps fixes for those only"
+            ) from error
+        if error.reason == session_remotes.NO_REMOTE:
+            raise UsageError(
+                f"the repository at {error.top} has no remote; m2b names a repository by its remote, "
+                "to find it again in a clone on another machine, so nothing was kept"
+            ) from error
+        raise UsageError(f"git could not say the remotes of the repository at {error.top}; nothing was kept") from error
+    return repository.top, repository.addresses
 
 
 def _where_it_waits(fix: Fix) -> str:

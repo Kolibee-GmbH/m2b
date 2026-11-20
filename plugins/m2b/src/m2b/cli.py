@@ -303,6 +303,9 @@ def _parser() -> argparse.ArgumentParser:
     )
     capture.add_argument("--quiet", action="store_true", help="keep it out of everything proactive")
     capture.add_argument("--follow-up", help="YYYY-MM-DD: also create a task due that day")
+    capture.add_argument(
+        "--project", action="store_true", help="make the working folder's project known, named by its git remote"
+    )
     capture_file = _command(
         commands, "capture-file", capture_commands.capture_file_command, "copy a file into the inbox, with words"
     )

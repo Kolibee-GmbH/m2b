@@ -63,6 +63,16 @@ session only when it is about that customer. What you are working on for that cu
 the same topic in Current; what goes on in your own life stays above the topics there and reaches
 every session.
 
+## A project
+
+Say "remember this project" in a session in a clone, and the session captures it with
+`m2b capture --project`: your words and the address of the repository's git remote, which is the
+same on every machine. The next curation run makes it a topic with a line
+`- Repository: github.com/acme/portal (acme-portal.md)`. When a prompt or the project folder's path
+names the topic, it comes into the session with the folder that repository lies in on that
+machine, or `not cloned on this machine`. A folder without a remote is not kept, and a project
+that already has a topic is not kept twice.
+
 ## Fixes for the files Claude reads
 
 When a `CLAUDE.md` or a rule file says something wrongly, say so in a session: "keep this as a

@@ -13,6 +13,9 @@ All notable changes to this project are documented here. The format follows
   where the topic comes into a session, it says which folder that repository lies in on this
   machine, or that it is not cloned here, so a session reads the project's files itself
   ([Store format](docs/store-format.md)).
+- "Remember this project" in a session keeps the project of its folder with the address of its git
+  remote, and the next run makes it a topic with its `Repository:` line
+  ([Using m2b](docs/using.md#a-project)).
 - A fix for a file Claude reads: say "keep this as a fix" with the file, what is wrong and the new
   wording, and `m2b fix add` keeps it. m2b never writes that file; the next session in a clone of
   that repository, or on this machine for a file under `~/.claude/`, names the fix, applies it with
