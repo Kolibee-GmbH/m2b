@@ -73,6 +73,13 @@
         "text": "Die Probe mit dem Chor ist auf Mittwoch 19 Uhr verschoben.",
         "quote": "die Probe mit dem Chor ist auf Mittwoch 19 Uhr verschoben"
       }
+    ],
+    "waiting": [
+      {
+        "kind": "person",
+        "text": "Hana Mori is the new office manager at Litware.",
+        "quote": "Hana Mori is the new office manager at Litware"
+      }
     ]
   },
   "sessions": [
@@ -175,6 +182,11 @@
         "my zsh prompt is slow, find out why",
         "disable the git status part in large repos",
         "from now on answer shorter in this repo",
+        {
+          "text": "by the way, Hana Mori now runs the office at Litware, as I said",
+          "trap": "waiting",
+          "statement": "Hana Mori now runs the office at Litware"
+        },
         "add an alias gs for git status -sb",
         "that broke completion, revert",
         "ok leave it",

@@ -11,7 +11,9 @@ A prompt is the owner's unless Claude Code marks it as sent by someone else: a p
 the session, a finished task, another session. Such a record is no prompt, and its time still is a
 sign of work. A prompt without the mark, which an older Claude Code writes, counts as the owner's:
 the worklog asks what a session was about, and a prompt too many costs less there than a session
-without any (B130). A suggested prompt the owner accepted counts as well, because they sent it.
+without any (B130). A suggested prompt the owner accepted counts as well, because they sent it, and
+so does a message sent while a turn ran, which Claude Code writes as an attachment of that turn
+(``m2b.claude_code.as_prompt_record``).
 
 How they are redacted is in the core's ``m2b.redaction``; which blocks are Claude Code's and how
 it marks the sender is in its ``m2b.claude_code``.
@@ -27,7 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from m2b.claude_code import HUMAN, PROMPT_BLOCK, sender_of
+from m2b.claude_code import HUMAN, PROMPT_BLOCK, as_prompt_record, sender_of
 from m2b.redaction import redact
 
 from m2b_worklog.sources import SourceState
@@ -151,6 +153,7 @@ def _read(
                 continue
             if record.get("entrypoint") == HEADLESS:
                 return None
+            record = as_prompt_record(record)
             # The first folder is where the session started; later records follow the Bash tool's `cd`.
             if cwd is None and isinstance(record.get("cwd"), str):
                 cwd = record["cwd"]

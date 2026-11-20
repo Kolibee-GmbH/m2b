@@ -70,7 +70,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from m2b.claude_code import PROMPT_BLOCK_TAGS
+from m2b.claude_code import PROMPT_BLOCK_TAGS, as_prompt_record
 from m2b.folders_left_out import LONGEST_PATH
 from m2b.glean import AGENT, PASTED, TOOL, TYPED
 from m2b.sessions import NOT_THE_MAIN_CONVERSATION, prompt_of_a_person, time_of
@@ -197,9 +197,11 @@ def read(transcript: Path) -> SessionPlaces:
     answered = ""
     with transcript.open(encoding="utf-8", errors="replace") as handle:
         for line in handle:
-            record = worked.note(line)
-            if record is None:
+            noted = worked.note(line)
+            if noted is None:
                 continue
+            # A message sent while Claude worked is written as an attachment of the turn; it is a prompt.
+            record = as_prompt_record(noted)
             moment = time_of(record)
             if moment is None or any(record.get(flag) for flag in NOT_THE_MAIN_CONVERSATION):
                 continue

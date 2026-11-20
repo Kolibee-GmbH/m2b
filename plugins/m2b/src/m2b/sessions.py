@@ -2,14 +2,16 @@
 
 Claude Code writes each session as a JSON Lines file and marks on every prompt who sent it. A
 prompt is the person's when its ``origin`` is ``human``: typed in the terminal or in the desktop
-app, also while Claude was busy. What is not the person speaking is left out and counted per
-session: what a sender other than a human sent, such as a plugin or a finished task; a suggested
-prompt the person only accepted, whose wording is the model's; and text without the mark, which a
-Claude Code older than the one m2b asks for writes. So a day read with such a Claude Code shows as
-unmarked prompts, not as a day on which nothing was said. What Claude Code writes in the user's
-place for itself is left out without a count: records it flags as its own (a skill's text, the
-summary after a context cut, another agent's message), a subagent's conversation, tool results,
-the output of a local command.
+app, also while Claude was busy. A message sent while a turn ran and taken into it is written as an
+attachment of that turn; it is read as the prompt it is (``claude_code.as_prompt_record``). What is
+not the person speaking is left out and counted per session: what a sender other than a human sent,
+such as a plugin or a finished task; a suggested prompt the person only accepted, whose wording is
+the model's; and text without the mark, which a Claude Code older than the one m2b asks for writes.
+So a day read with such a Claude Code shows as unmarked prompts, not as a day on which nothing was
+said. What Claude Code writes in the user's place for itself is left out without a count: records
+it flags as its own (a skill's text, the summary after a context cut, another agent's message), a
+notice it attaches to a turn (that a task finished), a subagent's conversation, tool results, the
+output of a local command.
 
 Of a prompt goes what was typed and, apart from it, what was pasted into it, block by block
 (``Prompt.pasted``). A longer text the person wrote elsewhere arrives as a pasted block, and so
@@ -40,7 +42,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from m2b.claude_code import HUMAN, PROMPT_BLOCK, sender_of
+from m2b.claude_code import HUMAN, PROMPT_BLOCK, as_prompt_record, sender_of
 from m2b.redaction import REDACTED, is_removed_behind, redact
 
 PROMPT_LENGTH = 2000
@@ -183,6 +185,7 @@ def _read(path: Path, start: datetime.datetime, end: datetime.datetime) -> _Read
                 continue
             if record.get("entrypoint") == _HEADLESS:
                 return _Reading(path.stem)
+            record = as_prompt_record(record)
             # The first folder is where the session started; later records follow the Bash tool's `cd`.
             if folder is None and isinstance(record.get("cwd"), str):
                 folder = record["cwd"]

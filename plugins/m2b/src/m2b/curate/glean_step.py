@@ -18,7 +18,9 @@ says anything of the folder, since it is then not shown to be other work (``sess
 The model is asked once, with nothing to call (``model.text_step``), and only when a session left
 has a prompt of the person's, typed or pasted. With the prompts it gets the distillate and what the
 person kept and dropped of earlier proposals (``proposals.examples``); harvest has settled the
-answers by then, so the last ones are among them. Code checks its answer (``glean.check``) against
+answers by then, so the last ones are among them. It also gets the proposals that still wait
+(``proposals.waiting_examples``), so that none of them is proposed again in other words. Code
+checks its answer (``glean.check``) against
 the prompts and against the captures of the period, and ``proposals`` keeps what is new and counts,
 per kind, what was added and what stood on no words of the person. The counts go to the run as
 information, never into the review: nothing here asks the person to act. What the reader left out of
@@ -118,10 +120,13 @@ def propose(
             f"the model was shown {len(examples.kept)} kept and "
             f"{_count(len(examples.dropped), 'dropped proposal')} as examples"
         )
+    waiting = proposals.waiting_examples(kept)
+    if waiting:
+        notes.append(f"the model was shown {_count(len(waiting), 'proposal')} that {_wait(len(waiting))} for an answer")
     pasted = sum(len(prompt.pasted) for session in read for prompt in session.prompts)
     if pasted:
         notes.append(f"{_count(pasted, 'pasted text')} {_were(pasted)} read with the prompts they stand in")
-    given = glean.step_input(read, _distillate(store), zone, examples)
+    given = glean.step_input(read, _distillate(store), zone, examples, waiting)
     run = model.text_step(config, machine, environ, glean.instruction(), given, pass_fds)
     if run.answer is None:
         raise GleanStepError(run.failure())
@@ -213,6 +218,10 @@ def _distillate(store: Store) -> str:
 
 def _count(number: int, noun: str) -> str:
     return f"{number} {noun}" if number == 1 else f"{number} {noun}s"
+
+
+def _wait(number: int) -> str:
+    return "waits" if number == 1 else "wait"
 
 
 def _were(number: int) -> str:

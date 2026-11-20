@@ -376,6 +376,25 @@ def examples(current: Proposals, now: datetime.datetime) -> Examples:
     return Examples(settled_last(KEPT), settled_last(DROPPED))
 
 
+def waiting_examples(current: Proposals) -> tuple[Example, ...]:
+    """The proposals of a reading that wait for an answer, the ``EXAMPLES_OF_EACH`` added last, newest first.
+
+    A reading shown what waits does not propose it a second time in other words, which ``add``
+    takes as new. What a session handed in is none, as it is no example: its quote can be a
+    tool's result, a mail's words, which must not reach the reading's model.
+    """
+    open_now = sorted(
+        (
+            (entry.since, key, entry)
+            for key, entry in current.entries.items()
+            if entry.state == OPEN and entry.by is None
+        ),
+        key=lambda item: item[:2],
+        reverse=True,
+    )
+    return tuple(Example(entry.kind, entry.text, entry.quote) for _, _, entry in open_now[:EXAMPLES_OF_EACH])
+
+
 def _remembered(entries: Mapping[str, Entry], now: datetime.datetime) -> dict[str, Entry]:
     return {key: entry for key, entry in entries.items() if entry.state == OPEN or now - entry.since < REMEMBER_SETTLED}
 

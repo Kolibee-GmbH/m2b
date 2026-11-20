@@ -6,7 +6,8 @@ about the person's own life. This module is the part of such a step that is code
 model gets, the form its answer must have, and two checks no instruction can replace.
 
 The input is one JSON document: the distillate, so the model can leave out what is known already,
-the proposals of earlier readings the person kept and those they dropped (``Examples``), and per
+the proposals of earlier readings the person kept and those they dropped (``Examples``), those
+that still wait for an answer (``waiting``), and per
 session its folder, its day and every prompt whole, what was pasted into one apart from what was
 typed. A session is named by a small number, its
 place in the sequence the caller passes; the model repeats a number more reliably than an id, and
@@ -148,11 +149,12 @@ def step_input(
     distillate: str,
     zone: datetime.tzinfo = datetime.timezone.utc,
     examples: Examples = NO_EXAMPLES,
+    waiting: Sequence[Example] = (),
 ) -> str:
     """The JSON document the model reads; ``zone`` is where the person is, for the day of a session.
 
-    ``answered`` is in it also while it is empty: the instruction describes one form, and a model
-    that sees two empty lists knows that nothing was answered yet.
+    ``answered`` and ``waiting`` are in it also while they are empty: the instruction describes one
+    form, and a model that sees empty lists knows that nothing was answered or waits yet.
     """
     given = [
         {
@@ -168,7 +170,13 @@ def step_input(
         "kept": [_as_given(example) for example in examples.kept],
         "dropped": [_as_given(example) for example in examples.dropped],
     }
-    return json.dumps({"memory": distillate, "answered": answered, "sessions": given}, ensure_ascii=False, indent=1)
+    document = {
+        "memory": distillate,
+        "answered": answered,
+        "waiting": [_as_given(example) for example in waiting],
+        "sessions": given,
+    }
+    return json.dumps(document, ensure_ascii=False, indent=1)
 
 
 def parse_answer(answer: str, sessions: Sequence[Session]) -> Answer:

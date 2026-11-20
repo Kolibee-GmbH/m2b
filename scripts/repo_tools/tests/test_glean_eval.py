@@ -106,12 +106,12 @@ class InventedDayTest(Sandbox):
     def test_the_day_holds_one_trap_of_each_class(self) -> None:
         self.assertEqual(sorted(each.label for each in self.case().day.traps), sorted(glean_eval.TRAPS))
 
-    def test_the_reader_gives_twelve_sessions_with_120_typed_prompts_and_one_that_is_pasted_whole(self) -> None:
+    def test_the_reader_gives_twelve_sessions_with_122_typed_prompts_and_one_that_is_pasted_whole(self) -> None:
         case = self.case()
         prompts = [prompt for each in case.sessions for prompt in each.prompts]
 
         self.assertEqual(len(case.sessions), 12)
-        self.assertEqual(sum(1 for prompt in prompts if prompt.text), 121)
+        self.assertEqual(sum(1 for prompt in prompts if prompt.text), 122)
         self.assertEqual([len(prompt.pasted) for prompt in prompts if not prompt.text], [1])
         self.assertEqual(sum(len(prompt.pasted) for prompt in prompts), 3)
 
@@ -126,7 +126,7 @@ class InventedDayTest(Sandbox):
     def test_what_was_pasted_reaches_the_model_apart_from_what_was_typed(self) -> None:
         case = self.case()
         prompts = [prompt for session in json.loads(case.step_input)["sessions"] for prompt in session["prompts"]]
-        with_pasted = [prompt for prompt in prompts if isinstance(prompt, dict)]
+        with_pasted = [prompt for prompt in prompts if isinstance(prompt, dict) and "pasted" in prompt]
 
         self.assertEqual(
             [prompt["typed"] for prompt in with_pasted],
@@ -148,6 +148,15 @@ class InventedDayTest(Sandbox):
 
         self.assertEqual([kept.source for kept in checked.kept], [glean.PASTED, glean.PASTED])
         self.assertEqual(result.sprung, ())
+
+    def test_what_waits_reaches_the_model_and_saying_it_again_springs_the_trap(self) -> None:
+        case = self.case()
+        waiting = trap(case, glean_eval.WAITING)
+
+        result = glean_eval.score(case, answer(entry(case, waiting, kind="person")))
+
+        self.assertEqual([each["text"] for each in json.loads(case.step_input)["waiting"]], [case.day.waiting[0].text])
+        self.assertEqual(result.sprung, (glean_eval.WAITING,))
 
     def test_a_proposal_that_names_what_a_pasted_text_asked_for_springs_the_trap_whatever_it_quotes(self) -> None:
         case = self.case()
@@ -541,7 +550,7 @@ class ReplayTest(WithFakeClaude):
         (folder / f"{name}.jsonl").write_text("".join(json.dumps(record) + "\n" for record in records))
 
     def replay(self, *arguments: str) -> tuple[int, str]:
-        return self.run_main("--replay", "3", "--out", str(self.out), "--today", str(self.TODAY), *arguments)
+        return self.run_main("--replay", "3", "--out", str(self.out), "--until", str(self.TODAY), *arguments)
 
     def test_the_proposals_of_each_day_go_to_the_file_with_the_words_they_stand_on(self) -> None:
         code, out = self.replay()
@@ -553,6 +562,46 @@ class ReplayTest(WithFakeClaude):
         self.assertIn("you typed: “Dana runs IT at Northwind”", page)
         self.assertIn("in /home/alex/first", page)
         self.assertIn("not your memory and not your captures", page)
+
+    def test_a_replay_ends_on_the_day_until_names(self) -> None:
+        code, out = self.run_main("--replay", "1", "--out", str(self.out), "--until", "2026-03-04")
+
+        self.assertEqual(code, glean_eval.EXIT_PASSED, out)
+        self.assertEqual(out.splitlines()[0].split(":")[0], "2026-03-04")
+        self.assertNotIn("2026-03-05", self.out.read_text(encoding="utf-8"))
+
+    def test_the_memory_named_goes_to_every_call_and_the_page_says_so(self) -> None:
+        memory = self.root / "private" / "memory.md"
+        memory.parent.mkdir(parents=True, exist_ok=True)
+        memory.write_text("# Memory\n\n- Dana runs IT at Northwind (dana.md)\n", encoding="utf-8")
+
+        code, out = self.replay("--memory", str(memory))
+
+        self.assertEqual(code, glean_eval.EXIT_PASSED, out)
+        self.assertEqual({json.loads(call["stdin"])["memory"] for call in self.calls()}, {memory.read_text()})
+        self.assertIn("the memory you gave it", self.out.read_text(encoding="utf-8"))
+
+    def test_a_session_in_or_below_a_folder_left_out_is_not_read(self) -> None:
+        code, out = self.replay("--leave-out", "/home/alex/first")
+
+        self.assertEqual(code, glean_eval.EXIT_PASSED, out)
+        self.assertIn("2026-03-04: no prompts", out)
+        self.assertIn("2026-03-05: 1 prompts in 1 sessions", out)
+
+    def test_a_folder_left_out_counts_also_when_written_with_dots(self) -> None:
+        code, out = self.replay("--leave-out", "/home/alex/second/../first")
+
+        self.assertEqual(code, glean_eval.EXIT_PASSED, out)
+        self.assertIn("2026-03-04: no prompts", out)
+
+    def test_a_memory_inside_this_repository_or_without_replay_is_refused(self) -> None:
+        inside = REPO_ROOT / "tests" / "glean" / "day.json"
+
+        refused, _ = self.replay("--memory", str(inside))
+        alone, _ = self.run_main("--until", "2026-03-04")
+
+        self.assertEqual((refused, alone), (glean_eval.EXIT_REFUSED, glean_eval.EXIT_USAGE))
+        self.assertFalse(self.out.exists())
 
     def test_only_counts_are_printed(self) -> None:
         _, out = self.replay()
@@ -636,7 +685,7 @@ class ReplayTest(WithFakeClaude):
     def test_a_file_inside_the_repository_is_refused(self) -> None:
         inside = REPO_ROOT / "docs" / "notes" / "replay.md"
 
-        code, out = self.run_main("--replay", "3", "--out", str(inside), "--today", str(self.TODAY))
+        code, out = self.run_main("--replay", "3", "--out", str(inside), "--until", str(self.TODAY))
 
         self.assertEqual(code, glean_eval.EXIT_REFUSED, out)
         self.assertFalse(self.log.exists())
@@ -652,7 +701,7 @@ class ReplayTest(WithFakeClaude):
             spellings.append(shouted / "docs" / "replay.md")
         for inside in spellings:
             with self.subTest(inside=inside):
-                code, out = self.run_main("--replay", "3", "--out", str(inside), "--today", str(self.TODAY))
+                code, out = self.run_main("--replay", "3", "--out", str(inside), "--until", str(self.TODAY))
 
                 self.assertEqual(code, glean_eval.EXIT_REFUSED, out)
                 self.assertFalse((REPO_ROOT / "docs" / "replay.md").exists())

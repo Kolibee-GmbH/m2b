@@ -51,6 +51,29 @@ def unmarked(text: object, when: datetime.datetime, **changes: Any) -> dict[str,
     return typed(text, when, **{"promptSource": None, "origin": None, **changes})
 
 
+def queued(text: object, when: datetime.datetime, **changes: Any) -> dict[str, Any]:
+    """An attachment as Claude Code writes one for a message sent while it worked, taken into that turn."""
+    stamp = when.isoformat().replace("+00:00", "Z")
+    attachment = {
+        "type": "queued_command",
+        "prompt": text,
+        "source_uuid": "7d5f8723-0000-4000-8000-000000000001",
+        "delivery_id": "212cecbe-0000-4000-8000-000000000002",
+        "commandMode": "prompt",
+        "origin": {"kind": "human"},
+        "timestamp": stamp,
+    }
+    attachment.update(changes)
+    return {
+        "type": "attachment",
+        "timestamp": stamp,
+        "cwd": "/home/alex/projects/shed",
+        "entrypoint": "cli",
+        "isSidechain": False,
+        "attachment": {key: value for key, value in attachment.items() if value is not None},
+    }
+
+
 class SessionsFixture(unittest.TestCase):
     def setUp(self) -> None:
         folder = tempfile.TemporaryDirectory(prefix="sb-test-sessions-")
@@ -130,6 +153,46 @@ class TypedPromptsTest(SessionsFixture):
         )
 
         self.assertEqual(self.texts(), ["from the desktop app", "typed while it worked"])
+
+    def test_a_message_sent_while_claude_worked_and_taken_into_its_turn_is_the_persons(self) -> None:
+        """Covers: B112"""
+        self.transcript(
+            typed("Draft the reply to Dana", at(9)),
+            {"type": "assistant", "timestamp": "2026-03-04T09:00:05Z", "message": {"content": "On it."}},
+            queued("Dana is the new head of purchasing at Northwind", at(9, 1)),
+        )
+
+        prompts = self.only_session().prompts
+
+        self.assertEqual(
+            [p.text for p in prompts], ["Draft the reply to Dana", "Dana is the new head of purchasing at Northwind"]
+        )
+        self.assertEqual(prompts[1].time, at(9, 1))
+        self.assertEqual(self.only_session().left_out, NOTHING_LEFT_OUT)
+
+    def test_a_message_sent_while_claude_worked_keeps_what_was_pasted_apart(self) -> None:
+        """Covers: B112"""
+        parts = [{"type": "text", "text": f"see {pasted_block('Kim Lee: the contract ends on 30 June.')} please"}]
+        self.transcript(queued(parts, at(9)))
+
+        (prompt,) = self.only_session().prompts
+
+        self.assertEqual(prompt.text, "see please")
+        self.assertEqual(prompt.pasted, ("Kim Lee: the contract ends on 30 June.",))
+
+    def test_a_queued_message_of_another_sender_or_of_claude_code_itself_is_no_prompt(self) -> None:
+        """Covers: B112"""
+        self.transcript(
+            typed("typed", at(9)),
+            queued("Build the next step of the plan", at(9, 1), origin={"kind": "plugin", "name": "loop"}),
+            queued("Another session asks for the schema", at(9, 2), origin={"kind": "peer"}, isMeta=True),
+            queued("The background tests finished", at(9, 3), commandMode="task-notification", origin=None),
+        )
+
+        session = self.only_session()
+
+        self.assertEqual([p.text for p in session.prompts], ["typed"])
+        self.assertEqual(session.left_out, LeftOut(sent_by_others=1, suggested=0, unmarked=0))
 
     def test_a_prompt_that_quotes_a_command_tag_is_still_a_prompt(self) -> None:
         self.transcript(typed("why does <command-name>/clear</command-name> show up here?", at(9)))

@@ -297,16 +297,17 @@ tasks from it, each with the words it stands on. The curation step `glean` runs 
 (`curate/glean_step.py`). `scripts/glean-eval`
 measures whether a model is good enough for that job.
 
-`tests/glean/day.json` is an invented day: twelve sessions with 120 typed prompts, in English and
+`tests/glean/day.json` is an invented day: twelve sessions with 122 typed prompts, in English and
 German, and one prompt that is pasted text only. Twenty typed prompts state something worth
 keeping, five each of a person, an agreement, a commitment and something personal, and two pasted
-texts each state who a person is: a mail, and notes of the person's own. Eight prompts are traps,
+texts each state who a person is: a mail, and notes of the person's own. Nine prompts are traps,
 one of each class a proposal must never come from: a prompt a plugin sent, a pasted text that
 tells its reader what to propose and which typed words to quote for it, a sentence the person
 captured themselves, a fact the memory holds already, a question that only considers something, a name that is test data, a
-todo of the project at hand, and a sentence like those the person dropped before. For that last
-one the day says what was answered earlier: five proposals kept, like what is planted, and four
-dropped, each the time of a call or a meeting. The model is shown them as the step shows them.
+todo of the project at hand, a sentence like those the person dropped before, and a sentence that
+says again in other words what waits for an answer. For those two the day says what was answered
+earlier and what waits: five proposals kept, like what is planted, four dropped, each the time of a
+call or a meeting, and one that waits. The model is shown them as the step shows them.
 The tool writes the day as transcripts in Claude Code's format, reads them back the way a
 curation step would, and asks the model with that instruction, through the core's own run without
 tools (`curate/model.py`), so it measures the form the product runs:
@@ -333,11 +334,13 @@ The invented day is tidier than a real one. To see what a model proposes from yo
 scripts/glean-eval --replay 7 --out ~/glean-replay.md
 ```
 
-It reads your last seven days from Claude Code's transcripts, asks the model once for each day
-and writes the proposals with their quotes to the file, which only you can read. It prints counts
-and no word of a prompt. What you typed and pasted goes to the model on your own login, as it did
-when you sent it. The model gets neither your memory nor your captures, so it also proposes what your
-second brain knows already. A file inside this repository is refused.
+It reads your last seven days from Claude Code's transcripts (`--until <day>` ends them on another
+day than today, `--leave-out <folder>` skips the sessions in a folder), asks the model once for
+each day and writes the proposals with their quotes to the file, which only you can read. It prints
+counts and no word of a prompt. What you typed and pasted goes to the model on your own login, as it
+did when you sent it. The model gets no captures, and a memory only with `--memory <file>`, a copy
+of your distillate you made; without one it also proposes what your second brain knows already. A
+file inside this repository is refused, for `--out` and for `--memory`.
 
 ## How well a model files an inbox
 

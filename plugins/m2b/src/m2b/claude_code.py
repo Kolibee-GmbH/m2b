@@ -14,15 +14,16 @@ beyond that, each with what breaks when it changes:
   stop recording when m2b is turned off.
 - Transcript files under ``~/.claude/projects/``, one JSON Lines file per session: ``sessions``
   reads what the person typed, and relies on the mark Claude Code puts on every prompt of who sent
-  it (``origin``, ``promptSource``); the worklog add-on reads prompts, answers and times for the
-  facts of a period (``m2b_worklog/sources/transcripts.py``) and leaves out a prompt the mark gives
-  to another sender. Both read the mark through ``sender_of`` and take out the blocks Claude Code
-  writes into a prompt beside what was typed (``PROMPT_BLOCK``, the one list of their tags).
-  ``sessions`` reports a transcript that cannot be opened or no longer names its folder as not
-  read, the worklog one that cannot be opened. When the mark goes, ``sessions`` counts every
-  prompt but a slash command as unmarked and gives none of them, and the worklog takes every
-  prompt as the owner's again; a record that changed in another way is not recognised and reads
-  as no prompt.
+  it (``origin``, ``promptSource``), and on the attachment of type ``queued_command`` for a message
+  sent while a turn ran (``as_prompt_record``); the worklog add-on reads prompts, answers and times
+  for the facts of a period (``m2b_worklog/sources/transcripts.py``) and leaves out a prompt the
+  mark gives to another sender. Both read the mark through ``sender_of`` and take out the blocks
+  Claude Code writes into a prompt beside what was typed (``PROMPT_BLOCK``, the one list of their
+  tags). ``sessions`` reports a transcript that cannot be opened or no longer names its folder as
+  not read, the worklog one that cannot be opened. When the mark goes, ``sessions`` counts every
+  prompt but a slash command as unmarked and gives none of them, and the worklog takes every prompt
+  as the owner's again; a record that changed in another way is not recognised and reads as no
+  prompt.
 - The folder itself (``own_folders``): the start of every model step that has tools denies Read
   and Edit there (``curate.model.fenced_command``), because Claude Code allows the file tools in
   the memory folder it keeps under ``projects/`` for a session's project without any rule. When
@@ -63,6 +64,33 @@ PROMPT_BLOCK = re.compile(r"<(" + "|".join(PROMPT_BLOCK_TAGS) + r")\b[^>]*>.*?</
 # The sender Claude Code names for what the person sent: typed in the terminal or in the desktop
 # app, also while Claude was busy, or a suggested prompt they accepted.
 HUMAN = "human"
+
+# What Claude Code attaches to a turn for a message that was sent while that turn ran and was taken
+# into it. Its other modes are Claude Code's own notices, such as that a task finished.
+_QUEUED_COMMAND = "queued_command"
+_QUEUED_PROMPT = "prompt"
+
+
+def as_prompt_record(record: Mapping[str, Any]) -> Mapping[str, Any]:
+    """The record, or for a message sent while Claude worked the prompt record it stands for.
+
+    Claude Code writes a prompt as a ``user`` record. A message sent while a turn runs and taken
+    into that turn is written instead as an ``attachment`` record of type ``queued_command``, which
+    holds the prompt, its sender (``origin``) and whether Claude Code sent it itself (``isMeta``).
+    Turned into the record it stands for, it meets every rule a prompt meets; every other record
+    comes back as it is.
+    """
+    attachment = record.get("attachment")
+    if record.get("type") != "attachment" or not isinstance(attachment, dict):
+        return record
+    if attachment.get("type") != _QUEUED_COMMAND or attachment.get("commandMode") != _QUEUED_PROMPT:
+        return record
+    prompt = {key: value for key, value in record.items() if key != "attachment"}
+    prompt.update(type="user", message={"role": "user", "content": attachment.get("prompt")})
+    for mark in ("origin", "isMeta"):
+        if mark in attachment:
+            prompt[mark] = attachment[mark]
+    return prompt
 
 
 def sender_of(record: Mapping[str, Any]) -> str | None:
