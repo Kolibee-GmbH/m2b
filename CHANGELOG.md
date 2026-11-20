@@ -7,6 +7,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The reading of your sessions also reads what Claude answered, beside the prompt each answer
+  follows: Claude often says what a mail, a document or a file it read holds, and a fact said only
+  there was in none of your prompts. Claude's thinking, its tool calls and tool results stay out,
+  and each answer ends after 2,000 characters. A proposal whose words stand only in an answer says
+  `Claude wrote on <day>`. Because a day's answers are more than one model call reads well, a run
+  asks about its period in parts of up to 150,000 characters, a day in two or three, four at most
+  in one run; what lies behind them is read by the next run
+  ([Reading your sessions](docs/curation.md#reading-your-sessions)).
+
 ### Fixed
 
 - A message you send while Claude is working, which Claude Code takes into the running turn, is

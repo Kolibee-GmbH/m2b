@@ -87,6 +87,8 @@ EXIT_USAGE = 2
 EXIT_REFUSED = 2
 
 _UTC = datetime.timezone.utc
+# How the replay's page names where a proposal's words stand.
+_WHO_WROTE = {glean.TYPED: "you typed", glean.PASTED: "you pasted", glean.AGENT: "Claude wrote"}
 _SESSION_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "m2b/tests/glean")
 
 
@@ -440,7 +442,7 @@ class ReplayDay:
 
 
 def replay(transcripts: Path, days: Sequence[datetime.date], model: str, asker: Asker, jobs: int) -> list[ReplayDay]:
-    """Asks the model once for every day that has prompts, with no memory and no captures."""
+    """Asks the model for every day that has prompts, once per part as a run does, with no memory and no captures."""
 
     def one(day: datetime.date) -> ReplayDay:
         # A naive time is read as local time, with the offset that day has.
@@ -449,15 +451,22 @@ def replay(transcripts: Path, days: Sequence[datetime.date], model: str, asker: 
         read = read_sessions(transcripts, start, end)
         if not any(session.prompts for session in read.sessions):
             return ReplayDay(day, read)
-        run = asker.ask(model, glean.step_input(read.sessions, "", start.tzinfo or _UTC))
-        if run.answer is None:
-            # Without what the command said: that goes into the file, not onto the terminal.
-            return ReplayDay(day, read, run, problem=f"{run.error}{run.advice}")
-        try:
-            answer = glean.parse_answer(run.answer, read.sessions)
-        except glean.GleanError as error:
-            return ReplayDay(day, read, run, problem=str(error))
-        return ReplayDay(day, read, run, answer, glean.check(answer.proposals, read.sessions, ()))
+        proposed: list[glean.Proposal] = []
+        malformed = 0
+        run: model_run.TextRun | None = None
+        for part in glean.in_parts(read.sessions, glean.PART_LENGTH):
+            run = asker.ask(model, glean.step_input(part.sessions, "", start.tzinfo or _UTC))
+            if run.answer is None:
+                # Without what the command said: that goes into the file, not onto the terminal.
+                return ReplayDay(day, read, run, problem=f"{run.error}{run.advice}")
+            try:
+                answer = glean.parse_answer(run.answer, part.sessions)
+            except glean.GleanError as error:
+                return ReplayDay(day, read, run, problem=str(error))
+            proposed += answer.proposals
+            malformed += answer.malformed
+        answered = glean.Answer(tuple(proposed), malformed)
+        return ReplayDay(day, read, run, answered, glean.check(answered.proposals, read.sessions, ()))
 
     with ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
         return list(pool.map(one, days))
@@ -468,11 +477,12 @@ def replay_page(replayed: Sequence[ReplayDay], model: str) -> str:
     lines = [
         "# What m2b would propose from your sessions",
         "",
-        f"Written by `scripts/glean-eval --replay`, asked of `{model}`, one answer per day. The model",
-        "got what you typed and nothing else: not your memory and not your captures. So it also",
-        "proposes what your second brain knows already and what you captured yourself. Each proposal",
-        "is shown with the words it stands on; a proposal whose quote is not in your prompts is not",
-        "shown, only counted.",
+        f"Written by `scripts/glean-eval --replay`, asked of `{model}`, one answer per part of a day.",
+        "The model got what you typed and what Claude answered, and nothing else:",
+        "not your memory and not your captures. So it also proposes what your second brain knows",
+        "already and what you captured yourself. Each proposal is shown with the words it stands on;",
+        "a proposal whose quote is neither in your prompts nor in Claude's answers is not shown, only",
+        "counted.",
     ]
     for day in replayed:
         lines += ["", f"## {day.day:%A} {day.day}", "", day.line()]
@@ -487,7 +497,7 @@ def replay_page(replayed: Sequence[ReplayDay], model: str) -> str:
             lines += [
                 "",
                 f"{number}. **{proposal.kind}**: {proposal.text}",
-                f"   - you typed: “{' '.join(proposal.quote.split())}”",
+                f"   - {_WHO_WROTE[proposal.source]}: “{' '.join(proposal.quote.split())}”",
                 f"   - in {folders[proposal.session]}" + "".join(f", {extra}" for extra in extras if extra),
             ]
     return "\n".join(lines) + "\n"

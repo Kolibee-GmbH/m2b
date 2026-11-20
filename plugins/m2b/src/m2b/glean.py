@@ -1,4 +1,4 @@
-"""What a model may propose for the memory from what the person typed, and what code checks of it.
+"""What a model may propose for the memory from what the person typed and Claude answered, and what code checks of it.
 
 A step that reads a period's sessions (``sessions``) can find what belongs in the second brain
 although nobody said "remember this": a person, an agreement with its day, a commitment, something
@@ -8,7 +8,8 @@ model gets, the form its answer must have, and two checks no instruction can rep
 The input is one JSON document: the distillate, so the model can leave out what is known already,
 the proposals of earlier readings the person kept and those they dropped (``Examples``), and per
 session its folder, its day and every prompt whole, what was pasted into one apart from what was
-typed. A session is named by a small number, its
+typed, and beside it what Claude answered, marked as Claude's (``claude_answers``). A session is
+named by a small number, its
 place in the sequence the caller passes; the model repeats a number more reliably than an id, and
 ``parse_answer`` turns it back with the same sequence. JSON keeps a prompt one string whatever it
 holds, so no typed text can pass as another session or as the memory, and no example as a session.
@@ -18,10 +19,11 @@ everybody, so the model is shown it. An example is words of another period and n
 proposal that quotes one stands in no prompt, and ``check`` refuses it like any other.
 
 A proposal carries the words it stands on, its ``quote``. ``check`` keeps a proposal only when the
-quote stands, white space aside, in one prompt of the session it names, with at least
-``QUOTE_WORDS`` words: fewer show nothing. The quote stands in what the person typed or in one text
-they pasted into the prompt; ``check`` says which (``Proposal.source``), looking at what was typed
-first, so pasted words are never shown as said. A proposal that fails is the model's wording and not
+quote stands, white space aside, in one prompt of the session it names or in one of Claude's
+answers there, with at least ``QUOTE_WORDS`` words: fewer show nothing. The quote stands in what the
+person typed, in one text they pasted into the prompt or in one answer; ``check`` says which
+(``Proposal.source``), looking at what was typed first and at the answers last, so pasted words and
+Claude's are never shown as said. A proposal that fails is the model's wording and not
 the person's; it is returned apart, so a caller can count it. The second check takes away what the
 person captured themselves in the same period: the quote stands in a capture, or a capture of at
 least ``QUOTE_WORDS`` words stands in the quote, case and the punctuation at the ends aside.
@@ -34,6 +36,14 @@ it came from that prompt), and it shares at least ``SAME_STATEMENT`` of the shor
 with the quote (so it is about what the quote says, not about the prompt's other sentence). Order,
 case, punctuation and the additions in brackets do not count. A capture made elsewhere in words of
 its own is not recognised; the person sees that proposal and drops it.
+
+Claude's answers make a day's sessions ten to twenty times what was typed, more than one model
+call reads well. ``in_parts`` parts a period by time, between prompts, so that the prompts of a
+part and their answers take up at most ``PART_LENGTH`` characters of the input; each part is asked
+on its own, with the memory and the examples. A prompt whose answers alone are longer is a part by
+itself, with as many of its first answers as fit: a session a plugin drives all day after one
+prompt of the person's hangs every answer on that prompt, and a part larger than the model reads
+would fail every reading that comes after.
 
 The instruction the model is asked with is ``glean_instruction.md`` beside this module. It is the
 prompt of a run without tools (``curate.model.text_step``), not a skill: no session can call it.
@@ -62,9 +72,9 @@ AGREEMENT = "agreement"
 COMMITMENT = "commitment"
 PERSONAL = "personal"
 KINDS = (PERSON, AGREEMENT, COMMITMENT, PERSONAL)
-# Where in a session a proposal's quote stands. What was pasted may be anyone's words. A reading
-# finds a quote in a prompt only; a session that hands a proposal in can also stand on what a tool
-# returned to it or on what Claude answered.
+# Where in a session a proposal's quote stands. What was pasted may be anyone's words, and so may
+# what Claude answered, which often says what a mail or a file holds. A reading finds a quote in a
+# prompt or an answer; a session that hands a proposal in can also stand on what a tool returned.
 TYPED = "typed"
 PASTED = "pasted"
 TOOL = "tool"
@@ -74,6 +84,8 @@ TEXT_LENGTH = 300
 QUOTE_WORDS = 3
 # The share of the shorter one's words a capture and a quote have in common when they say the same.
 SAME_STATEMENT = 0.8
+# The characters of sessions one model call reads at most: a day of answers is two or three parts.
+PART_LENGTH = 150_000
 INSTRUCTION = Path(__file__).with_name("glean_instruction.md")
 
 _DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -120,6 +132,14 @@ class Examples:
 
 
 NO_EXAMPLES = Examples()
+
+
+@dataclass(frozen=True)
+class Part:
+    """The sessions one model call reads: their prompts from ``since`` on, up to the next part's."""
+
+    since: datetime.datetime
+    sessions: tuple[Session, ...]
 
 
 @dataclass(frozen=True)
@@ -171,6 +191,55 @@ def step_input(
     return json.dumps({"memory": distillate, "answered": answered, "sessions": given}, ensure_ascii=False, indent=1)
 
 
+def in_parts(sessions: Sequence[Session], length: int) -> tuple[Part, ...]:
+    """The sessions parted by time, so that a part's prompts take up at most ``length`` characters of the input.
+
+    A part holds the prompts of every session from its start up to the next part's, each session
+    with its folder and in the order of its first prompt there; a prompt whose answers alone are
+    longer than ``length`` is a part by itself, with as many of its first answers as fit. A session
+    without a prompt is in no part.
+    """
+    said = sorted(
+        ((prompt.time, number, prompt) for number, session in enumerate(sessions) for prompt in session.prompts),
+        key=lambda each: (each[0], each[1]),
+    )
+    windows: list[list[tuple[int, Prompt]]] = []
+    used = 0
+    for _, number, whole in said:
+        prompt = _fitting(whole, length)
+        size = _size(prompt)
+        if not windows or used + size > length:
+            windows.append([])
+            used = 0
+        windows[-1].append((number, prompt))
+        used += size
+    return tuple(_part(sessions, window) for window in windows)
+
+
+def _size(prompt: Prompt) -> int:
+    return len(json.dumps(_as_shown(prompt), ensure_ascii=False))
+
+
+def _fitting(prompt: Prompt, length: int) -> Prompt:
+    """The prompt with as many of its first answers as fit in ``length`` characters of the input."""
+    if _size(prompt) <= length:
+        return prompt
+    kept: list[str] = []
+    for answer in prompt.answers:
+        if _size(dataclasses.replace(prompt, answers=(*kept, answer))) > length:
+            break
+        kept.append(answer)
+    return dataclasses.replace(prompt, answers=tuple(kept))
+
+
+def _part(sessions: Sequence[Session], window: Sequence[tuple[int, Prompt]]) -> Part:
+    prompts: dict[int, list[Prompt]] = {}
+    for number, prompt in window:
+        prompts.setdefault(number, []).append(prompt)
+    parted = tuple(dataclasses.replace(sessions[number], prompts=tuple(own)) for number, own in prompts.items())
+    return Part(window[0][1].time, parted)
+
+
 def parse_answer(answer: str, sessions: Sequence[Session]) -> Answer:
     """The proposals in the model's answer; ``sessions`` is the sequence its input was built from."""
     proposals: list[Proposal] = []
@@ -188,11 +257,16 @@ def check(proposals: Sequence[Proposal], sessions: Sequence[Session], captures: 
     """Sorts the proposals by the two checks; ``captures`` are the texts captured in the period.
 
     A kept proposal says where its quote stands (``Proposal.source``): in what was typed, or else
-    in what was pasted.
+    in what was pasted, or else in what Claude answered.
     """
     said = {
         session.session_id: [
-            (prompt.time, _collapsed(prompt.text), [_collapsed(text) for text in prompt.pasted])
+            _Said(
+                prompt.time,
+                _collapsed(prompt.text),
+                tuple(_collapsed(text) for text in prompt.pasted),
+                tuple(_collapsed(text) for text in prompt.answers),
+            )
             for prompt in session.prompts
         ]
         for session in sessions
@@ -217,6 +291,16 @@ def check(proposals: Sequence[Proposal], sessions: Sequence[Session], captures: 
 
 
 @dataclass(frozen=True)
+class _Said:
+    """A prompt as ``check`` looks at it: when it was sent, what was typed, pasted and answered."""
+
+    time: datetime.datetime
+    typed: str
+    pasted: tuple[str, ...]
+    answers: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class _StandsIn:
     """Where a quote stands in a session: the texts that hold it and when the first was sent."""
 
@@ -225,20 +309,32 @@ class _StandsIn:
     first_at: datetime.datetime
 
 
-def _where_it_stands(quote: str, prompts: Sequence[tuple[datetime.datetime, str, Sequence[str]]]) -> _StandsIn | None:
-    """In what was typed, or else in what was pasted; None when no prompt of the session holds the quote."""
-    typed = [(text, time) for time, text, _ in prompts if quote in text]
-    if typed:
-        return _StandsIn(TYPED, tuple(text for text, _ in typed), typed[0][1])
-    pasted = [(text, time) for time, _, texts in prompts for text in texts if quote in text]
-    if pasted:
-        return _StandsIn(PASTED, tuple(text for text, _ in pasted), pasted[0][1])
+def _where_it_stands(quote: str, prompts: Sequence[_Said]) -> _StandsIn | None:
+    """In what was typed, else in what was pasted, else in an answer; None when the session holds the quote nowhere.
+
+    An answer's time is that of the prompt it follows.
+    """
+    for source, texts_of in (
+        (TYPED, lambda said: (said.typed,)),
+        (PASTED, lambda said: said.pasted),
+        (AGENT, lambda said: said.answers),
+    ):
+        found = [(text, said.time) for said in prompts for text in texts_of(said) if quote in text]
+        if found:
+            return _StandsIn(source, tuple(text for text, _ in found), found[0][1])
     return None
 
 
 def _as_shown(prompt: Prompt) -> str | dict[str, Any]:
-    """A prompt as the model reads it: its text, or what was typed and what was pasted, kept apart."""
-    return {"typed": prompt.text, "pasted": list(prompt.pasted)} if prompt.pasted else prompt.text
+    """A prompt as the model reads it: its text, or what was typed, pasted and answered, kept apart."""
+    if not prompt.pasted and not prompt.answers:
+        return prompt.text
+    shown: dict[str, Any] = {"typed": prompt.text}
+    if prompt.pasted:
+        shown["pasted"] = list(prompt.pasted)
+    if prompt.answers:
+        shown["claude_answers"] = list(prompt.answers)
+    return shown
 
 
 def _as_given(example: Example) -> dict[str, str]:

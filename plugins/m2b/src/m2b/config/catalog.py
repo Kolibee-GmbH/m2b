@@ -227,8 +227,8 @@ def _of_this_machine() -> tuple[Setting, ...]:
             "curation.read_sessions",
             "Curation reads your sessions",
             "A curation run on this machine reads what you typed and pasted in Claude Code since the last "
-            "reading, never Claude's answers, and a model proposes facts from it for your memory. Pasted text can "
-            "be someone else's. Nothing is filed before you keep it.",
+            "reading, and what Claude answered, and a model proposes facts from it for your memory. Pasted text "
+            "and Claude's answers can be someone else's words. Nothing is filed before you keep it.",
             False,
         ),
         _switch(

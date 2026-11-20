@@ -1118,7 +1118,8 @@ class _Run:
         # Preflight fetches once, the journal once more for older month files.
         fetch = 2 * datetime.timedelta(seconds=self.fetch_timeout_seconds)
         backfill = len(expiry.batches(self.undated, BACKFILL_BATCH)) - 1 if self.undated is not None else 0
-        optional = (1 if self.sort_facts else 0) + (1 if self.config.curation.read_sessions else 0)
+        reading = glean_step.MOST_PARTS if self.config.curation.read_sessions else 0
+        optional = (1 if self.sort_facts else 0) + reading
         model_steps = MODEL_STEPS + max(backfill, 0) + addon_steps + optional
         return fetch + step * model_steps + CODE_STEPS_MARGIN
 

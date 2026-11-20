@@ -554,6 +554,34 @@ class ReplayTest(WithFakeClaude):
         self.assertIn("in /home/alex/first", page)
         self.assertIn("not your memory and not your captures", page)
 
+    def test_a_day_longer_than_a_part_is_asked_part_by_part_as_a_run_asks_it(self) -> None:
+        with mock.patch.object(glean, "PART_LENGTH", 30):
+            code, out = self.replay()
+
+        self.assertEqual(code, glean_eval.EXIT_PASSED, out)
+        asked = [json.loads(call["stdin"])["sessions"][0]["prompts"] for call in self.calls()]
+        # The days are asked side by side, so their calls come in any order.
+        self.assertCountEqual(asked, [["Dana runs IT at Northwind."], ["run the tests"], ["the build is red again"]])
+
+    def test_a_proposal_from_an_answer_of_claude_says_that_claude_wrote_it(self) -> None:
+        answered = {
+            "type": "assistant",
+            "timestamp": f"{self.TODAY}T12:05:00Z",
+            "cwd": "/home/alex/second",
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "Kim Lee runs purchasing at Globex."}],
+            },
+        }
+        with (self.projects / "-home-alex-second" / "second.jsonl").open("a", encoding="utf-8") as transcript:
+            transcript.write(json.dumps(answered) + "\n")
+        said = {"kind": "person", "text": "Kim Lee runs purchasing.", "quote": "Kim Lee runs purchasing at Globex"}
+        self.answer_with(any=answer({**said, "session": 1}))
+
+        self.replay()
+
+        self.assertIn("Claude wrote: “Kim Lee runs purchasing at Globex”", self.out.read_text(encoding="utf-8"))
+
     def test_only_counts_are_printed(self) -> None:
         _, out = self.replay()
 

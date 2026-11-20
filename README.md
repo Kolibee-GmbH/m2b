@@ -212,7 +212,7 @@ with its values to press
 rests on, each with `show`. All names and notes are invented.</sub>
 
 **Proposals from your sessions.** A curation run can also read what you typed and pasted in Claude
-Code and propose what you said in passing, without "remember this", each proposal with the words
+Code, and what Claude answered, and propose what was said in passing, without "remember this", each proposal with the words
 it stands on beside it; nothing is filed before you keep it, and once you have answered them all
 in the pane, a curation run files what you kept
 ([Reading your sessions](docs/curation.md#reading-your-sessions)).

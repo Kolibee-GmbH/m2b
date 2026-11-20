@@ -47,7 +47,7 @@ flowchart LR
 | Preflight | code | removes leftover temp files, downloads the files the run reads, loads the profile |
 | Migrate | code, only when the store's format is older than this m2b | brings `memory/` up to the rules of this m2b, one format at a time, each checked in code; a failing one puts `memory/` back, keeps the format and ends the run with the review |
 | Harvest | code | settles the memory candidates and "Still current? ..." questions you ticked or dropped, and the proposals you kept or dropped |
-| Glean | code and one model call without tools, only with `curation.read_sessions` | reads what you typed in Claude Code since the last reading and keeps what the model proposes for your memory ([Reading your sessions](#reading-your-sessions)) |
+| Glean | code and one model call without tools per part of the period, at most four, only with `curation.read_sessions` | reads what you typed in Claude Code and what Claude answered since the last reading and keeps what the model proposes for your memory ([Reading your sessions](#reading-your-sessions)) |
 | Ingest | model, only with captures in the inbox | files facts and what is going on into memory, under its topic what concerns one subject only, tasks into your list, each capture into `corpus/YYYY/MM/`; reads a PDF whole up to its 60th page and writes what stands on which page into the note beside it ([A document in the inbox](#a-document-in-the-inbox)) |
 | Refresh | model, only when a fact is past its day | rewrites the facts whose `until` has passed |
 | Sort | model, only with `m2b curate --sort-facts` | moves facts lines of an older distillate into topics; code puts the file back if a statement changed |
@@ -292,17 +292,19 @@ nothing a run filed is final:
 
 Much of what belongs in a second brain is said in passing: who runs what at a customer, what was
 agreed on the phone, what you promised by Friday. With `curation.read_sessions` set to `true` in
-the machine config, a curation run looks for it in what you typed in Claude Code and proposes it;
+the machine config, a curation run looks for it in what you typed in Claude Code and in what Claude answered, and proposes it;
 nothing is filed before you say keep. It is off by default. Setup asks on the machine that
 curates, and `m2b config set curation.read_sessions true` or `false` changes the answer later.
 
 **What is read.** Claude Code's transcripts on this machine, and of them only the prompts Claude
 Code marks as typed by a human, in the terminal or the desktop app, also a message you send while
-Claude is working, with what you pasted into one kept apart from what you typed. Left out: Claude's
-answers and tool results, what a plugin, a finished task or another agent sent, a suggested prompt
-you only accepted, and the blocks Claude Code writes into a prompt. Credentials are redacted, and a
-prompt ends after 2,000 characters, what you typed first and what you pasted in the room that is
-left. A longer text you wrote elsewhere reaches a prompt as pasted text, and so does a mail or a
+Claude is working, with what you pasted into one kept apart from what you typed, and beside each
+prompt what Claude wrote in answer up to your next one: Claude often says what a mail, a document
+or a file it read holds, and a fact said only there is in none of your prompts. Left out: Claude's
+thinking and tool calls, tool results, what a plugin, a finished task or another agent sent, a
+suggested prompt you only accepted, and the blocks Claude Code writes into a prompt. Credentials
+are redacted, a prompt ends after 2,000 characters, what you typed first and what you pasted in the
+room that is left, and each answer ends after 2,000 characters too. A longer text you wrote elsewhere reaches a prompt as pasted text, and so does a mail or a
 piece of an agent's answer, so a proposal says which of the two it stands on (below). A session
 that started in or below a folder of `worklog_leave_out` in the profile, or one where you ran `m2b
 distillate off`, does not reach the model, and neither does a headless run such as a curation run
@@ -314,19 +316,25 @@ is gone and nothing was noted for it or git does not answer. The run's informati
 **When.** The step `glean` runs after harvest and before ingest, so what you captured yourself is
 in the store by then. It covers the time since the last reading ended: the last 24 hours at the
 first reading and never more than 7 days; what lies before is named as not read. Without a prompt
-of yours in that time no model starts.
+of yours in that time no model starts. With Claude's answers a day is more than one model call
+reads well, so the period is asked in parts of up to 150,000 characters, parted by time, a day
+in two or three; a run asks four parts at most, and what lies behind them is read by the next
+run. A prompt whose answers alone are longer than a part, as in a session a plugin keeps going
+after one prompt of yours, keeps its first answers that fit, and the run's information counts the
+rest.
 
 **What is kept.** The model gets the distillate, so it can leave out what is known, the proposals
-you kept and dropped lately (below), and per session its folder, its day and its prompts. It answers with proposals of four kinds, a person, an
+you kept and dropped lately (below), and per session its folder, its day and its prompts with Claude's answers. It answers with proposals of four kinds, a person, an
 agreement, a commitment and something personal, each with the words it stands on. Code keeps a
-proposal only when those words stand in one prompt of the session it names, typed or pasted, with
-at least three words, and when you did not capture the same thing in that time. A proposal like one that
+proposal only when those words stand in one prompt of the session it names, typed or pasted, or in
+one of Claude's answers there, with at least three words, and when you did not capture the same thing in that time. A proposal like one that
 waits, or like one you kept or dropped or that expired within 90 days, is not kept a second time,
 so reading a period again adds nothing.
 
 **Your answer.** `m2b proposals` lists what waits, each with its id, its kind, the text, the words
 it stands on and their day: `said on <day>` before words you typed, `pasted on <day>` before words
-that stood in text you pasted, which may be someone else's:
+that stood in text you pasted, which may be someone else's, and `Claude wrote on <day>` before
+words of an answer of Claude's:
 
 ```bash
 m2b proposals                 # what waits for an answer

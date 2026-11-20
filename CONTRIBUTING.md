@@ -291,7 +291,7 @@ of a fix the model never sees does not need them, and keeps the page of the rele
 
 ## What a model finds in typed prompts
 
-`m2b/sessions.py` reads what you typed in your sessions, and `m2b/glean.py` holds the instruction
+`m2b/sessions.py` reads what you typed in your sessions and what Claude answered, and `m2b/glean.py` holds the instruction
 (`glean_instruction.md` beside it), the form and the checks for a model that proposes facts and
 tasks from it, each with the words it stands on. The curation step `glean` runs them
 (`curate/glean_step.py`). `scripts/glean-eval`
@@ -333,10 +333,10 @@ The invented day is tidier than a real one. To see what a model proposes from yo
 scripts/glean-eval --replay 7 --out ~/glean-replay.md
 ```
 
-It reads your last seven days from Claude Code's transcripts, asks the model once for each day
-and writes the proposals with their quotes to the file, which only you can read. It prints counts
-and no word of a prompt. What you typed and pasted goes to the model on your own login, as it did
-when you sent it. The model gets neither your memory nor your captures, so it also proposes what your
+It reads your last seven days from Claude Code's transcripts, asks the model once for each part of
+a day, as a run parts its period, and writes the proposals with their quotes to the file, which only you can read. It prints counts
+and no word of a prompt. What you typed and pasted and what Claude answered goes to the model on your
+own login, as it did in the session. The model gets neither your memory nor your captures, so it also proposes what your
 second brain knows already. A file inside this repository is refused.
 
 ## How well a model files an inbox

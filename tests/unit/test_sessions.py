@@ -74,6 +74,20 @@ def queued(text: object, when: datetime.datetime, **changes: Any) -> dict[str, A
     }
 
 
+def answered(*parts: object, when: datetime.datetime, **changes: Any) -> dict[str, Any]:
+    """An assistant record as Claude Code writes one for a part of an answer: text, a tool call, thinking."""
+    content = [{"type": "text", "text": part} if isinstance(part, str) else part for part in parts]
+    record = {
+        "type": "assistant",
+        "timestamp": when.isoformat().replace("+00:00", "Z"),
+        "cwd": "/home/alex/projects/shed",
+        "isSidechain": False,
+        "message": {"role": "assistant", "model": "claude-opus-5-5", "content": content},
+    }
+    record.update(changes)
+    return record
+
+
 class SessionsFixture(unittest.TestCase):
     def setUp(self) -> None:
         folder = tempfile.TemporaryDirectory(prefix="sb-test-sessions-")
@@ -116,7 +130,7 @@ class TypedPromptsTest(SessionsFixture):
         self.assertEqual(
             session.prompts,
             (
-                Prompt(at(9), "Dana runs IT at Northwind and signs the renewals."),
+                Prompt(at(9), "Dana runs IT at Northwind and signs the renewals.", answers=("Noted.",)),
                 Prompt(at(9, 30), "Who else is in the team?"),
             ),
         )
@@ -661,6 +675,93 @@ class NotThePersonTest(SessionsFixture):
 
         self.assertEqual([prompt.text for prompt in session.prompts], ["build the shed door"])
         self.assertEqual(session.left_out, NOTHING_LEFT_OUT)
+
+
+class ClaudesAnswersTest(SessionsFixture):
+    def test_claudes_answers_come_with_the_prompt_they_follow_text_by_text(self) -> None:
+        """Covers: B244"""
+        self.transcript(
+            typed("read the mail from Dana", at(9)),
+            answered("Reading it now.", {"type": "tool_use", "id": "t1", "name": "Read", "input": {}}, when=at(9, 1)),
+            answered("Dana writes that\nthe contract   ends on 30 June.", when=at(9, 2)),
+            typed("thanks", at(9, 10)),
+            answered("You are welcome.", when=at(9, 11)),
+        )
+
+        prompts = self.only_session().prompts
+
+        self.assertEqual(
+            prompts,
+            (
+                Prompt(
+                    at(9),
+                    "read the mail from Dana",
+                    answers=("Reading it now.", "Dana writes that the contract ends on 30 June."),
+                ),
+                Prompt(at(9, 10), "thanks", answers=("You are welcome.",)),
+            ),
+        )
+
+    def test_thinking_tool_calls_a_subagents_answers_and_claude_codes_own_are_no_answer(self) -> None:
+        """Covers: B244"""
+        self.transcript(
+            typed("plan the shed door", at(9)),
+            answered({"type": "thinking", "thinking": "Dana signs the renewals"}, when=at(9, 1)),
+            answered({"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "ls"}}, when=at(9, 2)),
+            answered("Sam owes 40 euros.", when=at(9, 3), isSidechain=True),
+            answered("No response requested.", when=at(9, 4), message={"model": "<synthetic>", "content": "x"}),
+            answered("   ", when=at(9, 5)),
+        )
+
+        (prompt,) = self.only_session().prompts
+
+        self.assertEqual(prompt.answers, ())
+
+    def test_an_answer_is_redacted_its_white_space_collapsed_and_it_ends_after_two_thousand_characters(self) -> None:
+        """Covers: B244"""
+        self.transcript(
+            typed("deploy it", at(9)),
+            answered("I ran it with PGPASSWORD=hunter2 psql -h db.example", when=at(9, 1)),
+            answered("word " * 1000, when=at(9, 2)),
+        )
+
+        (prompt,) = self.only_session().prompts
+
+        self.assertEqual(prompt.answers[0], "I ran it with PGPASSWORD=[removed] psql -h db.example")
+        self.assertEqual(len(prompt.answers[1]), sessions.ANSWER_LENGTH)
+
+    def test_answers_follow_the_persons_last_prompt_also_when_a_plugin_started_the_turn(self) -> None:
+        """Covers: B244"""
+        self.transcript(
+            typed("build the shed door", at(9)),
+            sent_by("plugin", "next task: the hinges", at(9, 30)),
+            answered("The hinges are on.", when=at(9, 31)),
+        )
+
+        (prompt,) = self.only_session().prompts
+
+        self.assertEqual(prompt.answers, ("The hinges are on.",))
+
+    def test_an_answer_to_a_prompt_before_the_period_or_after_it_is_left_out(self) -> None:
+        """Covers: B244"""
+        self.transcript(
+            typed("start the build", DAY - datetime.timedelta(minutes=5)),
+            answered("Dana signs the renewals.", when=at(0, 1)),
+            typed("and now?", at(9)),
+            answered("It is done.", when=at(9, 1)),
+            answered("Sam owes 40 euros.", when=NEXT_DAY + datetime.timedelta(minutes=1)),
+        )
+
+        self.assertEqual(self.only_session().prompts, (Prompt(at(9), "and now?", answers=("It is done.",)),))
+
+    def test_answers_in_a_session_without_a_prompt_of_the_person_are_left_out(self) -> None:
+        """Covers: B244"""
+        self.transcript(sent_by("plugin", "next task", at(9)), answered("Dana signs the renewals.", when=at(9, 1)))
+
+        session = self.only_session()
+
+        self.assertEqual(session.prompts, ())
+        self.assertEqual(session.left_out.sent_by_others, 1)
 
 
 class WhichSessionsTest(SessionsFixture):

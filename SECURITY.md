@@ -231,12 +231,14 @@ Off until you say yes in setup or turn `curation.read_sessions` on yourself, wit
 not refused inside a Claude Code session: a session that may run `m2b` can turn it on. A
 curation run then gives a model what you typed in Claude Code since the last reading, with the
 folder and the day of each session: the prompts Claude Code marks as typed by you, with what you
-pasted into them kept apart from what you typed, without Claude's answers, tool results and what a
-plugin or another agent sent, each cut at 2,000 characters, with credentials redacted by pattern,
-which stays incomplete. Pasted text may be anyone's words: a mail, a document, an agent's answer. A session you left out,
+pasted into them kept apart from what you typed, and beside each prompt the text of Claude's
+answers up to your next one, without Claude's thinking, tool calls, tool results and what a plugin
+or another agent sent, each prompt and each answer cut at 2,000 characters, with credentials
+redacted by pattern, which stays incomplete. Pasted text may be anyone's words: a mail, a
+document, an agent's answer; Claude's answers repeat what it read, a mail or a web page among it. A session you left out,
 by its folder or by a git remote of its repository, does not reach it. With the prompts the model gets the distillate and, from
 `state/core/proposals.json` in the store, up to 30 proposals you kept and 30 you dropped, each
-with the words it stood on, typed or pasted; so words of an earlier period go to the model again
+with the words it stood on, typed, pasted or Claude's; so words of an earlier period go to the model again
 while such a proposal is among them, until 90 days after a run settled your answer to it.
 
 That model can call nothing: it reads its input and answers once. Code keeps a proposal of a

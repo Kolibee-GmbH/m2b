@@ -13,8 +13,8 @@ read about 365,000 input tokens (338,000 of them from Claude Code's prompt cache
 Claude Code put it at US$0.013 at API prices. A run with nothing to read (an empty inbox, nothing
 expiring, no memory link to repair) uses no model. A run that starts after your answers to
 proposals ([When it runs](curation.md#when-it-runs)) is a whole run with every step: it files a
-capture for each proposal you kept and, where your sessions are read, reads what you typed since
-the last reading; `curation.run_after_answers` set to `false` keeps it from starting. m2b does
+capture for each proposal you kept and, where your sessions are read, reads what you typed and
+Claude answered since the last reading; `curation.run_after_answers` set to `false` keeps it from starting. m2b does
 not record what a run used:
 `curation.max_turns` and `curation.max_budget_usd` cap a model step, and `curation.paused` stops
 the runs that start by themselves ([Configuration](configuration.md)).
@@ -23,8 +23,9 @@ the runs that start by themselves ([Configuration](configuration.md)).
 
 **The model.** Only a curation run calls a model, and only for a step with something to read:
 ingest for new captures, refresh for a fact past its day, lint for a broken link in memory with
-exactly one candidate, the reading of your sessions once in a run while it is on and you typed
-something since the last reading, and the worklog's verdict once a day while that add-on is on,
+exactly one candidate, the reading of your sessions while it is on and you typed something since the last reading,
+once per part of up to 150,000 characters and four times in a run at most (a day is two or
+three), and the worklog's verdict once a day while that add-on is on,
 unless the day had no sessions. Each step runs with `curation.model` (`haiku` by default; setup offers `sonnet`
 for more careful filing at a higher cost) and stops after `curation.max_turns` turns;
 `curation.max_budget_usd`, unset by default, caps its spending. It runs on your Claude Code login
@@ -37,7 +38,7 @@ due and any archive file; sorting reads memory. Ingest, lint, `--refresh-all` an
 also get `m2b search` results over inbox, archive and memory. The reading of your sessions sends
 the distillate, up to 30 proposals you kept and 30 you dropped lately, each with the words it
 stood on, and, per session, its folder, its day and the prompts you typed, with what you pasted
-into them, redacted, to a model that can call
+into them and the text of Claude's answers to them, redacted, to a model that can call
 nothing. With the worklog add-on, its step sees the period's prompts and last
 answers, commits and session folders, the inbox and memory (below). In every session:
 the distillate, the routing rule and the notices at session start; before a prompt that names a
