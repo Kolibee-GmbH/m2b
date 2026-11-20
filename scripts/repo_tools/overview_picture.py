@@ -8,6 +8,8 @@ real file names. One thick line in the logo's color carries the sentence through
 is quiet. Words in the picture are labels; the sentences stand in the caption below it.
 
 Color: ink and the logo's petrol, a petrol tint for the folder, one neutral for the quiet lines.
+The picture lies on its own ground, a card in the page's color: GitHub picks the light or dark file by
+the system's setting, not by the theme chosen on GitHub, so either file can land on either page.
 Type: Montserrat, the social preview's face, for labels; JetBrains Mono for what is typed and for
 file names (both SIL Open Font License), drawn as outlines so every machine shows the same picture.
 Every text is measured against the room it has; one that does not fit ends the script.
@@ -322,7 +324,7 @@ def svg(theme: dict[str, str], type_: Type) -> str:
     )
     style = (
         fills + f".disc{{fill:{theme['petrol']}}}.tint{{fill:{theme['tint']}}}.band-row{{fill:{theme['band']}}}"
-        f".terminal{{fill:{theme['terminal']}}}.curator-box{{fill:{theme['petrol']}}}"
+        f".ground{{fill:{theme['ground']}}}.terminal{{fill:{theme['terminal']}}}.curator-box{{fill:{theme['petrol']}}}"
         f".stroke-on-petrol{{stroke:{theme['on-petrol']}}}"
         f".glow{{fill:none;stroke:{theme['bright']};stroke-width:3;stroke-opacity:0}}"
         f".prompt{{fill:none;stroke:{theme['bright']};stroke-width:2;stroke-linecap:round;stroke-linejoin:round}}"
@@ -355,7 +357,7 @@ def svg(theme: dict[str, str], type_: Type) -> str:
         f'stroke="{color}" stroke-width="{width}" stroke-linecap="round" stroke-linejoin="round"/></marker>'
         for kind, size, width, color in (("main", 7, 5, theme["petrol"]), ("quiet", 5, 2, theme["line"]))
     )
-    body = []
+    body = [f'<rect class="ground" width="{WIDTH}" height="{HEIGHT}" rx="16"/>']
     for x, number, label in ZONES:
         body.append(f'<circle class="disc" cx="{x + 11}" cy="31" r="11"/>')
         body.append(type_.draw(x + 11, 35.4, number, "badge", "middle"))
