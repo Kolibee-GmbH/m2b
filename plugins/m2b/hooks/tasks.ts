@@ -137,7 +137,7 @@ export function parseBandTasks(
 }
 
 /** What the band shows where the answer it draws from names no settings: what a machine without an entry shows. */
-export const SHOWS_BY_DEFAULT: BandShows = { place: 'above', dueTasks: 'count', topics: false }
+export const SHOWS_BY_DEFAULT: BandShows = { place: null, dueTasks: 'count', topics: false }
 
 const PLACES: readonly BandPlace[] = ['above', 'below', 'waiting']
 const DUE_TASKS_SHOWN: readonly BandShows['dueTasks'][] = ['off', 'count', 'list']
@@ -145,13 +145,15 @@ const DUE_TASKS_SHOWN: readonly BandShows['dueTasks'][] = ['off', 'count', 'list
 /**
  * The `band` part of `m2b band --json`, the machine's settings of that name; undefined where a
  * core before the part answered, or one of its values is none this band knows. A core before the
- * band's place names none: there the band stands where a machine without an entry has it.
+ * band's place names none: there the band stands where a machine without an entry has it. A core
+ * that names `null` has no entry for it either.
  */
 export function parseBandShows(part: unknown): BandShows | undefined {
   if (!isObject(part)) {
     return undefined
   }
-  const place = part['place'] === undefined ? SHOWS_BY_DEFAULT.place : PLACES.find(known => known === part['place'])
+  const named = part['place']
+  const place = named === undefined || named === null ? SHOWS_BY_DEFAULT.place : PLACES.find(known => known === named)
   const dueTasks = DUE_TASKS_SHOWN.find(shown => shown === part['due_tasks'])
   const topics = part['topics']
   return place === undefined || dueTasks === undefined || typeof topics !== 'boolean' ? undefined : { place, dueTasks, topics }

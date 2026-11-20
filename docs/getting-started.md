@@ -116,9 +116,12 @@ nor a model. Both end with a first capture, a curation run and a first search.
    know it, `m2b doctor` says in its line `band` whether the latest session ran m2b's hooks, and
    `m2b distillate on` turns the distillate back on in a folder where it was turned off.
 
-From the next session on, [the band](band.md) is one row above the prompt: `m2b` and the button
-`open`, which shows the m2b pane. Once curation asks you to keep or drop something, the row
-counts it, and you answer in the pane. It is a mod, a module Claude Code loads with the plugin, and runs only while mods are
+From the next session on, [the band](band.md) shows that m2b runs: in a terminal at the end of
+the hint line below the prompt, `m2b` and the command `/m2b-pane`, and in the desktop app as one
+row above the prompt, `m2b` and the button `open`. Both show the m2b pane.
+`m2b settings set band.place above` puts the row above the prompt in a terminal too
+([Where it stands](band.md#where-it-stands)). Once curation asks you to keep or drop something,
+the band counts it, and you answer in the pane. It is a mod, a module Claude Code loads with the plugin, and runs only while mods are
 on in Claude Code: `m2b doctor` says in its line `band` whether it ran, and
 [What it needs](band.md#what-it-needs) what to do when it did not. With it come
 `/m2b-note <text>`, which notes a text at once without a model turn, `/m2b-pane`, `/m2b-review`,

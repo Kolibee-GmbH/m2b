@@ -171,20 +171,22 @@ the model's step, m2b is plain code: standard library Python, no database.
 
 ![The pane after /m2b-review, under the tab Review: the part "Last curation run" reads "succeeded" with its time, then the fact about Sam with the old day struck through in red and the new one in green, and where the facts from before the run lie; the part "Waits for you" begins below it. Under the pane the band is one row, "m2b 5 wait for you" with the button "open", and one task due today and one overdue below it](docs/images/review.png)
 
-Above the prompt, the band says in one row how many things wait for an answer from you, and its
-one button, `open`, shows the m2b pane. There you answer them: a "Still current?" question for a
+The band says in one row how many things wait for an answer from you, and its one button,
+`open`, shows the m2b pane. There you answer them: a "Still current?" question for a
 line under Current that no note has touched for a month, a "Remember?" fact that a script of
 yours proposed, the proposals from your sessions, and the review of the last run with the facts
 it changed. `keep`, `drop` and `ok` are buttons; a press waits 5 seconds with `undo` before it
 writes. The row also names your tasks due today or overdue, as a count or by name, as you set
-it. While nothing waits and no task is to show, the row is `m2b` and `open` alone. The setting
-`band.place` moves the band to the end of the hint line below the prompt (`below`) or draws it
-only while it has something to say (`waiting`) ([Where it stands](docs/band.md#where-it-stands)). Below the prompt, a status
+it. While nothing waits and no task is to show, the row is `m2b` and `open` alone. In a terminal
+the band is the end of the hint line below the prompt, in the desktop app a row above the
+prompt, as in the picture. The setting `band.place` puts it above the prompt everywhere
+(`above`), below it (`below`) or above it only while it has something to say (`waiting`)
+([Where it stands](docs/band.md#where-it-stands)). Below the prompt, a status
 line appears only while something is wrong with m2b.
 
 ![A Claude Code session on the main screen with band.place set to below: nothing of m2b stands above the prompt. The hint line below the prompt reads "manual mode on", "? for shortcuts" and "1 agent" in the dim text of Claude Code and ends in "m2b", "1 waits for you", "1 overdue" and "1 due today" in their colors and the command /m2b-pane, dim](docs/images/band-below.png)
 
-<sub>The band with `band.place` set to `below`: at the end of the hint line below the prompt, in a terminal of 130 columns.</sub>
+<sub>The band in a terminal, here with `band.place` set to `below`: at the end of the hint line below the prompt, in a terminal of 130 columns.</sub>
 
 `/m2b-review` opens the pane in the picture with the whole last run, `/m2b-proposals` the
 proposals from your sessions, `/m2b-search <text>` search hits, and `/m2b-note <text>` notes a

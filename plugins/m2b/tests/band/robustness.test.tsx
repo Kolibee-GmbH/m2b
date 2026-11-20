@@ -168,7 +168,8 @@ test('a launcher that cannot be started shows one error line and the status line
   const fake = new FakeM2b().candidate('c1', 'Remember? Acme moved')
   fake.runFails = 'timed out after 90000 ms'
   const { statuses } = await start($, on, fake)
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  // No answer says where the band stands: in the desktop app that is above the prompt.
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   const shown = await shownBand(ui)
   const line = shown?.says ?? ''
   expect(shown).toEqual(sentenceOfM2b(line))

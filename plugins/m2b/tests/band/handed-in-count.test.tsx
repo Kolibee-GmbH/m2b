@@ -297,7 +297,7 @@ test('in the row what sessions handed in stands after what waits for the person 
   ]
   const snapshot = { ...ONE_WAITS, due, shows: { place: 'above' as const, dueTasks: 'count' as const, topics: true } }
 
-  expect(bandLine(handedIn(2, { snapshot, topics: 1 }))?.parts).toEqual([
+  expect(bandLine(handedIn(2, { snapshot, topics: 1 }), 'terminal')?.parts).toEqual([
     { text: '1 waits for you', tone: 'waits' },
     { text: '2 handed in', tone: 'plain' },
     { text: '1 overdue', tone: 'overdue' },
@@ -305,7 +305,7 @@ test('in the row what sessions handed in stands after what waits for the person 
     { text: '1 topic', tone: 'quiet' },
   ])
   // Where the row below the prompt has no room for every count, the last go first: what was handed in stays beside what waits.
-  const line = bandLine(handedIn(2, { snapshot: { ...snapshot, shows: { ...snapshot.shows, place: 'below' } }, topics: 1 }))
+  const line = bandLine(handedIn(2, { snapshot: { ...snapshot, shows: { ...snapshot.shows, place: 'below' } }, topics: 1 }), 'terminal')
   expect(line).not.toBeNull()
   const narrow = line === null ? null : belowPrompt(line, '? for shortcuts', 100, 'm2b-pane')
   expect(narrow).toEqual({
@@ -318,10 +318,10 @@ test('the row counts nothing handed in where none waits, where m2b could not cou
   // Covers: B243
   const calm = { parts: [], isNamed: true, isCalm: true, listed: [], more: 0 }
 
-  expect(bandLine(handedIn(0))).toEqual(calm)
+  expect(bandLine(handedIn(0), 'terminal')).toEqual(calm)
   // Could not count is said in the pane, in the color of trouble: the row does not turn it into a number.
-  expect(bandLine(handedIn(null))).toEqual(calm)
-  expect(bandLine(handedIn(1, { health: null }))?.parts).toEqual([{ text: '1 handed in', tone: 'quiet' }])
-  expect(bandLine(handedIn(1, { health: { ...CURATES, curates: null } }))?.parts).toEqual([{ text: '1 handed in', tone: 'quiet' }])
-  expect(bandLine(handedIn(1, { health: { ...CURATES, isCurating: true } }))).toEqual(calm)
+  expect(bandLine(handedIn(null), 'terminal')).toEqual(calm)
+  expect(bandLine(handedIn(1, { health: null }), 'terminal')?.parts).toEqual([{ text: '1 handed in', tone: 'quiet' }])
+  expect(bandLine(handedIn(1, { health: { ...CURATES, curates: null } }), 'terminal')?.parts).toEqual([{ text: '1 handed in', tone: 'quiet' }])
+  expect(bandLine(handedIn(1, { health: { ...CURATES, isCurating: true } }), 'terminal')).toEqual(calm)
 })

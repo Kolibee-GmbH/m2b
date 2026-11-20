@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Without an entry for `band.place`, the band picks its place by where the session is drawn: in a
+  terminal it is the end of the hint line below the prompt, as with `below`, and the space above
+  the prompt stays the session's; in the desktop app and on the other surfaces it is the row above
+  the prompt, as with `above`, because only a terminal draws the hint line's end. A value you set
+  holds everywhere; `m2b config get band.place` answers `null` without an entry
+  ([Where it stands](docs/band.md#where-it-stands)).
+
 ## [0.9.1] - 2026-11-18
 
 The band says that a session handed something in, so you see that a curation run is worth

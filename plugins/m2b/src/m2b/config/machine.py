@@ -69,8 +69,11 @@ BAND_KEYS = ("place", "due_tasks", "topics")
 # prompt, or above the prompt only while it has something to say.
 BAND_ABOVE, BAND_BELOW, BAND_WAITING = "above", "below", "waiting"
 BAND_PLACES = (BAND_ABOVE, BAND_BELOW, BAND_WAITING)
-# Always there: someone who installed m2b and has nothing waiting would otherwise see nothing of it.
-DEFAULT_BAND_PLACE = BAND_ABOVE
+# Without an entry the band picks its place by where the session is drawn: in a terminal at the
+# end of the hint line below the prompt, which leaves the space above it to the session; in the
+# desktop app and the other surfaces above the prompt, because only a terminal draws the band's
+# words in the hint line, and someone who installed m2b would see nothing of it there.
+DEFAULT_BAND_PLACE: str | None = None
 # How the band shows the owner's tasks due today or overdue: not at all, how many, or the first by name.
 DUE_TASKS_OFF, DUE_TASKS_COUNT, DUE_TASKS_LIST = "off", "count", "list"
 DUE_TASKS_CHOICES = (DUE_TASKS_OFF, DUE_TASKS_COUNT, DUE_TASKS_LIST)
@@ -168,8 +171,8 @@ class CaptureSettings:
 
 @dataclass(frozen=True)
 class BandSettings:
-    # One of BAND_PLACES.
-    place: str = DEFAULT_BAND_PLACE
+    # One of BAND_PLACES, or None where the config names none and the band picks by its surface.
+    place: str | None = DEFAULT_BAND_PLACE
     # One of DUE_TASKS_CHOICES. The pane lists the tasks whatever this says.
     due_tasks: str = DEFAULT_DUE_TASKS
     # Whether the band names how many topics m2b gave the session.
@@ -297,7 +300,7 @@ def _capture(fields: Fields) -> CaptureSettings:
 def _band(fields: Fields) -> BandSettings:
     fields.reject_unknown(SECTION_KEYS["band"])
     return BandSettings(
-        place=fields.choice("place", BAND_PLACES, default=DEFAULT_BAND_PLACE),
+        place=fields.choice("place", BAND_PLACES) if fields.has("place") else DEFAULT_BAND_PLACE,
         due_tasks=_due_tasks(fields),
         topics=fields.boolean("topics", default=False),
     )

@@ -1,8 +1,9 @@
 # The band
 
 The band is m2b's row in a Claude Code session: it says how many things wait for you and has the
-one button that opens the m2b pane. It stands above the prompt in every session, unless the
-setting [`band.place`](#where-it-stands) says otherwise. It is part of m2b and needs no setup of
+one button that opens the m2b pane. In a terminal it is the end of the hint line below the
+prompt, in the desktop app a row above the prompt, unless the setting
+[`band.place`](#where-it-stands) says otherwise. It is part of m2b and needs no setup of
 its own; it starts once m2b is set up on the machine.
 
 ```text
@@ -76,14 +77,23 @@ is stored, and a part the pane left out would be kept unseen.
 ### Where it stands
 
 `band.place` in the machine config says where the band stands on this machine.
-`m2b settings set band.place below` changes it, and so does a press on a value under
-`Where the band stands` in [the settings](#every-setting-in-the-pane).
+`m2b settings set band.place above` changes it, and so does a press on a value under
+`Where the band stands` in [the settings](#every-setting-in-the-pane). A value you set holds in
+every session, in a terminal and in the desktop app alike.
 
 | `band.place` | The band |
 |---|---|
-| `above` (without an entry) | its row above the prompt in every session, calm while it has nothing to say |
+| without an entry | below the prompt in a terminal, above it in the desktop app and on every other surface |
+| `above` | its row above the prompt in every session, calm while it has nothing to say |
 | `waiting` | its row above the prompt only while it has something to say: a count, a task or a sentence |
 | `below` | nothing above the prompt; the hint line below the prompt ends in the band |
+
+Without an entry the band picks its place by where the session is drawn. Only a terminal draws
+what the band adds to the hint line, so with `below` the desktop app shows nothing of m2b: there
+it stands above the prompt. `m2b config get band.place` answers `null` then, and the settings say
+`below in a terminal, else above`. Once you set a value, nothing in the pane turns it back into
+no entry; `m2b config set band '{"due_tasks": "count", "topics": false}'` writes the section
+without it, with the values you keep for the other two.
 
 With `above`, the row is calm while nothing waits, no task is to show and nothing is wrong: `m2b`
 and `open` alone, both dim.
@@ -382,8 +392,12 @@ button that sets it. The top of the view:
 │ │ end of the hint line under the prompt and leaves the     │ │
 │ │ space above free. Below the prompt no key reaches the    │ │
 │ │ button and a mouse click only under the fullscreen       │ │
-│ │ layout: /m2b-pane opens the pane.                        │ │
-│ │ ● above [ below ] [ waiting ]                            │ │
+│ │ layout: /m2b-pane opens the pane. Not set, it is below   │ │
+│ │ in a terminal and above in the desktop app, where        │ │
+│ │ nothing draws the hint line's end; a value you set holds │ │
+│ │ everywhere.                                              │ │
+│ │ ● below in a terminal, else above [ above ] [ below ]    │ │
+│ │ [ waiting ]                                              │ │
 │ │                                                          │ │
 │ │ Tasks in the band                                        │ │
 │ │ Your tasks due today or overdue in the band: off shows   │ │
@@ -993,7 +1007,7 @@ of the backends. With invented tasks:
 ```json
 {
   "version": "0.3.0",
-  "band": {"place": "above", "due_tasks": "count", "topics": false},
+  "band": {"place": null, "due_tasks": "count", "topics": false},
   "tasks": {
     "candidates": [{"id": "c1", "title": "Remember? Sam brings the plywood", "notes": "m2b:candidate", "due": null, "completed": false, "completed_at": null, "dropped": false, "marker": "candidate"}],
     "questions": [],
@@ -1086,8 +1100,10 @@ In `plugins/m2b/hooks/`: `register.tsx` and its helpers, loaded through `"module
 
 ## How you see it runs
 
-A session the band runs in shows its row above the prompt once m2b has answered, unless
-[`band.place`](#where-it-stands) says otherwise. While all is well and nothing waits, the row is
+A session the band runs in shows it once m2b has answered: at the end of the hint line below the
+prompt in a terminal, as a row above the prompt in the desktop app, unless
+[`band.place`](#where-it-stands) says otherwise. With `above`, the row stands above the prompt
+everywhere. While all is well and nothing waits, the row is
 `m2b` and `open` alone and the status line is empty: no candidate, no question, no proposal, no
 open review, no task due to show and, with `band.topics` on, no topic given to the session. With
 `band.place` set to `waiting` there is no row then, and with `below` the hint line below the

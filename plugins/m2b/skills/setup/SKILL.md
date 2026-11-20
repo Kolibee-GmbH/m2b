@@ -111,8 +111,10 @@ curation run on this machine cannot commit into it, for the reason the line give
 the curating machine, where the model steps need that program. The line `band` says whether the
 latest session that ran m2b's hooks also started the band. Right after setup it
 can say `not seen`, because m2b's hooks only begin with the next session. Say that the band runs
-from the next session on, as one row above the prompt, `m2b` and the button `open` for the m2b
-pane, which counts what waits for an answer and the tasks due once there are any, and that if
+from the next session on: in a terminal at the end of the hint line below the prompt, `m2b` and
+`/m2b-pane`, in the desktop app as one row above the prompt, `m2b` and the button `open`, both
+for the m2b pane; that it counts what waits for an answer and the tasks due once there are any,
+and that `m2b settings set band.place above` puts the row above the prompt in a terminal too; and that if
 `m2b doctor` still says `not seen` after one, pass on the reason its line gives.
 
 ## 5. What the owner does by hand

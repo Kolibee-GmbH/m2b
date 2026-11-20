@@ -735,7 +735,8 @@ test('a shared answer of a band that does not know proposals leaves a band that 
   const stored = { writtenAtMs: NOW - 1_000, value: { snapshot, status: null, version: '0.3.0' } }
   const files: Files = new Map([[CACHE, JSON.stringify(stored)]])
   const { clock } = await start($, on, fake, {}, files)
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  // The answer names no place: in the desktop app the band's row is above the prompt.
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
 
   expect(fake.calls).toEqual([])
   expect(await shownBand(ui)).toEqual(CALM_ROW)
