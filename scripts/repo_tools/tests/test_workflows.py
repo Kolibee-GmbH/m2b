@@ -12,7 +12,7 @@ import textwrap
 import unittest
 from pathlib import Path
 
-from repo_tools import e2e
+from repo_tools import e2e, pin_release
 
 REPO = Path(__file__).resolve().parents[3]
 WORKFLOWS = REPO / ".github" / "workflows"
@@ -324,6 +324,33 @@ class ReleaseNotesTest(unittest.TestCase):
 
         self.assertNotEqual(done.returncode, 0)
         self.assertEqual(done.stdout, "")
+
+
+class ReleaseZipTest(unittest.TestCase):
+    """The release carries the plugin as a zip, and installing it is proved before anyone pins it."""
+
+    def setUp(self) -> None:
+        self.text = _text("release.yml")
+
+    def test_the_release_attaches_the_plugin_folder_at_the_tag_as_its_zip(self) -> None:
+        self.assertIn(
+            'git archive --format=zip --mtime="$(git show -s --format=%cI "$GITHUB_SHA")" '
+            '-o m2b-plugin.zip "$GITHUB_SHA:plugins/m2b"',
+            self.text,
+        )
+        self.assertRegex(self.text, r"(?m)^ +- run: gh release create .* --notes-file notes\.md m2b-plugin\.zip$")
+        self.assertIn(f"/{pin_release.ZIP_NAME}", self.text)
+
+    def test_the_zip_is_installed_with_the_oldest_claude_code_ci_holds_and_the_newest(self) -> None:
+        (minimum,) = re.findall(r"(?m)^  CLAUDE_CODE_VERSION: (\S+)$", _text("ci.yml"))
+
+        self.assertIn(f"        claude: ['{minimum}', latest]\n", self.text)
+        self.assertIn("\n  install:\n    needs: release\n", self.text)
+
+    def test_the_install_goes_through_a_pinned_marketplace_and_checks_the_version_of_the_tag(self) -> None:
+        self.assertIn('source: {source: "archive", url: $url, sha256: $sha}', self.text)
+        self.assertIn("claude plugin install m2b@release", self.text)
+        self.assertIn('grep -F "Version: ${GITHUB_REF_NAME#v}" installed.txt', self.text)
 
 
 if __name__ == "__main__":

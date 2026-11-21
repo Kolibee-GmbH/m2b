@@ -572,7 +572,8 @@ is a pull request of its own:
    last tag (`git log --oneline vA.B.C..main`). Entries sit under `### Added`, `### Changed` or
    `### Fixed`, one sentence or two each on what changes for the user, ending in the pull request
    that made it, as `([#12](https://github.com/Kolibee-GmbH/m2b/pull/12))`. A pull request that
-   changes nothing for the user gets no entry.
+   changes nothing for the user gets no entry. Entries left under a heading `## [Unreleased]` move
+   into the new section, and the heading goes.
 3. Run `scripts/check`; it must end with `check: passed`. If the release changes what the model
    sees, such as a skill, a hook, a tool description, what a tool or command returns to a session,
    the text a session starts with or the distillate's format, run the [evals](#evals) too and
@@ -582,24 +583,45 @@ is a pull request of its own:
    released as open. Three eval cases run in both, because the page reports one run of the whole
    suite and a promise counts only runs of its own; the second time costs about a minute.
 4. Commit both files, and the eval page if it was rewritten, as `chore(release): m2b X.Y.Z`, open
-   a pull request to `main` and let it merge itself once CI is green:
+   a pull request to `main` and let it merge itself once CI is green; that needs "Allow auto-merge"
+   on in the repository's settings (`gh repo edit --enable-auto-merge`):
 
    ```bash
    gh pr create --title "m2b X.Y.Z" --body-file <notes> && gh pr merge --auto --squash
    ```
 
    Its description says what the release changes for the user and which checks ran.
-5. On `main`, at the merged release, tag and push the tag:
+5. Tag the release pull request's merge commit and push the tag. Name the commit: another pull
+   request may have merged into `main` since, and the tag decides what goes into the zip:
 
    ```bash
-   git switch main && git pull --ff-only
-   git tag vX.Y.Z && git push origin vX.Y.Z
+   git fetch origin
+   git tag vX.Y.Z "$(gh pr view release-X.Y.Z --json mergeCommit --jq .mergeCommit.oid)"
+   git push origin vX.Y.Z
    ```
 
    The tag starts `.github/workflows/release.yml`. It checks that the tag names the version in
    `plugin.json` and sits on `main`, and publishes a GitHub release with that version's section
-   of the changelog as its notes. A link in the section to a file of the repository, such as
-   `(docs/curation.md#pausing)`, points to that file at the tag in the notes.
+   of the changelog as its notes and the plugin's folder at the tag as `m2b-plugin.zip`. A link in
+   the section to a file of the repository, such as `(docs/curation.md#pausing)`, points to that
+   file at the tag in the notes. Its job `install` then installs the zip through a marketplace
+   that names its address and SHA-256, with the oldest Claude Code m2b supports and the newest,
+   and checks that Claude Code reports the version of the tag.
+6. Once `install` passed, point the marketplace at the zip, in a pull request of its own:
+
+   ```bash
+   git switch -c pin-vX.Y.Z origin/main
+   scripts/pin-release vX.Y.Z
+   git commit -am "chore(release): pin installs to m2b X.Y.Z's plugin zip"
+   gh pr create --title "Pin installs to m2b X.Y.Z's plugin zip" --body "..." && gh pr merge --auto --squash
+   ```
+
+   `scripts/pin-release` fetches the zip, hashes it and writes its address, its SHA-256 and the
+   version into the plugin's entry in `.claude-plugin/marketplace.json`. From then on every install
+   and every `/plugin update` gets exactly the release, and Claude Code refuses a download that
+   does not match; what is merged on `main` after it reaches no one until the next release. Until
+   the pin merges, installs get what the entry named before: the release before this one or, before
+   the first pin, the plugin's folder on `main`.
 
 ## README images
 
