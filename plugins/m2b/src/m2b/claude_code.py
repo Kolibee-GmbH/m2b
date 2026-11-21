@@ -7,11 +7,14 @@ beyond that, each with what breaks when it changes:
 - ``~/.claude/plugins/installed_plugins.json``: the launcher finds the core's install path there
   (user scope, key ``m2b@m2b``). Read here, in ``launcher.RESOLVER`` (a copy that runs before any
   m2b code is found) and in the worklog recorder's ``m2b_installed`` (``recorder/record.py``, which
-  runs from its own copy). When it changes, ``m2b doctor`` says the launcher cannot find m2b,
-  callers outside Claude Code (Shortcuts, integrations) stop, and the recorder records nothing (B38).
+  runs from its own copy); ``start_size`` reads each enabled plugin's install path from it (``scope``,
+  ``projectPath``, ``installPath``) to find the output style the plugin forces. When it changes,
+  ``m2b doctor`` says the launcher cannot find m2b, callers outside Claude Code (Shortcuts,
+  integrations) stop, and the recorder records nothing (B38).
 - ``enabledPlugins`` in Claude Code's managed settings (``MANAGED_SETTINGS`` in the recorder,
-  ``M2B_MANAGED_SETTINGS`` in tests) and in the user's: only the worklog recorder reads them, to
-  stop recording when m2b is turned off.
+  ``M2B_MANAGED_SETTINGS`` in tests) and in the user's: the worklog recorder reads them, to
+  stop recording when m2b is turned off, and ``start_size`` the user's and the project's, for the
+  output style an enabled plugin forces.
 - Transcript files under ``~/.claude/projects/``, one JSON Lines file per session: ``sessions``
   reads what the person typed, and relies on the mark Claude Code puts on every prompt of who sent
   it (``origin``, ``promptSource``), and on the attachment of type ``queued_command`` for a message
@@ -29,6 +32,14 @@ beyond that, each with what breaks when it changes:
   the memory folder it keeps under ``projects/`` for a session's project without any rule. When
   Claude Code keeps its files elsewhere, the rules name the wrong folder and a step can read and
   write that memory folder again.
+- What Claude Code loads at a session's start, which ``start_size`` measures for ``m2b status``:
+  ``CLAUDE.md``, ``CLAUDE.local.md``, ``.claude/CLAUDE.md`` and ``.claude/rules/`` of the folder and
+  the folders above it, ``~/.claude/CLAUDE.md`` and ``~/.claude/rules/`` (a rule with ``paths`` in its
+  frontmatter only when a matching file is read), the output style (``outputStyle`` in the settings,
+  or one a plugin forces with ``force-for-plugin``) and the first 200 lines or 25 KB of the auto
+  memory's ``MEMORY.md`` under ``projects/``, one folder per git repository named by its path with
+  every character but a letter or digit as ``-``. When Claude Code loads other files, or names the
+  memory folder in another way, the count is wrong and nothing else is.
 - The mod API (``hooks/register.tsx``): the band, early-access API; when it changes, the band
   shows nothing and everything else works.
 
@@ -110,21 +121,22 @@ def installed_plugins_file(environ: Mapping[str, str]) -> Path:
     override = environ.get(INSTALLED_PLUGINS_VARIABLE)
     if override:
         return Path(override)
-    return _claude_folder(environ) / "plugins" / "installed_plugins.json"
+    return claude_folder(environ) / "plugins" / "installed_plugins.json"
 
 
 def transcripts_folder(environ: Mapping[str, str]) -> Path:
     """Where Claude Code keeps a folder of transcripts per project folder."""
-    return _claude_folder(environ) / "projects"
+    return claude_folder(environ) / "projects"
 
 
 def own_folders(environ: Mapping[str, str]) -> list[Path]:
     """The folder Claude Code keeps its own files in, as it is named and, where a link leads to it, as it resolves."""
-    named = _claude_folder(environ)
+    named = claude_folder(environ)
     return list(dict.fromkeys([named, named.resolve()]))
 
 
-def _claude_folder(environ: Mapping[str, str]) -> Path:
+def claude_folder(environ: Mapping[str, str]) -> Path:
+    """Claude Code's own folder, ``~/.claude`` unless ``CLAUDE_CONFIG_DIR`` names another."""
     return Path(environ.get("CLAUDE_CONFIG_DIR") or Path(environ.get("HOME") or Path.home()) / ".claude")
 
 

@@ -4,7 +4,8 @@ hanging or failed run at once.
 Inbox count, the run record, whether a run is due (only on the curating machine, the only one
 where that question has an answer), whether the backends can be reached, where sessions are
 read for proposals or were, how many of the proposals the person kept lately, and how many
-proposals sessions handed in wait for the next run to take them in. The backend probes
+proposals sessions handed in wait for the next run to take them in, and how large everything is
+that a session in this folder starts with (``start_size``). The backend probes
 start other programs, so their answer is kept for 5 minutes in the machine state; the rest is read
 fresh. Each part that cannot be looked at says why instead of disappearing.
 
@@ -21,7 +22,7 @@ import datetime
 import json
 from typing import Any
 
-from m2b import handed_in, lessons, proposal_answers, proposals
+from m2b import handed_in, lessons, proposal_answers, proposals, start_size
 from m2b.addons import ADDONS, is_on
 from m2b.atomic_file import replace_atomically
 from m2b.commands import Context
@@ -35,6 +36,7 @@ from m2b.config.store_settings import describe_format, format_state, load_store_
 from m2b.curate import machine_state
 from m2b.curate.due import PAUSED_NOTE, check_due
 from m2b.glean import AGENT, KINDS, PASTED, TOOL, TYPED
+from m2b.hook_input import project_folder
 from m2b.notes.characters import with_hidden_written_out
 from m2b.notes.layout import INBOX
 from m2b.paths import MachinePaths
@@ -47,11 +49,19 @@ INTERRUPTED = "interrupted"
 
 
 def status_command(arguments: argparse.Namespace, context: Context) -> int:
-    answer = status_answer(load_machine_config(context.machine), context)
+    config = load_machine_config(context.machine)
+    answer = status_answer(config, context)
+    # Only here, not in the band's answer: it reads files outside the store and changes only when
+    # the owner edits them. The worklog's session start runs ``status --json`` too; the part costs
+    # it about a millisecond for Claude Code's files and one read of the distillate.
+    folder = project_folder(context.environ)
+    answer["session_start"] = start_size.measure(config, context.machine, context.environ, folder)
     if arguments.json:
         print_json(answer)
     else:
         _print_text(answer)
+        for line in start_size.text_lines(answer["session_start"]):
+            print(line)
     return 0
 
 

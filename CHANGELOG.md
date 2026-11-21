@@ -9,6 +9,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `m2b status` says how large everything is that a session in this folder starts with: your
+  `CLAUDE.md` files and rules, the output style, Claude Code's auto memory and m2b's part, each in
+  KB and list points, with the sum, so you see where to cut. A file it cannot read is named as such.
 - A topic about a project can name its repository (`- Repository: github.com/acme/portal (...)`);
   where the topic comes into a session, it says which folder that repository lies in on this
   machine, or that it is not cloned here, so a session reads the project's files itself

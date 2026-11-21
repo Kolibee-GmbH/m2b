@@ -146,16 +146,41 @@ def _print_distillate(
     text = _distillate_text(store)
     if text is None:
         return [], topic_state.NONE
-    head = f"{DISTILLATE_HEADER}\n\n"
-    rule = f"\n{ROUTING_RULE} {WORK_PEOPLE_RULE}\n"
-    # The lessons come whole and the distillate is cut earlier to make room for them (B259).
     kept_lessons = lessons.read_all(store)
     # The tool hook reads no file of the store before a Bash call, so the session start hands it the list.
     with contextlib.suppress(OSError):
         action_lessons.note(machine, kept_lessons)
+    view = start_view(text, kept_lessons, machine, environ, folder, len(notices))
+    print(view.distillate + view.lessons, end="")
+    return view.shown, topic_state.CUT if view.cut else topic_state.WHOLE
+
+
+@dataclass(frozen=True)
+class StartView:
+    """What the session start prints after the notices: the distillate part (the header, the session's
+    view of the distillate, the cut line, the routing rules) and the block of lessons."""
+
+    distillate: str
+    lessons: str
+    shown: list[TopicBlock]
+    cut: bool
+
+
+def start_view(
+    text: str,
+    kept_lessons: Sequence[lessons.Lesson],
+    machine: MachinePaths,
+    environ: Mapping[str, str],
+    folder: Path,
+    notices_length: int = 0,
+) -> StartView:
+    """The session's view of the distillate and the lessons; it only reads, so ``status`` can measure it."""
+    head = f"{DISTILLATE_HEADER}\n\n"
+    rule = f"\n{ROUTING_RULE} {WORK_PEOPLE_RULE}\n"
+    # The lessons come whole and the distillate is cut earlier to make room for them (B259).
     kept = lessons.block(kept_lessons)
     tail = f"\n{kept}" if kept else ""
-    room = OUTPUT_LIMIT - len(notices) - len(head) - len(rule) - len(tail) - len(CUT_LINE) - 2
+    room = OUTPUT_LIMIT - notices_length - len(head) - len(rule) - len(tail) - len(CUT_LINE) - 2
     split = split_topics(text)
     notes = machine.state_dir / session_remotes.NOTES_FOLDER
     named = [
@@ -163,8 +188,7 @@ def _print_distillate(
         for block in _named_by_path(split.blocks, folder, environ)
     ]
     body, shown, cut = _session_view(split.general, split.blocks, named, room)
-    print(head + body + (f"{CUT_LINE}\n" if cut else "") + rule + tail, end="")
-    return shown, topic_state.CUT if cut else topic_state.WHOLE
+    return StartView(head + body + (f"{CUT_LINE}\n" if cut else "") + rule, tail, shown, cut)
 
 
 def _named_by_path(blocks: Sequence[TopicBlock], folder: Path, environ: Mapping[str, str]) -> list[TopicBlock]:
