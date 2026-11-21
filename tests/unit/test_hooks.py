@@ -121,6 +121,14 @@ class DistillateHookTest(HookFixture):
 
         self.assertIn("for what holds in every project, not one project's memory", out)
 
+    def test_the_routing_rule_gives_the_second_brain_a_sentence_naming_the_file(self) -> None:
+        """Covers: B285"""
+        self.assertIn(
+            "when something touches both, the repository gets the content and the second brain a sentence naming "
+            "the file",
+            ROUTING_RULE,
+        )
+
     def test_characters_that_hide_or_reorder_text_never_reach_the_session(self) -> None:
         """Covers: B56"""
         self.set_up()

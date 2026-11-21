@@ -80,14 +80,14 @@ TOPIC_LINE = (
 )
 CUT_LINE = f"[m2b: the distillate was cut to fit the session start; the rest is in {MEMORY_INDEX_PATH}]"
 ROUTING_RULE = (
-    "Routing: personal things without a home in a repository (facts, private tasks, ideas) go to the "
-    "second brain with m2b:capture; a project's own things go to its repository; when something touches "
-    "both, the repository gets the content and the second brain a pointer. How Claude should work "
+    "Routing: personal things without a home in a repository (facts, tasks, ideas) go to the second brain "
+    "with m2b:capture; a project's own things go to its repository; when something touches both, the "
+    "repository gets the content and the second brain a sentence naming the file. How Claude should work "
     "(corrections, conventions) is not for the second brain: it belongs to Claude Code, in its own memory or "
     "in a CLAUDE.md (the repository's for one project, ~/.claude/CLAUDE.md for what holds in every project, "
-    "not one project's memory); a CLAUDE.md that says it wrongly gets a fix (m2b:capture), not a second rule. "
-    "What concerns the owner's life and world across projects (people, agreements, facts, tasks) goes to the "
-    "second brain, not to Claude Code's own memory."
+    "not one project's memory); a CLAUDE.md that says it wrongly gets a fix (m2b:capture), not a second "
+    "rule. What concerns the owner's life and world across projects (people, agreements, facts, tasks) goes "
+    "to the second brain, not to Claude Code's own memory."
 )
 # Who is who and what was agreed is what a second brain is for, also at work; what else goes in,
 # a customer's document among it, the owner decides.

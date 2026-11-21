@@ -23,7 +23,8 @@ run the commands below.
 - What the user learns about people and verbal agreements: who is who, which role, what was
   agreed, from work too.
 - A project's own todos and decisions belong in that project's repository, not here. When
-  something touches both, the repository gets the content and the capture gets a pointer.
+  something touches both, the repository gets the content and the capture one sentence naming the
+  file it stands in.
 
 Write the text in the user's words, as they said it after the request itself ("remember that",
 "note that", "merk dir, dass"), turned into a plain sentence where the request made it a clause

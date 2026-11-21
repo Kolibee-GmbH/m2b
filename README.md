@@ -151,6 +151,25 @@ session then starts with the topic's name only, and its facts come in when your 
 project folder's path names one of the topic's words, or through a search
 ([The distillate at session start](docs/using.md#the-distillate-at-session-start)).
 
+A topic can be a project. Say "remember this project" in a clone, and the run makes a topic that
+names the repository by its git remote. A session in that clone, or one whose prompt names the
+project, gets the topic together with the folder where the clone is on this machine. Its lines can
+point into the repository, as a sentence and the file it stands in, so the content itself stays in
+the repository ([A project](docs/using.md#a-project)):
+
+```markdown
+### Acme portal (Acme, portal)
+- Repository: github.com/acme/portal (acme-portal.md)
+  on this machine: ~/code/acme-portal; the paths after → lie in it
+- Login moves to the customer's identity provider in March → docs/records/014-login.md (acme-portal.md)
+```
+
+A correction you keep is a lesson. Lessons for every project come after the distillate in a block
+of their own. A lesson about a command comes right before Claude runs it: "run the whole proof only
+when the change gives a reason" before each `scripts/check` without `--quick`. `m2b status` counts
+how often you corrected Claude on each lesson again since you kept it
+([Lessons](docs/using.md#lessons)).
+
 What a note becomes is the model's reading of it, by these rules:
 
 | The note says | It becomes | For example |
