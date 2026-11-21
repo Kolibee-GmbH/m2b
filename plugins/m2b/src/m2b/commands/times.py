@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import datetime
 import re
+from collections.abc import Mapping
 
 from m2b.commands import UsageError
+from m2b.curate.model import CURATION_RUN_VARIABLE, TODAY_VARIABLE
 
 _DAY = re.compile(r"\A\d{4}-\d{2}-\d{2}\Z")
 _MOMENT = re.compile(r"\A\d{4}-\d{2}-\d{2} \d{2}:\d{2}\Z")
@@ -38,3 +40,17 @@ def parse_moment(text: str, option: str) -> datetime.datetime:
 def parse_day_or_moment(text: str, option: str) -> datetime.date:
     """A date, or a ``datetime`` when the text carries a time."""
     return parse_moment(text, option) if " " in text else parse_day(text, option)
+
+
+def run_day(environ: Mapping[str, str]) -> datetime.date | None:
+    """Inside a curation run, the day the run counts as today (``TODAY_VARIABLE``); outside one, None."""
+    day = environ.get(TODAY_VARIABLE)
+    if environ.get(CURATION_RUN_VARIABLE) != "1" or not day:
+        return None
+    return parse_day(day, TODAY_VARIABLE)
+
+
+def run_moment(environ: Mapping[str, str]) -> datetime.datetime | None:
+    """The run's day at the time of day it is, inside a curation run; outside one, None."""
+    day = run_day(environ)
+    return None if day is None else datetime.datetime.combine(day, datetime.datetime.now().astimezone().timetz())

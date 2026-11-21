@@ -175,6 +175,19 @@ class RefreshDueCommandTest(unittest.TestCase):
         self.assertNotEqual(code, cli.EXIT_OK)
         self.assertIn("no backfill batch", err)
 
+    def test_inside_a_run_the_run_s_day_counts_as_today_and_outside_one_it_does_not(self) -> None:
+        """Covers: B293"""
+        self.environ["M2B_TODAY"] = "2026-11-20"
+        _, outside, _ = self.run_command("refresh", "due", "--json")
+        self.environ["M2B_CURATION_RUN"] = "1"
+        _, inside, _ = self.run_command("refresh", "due", "--json")
+        _, named, _ = self.run_command("refresh", "due", "--json", "--today", "2026-11-14")
+
+        self.assertNotEqual(json.loads(outside)["today"], "2026-11-20")
+        self.assertEqual(json.loads(inside)["today"], "2026-11-20")
+        self.assertEqual(json.loads(inside)["facts"][0]["file"], "sam.md")
+        self.assertEqual(json.loads(named)["today"], "2026-11-14")
+
     def test_text_says_when_nothing_is_due(self) -> None:
         code, out, _ = self.run_command("refresh", "due", "--today", "2026-11-14")
 

@@ -11,6 +11,14 @@ All notable changes to this project are documented here. The format follows
 
 - The plugin carries its icon at `plugins/m2b/.claude-plugin/icon.png`, the same 512 by 512
   picture as `docs/images/icon.png`, so a plugin directory that lists m2b shows it.
+- `m2b curate --today <YYYY-MM-DD>` runs a curation run as on that day, for a test that lets days
+  pass: the facts past their day, the questions "Still current?" and "Still needed?" and the period
+  the reading of sessions covers all count from it ([Commands](docs/commands.md)).
+
+### Changed
+
+- The refresh step counts from the day its run counts as today, which each model step of a run is
+  given, also where the date of the model's session is another.
 
 ## [0.12.0] - 2026-11-21
 

@@ -130,6 +130,7 @@ scripts/e2e --level model E33-project-known                 # the same
 scripts/e2e --level model E34-session-read                  # after each Claude Code minor update
 scripts/e2e --level model E35-correction-kept               # the same, and after a change to lessons
 scripts/e2e --level model E36-correction-read               # the same, and after a change to the reading
+scripts/e2e --level model E37-fact-after-its-day            # after a change to ingest or refresh
 ```
 
 Every session at this level runs in a Claude Code folder of the scenario's own, set as
@@ -176,6 +177,11 @@ control of E35 is that Claude Code alone, asked to keep the correction, kept it 
 the second repository; the control of E36 is that every session ran a check, since keeping a
 correction nobody asked to keep is what the reading adds. Two interactive sessions and a headless one
 on Sonnet, one or two curation runs, under a minute each.
+
+`E37-fact-after-its-day` is the case of the promise that facts with an end date are rewritten: a
+session is told that Sam brings the plywood next Friday, a run files it with that Friday as its end,
+and a run 30 days later on the test clock (`m2b curate --today`) rewrites it, so the distillate says
+the plywood was brought. One session on Sonnet and two curation runs, under a minute.
 
 `E34-session-read` types two turns into a session in an invented repository: "run scripts/check",
 then a correction to run only the quick round. It passes when the reading finds both prompts in

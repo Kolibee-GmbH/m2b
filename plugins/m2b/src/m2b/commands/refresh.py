@@ -16,7 +16,7 @@ from m2b import expiry
 from m2b.commands import Context, ProblemError
 from m2b.commands.backends import configured_store
 from m2b.commands.output import print_json
-from m2b.commands.times import parse_day
+from m2b.commands.times import parse_day, run_day
 from m2b.config.machine import load_machine_config
 from m2b.curate.model import CURATION_RUN_VARIABLE, REFRESH_ALL_VARIABLE
 from m2b.store.base import fetch_command
@@ -32,7 +32,9 @@ def _batch(raw: str | None) -> expiry.Batch | None:
 
 
 def refresh_due(arguments: argparse.Namespace, context: Context) -> int:
-    today = parse_day(arguments.today, "--today") if arguments.today else datetime.date.today()
+    today = (
+        parse_day(arguments.today, "--today") if arguments.today else run_day(context.environ) or datetime.date.today()
+    )
     config = load_machine_config(context.machine)
     store = configured_store(config, context.machine)
     found = expiry.due(store, today)

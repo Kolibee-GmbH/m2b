@@ -1,0 +1,12 @@
+{
+  "description": "E38 a quiet lesson: a lesson about a command kept on 1 November has not fired. A run on 5 December, 34 days later, asks in the task list whether it is still needed; the owner drops the question, and the next run removes the lesson. The days pass with the test clock, m2b curate --today.",
+  "steps": [
+    {"run": ["m2b", "curate", "--force", "--today", "2026-11-20"]},
+    {"run": ["m2b", "tasks", "list", "--json"], "stdout": "\\A(?![\\s\\S]*Still needed)"},
+    {"run": ["m2b", "curate", "--force", "--today", "2026-12-05"]},
+    {"run": ["m2b", "tasks", "list", "--json"], "save": {"task": "\"id\": \"([^\"]+)\"[^}]*Still needed\\? When asked to run scripts/check"}},
+    {"run": ["m2b", "tasks", "drop", "{task}"]},
+    {"run": ["m2b", "curate", "--force", "--today", "2026-12-05"]},
+    {"run": ["m2b", "tasks", "list", "--json"], "stdout": "\\A(?![\\s\\S]*Still needed)"}
+  ]
+}

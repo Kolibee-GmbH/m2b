@@ -10,7 +10,7 @@ that shows each best ([Contributing](../CONTRIBUTING.md#promises)).
 |---|---|---|---|---|
 | 1 | Say it once, every project knows it | compared | `E22-recall-across-projects` | `recall` |
 | 2 | A sentence becomes a task | not compared | open | `E26-tick-a-task` |
-| 3 | Facts with an end date are rewritten | not compared | open | `E16-expiring-fact` |
+| 3 | Facts with an end date are rewritten | not compared | `E37-fact-after-its-day` | `E16-expiring-fact` |
 | 4 | Your words stay, every fact points to them | not compared | open | `details` |
 | 5 | A correction you keep you do not repeat | compared | `E35-correction-kept`, `E36-correction-read` | `correction` |
 | 6 | A project knows where it lies | compared | open | `E33-project-known` |

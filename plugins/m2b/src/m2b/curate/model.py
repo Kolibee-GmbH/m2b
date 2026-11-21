@@ -87,6 +87,9 @@ CURATION_RUN_VARIABLE = "M2B_CURATION_RUN"
 # Set for the refresh steps of ``m2b curate --refresh-all`` alone, to the step's batch as JSON:
 # ``m2b refresh due`` then lists those undated lines too.
 REFRESH_ALL_VARIABLE = "M2B_REFRESH_ALL"
+# The day a curation run counts as today, given to each of its model steps: a command the step
+# runs counts from it inside the run (``m2b refresh due``), so a run on the test clock stays one day.
+TODAY_VARIABLE = "M2B_TODAY"
 MODEL_RUNNER_VARIABLE = "M2B_MODEL_RUNNER"
 STORE_PLACEHOLDER = "<store>"
 # The tools a rule gives a step: an Edit rule is the one Claude Code reads for the Write tool too.

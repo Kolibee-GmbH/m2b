@@ -250,6 +250,15 @@ def now() -> datetime.datetime:
     return datetime.datetime.now().astimezone()
 
 
+def clock_on(day: datetime.date) -> Callable[[], datetime.datetime]:
+    """A clock that starts on ``day`` at the time of day it is and runs on from there, so a run's
+    steps keep their order and their durations, past midnight too: a test lets days pass with it
+    (``m2b curate --today``). What measures a file's age against its own time keeps ``now``."""
+    start = now()
+    shift = datetime.datetime.combine(day, start.timetz()) - start
+    return lambda: now() + shift
+
+
 def curate(
     machine: MachinePaths,
     environ: Mapping[str, str],
@@ -459,7 +468,8 @@ class _Run:
         return told
 
     def _preflight(self, started: datetime.datetime) -> tuple[Tasks, Locale]:
-        machine_state.clear_leftovers(self.machine, started)
+        # Against the files' own times: how old a leftover is, on the wall clock, not the run's day.
+        machine_state.clear_leftovers(self.machine, now())
         self.last_success = self._previous_success()
         paths = _preflight_paths(started)
         try:
@@ -950,7 +960,8 @@ class _Run:
         if any(finding.code == lint.BROKEN_LINK and len(finding.candidates) == 1 for finding in scanned.findings):
             self._guarded(LINT, LINT_SKILL, LINT_RULES, token)
             return
-        if lint.fix(self.store, tasks, self.clock()):
+        # The wall clock: a fix removes temporary files by their age (``clear_leftovers`` above).
+        if lint.fix(self.store, tasks, now()):
             scanned = lint.scan(self.store, tasks, self._remote_notes(), self.clock())
         self.findings += [report.Finding(LINT, finding.kind, finding.text) for finding in scanned.findings]
 
@@ -1064,8 +1075,10 @@ class _Run:
 
     def _model(self, skill: str, rules: Sequence[str], token: str, environ: Mapping[str, str] | None = None) -> None:
         plugin_dirs = {launcher.CORE_PLUGIN: launcher.PLUGIN_ROOT}
+        # The step's commands count from the run's day, not their own clock (``m2b curate --today``).
+        step_environ = {**(environ or self.environ), model.TODAY_VARIABLE: self.clock().date().isoformat()}
         run = model.model_step(
-            self.config, self.machine, environ or self.environ, skill, rules, token, plugin_dirs, self.lock.pass_fds
+            self.config, self.machine, step_environ, skill, rules, token, plugin_dirs, self.lock.pass_fds
         )
         if run.error:
             raise StepError(run.error)

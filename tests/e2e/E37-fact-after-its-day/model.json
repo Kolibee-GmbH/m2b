@@ -1,0 +1,92 @@
+{
+  "description": "E37 at the model level, a fact with an end date after its day: a session is told that Sam brings the plywood for the shed roof next Friday, a curation run files it with that Friday as its end, and a run 30 days later, on the test clock (m2b curate --today), rewrites it: the distillate says the plywood was brought, and no fact file about it holds an end any more. Not compared: Claude Code's own memory keeps no end date to rewrite. Three wordings, one in German.",
+  "wordings": [
+    {
+      "remember": "Remember that Sam brings the plywood for the shed roof next Friday."
+    },
+    {
+      "remember": "Merk dir, dass Sam nächsten Freitag das Sperrholz für das Schuppendach bringt.",
+      "language": "de"
+    },
+    {
+      "remember": "Note for me: Sam is dropping off the plywood for the shed roof on Friday next week."
+    }
+  ],
+  "steps": [
+    {
+      "run": [
+        "claude",
+        "-p",
+        "{remember}",
+        "--setting-sources",
+        "project",
+        "--plugin-dir",
+        "{core_plugin}",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Skill,mcp__m2b__note,mcp__m2b__search",
+        "--max-turns",
+        "6",
+        "--max-budget-usd",
+        "1",
+        "--model",
+        "sonnet",
+        "--output-format",
+        "json"
+      ],
+      "cwd": "garden-site"
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ]
+    },
+    {
+      "run": [
+        "sh",
+        "-c",
+        "grep -l '^until: ' \"{store}\"/memory/*.md"
+      ],
+      "stdout": "\\S"
+    },
+    {
+      "run": [
+        "python3",
+        "-c",
+        "import datetime; print((datetime.date.today() + datetime.timedelta(days=30)).isoformat())"
+      ],
+      "save": {
+        "later": "(\\d{4}-\\d{2}-\\d{2})"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force",
+        "--today",
+        "{later}"
+      ]
+    }
+  ],
+  "invariants": [
+    {
+      "run_state": "succeeded"
+    },
+    {
+      "no_denials": true
+    },
+    {
+      "count": 0,
+      "glob": "memory/*.md",
+      "content": "(?si)\\A---\\nuntil: .*(plywood|Sperrholz)"
+    },
+    {
+      "matches": "(?im)^- (?=[^\\n]*(plywood|Sperrholz))(?=[^\\n]*(brought|delivered|dropped off|gebracht|brachte|geliefert))",
+      "path": "memory/MEMORY.md"
+    }
+  ]
+}

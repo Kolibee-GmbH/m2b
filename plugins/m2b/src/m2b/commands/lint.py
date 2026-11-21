@@ -8,6 +8,7 @@ from m2b import lint, session_remotes
 from m2b.commands import Context
 from m2b.commands.backends import configured_store, configured_tasks
 from m2b.commands.output import print_json
+from m2b.commands.times import run_moment
 from m2b.config.machine import load_machine_config
 from m2b.config.profile import language_for_clients, load_profile
 from m2b.config.store_settings import require_store_writable
@@ -22,7 +23,7 @@ def lint_scan(arguments: argparse.Namespace, context: Context) -> int:
     config = load_machine_config(context.machine)
     store = configured_store(config, context.machine)
     notes = context.machine.state_dir / session_remotes.NOTES_FOLDER
-    findings = lint.scan(store, configured_tasks(config, context.machine), notes).findings
+    findings = lint.scan(store, configured_tasks(config, context.machine), notes, run_moment(context.environ)).findings
     if arguments.report:
         token = context.environ.get(report.RUN_TOKEN_VARIABLE)
         if not token:

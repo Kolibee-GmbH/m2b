@@ -8,6 +8,7 @@ import sys
 from m2b import launcher, proposals
 from m2b.commands import Context, ProblemError, UsageError
 from m2b.commands.output import print_json
+from m2b.commands.times import parse_day
 from m2b.config.machine import load_machine_config
 from m2b.curate import model, report, runner
 from m2b.curate.detach import start_detached
@@ -25,6 +26,8 @@ def curate_run(arguments: argparse.Namespace, context: Context) -> int:
 
     ``--after-answers`` is the start an answer to a proposal asks for, in the background alone: it
     is no start by hand, so it goes with none of the switches that are.
+
+    ``--today`` runs as on that day, for a test that lets days pass: every step reads its clock.
     """
     if arguments.json and not arguments.detach:
         raise UsageError("--json goes with --detach: a run in the foreground is told in lines")
@@ -32,6 +35,9 @@ def curate_run(arguments: argparse.Namespace, context: Context) -> int:
         raise UsageError("--after-answers goes with --detach: it starts a run in the background or none")
     if arguments.after_answers and (arguments.force or arguments.refresh_all or arguments.sort_facts):
         raise UsageError("--after-answers starts a run only when the answers call for one: leave out the other switch")
+    if arguments.today and arguments.detach:
+        raise UsageError("--today goes with a run in the foreground: a test lets days pass with it")
+    clock = runner.clock_on(parse_day(arguments.today, "--today")) if arguments.today else runner.now
     if arguments.detach:
         try:
             start = start_detached(
@@ -56,6 +62,7 @@ def curate_run(arguments: argparse.Namespace, context: Context) -> int:
         force=arguments.force,
         refresh_all=arguments.refresh_all,
         sort_facts=arguments.sort_facts,
+        clock=clock,
     )
     if outcome.state == FAILED:
         print(f"the curation run failed: {outcome.message}. The review task names what to look at.")

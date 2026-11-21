@@ -271,7 +271,64 @@ class DetachTest(test_runner.RunnerTest):
             code, _, err = self.run_command("curate", "--refresh-all")
 
         self.assertEqual(code, cli.EXIT_OK, err)
-        self.assertEqual(curate.call_args.kwargs, {"force": False, "refresh_all": True, "sort_facts": False})
+        self.assertEqual(
+            curate.call_args.kwargs, {"force": False, "refresh_all": True, "sort_facts": False, "clock": runner.now}
+        )
+
+    def test_today_runs_as_on_that_day_at_the_time_of_day_it_is(self) -> None:
+        """Covers: B293"""
+        outcome = runner.RunOutcome(SUCCEEDED, "the curation run succeeded")
+        instant = datetime.datetime(2026, 11, 21, 14, 30).astimezone()
+        with (
+            test_runner.mock.patch("m2b.commands.curate.runner.curate", return_value=outcome) as curate,
+            test_runner.mock.patch("m2b.curate.runner.now", return_value=instant),
+        ):
+            code, _, err = self.run_command("curate", "--force", "--today", "2027-01-20")
+            moment = curate.call_args.kwargs["clock"]()
+
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertEqual(moment, datetime.datetime.combine(datetime.date(2027, 1, 20), instant.timetz()))
+
+    def test_the_test_clock_moves_on_with_time_across_midnight(self) -> None:
+        """Covers: B293"""
+        start = datetime.datetime(2026, 11, 21, 23, 59, 30).astimezone()
+        later = start + datetime.timedelta(minutes=1)
+        with test_runner.mock.patch("m2b.curate.runner.now", side_effect=[start, start, later]):
+            clock = runner.clock_on(datetime.date(2027, 1, 20))
+            first, second = clock(), clock()
+
+        self.assertEqual(first.date(), datetime.date(2027, 1, 20))
+        self.assertEqual(second - first, datetime.timedelta(minutes=1))
+
+    def test_a_fact_past_its_day_on_the_day_given_is_rewritten_and_without_it_is_not(self) -> None:
+        """Covers: B293"""
+        self.curating()
+        self.write("memory/sam.md", "---\nuntil: 2090-06-01\n---\n# Sam\n")
+        self.model({"m2b:refresh": []})
+
+        code, _, err = self.run_command("curate", "--force")
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertEqual(self.calls(), [])
+
+        code, _, err = self.run_command("curate", "--force", "--today", "2090-06-02")
+
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertEqual([call["arguments"][1] for call in self.calls()], ["/m2b:refresh"])
+        record = load_run_record(self.store)
+        assert record is not None
+        self.assertEqual(record.started_at.date(), datetime.date(2090, 6, 2))
+
+    def test_today_goes_with_a_run_in_the_foreground_and_takes_a_day(self) -> None:
+        """Covers: B293"""
+        with test_runner.mock.patch("m2b.commands.curate.runner.curate") as curate:
+            detached = self.run_command("curate", "--force", "--detach", "--today", "2027-01-20")
+            no_day = self.run_command("curate", "--force", "--today", "20 January")
+
+        self.assertEqual(detached[0], cli.EXIT_USAGE)
+        self.assertIn("--today", detached[2])
+        self.assertEqual(no_day[0], cli.EXIT_USAGE)
+        self.assertIn("YYYY-MM-DD", no_day[2])
+        curate.assert_not_called()
 
     def test_sort_facts_reaches_the_run(self) -> None:
         """Covers: B51"""
@@ -280,7 +337,9 @@ class DetachTest(test_runner.RunnerTest):
             code, _, err = self.run_command("curate", "--sort-facts")
 
         self.assertEqual(code, cli.EXIT_OK, err)
-        self.assertEqual(curate.call_args.kwargs, {"force": False, "refresh_all": False, "sort_facts": True})
+        self.assertEqual(
+            curate.call_args.kwargs, {"force": False, "refresh_all": False, "sort_facts": True, "clock": runner.now}
+        )
 
     def test_detach_passes_sort_facts_on_to_the_run_it_starts(self) -> None:
         self.curating()
