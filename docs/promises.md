@@ -11,7 +11,7 @@ that shows each best ([Contributing](../CONTRIBUTING.md#promises)).
 | 1 | Say it once, every project knows it | compared | `E22-recall-across-projects` | `recall` |
 | 2 | A sentence becomes a task | not compared | `E40-task-on-friday` | `E26-tick-a-task` |
 | 3 | Facts with an end date are rewritten | not compared | `E37-fact-after-its-day` | `E16-expiring-fact` |
-| 4 | Your words stay, every fact points to them | not compared | open | `details` |
+| 4 | Your words stay, every fact points to them | not compared | `E42-words-kept` | `details` |
 | 5 | A correction you keep you do not repeat | compared | `E35-correction-kept`, `E36-correction-read` | `correction` |
 | 6 | A project knows where it lies | compared | `E41-project-elsewhere` | `E33-project-known` |
 | 7 | Nothing from another project, nothing filed without you | not compared | `no-leak` / `no-leak-de` / `no-leak-plain`, `propose-person` / `propose-person-de` / `propose-person-plain`, `propose-planted` / `propose-planted-de` / `propose-planted-plain` | `topic` |

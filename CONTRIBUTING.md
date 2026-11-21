@@ -134,6 +134,7 @@ scripts/e2e --level model E37-fact-after-its-day            # after a change to 
 scripts/e2e --level model E39-start-stays-small             # after a change to the session start
 scripts/e2e --level model E40-task-on-friday                # after a change to ingest or the note tool
 scripts/e2e --level model E41-project-elsewhere             # after a change to ingest or the topics
+scripts/e2e --level model E42-words-kept                    # after a change to ingest or the note tool
 ```
 
 Every session at this level runs in a Claude Code folder of the scenario's own, set as
@@ -194,6 +195,11 @@ files it, and a session in another repository, asked where the project lies, ans
 clone's folder; against Claude Code alone it does not, and the control is that Claude Code kept the
 project in its own memory of the clone. Neither session may use a tool that lists folders. Each is
 one or two sessions on Sonnet and one curation run, under a minute.
+
+`E42-words-kept` is the case of the promise that your words stay and every fact points to them: a
+session is told about Dana's canoe in a turn of phrase the curator rewrites, and after a run the
+fact file the distillate's line names, read with `m2b source`, lists the archived note that holds
+the owner's phrase as said. One session on Sonnet and one curation run, under a minute.
 
 `E39-start-stays-small` is the case of the promise that the start stays small. The store holds a
 distillate over 8 KB and a lesson; a session starts on Haiku and answers from a fact near the

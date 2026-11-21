@@ -75,11 +75,11 @@ class CatalogTest(unittest.TestCase):
             (Case(("no-leak",), promises.EVAL), Case(("leak-a", "leak-b", "leak-c"), promises.EVAL)),
         )
 
-    def test_the_page_lists_the_eight_promises_and_names_only_cases_that_exist(self) -> None:
+    def test_the_page_lists_the_eight_promises_each_with_cases_that_exist(self) -> None:
         page = promises.read_catalog(promises.CATALOG, e2e.SCENARIO_ROOT, [promises.EVALS, promises.WORDING_EVALS])
 
         self.assertEqual([promise.number for promise in page], list(range(1, 9)))
-        self.assertTrue(any(not promise.cases for promise in page))
+        self.assertEqual([promise.number for promise in page if not promise.cases], [])
 
     def test_a_case_that_names_neither_a_scenario_nor_an_eval_is_an_error(self) -> None:
         self.tree.catalog.write_text(CATALOG.replace("`E1-recall`", "`E9-nothing`"), encoding="utf-8")
