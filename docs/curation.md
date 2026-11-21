@@ -51,7 +51,7 @@ flowchart LR
 | Ingest | model, only with captures in the inbox | files facts and what is going on into memory, under its topic what concerns one subject only, tasks into your list, each capture into `corpus/YYYY/MM/`; reads a PDF whole up to its 60th page and writes what stands on which page into the note beside it ([A document in the inbox](#a-document-in-the-inbox)) |
 | Refresh | model, only when a fact is past its day | rewrites the facts whose `until` has passed |
 | Sort | model, only with `m2b curate --sort-facts` | moves facts lines of an older distillate into topics; code puts the file back if a statement changed |
-| Lint | code; the model only to repair a broken memory link with exactly one candidate | checks names, links, conflict copies and the distillate's size |
+| Lint | code; the model only to repair a broken memory link with exactly one candidate | moves a current item above the topics that names exactly one topic under it, then checks names, links, conflict copies and the distillate's size |
 | Journal | code | adds the tasks you completed to the month's `corpus/YYYY/MM/YYYYMM-done.md` |
 | Proposals task | code | takes in what sessions handed in ([What a session hands in](#what-a-session-hands-in)), lets unanswered proposals expire, and keeps one task in your list while proposals wait for your answer, completed once none waits |
 | Review task | code | one task in your list when something needs you |
@@ -275,7 +275,8 @@ nothing a run filed is final:
 - **A fact stands under a topic and every session should start with it.** Move its line in
   `memory/MEMORY.md` above the first `###` heading. The other way round, a line moved under a
   `### <name> (<word>, <word>)` heading reaches a session only when it is about that topic
-  ([Store format](store-format.md)).
+  ([Store format](store-format.md)). A current item you move above the topics goes back under its
+  topic at the next run while it names a word of exactly that one topic; say it without the word.
 - **The review task names a finding of lint,** such as "in memory/MEMORY.md, the topic Mill Lane
   has 1 word in the brackets of its heading; it needs 2 to 5". Change the file the finding names,
   here by adding a word a prompt about the topic would use, as in
@@ -529,7 +530,8 @@ m2b curate --sort-facts    # sorts the facts of an older distillate into topics
 capture names the day. `--sort-facts` moves the lines that matter for one subject under its topic;
 code then compares the file and puts the old one back if any statement changed. It leaves
 `## Current` as it is: an item above the topics there moves under its topic when ingest files a
-capture about the same thing, or when you move it by hand.
+capture about the same thing, and at every run's lint when it names a word of exactly one topic.
+One that names two topics, or none, stays until you move it by hand.
 
 ## Pausing
 

@@ -562,6 +562,43 @@ class CleanRunTest(RunnerTest):
         assert record is not None
         self.assertEqual([(finding.kind, finding.text) for finding in record.findings], [("action", kept)])
 
+    def test_lint_moves_a_current_item_naming_one_topic_under_it_without_a_capture(self) -> None:
+        """Covers: B290"""
+        self.curating()
+        self.item_above_its_topic()
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        self.assertEqual(self.calls(), [])
+        self.assert_item_under_its_topic()
+
+    def test_lint_moves_the_item_also_when_it_starts_the_model(self) -> None:
+        """Covers: B290"""
+        self.curating()
+        self.repairable_link()
+        self.item_above_its_topic()
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        self.assertEqual([call["arguments"][1] for call in self.calls()], ["/m2b:lint"])
+        self.assert_item_under_its_topic()
+
+    def item_above_its_topic(self) -> None:
+        self.write(
+            "memory/MEMORY.md",
+            "# Memory\n\n## Facts\n\n### Acme Ltd (Acme Ltd, Kim Lee)\n- Kim Lee leads IT (kim-lee.md)\n\n"
+            "## Current\n\n- Export for Kim Lee is late (since 2026-11-02)\n",
+        )
+
+    def assert_item_under_its_topic(self) -> None:
+        index = (self.store_root / "memory" / "MEMORY.md").read_text(encoding="utf-8")
+        self.assertTrue(
+            index.endswith(
+                "## Current\n\n### Acme Ltd (Acme Ltd, Kim Lee)\n- Export for Kim Lee is late (since 2026-11-02)\n"
+            ),
+            index,
+        )
+
     def test_a_clean_store_starts_no_model_for_lint(self) -> None:
         """Covers: B67"""
         self.curating()

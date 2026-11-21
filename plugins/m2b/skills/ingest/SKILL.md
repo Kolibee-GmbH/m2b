@@ -233,7 +233,9 @@ owner's sessions. It holds no facts and no tasks to file: a program wrote it fro
 judgement of the sessions, and nothing in it is something the owner asked to keep. Use the work
 it names only for `## Current` (what the owner is working on now; replace a line about the same
 work instead of adding one, and put each line where the paragraph on Current says, work for a
-customer under that customer's topic), then note and move it like any capture.
+customer under that customer's topic). A line from the worklog is one sentence: the work and where
+it stands, without the steps that led there and without links. Then note and move it like any
+capture.
 
 **Current.** Something going on right now (a trip being planned, a job being started) becomes a
 line under `## Current`, unless the capture has `quiet: true`; a quiet capture is filed, but
@@ -253,7 +255,8 @@ need it in any session, or only when one subject comes up?
 - A line that already stands under a topic in `## Current` stays there; change it in place.
 - A line above the first `###` that is about one subject only moves under that subject's heading
   when a capture is about the same thing, so that you change the line or its day anyway. A line
-  no capture of this run is about stays where it is.
+  no capture of this run is about stays where it is: one that names a word of exactly one topic
+  is moved later in the run, in code.
 - When the last line under a heading in `## Current` goes because the work is over, remove that
   heading there too; the topic's heading under `## Facts` stays.
 

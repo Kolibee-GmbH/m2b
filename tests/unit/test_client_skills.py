@@ -230,7 +230,10 @@ PLACES_CURRENT_ITEMS = (
     "start one at the end of `## Current`: the topic's heading under `## Facts`, copied character for character",
     "A line that already stands under a topic in `## Current` stays there; change it in place.",
     "moves under that subject's heading when a capture is about the same thing",
-    "A line no capture of this run is about stays where it is.",
+    "A line no capture of this run is about stays where it is: one that names a word of exactly one topic is "
+    "moved later in the run, in code.",
+    "A line from the worklog is one sentence: the work and where it stands, without the steps that led there "
+    "and without links.",
     "remove that heading there too; the topic's heading under `## Facts` stays.",
     "put each line where the paragraph on Current says, work for a customer under that customer's topic",
     "A topic that stands under `## Current` keeps its heading, copied character for character",

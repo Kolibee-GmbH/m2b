@@ -85,6 +85,11 @@ right before the command it is about.
   are read, and keeps a note while its folder is there; for leaving work out a note still counts
   for 30 days
   ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
+- A current item above the topics that names a word of exactly one topic moves under that topic at
+  the next run, not only when a capture about it comes, so every session no longer starts with it.
+  A current item from the worklog is one sentence, without links
+  ([Curation](docs/curation.md#moving-over-an-older-distillate))
+  ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 
 ### Fixed
 

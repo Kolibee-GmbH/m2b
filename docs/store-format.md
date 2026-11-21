@@ -177,7 +177,8 @@ them names it; a topic may stand under `## Current` alone. Ingest puts a new ite
 fact: one that holds everywhere above the first `###` there, one about a single subject under that
 subject's heading, which it copies from `## Facts` when the topic has one there. An item above the
 topics that is about one subject moves under its topic when ingest files a capture about the same
-thing; an item under a topic stays there, and no other step moves an item. When a "Still current?" answer takes a topic's last item out,
+thing, and at every run, in code, when it names a word of exactly one topic, as a prompt would; an
+item under a topic stays there, and no other step moves an item. When a "Still current?" answer takes a topic's last item out,
 its heading under `## Current` goes with it, unless another line is left below it; ingest is told
 to remove the heading with the last item it takes out.
 

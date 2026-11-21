@@ -61,6 +61,7 @@ from pathlib import Path, PurePosixPath
 
 from m2b import (
     current_check,
+    current_topics,
     expiry,
     ingest,
     launcher,
@@ -933,8 +934,10 @@ class _Run:
 
         Otherwise the code does what the lint skill would: the safe fixes, then every finding left
         goes to the run's review. A model step costs money and time at every run, so the code takes
-        everything it can decide.
+        everything it can decide. First, in code, a current item above the topics that names one
+        topic moves under it, so the scan measures the distillate a session will get.
         """
+        current_topics.place(self.store)
         scanned = lint.scan(self.store, tasks, self._remote_notes(), self.clock())
         if any(finding.code == lint.BROKEN_LINK and len(finding.candidates) == 1 for finding in scanned.findings):
             self._guarded(LINT, LINT_SKILL, LINT_RULES, token)
