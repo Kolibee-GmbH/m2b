@@ -59,7 +59,8 @@ right before the command it is about.
   `Still needed?`: a drop removes it, a tick keeps it for another 30 days. A lesson of the block
   you did not correct Claude on again for 60 days is asked about the same way. Where the block of
   lessons is full, a proposed lesson names the kept lesson it would replace, the one corrected again
-  most often; keeping it removes that one ([Using m2b](docs/using.md#lessons))
+  most often; keeping it removes that one while it is still in the block
+  ([Using m2b](docs/using.md#lessons))
   ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - A fix for a file Claude reads: say "keep this as a fix" with the file, what is wrong and the new
   wording, and `m2b fix add` keeps it. m2b never writes that file; the next session in a clone of

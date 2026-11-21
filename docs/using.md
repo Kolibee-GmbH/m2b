@@ -70,10 +70,12 @@ starts with the lessons for every project in a block of their own, in m2b's seco
 distillate, written as corrections you made and kept, not as notes. A lesson that
 `~/.claude/CLAUDE.md` or another source states now is left out, and `m2b status` says where it is
 kept: where the reading of your sessions is on, each run checks the block again against the files
-every session loads, so a rule you write into `~/.claude/CLAUDE.md` takes the lesson's place. When distillate and lessons together pass the 2 KB target, lint says so with both sizes. Where
-the block is full, a new lesson the reading of your sessions proposes for every session names the
-kept lesson it would replace: the one you corrected Claude on again most often, then the oldest.
-Keep it, and that lesson goes.
+every session loads, so a rule you write into `~/.claude/CLAUDE.md` takes the lesson's place. When
+distillate and lessons together pass the 2 KB target, lint says so with both sizes. Where the block
+is full, a new lesson the reading of your sessions proposes for every session names the kept
+lesson it would replace: the one you corrected Claude on again most often, then the oldest. Keep
+it, and that lesson goes, unless a file every session loads states it by then: it has left the
+block already and stays, kept at that file.
 
 A lesson about a command, such as "run the whole proof only when the change gives a reason, when you
 start scripts/check", comes before Claude runs that command: the first Bash call of a session whose
