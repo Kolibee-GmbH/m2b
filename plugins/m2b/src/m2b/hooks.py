@@ -146,10 +146,15 @@ def _print_distillate(
     text = _distillate_text(store)
     if text is None:
         return [], topic_state.NONE
-    kept_lessons = lessons.read_all(store)
-    # The tool hook reads no file of the store before a Bash call, so the session start hands it the list.
-    with contextlib.suppress(OSError):
-        action_lessons.note(machine, kept_lessons)
+    kept_lessons, unread = _kept_lessons(store)
+    if unread is None:
+        # The tool hook reads no file of the store before a Bash call, so the session start hands it the list.
+        with contextlib.suppress(OSError):
+            action_lessons.note(machine, kept_lessons)
+    else:
+        # The list from the last session start stays: lessons that could not be read are not given up.
+        print(unread, end="")
+        notices += unread
     view = start_view(text, kept_lessons, machine, environ, folder, len(notices))
     print(view.distillate + view.lessons, end="")
     return view.shown, topic_state.CUT if view.cut else topic_state.WHOLE
@@ -446,6 +451,18 @@ def _unrecorded(machine: MachinePaths, event: machine_state.LogEvent | None) -> 
         return []
     log = machine_state.run_log(machine)
     return [f"the last curation run on this machine left no run record; the last line of {log} says why."]
+
+
+def _kept_lessons(store: Store) -> tuple[list[lessons.Lesson], str | None]:
+    """The lessons, or none with one line saying that they could not be read, as for the distillate.
+    The line names a file of the store, which is not m2b's own text, so it draws what it says."""
+    try:
+        return lessons.read_all(store), None
+    except EvictedFileError as error:
+        fetch = without_hidden(fetch_command(error.relative))
+        return [], f"m2b: the lessons are not downloaded to this machine; run: {fetch}\n"
+    except (StoreError, OSError):
+        return [], f"m2b: the lessons in {lessons.FOLDER}/ could not be read; this session starts without them.\n"
 
 
 def _distillate_text(store: Store) -> str | None:

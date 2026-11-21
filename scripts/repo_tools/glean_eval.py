@@ -64,7 +64,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from m2b import claude_code, folders_left_out, glean, kept_lessons, project_capture, project_files
+from m2b import claude_code, folders_left_out, glean, kept_lessons, lessons, project_capture, project_files
 from m2b.config.machine import CURATION_MODELS, DEFAULT_CURATION_MODEL
 from m2b.curate import model as model_run
 from m2b.paths import HOME_VARIABLE, machine_paths
@@ -402,7 +402,7 @@ def _as_the_step_keeps(checked: glean.Checked) -> glean.Checked:
 def _could_be_kept(proposal: glean.Proposal) -> bool:
     lesson = proposal.lesson
     assert lesson is not None
-    if lesson.target == glean.THIS_PROJECT:
+    if lesson.target == lessons.THIS_PROJECT:
         return False
     given = kept_lessons.KeptLesson(
         proposal.text[:60], proposal.text, lesson.kind, lesson.target, "2026-03-04", lesson.words

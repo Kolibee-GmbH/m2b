@@ -82,7 +82,7 @@ class KeptLessonTest(ProposalHarvestFixture):
 
         self.assertFalse(weak.exists())
         self.assertEqual(report.replaced, ["weak.md"])
-        self.assertEqual(self.written()["format"], 5)
+        self.assertEqual(self.written()["format"], 4)
 
     def kept_at(self, at_source: glean.AtSource, kind: str = "action") -> proposals.Entry:
         words = ("scripts/check",) if kind == "action" else ()

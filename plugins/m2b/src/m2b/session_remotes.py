@@ -207,9 +207,10 @@ def repository_of(folder: Path, environ: Mapping[str, str], timeout: float = GIT
     remotes = None if git is None else remotes_in(folder, git, timeout=timeout, environ=environ)
     if remotes is None:
         raise RepositoryNotKnownError(REMOTES_NOT_SAID, top)
-    if not remotes:
+    addresses = hosted_addresses(remotes)
+    if not addresses:
         raise RepositoryNotKnownError(NO_REMOTE, top)
-    return Repository(top, tuple(sorted({address_of(remote) for remote in remotes})))
+    return Repository(top, tuple(sorted(addresses)))
 
 
 @dataclass(frozen=True)
@@ -242,11 +243,28 @@ def noted_folders(notes: Path) -> list[NotedFolder]:
     return found
 
 
+def hosted_addresses(remotes: Iterable[str]) -> set[str]:
+    """The addresses of the remotes that name a host. A remote without one, a local path or a
+    ``file://`` address, is a folder of one machine: no other machine finds the repository by it,
+    and a path of this machine must not reach the store; ``file://localhost/...`` is one too.
+    """
+    return {
+        address_of(remote)
+        for remote in remotes
+        if _host_and_path(remote)[0] and not remote.strip().casefold().startswith("file:")
+    }
+
+
 def address_of(remote: str) -> str:
     """A remote's address as host and path, the same for every spelling of it: no scheme, user,
     password or port, no ``.git`` and no slash at the end, letters in lower case.
     ``git@github.com:acme/portal.git`` and ``https://github.com/acme/portal`` are both
     ``github.com/acme/portal``."""
+    host, path = _host_and_path(remote)
+    return f"{host}/{path}" if host else path
+
+
+def _host_and_path(remote: str) -> tuple[str, str]:
     lowered = remote.strip().casefold()
     if "://" in lowered:
         rest = lowered.split("://", 1)[1]
@@ -255,8 +273,7 @@ def address_of(remote: str) -> str:
     else:
         short = _SHORT_SSH.match(lowered)
         host, path = (short.group(1).rsplit("@", 1)[-1], short.group(2)) if short else ("", lowered)
-    path = path.strip("/").removesuffix(".git")
-    return f"{host}/{path}" if host else path
+    return host, path.strip("/").removesuffix(".git")
 
 
 def noted(notes: Path, folder: str, now: datetime.datetime) -> frozenset[str] | None:

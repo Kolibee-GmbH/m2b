@@ -231,7 +231,13 @@ function textOrNull(value: unknown): string | null {
 }
 
 function troublesOf(answer: JsonObject): Trouble[] {
-  return [...runTrouble(answer['run']), ...inboxTrouble(answer['inbox']), ...storeTrouble(answer), ...backendTroubles(answer)]
+  return [
+    ...runTrouble(answer['run']),
+    ...inboxTrouble(answer['inbox']),
+    ...lessonsTrouble(answer['lessons']),
+    ...storeTrouble(answer),
+    ...backendTroubles(answer),
+  ]
 }
 
 function runTrouble(run: unknown): Trouble[] {
@@ -253,6 +259,14 @@ function inboxTrouble(inbox: unknown): Trouble[] {
   }
   const reason = isObject(inbox) ? textOrNull(inbox['error']) : null
   return [{ status: 'could not read the inbox', sentence: 'm2b could not read the inbox', reason }]
+}
+
+/** Lessons that could not be read; an m2b whose answer has no part about lessons has none to read. */
+function lessonsTrouble(lessons: unknown): Trouble[] {
+  if (!isObject(lessons) || !('error' in lessons)) {
+    return []
+  }
+  return [{ status: 'could not read the lessons', sentence: 'm2b could not read the lessons', reason: textOrNull(lessons['error']) }]
 }
 
 function inboxCount(inbox: unknown): string[] {

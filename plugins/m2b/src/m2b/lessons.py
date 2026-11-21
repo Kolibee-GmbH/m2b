@@ -23,13 +23,16 @@ from pathlib import PurePosixPath
 from m2b.notes.characters import without_hidden
 from m2b.notes.frontmatter import Note, NoteFormatError
 from m2b.notes.layout import MEMORY
-from m2b.store.base import Store, StoreError
+from m2b.store.base import EvictedFileError, Store
 
 FOLDER = f"{MEMORY}/lessons"
 KNOWLEDGE = "knowledge"
 ACTION = "action"
 KINDS = (KNOWLEDGE, ACTION)
 EVERY_PROJECT = "every project"
+# Said before a lesson is kept, for the repository of the folder it comes from; it is kept under that
+# repository's address (``m2b lesson add``, the reading of the sessions), never under these words.
+THIS_PROJECT = "this project"
 KIND = "kind"
 TARGET = "target"
 KEPT = "kept"
@@ -66,25 +69,34 @@ class Lesson:
 
 
 def read_all(store: Store) -> list[Lesson]:
-    """Every lesson that can be read, the oldest kept first; a file without a lesson's fields, one not
-    downloaded and a folder that cannot be listed hold none."""
-    try:
-        scan = store.scan(FOLDER)
-    except (OSError, StoreError):
-        return []
+    """Every lesson, the oldest kept first; a file without a lesson's fields holds none.
+
+    A folder or a lesson's file that is not downloaded raises ``EvictedFileError``, and a folder or
+    file that cannot be read raises ``StoreError`` or ``OSError``: a list without it would read as
+    the owner having given those lessons up, and the tool hook's list would lose them.
+    """
+    scan = store.scan(FOLDER)
+    for path in scan.evicted:
+        if path == FOLDER or _is_lesson_file(path):
+            raise EvictedFileError(path)
     found: list[Lesson] = []
     for path in scan.files:
-        if PurePosixPath(path).parent.as_posix() != FOLDER or not path.endswith(".md"):
+        if not _is_lesson_file(path):
             continue
         try:
             text = store.read_bytes(path).decode("utf-8", errors="replace")
-        except (OSError, StoreError):
+        except FileNotFoundError:
+            # Listed, then removed by a sync or a run elsewhere before it was read: it is gone.
             continue
         lesson = _parsed(PurePosixPath(path).name, text)
         if lesson is not None:
             found.append(lesson)
     found.sort(key=lambda lesson: (lesson.kept, lesson.name))
     return found
+
+
+def _is_lesson_file(path: str) -> bool:
+    return PurePosixPath(path).parent.as_posix() == FOLDER and path.endswith(".md")
 
 
 def _parsed(name: str, text: str) -> Lesson | None:

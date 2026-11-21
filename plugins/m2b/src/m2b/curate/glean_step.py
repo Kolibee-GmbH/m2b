@@ -156,7 +156,7 @@ def propose(
     if pasted:
         notes.append(f"{_count(pasted, 'pasted text')} {_were(pasted)} read with the prompts they stand in")
     standing = lessons.read_all(store)
-    shown_lessons = [glean.KeptLesson(lesson.name, lesson.text, lesson.kept) for lesson in standing]
+    shown_lessons = [glean.ShownLesson(lesson.name, lesson.text, lesson.kept) for lesson in standing]
     given = glean.step_input(read, _distillate(store), zone, examples, waiting, shown_lessons)
     run = model.text_step(config, machine, environ, glean.instruction(), given, pass_fds)
     if run.answer is None:
@@ -172,7 +172,7 @@ def propose(
     # Before the weakest lesson is chosen, so this reading's corrections count in that choice.
     corrections = glean.checked_corrections(answer.corrections, read, shown_lessons, zone)
     try:
-        again = lesson_counts.add(store, corrections, {lesson.name for lesson in standing})
+        again = lesson_counts.add(store, corrections, {lesson.name: lesson.kept for lesson in standing})
     # A counter must not cost the reading its proposals: whatever keeps the file from being read or
     # written is said, and the reading goes on.
     except (lesson_counts.LessonCountsError, ConfigError, StoreError) as error:
@@ -244,7 +244,7 @@ def _for_their_project(
     without = 0
     for proposal, typed_at in zip(checked.kept, checked.kept_at):
         lesson = proposal.lesson
-        if lesson is None or lesson.target != glean.THIS_PROJECT:
+        if lesson is None or lesson.target != lessons.THIS_PROJECT:
             placed.append((proposal, typed_at))
             continue
         first, second = (_addresses(notes, folders.get(key, ""), now) for key in (proposal.session, lesson.session))
@@ -413,7 +413,7 @@ def _within_the_start(
     if start + lessons_bytes + added <= lint.DISTILLATE_TARGET_BYTES:
         return list(placed)
     try:
-        again = lesson_counts.corrected_again(store)
+        again = lesson_counts.corrected_again(store, {lesson.name: lesson.kept for lesson in standing})
     except (lesson_counts.LessonCountsError, ConfigError, StoreError):
         again = {}
     weakest = iter(
@@ -460,7 +460,8 @@ def _same_lesson(proposal: glean.Proposal, lesson: glean.LessonPart, other: less
 
 def _addresses(notes: Path, folder: str, now: datetime.datetime) -> frozenset[str]:
     remotes = session_remotes.noted(notes, folder, now) if folder else None
-    return frozenset(session_remotes.address_of(remote) for remote in remotes or ())
+    # Only addresses with a host: a local path would name a folder of this machine in a proposal.
+    return frozenset(session_remotes.hosted_addresses(remotes or ()))
 
 
 def _nothing_marked(found: Sequence[sessions.Session]) -> int:

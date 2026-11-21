@@ -139,15 +139,22 @@ def unsafe_line(before: Snapshot, after: Snapshot, added_files_stay: bool = Fals
     return None
 
 
+def changed_lessons(before: Snapshot, after: Snapshot) -> list[str]:
+    """The files below ``memory/lessons/`` added, changed or removed between the two snapshots.
+
+    Compared without case: on a store that ignores case, as macOS and iCloud Drive do by default,
+    ``memory/Lessons/`` written by a step is the folder every session start reads its lessons from.
+    """
+    prefix = f"{LESSONS_FOLDER}/".casefold()
+    paths = {path for path in (*before.files, *after.files) if path.casefold().startswith(prefix)}
+    return sorted(path for path in paths if before.files.get(path) != after.files.get(path))
+
+
 def lessons_changed(before: Snapshot, after: Snapshot) -> str | None:
     """Why the step must be undone: it wrote below ``memory/lessons/``. Said without the file's name,
     which the model chose."""
-    prefix = f"{LESSONS_FOLDER}/"
-    # Compared without case: on a store that ignores case, as macOS and iCloud Drive do by default,
-    # ``memory/Lessons/`` written by a step is the folder every session start reads its lessons from.
-    paths = {path for path in (*before.files, *after.files) if path.casefold().startswith(prefix.casefold())}
-    if any(before.files.get(path) != after.files.get(path) for path in paths):
-        return f"the step changed {prefix}, where only lessons the owner kept go and no model step writes"
+    if changed_lessons(before, after):
+        return f"the step changed {LESSONS_FOLDER}/, where only lessons the owner kept go and no model step writes"
     return None
 
 

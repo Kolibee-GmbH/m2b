@@ -62,7 +62,7 @@ from typing import Any
 
 from m2b import kept_lessons, lessons
 from m2b.action_lessons import holds_word
-from m2b.lessons import EVERY_PROJECT
+from m2b.lessons import EVERY_PROJECT, THIS_PROJECT
 from m2b.notes.characters import can_be_written, unsafe_characters
 from m2b.notes.memory_index import MAX_TOPIC_NAME
 from m2b.sessions import Prompt, Session
@@ -88,7 +88,6 @@ FACT_KINDS = (PERSON, AGREEMENT, COMMITMENT, PERSONAL)
 HANDED_IN_KINDS = FACT_KINDS
 # Whom a proposed lesson is for: every project, or the repository both sessions worked in, which the
 # reading step names by its address (``curate.glean_step``).
-THIS_PROJECT = "this project"
 LESSON_TARGETS = (EVERY_PROJECT, THIS_PROJECT)
 # A word of a command an action lesson fires on, such as ``scripts/check`` or ``push``.
 MAX_WORD = 60
@@ -217,7 +216,7 @@ class Correction:
 
 
 @dataclass(frozen=True)
-class KeptLesson:
+class ShownLesson:
     """A lesson the person kept, as the model is shown it: its name, its text and the day it was kept."""
 
     name: str
@@ -253,7 +252,7 @@ def step_input(
     zone: datetime.tzinfo = datetime.timezone.utc,
     examples: Examples = NO_EXAMPLES,
     waiting: Sequence[Example] = (),
-    kept_lessons: Sequence[KeptLesson] = (),
+    shown_lessons: Sequence[ShownLesson] = (),
 ) -> str:
     """The JSON document the model reads; ``zone`` is where the person is, for the day of a session.
 
@@ -282,8 +281,8 @@ def step_input(
         "waiting": [_as_given(example) for example in waiting],
         # Only where there is one, so a reading without lessons is asked as before.
         **(
-            {"lessons": [{"name": each.name, "text": each.text, "kept": each.kept} for each in kept_lessons]}
-            if kept_lessons
+            {"lessons": [{"name": each.name, "text": each.text, "kept": each.kept} for each in shown_lessons]}
+            if shown_lessons
             else {}
         ),
         "sessions": given,
@@ -308,7 +307,7 @@ def parse_answer(answer: str, sessions: Sequence[Session]) -> Answer:
 
 
 def checked_corrections(
-    corrections: Sequence[Correction], sessions: Sequence[Session], kept: Sequence[KeptLesson], zone: datetime.tzinfo
+    corrections: Sequence[Correction], sessions: Sequence[Session], kept: Sequence[ShownLesson], zone: datetime.tzinfo
 ) -> list[Correction]:
     """The corrections whose lesson the person kept and whose quote, at least ``QUOTE_WORDS`` words,
     stands in what they typed in its session after the day the lesson was kept. A lesson is kept by

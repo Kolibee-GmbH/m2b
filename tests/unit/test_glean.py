@@ -717,14 +717,14 @@ class PointerTest(unittest.TestCase):
 
 
 class CorrectedAgainTest(unittest.TestCase):
-    QUICK = glean.KeptLesson(
+    QUICK = glean.ShownLesson(
         "quick.md", "Run only the quick checks.", (MORNING.date() - datetime.timedelta(days=1)).isoformat()
     )
     AGAIN = session("again", "no, again only the quick round please")
 
     def test_the_kept_lessons_go_in_by_name_and_text_and_none_go_in_without_any(self) -> None:
         """Covers: B280"""
-        given = json.loads(glean.step_input([self.AGAIN], "# Memory\n", kept_lessons=[self.QUICK]))
+        given = json.loads(glean.step_input([self.AGAIN], "# Memory\n", shown_lessons=[self.QUICK]))
 
         self.assertEqual(
             given["lessons"], [{"name": "quick.md", "text": "Run only the quick checks.", "kept": self.QUICK.kept}]

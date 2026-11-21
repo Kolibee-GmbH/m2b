@@ -73,7 +73,6 @@ from m2b.glean import (
     PROJECT,
     READ_KINDS,
     STATED,
-    THIS_PROJECT,
     TOOL,
     TYPED,
     WORKED,
@@ -89,9 +88,7 @@ from m2b.notes.layout import STATE
 from m2b.store.base import Store
 
 PROPOSALS_FILE = f"{STATE}/core/proposals.json"
-FORMAT = 5
-# What an m2b before a project or a pointer could be proposed wrote and reads: neither kind.
-FORMAT_WITHOUT_PROJECTS = 4
+FORMAT = 4
 # What an m2b before a lesson could be proposed wrote and reads: no kind ``lesson``.
 FORMAT_WITHOUT_LESSONS = 3
 # What an m2b before a proposal had a source wrote and reads.
@@ -296,14 +293,11 @@ def is_tool_name(text: str) -> bool:
 
 
 def _format_of(entries: Collection[Entry]) -> int:
-    """The format the file needs: 5 with a project or a pointer; 4 with a lesson; 3 with a proposal that names who
-    proposed or a tool, or whose source is neither typed nor pasted; else 2 with one from pasted
+    """The format the file needs: 4 with a lesson, a project or a pointer; 3 with a proposal that names
+    who proposed or a tool, or whose source is neither typed nor pasted; else 2 with one from pasted
     text; else 1."""
-    # A lesson that replaces another would be kept beside it by an m2b before that field.
-    if any(entry.kind in (PROJECT, POINTER) or (entry.lesson and entry.lesson.replaces) for entry in entries):
+    if any(entry.kind in (LESSON, PROJECT, POINTER) for entry in entries):
         return FORMAT
-    if any(entry.kind == LESSON for entry in entries):
-        return FORMAT_WITHOUT_PROJECTS
     if any(entry.by is not None or entry.tool is not None or entry.source not in (TYPED, PASTED) for entry in entries):
         return FORMAT_WITHOUT_LESSONS
     return FORMAT_WITHOUT_SOURCE if all(entry.source == TYPED for entry in entries) else FORMAT_OF_A_READING
@@ -521,7 +515,7 @@ def _lesson_of(value: object) -> LessonPart | None:
     if not isinstance(value, dict):
         return None
     kind, target, quote, session, words = (value.get(name) for name in ("kind", "target", "quote", "session", "words"))
-    if kind not in lessons.KINDS or not isinstance(target, str) or not target or target == THIS_PROJECT:
+    if kind not in lessons.KINDS or not isinstance(target, str) or not target or target == lessons.THIS_PROJECT:
         return None
     if not isinstance(quote, str) or not isinstance(session, str) or not isinstance(words, list):
         return None

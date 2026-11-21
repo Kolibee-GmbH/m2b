@@ -316,7 +316,7 @@ class LessonInFileTest(ProposalsFixture):
 
         written = self.written()
         (entry,) = written["proposals"].values()
-        self.assertEqual((entry["lesson"]["replaces"], written["format"]), ("weak.md", 5))
+        self.assertEqual((entry["lesson"]["replaces"], written["format"]), ("weak.md", 4))
         (loaded,) = proposals.load(self.store).entries.values()
         assert loaded.lesson is not None
         self.assertEqual(loaded.lesson.replaces, "weak.md")
@@ -341,16 +341,17 @@ class LessonInFileTest(ProposalsFixture):
 
 
 class ProjectInFileTest(ProposalsFixture):
-    def test_a_project_has_format_5_an_m2b_before_projects_refuses_and_it_is_no_example(self) -> None:
+    def test_a_project_has_the_format_of_a_lesson_an_m2b_before_both_refuses_and_it_is_no_example(self) -> None:
         """Covers: B275"""
-        self.kept(LESSON)
         self.kept(PROJECT)
+        self.assertEqual(self.written()["format"], 4)
+        self.kept(LESSON)
         written = self.written()
-        self.assertEqual(written["format"], 5)
+        self.assertEqual(written["format"], 4)
         (entry,) = (each for each in written["proposals"].values() if each["kind"] == "project")
         self.assertEqual((entry["quote"], entry["source"]), ("github.com/acme/portal", "worked"))
         with (
-            mock.patch.object(proposals, "FORMAT", proposals.FORMAT_WITHOUT_PROJECTS),
+            mock.patch.object(proposals, "FORMAT", proposals.FORMAT_WITHOUT_LESSONS),
             self.assertRaises(proposals.ProposalsError),
         ):
             proposals.load(self.store)
@@ -384,7 +385,7 @@ class PointerInFileTest(ProposalsFixture):
             written["proposals"][key]["pointer"],
             {"path": "docs/records/014-login.md", "repositories": ["github.com/acme/portal"]},
         )
-        self.assertEqual(written["format"], 5)
+        self.assertEqual(written["format"], 4)
         (loaded,) = proposals.load(self.store).entries.values()
         self.assertEqual(loaded.pointer, POINTER.pointer)
         for broken in ({"pointer": None}, {"pointer": {"path": "docs/x.md", "repositories": []}}):

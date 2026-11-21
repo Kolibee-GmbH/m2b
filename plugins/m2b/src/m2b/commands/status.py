@@ -110,10 +110,15 @@ def _lessons(store: Store, machine: MachinePaths) -> dict[str, Any]:
     """How many lessons every session starts with, those left out because their source states them
     now, by name and source (B258), and how each lesson does since it was kept: how often it fired
     on this machine and in how many of the Bash calls seen here, and how often the owner corrected
-    Claude on it again."""
-    found = lessons.read_all(store)
+    Claude on it again. Lessons that cannot be read are said as such, never as none."""
     try:
-        again: dict[str, int] | None = lesson_counts.corrected_again(store)
+        found = lessons.read_all(store)
+    except (StoreError, OSError) as error:
+        return {"error": with_hidden_written_out(str(error))}
+    try:
+        again: dict[str, int] | None = lesson_counts.corrected_again(
+            store, {lesson.name: lesson.kept for lesson in found}
+        )
     except (lesson_counts.LessonCountsError, ConfigError, StoreError):
         again = None
     return {
@@ -318,12 +323,14 @@ def _print_text(answer: dict[str, Any]) -> None:
         not_downloaded = f" ({handed['evicted']} not downloaded)" if handed["evicted"] else ""
         print(f"handed in: {handed['count']} waiting for the next curation run{not_downloaded}")
     kept = answer["lessons"]
-    if kept["in_every_session"] or kept["kept_at_source"]:
+    if "error" in kept:
+        print(f"lessons: could not look: {kept['error']}")
+    elif kept["in_every_session"] or kept["kept_at_source"]:
         at_source = "".join(
             f"; {item['name']} is kept at its source, {item['source']}" for item in kept["kept_at_source"]
         )
         print(f"lessons: {kept['in_every_session']} in every session{at_source}")
-    for each in kept["each"]:
+    for each in kept.get("each", []):
         print(_lesson_line(each))
     on = [name for name, is_addon_on in answer["addons"].items() if is_addon_on]
     print(f"add-ons on: {', '.join(on) if on else 'none'}")

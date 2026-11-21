@@ -199,6 +199,19 @@ class StartSizeTest(test_runner.RunnerTest):
 
         self.assertFalse(any(name.startswith("m2b") for name in self.parts()))
 
+    def test_lessons_that_are_not_downloaded_are_not_read_beside_the_distillate(self) -> None:
+        """Covers: B268"""
+        self.curating()
+        self.write(
+            "memory/lessons/once.md",
+            "---\nkind: knowledge\ntarget: every project\nkept: 2026-11-20\n---\n# Once\n\nSay it once.\n",
+        )
+        with mock.patch.object(DatalessGuard, "is_evicted", side_effect=lambda path: Path(path).name == "once.md"):
+            parts = self.parts()
+
+        self.assertEqual(parts["m2b lessons"]["not_read"], "not downloaded to this machine")
+        self.assertNotIn("not_read", parts["m2b distillate"])
+
     def test_a_plugin_that_is_not_enabled_forces_no_style(self) -> None:
         """Covers: B268"""
         self.curating()

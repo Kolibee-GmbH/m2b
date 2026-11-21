@@ -61,6 +61,22 @@ class StatusTest(test_runner.RunnerTest):
             self.run_command("status")[1],
         )
 
+    def test_lessons_that_are_not_downloaded_are_said_and_never_counted_as_none(self) -> None:
+        """Covers: B258"""
+        self.curating()
+        self.write(
+            "memory/lessons/once.md",
+            "---\nkind: knowledge\ntarget: every project\nkept: 2026-11-20\n---\n# Once\n\nSay it once.\n",
+        )
+
+        with mock.patch.object(DatalessGuard, "is_evicted", side_effect=lambda path: Path(path).name == "once.md"):
+            answer = self.run_json("status")["lessons"]
+            out = self.run_command("status")[1]
+
+        fetch = "m2b store fetch memory/lessons/once.md"
+        self.assertEqual(answer, {"error": f"memory/lessons/once.md is not downloaded to this machine; run: {fetch}"})
+        self.assertIn(f"lessons: could not look: {answer['error']}\n", out)
+
     def test_each_lesson_says_how_often_it_fired_in_how_many_calls_and_was_corrected_again_since_kept(self) -> None:
         """Covers: B281"""
         self.curating()
@@ -75,7 +91,9 @@ class StatusTest(test_runner.RunnerTest):
         )
         self.write(
             lesson_counts.COUNTS_FILE,
-            json.dumps({"format": 1, "lessons": {"proof.md": {"corrected_again": ["a1b2c3d4e5f6"]}}}),
+            json.dumps(
+                {"format": 1, "lessons": {"proof.md": {"kept": "2026-11-20", "corrected_again": ["a1b2c3d4e5f6"]}}}
+            ),
         )
         state = self.machine.state_dir
         (state / action_lessons.CALLS_FOLDER).mkdir(parents=True)

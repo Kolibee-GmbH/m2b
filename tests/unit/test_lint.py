@@ -428,6 +428,20 @@ class EvictedMemoryTest(LintFixture):
 
         self.assertEqual(self.codes(), [("evicted", "info", "memory")])
 
+    def test_a_lesson_that_is_not_downloaded_is_listed_and_the_rest_is_checked(self) -> None:
+        """Covers: B6"""
+        self.write("memory/MEMORY.md", "# Memory\n\n## Facts\n\n- [[nothing.md]]\n")
+        self.write(
+            "memory/lessons/once.md",
+            "---\nkind: knowledge\ntarget: every project\nkept: 2026-11-20\n---\n# Once\n\nSay it once.\n",
+        )
+        self.evicted.add("memory/lessons/once.md")
+
+        codes = self.codes()
+
+        self.assertIn(("evicted", "info", "memory"), codes)
+        self.assertIn(("broken-link", "action", "memory/MEMORY.md"), codes)
+
     def test_links_are_checked_when_only_the_distillate_is_evicted(self) -> None:
         self.write("memory/dana.md", DANA + "- [[nothing.md]]\n")
         self.evicted.add("memory/MEMORY.md")

@@ -39,7 +39,7 @@ from m2b.notes.names import NoteName
 from m2b.prompt_hook import MAX_ADDED_BYTES
 from m2b.repository_places import POINTER_LINE, REPOSITORY_LINE, clone_here, with_places
 from m2b.session_remotes import KEEP_FOR, NotedFolder, address_of, noted_folders
-from m2b.store.base import ConflictCopy, Scan, Store, StoreError, SymlinkError, fetch_command
+from m2b.store.base import ConflictCopy, EvictedFileError, Scan, Store, StoreError, SymlinkError, fetch_command
 from m2b.tasks import markers
 from m2b.tasks.base import Tasks, TasksError
 from m2b.topic_match import MIN_WORD_CHARACTERS
@@ -309,7 +309,12 @@ def _index(
         report.add("no-distillate", ACTION, index_path, f"{index_path} is missing; every session starts without it")
     else:
         text = store.read_bytes(index_path).decode("utf-8", errors="replace")
-        lessons_bytes = len(lessons.block(lessons.read_all(store)).encode("utf-8"))
+        try:
+            lessons_bytes = len(lessons.block(lessons.read_all(store)).encode("utf-8"))
+        except EvictedFileError:
+            # The lesson is listed among the evicted files with the command that fetches it; the
+            # distillate's own size is checked without the block.
+            lessons_bytes = 0
         _sizes(report, index_path, text, machine, lessons_bytes)
         if machine is not None:
             _projects(report, index_path, text, machine)

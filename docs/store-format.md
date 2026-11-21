@@ -316,8 +316,9 @@ A proposed lesson, a correction of Claude you made in two sessions, has one more
 `kind` is `knowledge` or `action`, as in a [lesson](using.md#lessons); `target` is `every project` or the
 address of the repository both sessions worked in; `words` are, for an action, the words a command
 holds when the lesson applies; `quote` and `session` are the same correction in the second session.
-While the file holds a lesson its `format` is 4, and an m2b that knows format 3 answers "update m2b
-on this machine" where it would leave the lesson out and write the file back without it.
+While the file holds a lesson, a project or a pointer its `format` is 4, and an m2b that knows format
+3 answers "update m2b on this machine" where it would leave them out and write the file back without
+them.
 
 ## Fixes for the files Claude reads
 

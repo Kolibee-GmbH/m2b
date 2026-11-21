@@ -5,6 +5,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import test_lint
 from m2b import lessons, lint
@@ -70,6 +71,20 @@ class ReadTest(StoreFixture):
         (self.root / lessons.FOLDER).rmdir()
 
         self.assertEqual(lessons.read_all(self.store), [])
+
+    def test_a_lesson_file_gone_between_the_listing_and_the_read_is_left_out(self) -> None:
+        """Covers: B257"""
+        self.write("checks.md", CHECKS)
+        self.write("look-first.md", LOOK_FIRST)
+        read = self.store.read_bytes
+
+        def gone_once_listed(path: str) -> bytes:
+            if path.endswith("checks.md"):
+                raise FileNotFoundError(path)
+            return read(path)
+
+        with mock.patch.object(self.store, "read_bytes", side_effect=gone_once_listed):
+            self.assertEqual([lesson.name for lesson in lessons.read_all(self.store)], ["look-first.md"])
 
 
 PROOF = (

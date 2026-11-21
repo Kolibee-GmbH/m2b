@@ -75,6 +75,11 @@ describe('the status line', () => {
     expect(statusLine(answer({ run: undefined }))).toBe('could not read the last curation run')
     expect(statusLine(answer({ inbox: { error: 'gone' } }))).toBe('could not read the inbox')
     expect(statusLine(answer({ store_error: 'bad json' }))).toBe('could not read store.json')
+    expect(statusLine(answer({ lessons: { error: 'memory/lessons is not downloaded to this machine' } }))).toBe(
+      'could not read the lessons',
+    )
+    expect(statusLine(answer({ lessons: { in_every_session: 0, kept_at_source: [], each: [] } }))).toBeNull()
+    expect(statusLine(answer({ lessons: undefined }))).toBeNull()
   })
 
   test('joins everything that is wrong in one line, the run first', () => {
@@ -209,6 +214,12 @@ describe('how m2b stands, for the part of the pane about m2b itself', () => {
     // Covers: B206
     expect(healthOf(answer({ inbox: { error: 'the folder is gone' } }), NOW).troubles).toEqual(['m2b could not read the inbox: the folder is gone'])
     expect(healthOf(answer({ inbox: undefined }), NOW).troubles).toEqual(['m2b could not read the inbox.'])
+  })
+
+  test('lessons m2b could not read are a sentence with the error, never no lessons', () => {
+    // Covers: B206
+    const lessons = { error: 'memory/lessons is not downloaded to this machine; run: m2b store fetch memory/lessons' }
+    expect(healthOf(answer({ lessons }), NOW).troubles).toEqual([`m2b could not read the lessons: ${lessons.error}`])
   })
 
   test('an answer without a part about m2b is one trouble, where the status line says that it could not look', () => {

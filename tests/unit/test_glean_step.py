@@ -614,7 +614,7 @@ class ProjectProposalTest(InPortalTest):
             "portal (github.com/acme/portal) is a repository you worked in on 2026-11-05 and 2026-11-07, "
             "with no topic: keep it as a project",
         )
-        self.assertEqual(self.kept()["format"], 5)
+        self.assertEqual(self.kept()["format"], 4)
         self.assertIn("1 repository without a topic was worked in on two days and proposed as a project", self.info())
         self.assertEqual(self.days_file(), {"days": {"github.com/acme/portal": ["2026-11-05", "2026-11-07"]}})
 
@@ -762,7 +762,7 @@ class PointerProposalTest(InPortalTest):
         self.assertEqual(
             entry["pointer"], {"path": "docs/records/014-login.md", "repositories": ["github.com/acme/portal"]}
         )
-        self.assertEqual(self.kept()["format"], 5)
+        self.assertEqual(self.kept()["format"], 4)
 
     def test_a_session_in_a_subfolder_whose_note_names_no_top_names_its_files_from_the_repositorys_folder(
         self,
@@ -828,7 +828,7 @@ class CorrectedAgainTest(GleanStepTest):
         self.assertEqual(
             asked["lessons"], [{"name": "quick.md", "text": "Run only the quick checks.", "kept": "2026-11-01"}]
         )
-        self.assertEqual(lesson_counts.corrected_again(self.store), {"quick.md": 1})
+        self.assertEqual(lesson_counts.corrected_again(self.store, {"quick.md": "2026-11-01"}), {"quick.md": 1})
         self.assertIn("1 correction of a kept lesson counted: Claude was corrected on it again", self.info())
 
     def test_a_counts_file_that_cannot_be_read_is_said_and_the_proposals_are_kept(self) -> None:
@@ -891,7 +891,9 @@ class StartBudgetTest(GleanStepTest):
         if counted:
             self.write(
                 lesson_counts.COUNTS_FILE,
-                json.dumps({"format": 1, "lessons": {"weak.md": {"corrected_again": ["a1", "b2"]}}}),
+                json.dumps(
+                    {"format": 1, "lessons": {"weak.md": {"kept": "2026-10-20", "corrected_again": ["a1", "b2"]}}}
+                ),
             )
         self.typed("herdr is an agent runtime, say so. it is the band, not the bar", START - 3 * HOUR, "one")
         self.typed("again: herdr is an agent runtime. again, the band, not the bar", START - 2 * HOUR, "two")

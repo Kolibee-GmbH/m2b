@@ -357,9 +357,17 @@ def _m2b_parts(
         return []
     except (OSError, StoreError) as error:
         return [Part("m2b distillate", None, None, not_read=str(error))]
-    view = hooks.start_view(text, lessons.read_all(store), machine, environ, folder)
+    try:
+        found, unread = lessons.read_all(store), None
+    except EvictedFileError:
+        found, unread = [], Part("m2b lessons", None, None, not_read="not downloaded to this machine")
+    except (OSError, StoreError) as error:
+        found, unread = [], Part("m2b lessons", None, None, not_read=str(error))
+    view = hooks.start_view(text, found, machine, environ, folder)
     parts = [_part("m2b distillate", view.distillate)]
-    if view.lessons:
+    if unread is not None:
+        parts.append(unread)
+    elif view.lessons:
         parts.append(_part("m2b lessons", view.lessons))
     return parts
 

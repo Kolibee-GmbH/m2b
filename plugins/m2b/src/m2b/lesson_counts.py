@@ -7,14 +7,16 @@ drawn from its session and its words, so a period read a second time counts noth
 corrected again since it was kept is one that does not work yet: the overview says so, and what then
 becomes of it is the owner's.
 
-Only the curation run writes the file. A lesson that is gone keeps its count until the file is
-written again without it.
+Only the curation run writes the file. Each lesson's entry holds the day it was kept beside its ids:
+a lesson is known by its file's name, and a name is free again once its lesson is gone, so a count
+belongs to the lesson only while that day is the same. An entry of another day counts nothing and,
+like one of a lesson that is gone, is left out when the file is written again.
 """
 
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Collection, Sequence
+from collections.abc import Mapping, Sequence
 
 from m2b.config.json_file import read_store_json_object, write_store_json_object
 from m2b.glean import Correction
@@ -30,17 +32,17 @@ class LessonCountsError(Exception):
     """The file is there and this m2b cannot use it."""
 
 
-def corrected_again(store: Store) -> dict[str, int]:
-    """Per lesson how often it was corrected again since it was kept."""
-    return {name: len(ids) for name, ids in _load(store).items()}
+def corrected_again(store: Store, kept: Mapping[str, str]) -> dict[str, int]:
+    """Per standing lesson (its name and the day it was kept) how often it was corrected again since."""
+    return {name: len(ids) for name, ids in _load(store, kept).items()}
 
 
-def add(store: Store, corrections: Sequence[Correction], lessons: Collection[str]) -> int:
+def add(store: Store, corrections: Sequence[Correction], kept: Mapping[str, str]) -> int:
     """Counts the corrections of the lessons that still stand, each once; how many were new."""
-    counted = _load(store)
+    counted = _load(store, kept)
     new = 0
     for correction in corrections:
-        if correction.lesson not in lessons:
+        if correction.lesson not in kept:
             continue
         ids = counted.setdefault(correction.lesson, set())
         key = _id_of(correction)
@@ -53,13 +55,18 @@ def add(store: Store, corrections: Sequence[Correction], lessons: Collection[str
             COUNTS_FILE,
             {
                 "format": FORMAT,
-                "lessons": {name: {"corrected_again": sorted(ids)} for name, ids in sorted(counted.items()) if ids},
+                "lessons": {
+                    name: {"kept": kept[name], "corrected_again": sorted(ids)}
+                    for name, ids in sorted(counted.items())
+                    if ids
+                },
             },
         )
     return new
 
 
-def _load(store: Store) -> dict[str, set[str]]:
+def _load(store: Store, kept: Mapping[str, str]) -> dict[str, set[str]]:
+    """The ids of the standing lessons whose entry holds the day they were kept."""
     raw = read_store_json_object(store, COUNTS_FILE)
     if raw is None:
         return {}
@@ -69,8 +76,10 @@ def _load(store: Store) -> dict[str, set[str]]:
     given = raw.get("lessons")
     counted: dict[str, set[str]] = {}
     for name, value in (given if isinstance(given, dict) else {}).items():
-        ids = value.get("corrected_again") if isinstance(value, dict) else None
-        if isinstance(name, str) and isinstance(ids, list):
+        if not isinstance(name, str) or not isinstance(value, dict) or name not in kept:
+            continue
+        ids = value.get("corrected_again")
+        if value.get("kept") == kept[name] and isinstance(ids, list):
             counted[name] = {each for each in ids if isinstance(each, str)}
     return counted
 

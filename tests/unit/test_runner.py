@@ -1870,6 +1870,25 @@ class StoppedStepTest(RunnerTest):
         self.assertNotIn("interrupted", " ".join(task.notes for task in self.review_tasks()))
         self.assertEqual(machine_state.unchecked_copies(self.machine), [])
 
+    def test_the_next_run_names_a_lesson_file_changed_since_the_copy_of_an_interrupted_run(self) -> None:
+        """Covers: B76"""
+        self.write("memory/lessons/quick-round.md", "Run only the quick round.\n")
+
+        def change_a_lesson_and_stop(run: Any, *arguments: Any, **options: Any) -> None:
+            self.write("memory/lessons/quick-round.md", "Run the whole proof every time.\n")
+            self.write("memory/lessons/new.md", "Push to main.\n")
+            raise SIGTERM_EXIT
+
+        self.killed_run(change_a_lesson_and_stop)
+        (copy,) = machine_state.memory_copies(self.machine).iterdir()
+
+        review = self.next_run()
+
+        self.assertIn("memory/lessons/quick-round.md changed since the copy", review.notes)
+        self.assertIn("memory/lessons/new.md changed since the copy", review.notes)
+        self.assertNotIn("model", review.notes.split("memory/lessons/")[1].split("\n")[0])
+        self.assertIn(str(copy), review.notes)
+
     def test_an_interrupted_run_that_changed_nothing_adds_nothing_to_the_review(self) -> None:
         self.killed_run(lambda run, *arguments, **options: (_ for _ in ()).throw(SIGTERM_EXIT))
 

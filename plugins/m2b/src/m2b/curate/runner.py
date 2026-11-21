@@ -1220,6 +1220,12 @@ def _interrupted_changes(copy: Path, store: Store) -> list[report.Finding]:
         report.Finding(RUN, report.ACTION, f"{run}: {without_hidden(change.described())}", _shown_change(change))
         for change in records
     ]
+    # The harvest writes lessons in code after the copy was saved, so a changed lesson is not
+    # necessarily a model's writing; the owner compares it with the copy. Named, since it stays.
+    findings[:0] = [
+        report.Finding(RUN, report.ACTION, f"{run}: {with_hidden_written_out(path)} changed since the copy")
+        for path in memory_guard.changed_lessons(before, after)
+    ]
     problem = memory_guard.unsafe_line(before, after, added_files_stay=True)
     if problem is not None:
         # The file is still there, and its name must be the one the owner finds on disk.

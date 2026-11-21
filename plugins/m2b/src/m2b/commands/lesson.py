@@ -22,10 +22,9 @@ from m2b.commands import Context, UsageError
 from m2b.commands.backends import configured_store
 from m2b.config.machine import load_machine_config
 from m2b.config.store_settings import require_store_writable
-from m2b.lessons import EVERY_PROJECT, KNOWLEDGE
+from m2b.lessons import EVERY_PROJECT, KNOWLEDGE, THIS_PROJECT
 
 ADD = "add"
-THIS_PROJECT = "this project"
 INPUT_LENGTH = 8 * 1024
 
 

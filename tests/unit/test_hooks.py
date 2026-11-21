@@ -14,7 +14,7 @@ from pathlib import Path
 from unittest import mock
 
 from locations import PLUGIN_ROOT
-from m2b import addons, cli, fixes, launcher, lessons, paths, session_remotes, topic_state
+from m2b import action_lessons, addons, cli, fixes, launcher, lessons, paths, session_remotes, topic_state
 from m2b.config import machine
 from m2b.curate import machine_state
 from m2b.hooks import (
@@ -27,6 +27,7 @@ from m2b.hooks import (
     WORK_PEOPLE_RULE,
 )
 from m2b.run_record import RUN_RECORD, RunRecordError, load_run_record
+from m2b.store.base import fetch_command
 from m2b.store.folder import FolderStore
 from m2b.store.guard import DatalessGuard
 from store_contract import FakeEviction
@@ -711,6 +712,50 @@ class LessonBlockTest(HookFixture):
         self.assertIn(CUT_LINE, out)
         self.assertTrue(out.endswith(f"{lessons.BLOCK_HEADER}\n- {CHECKS}\n- {LOOK_FIRST}\n"))
         self.assertLessEqual(len(out), OUTPUT_LIMIT)
+
+    def assert_lessons_not_downloaded(self, out: str, fetched: str) -> None:
+        self.assertIn(f"m2b: the lessons are not downloaded to this machine; run: {fetch_command(fetched)}\n", out)
+        self.assertNotIn(lessons.BLOCK_HEADER, out)
+        self.assertIn(MEMORY, out)
+        self.assertEqual((self.machine.state_dir / action_lessons.FILE).read_text(encoding="utf-8"), KEPT_LIST)
+
+    def test_a_lessons_folder_that_is_not_downloaded_is_said_and_keeps_the_tool_hooks_list(self) -> None:
+        """Covers: B257"""
+        self.write_kept_list()
+        self.eviction.evicted.add(self.store_root / lessons.FOLDER)
+
+        _, out, _ = self.hook("distillate")
+
+        self.assert_lessons_not_downloaded(out, lessons.FOLDER)
+
+    def test_a_lesson_file_that_is_not_downloaded_is_said_and_keeps_the_tool_hooks_list(self) -> None:
+        """Covers: B257"""
+        self.write_kept_list()
+        self.eviction.evicted.add(self.store_root / lessons.FOLDER / "checks.md")
+
+        _, out, _ = self.hook("distillate")
+
+        self.assert_lessons_not_downloaded(out, f"{lessons.FOLDER}/checks.md")
+
+    def test_a_lesson_name_that_hides_text_is_said_without_it(self) -> None:
+        """Covers: B257"""
+        self.write("memory/lessons/checks\u202e.md", LESSON.format(title="Checks", sentence=CHECKS))
+        self.eviction.evicted.add(self.store_root / lessons.FOLDER / "checks\u202e.md")
+
+        _, out, _ = self.hook("distillate")
+
+        self.assertIn("m2b: the lessons are not downloaded to this machine", out)
+        self.assertNotIn("\u202e", out)
+
+    def write_kept_list(self) -> None:
+        self.machine.state_dir.mkdir(parents=True, exist_ok=True)
+        (self.machine.state_dir / action_lessons.FILE).write_text(KEPT_LIST, encoding="utf-8")
+
+
+KEPT_LIST = (
+    '[{"name": "checks.md", "text": "Only the quick round.", "target": "every project", '
+    '"words": ["scripts/check"], "unless": ["--quick"], "ask": false}]\n'
+)
 
 
 class FixNoticeTest(HookFixture):
