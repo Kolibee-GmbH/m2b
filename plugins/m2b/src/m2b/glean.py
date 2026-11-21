@@ -9,7 +9,8 @@ The input is one JSON document: the distillate, so the model can leave out what 
 the proposals of earlier readings the person kept and those they dropped (``Examples``), those
 that still wait for an answer (``waiting``), and per
 session its folder, its day and every prompt whole, what was pasted into one apart from what was
-typed. A session is named by a small number, its
+typed, and beside it the end of Claude's answer before it and the Bash commands of that turn, which
+are Claude's and never stand for the person's words. A session is named by a small number, its
 place in the sequence the caller passes; the model repeats a number more reliably than an id, and
 ``parse_answer`` turns it back with the same sequence. JSON keeps a prompt one string whatever it
 holds, so no typed text can pass as another session or as the memory, and no example as a session.
@@ -39,6 +40,11 @@ its own is not recognised; the person sees that proposal and drops it.
 The instruction the model is asked with is ``glean_instruction.md`` beside this module. It is the
 prompt of a run without tools (``curate.model.text_step``), not a skill: no session can call it.
 
+A session's ``written`` files go in only where its repository is a project of the memory (the
+reading step leaves them out elsewhere), each by its path in that repository. A ``pointer`` names one
+of them in ``file``; ``check`` keeps a pointer only when its file stands among its session's
+``written``, so a decision written into no file of the repository points nowhere.
+
 An answer that cannot be read is an error (``GleanError``), never an answer without proposals. A
 single proposal that is not in the form is left out and counted.
 """
@@ -49,11 +55,14 @@ import dataclasses
 import datetime
 import json
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from m2b import kept_lessons, lessons
+from m2b.action_lessons import holds_word
+from m2b.lessons import EVERY_PROJECT, THIS_PROJECT
 from m2b.notes.characters import can_be_written, unsafe_characters
 from m2b.notes.memory_index import MAX_TOPIC_NAME
 from m2b.sessions import Prompt, Session
@@ -62,7 +71,26 @@ PERSON = "person"
 AGREEMENT = "agreement"
 COMMITMENT = "commitment"
 PERSONAL = "personal"
-KINDS = (PERSON, AGREEMENT, COMMITMENT, PERSONAL)
+# A correction of Claude the person made in two sessions: kept, it becomes a lesson (``lessons``).
+LESSON = "lesson"
+# A decision, an agreement, a person or a deadline of a project a session wrote into a file of its
+# repository: kept, it becomes a line of the project's topic that points to that file.
+POINTER = "pointer"
+# What a model may propose from the words of a session.
+READ_KINDS = (PERSON, AGREEMENT, COMMITMENT, PERSONAL, LESSON, POINTER)
+# A repository the person worked in on two days and that has no topic: code proposes it from where
+# the sessions worked (``project_proposals``), on no words, so no model is asked and none is shown it.
+PROJECT = "project"
+KINDS = (*READ_KINDS, PROJECT)
+# The kinds that become a fact or a task, and what a session may hand in by itself: a lesson stands
+# on a correction made in two sessions, which one session cannot show.
+FACT_KINDS = (PERSON, AGREEMENT, COMMITMENT, PERSONAL)
+HANDED_IN_KINDS = FACT_KINDS
+# Whom a proposed lesson is for: every project, or the repository both sessions worked in, which the
+# reading step names by its address (``curate.glean_step``).
+LESSON_TARGETS = (EVERY_PROJECT, THIS_PROJECT)
+# A word of a command an action lesson fires on, such as ``scripts/check`` or ``push``.
+MAX_WORD = 60
 # Where in a session a proposal's quote stands. What was pasted may be anyone's words. A reading
 # finds a quote in a prompt only; a session that hands a proposal in can also stand on what a tool
 # returned to it or on what Claude answered.
@@ -70,6 +98,9 @@ TYPED = "typed"
 PASTED = "pasted"
 TOOL = "tool"
 AGENT = "agent"
+# Where a project's proposal stands: the sessions that worked in its repository, its quote the
+# repository's addresses.
+WORKED = "worked"
 # A proposal is one fact or one task; a longer text is a summary, which nobody asked for.
 TEXT_LENGTH = 300
 QUOTE_WORDS = 3
@@ -89,6 +120,53 @@ class GleanError(Exception):
     """The model's answer could not be read; that is not an answer without proposals."""
 
 
+# What a source a session loads says of a proposed lesson (``lesson_sources``): wrongly, so the
+# lesson is a fix of it; or rightly, so the lesson is a pointer to the line that states it.
+FIX = "fix"
+STATED = "stated"
+
+
+@dataclass(frozen=True)
+class AtSource:
+    """A proposed lesson's source: the file as the person reads its name, the line a fix replaces or
+    that states the lesson (None for a fix that adds), a fix's new wording, and where a fix is kept:
+    its path in its repository with the repository's addresses, or from ``~`` with none."""
+
+    verdict: str
+    file: str
+    line: str | None
+    wording: str | None = None
+    path: str | None = None
+    repositories: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class LessonPart:
+    """What a proposed lesson carries beside its text: its kind and target, the words of the command
+    for an action, and the same correction in a second session."""
+
+    kind: str
+    target: str
+    words: tuple[str, ...]
+    quote: str
+    # The id of the second session.
+    session: str
+    # What a source says of it, where one does; set by the reading step, never by the model's answer.
+    at_source: AtSource | None = None
+    # The kept lesson it would replace, where what every session starts with is past its target;
+    # set by the reading step, never by the model's answer.
+    replaces: str | None = None
+
+
+@dataclass(frozen=True)
+class PointerPart:
+    """Where a proposed pointer points: a file its session wrote, by its path in the repository, and
+    the addresses of that repository, which the reading step sets (``curate.glean_step``)."""
+
+    path: str
+    repositories: tuple[str, ...] = ()
+
+
 @dataclass(frozen=True)
 class Proposal:
     kind: str
@@ -101,6 +179,10 @@ class Proposal:
     due: datetime.date | None = None
     # Where the quote stands in that session; ``check`` finds it, the model is never asked.
     source: str = TYPED
+    # For a lesson, and only for one.
+    lesson: LessonPart | None = None
+    # For a pointer, and only for one.
+    pointer: PointerPart | None = None
 
 
 @dataclass(frozen=True)
@@ -124,10 +206,30 @@ NO_EXAMPLES = Examples()
 
 
 @dataclass(frozen=True)
+class Correction:
+    """A prompt that corrects Claude again on a lesson the person kept: the lesson's name, the words
+    and the id of the session they were typed in."""
+
+    lesson: str
+    quote: str
+    session: str
+
+
+@dataclass(frozen=True)
+class ShownLesson:
+    """A lesson the person kept, as the model is shown it: its name, its text and the day it was kept."""
+
+    name: str
+    text: str
+    kept: str
+
+
+@dataclass(frozen=True)
 class Answer:
     proposals: tuple[Proposal, ...]
     # How many entries of the answer were not a proposal in the form.
     malformed: int
+    corrections: tuple[Correction, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -150,6 +252,7 @@ def step_input(
     zone: datetime.tzinfo = datetime.timezone.utc,
     examples: Examples = NO_EXAMPLES,
     waiting: Sequence[Example] = (),
+    shown_lessons: Sequence[ShownLesson] = (),
 ) -> str:
     """The JSON document the model reads; ``zone`` is where the person is, for the day of a session.
 
@@ -162,6 +265,8 @@ def step_input(
             "folder": session.folder,
             "day": session.prompts[0].time.astimezone(zone).strftime("%A %Y-%m-%d"),
             "prompts": [_as_shown(prompt) for prompt in session.prompts],
+            # Only where a pointer can be kept; the reading step leaves the files out elsewhere.
+            **({"written": list(session.written)} if session.written else {}),
         }
         for number, session in enumerate(sessions, start=1)
         if session.prompts
@@ -174,6 +279,12 @@ def step_input(
         "memory": distillate,
         "answered": answered,
         "waiting": [_as_given(example) for example in waiting],
+        # Only where there is one, so a reading without lessons is asked as before.
+        **(
+            {"lessons": [{"name": each.name, "text": each.text, "kept": each.kept} for each in shown_lessons]}
+            if shown_lessons
+            else {}
+        ),
         "sessions": given,
     }
     return json.dumps(document, ensure_ascii=False, indent=1)
@@ -183,20 +294,55 @@ def parse_answer(answer: str, sessions: Sequence[Session]) -> Answer:
     """The proposals in the model's answer; ``sessions`` is the sequence its input was built from."""
     proposals: list[Proposal] = []
     malformed = 0
-    for entry in _entries(answer):
+    found = _answer_object(answer)
+    for entry in found["proposals"]:
         proposal = _proposal(entry, sessions)
         if proposal is None:
             malformed += 1
         else:
             proposals.append(proposal)
-    return Answer(tuple(proposals), malformed)
+    given = found.get("corrected_again")
+    corrections = [_correction(entry, sessions) for entry in (given if isinstance(given, list) else [])]
+    return Answer(tuple(proposals), malformed, tuple(each for each in corrections if each is not None))
+
+
+def checked_corrections(
+    corrections: Sequence[Correction], sessions: Sequence[Session], kept: Sequence[ShownLesson], zone: datetime.tzinfo
+) -> list[Correction]:
+    """The corrections whose lesson the person kept and whose quote, at least ``QUOTE_WORDS`` words,
+    stands in what they typed in its session after the day the lesson was kept. A lesson is kept by
+    the day, so a prompt of that day may be the correction it was kept from."""
+    by_id = {session.session_id: session for session in sessions}
+    days = {lesson.name: lesson.kept for lesson in kept}
+    found = []
+    for correction in corrections:
+        kept_on = days.get(correction.lesson)
+        if kept_on is None or len(_collapsed(correction.quote).split()) < QUOTE_WORDS:
+            continue
+        typed = _typed_in(correction.quote, by_id.get(correction.session))
+        if any(prompt.time.astimezone(zone).date().isoformat() > kept_on for prompt in typed):
+            found.append(correction)
+    return found
+
+
+def _correction(entry: object, sessions: Sequence[Session]) -> Correction | None:
+    if not isinstance(entry, dict):
+        return None
+    lesson, quote, number = entry.get("lesson"), entry.get("quote"), _session_number(entry.get("session"))
+    if not isinstance(lesson, str) or not isinstance(quote, str) or not quote.strip():
+        return None
+    if number is None or not 1 <= number <= len(sessions):
+        return None
+    return Correction(lesson, quote, sessions[number - 1].session_id)
 
 
 def check(proposals: Sequence[Proposal], sessions: Sequence[Session], captures: Sequence[str]) -> Checked:
     """Sorts the proposals by the two checks; ``captures`` are the texts captured in the period.
 
     A kept proposal says where its quote stands (``Proposal.source``): in what was typed, or else
-    in what was pasted.
+    in what was pasted. A lesson is a correction of Claude, so both its quotes must stand in what
+    was typed, each in its own session, and for an action every word in a command of the turn one
+    of them answers (``Prompt.commands``); a lesson that fails is counted with ``not_quoted``.
     """
     said = {
         session.session_id: [
@@ -205,6 +351,7 @@ def check(proposals: Sequence[Proposal], sessions: Sequence[Session], captures: 
         ]
         for session in sessions
     }
+    by_id = {session.session_id: session for session in sessions}
     # Only a capture adds in brackets; what the person typed in brackets are words of their prompt.
     captured = [(_bare(capture), _words(_ADDITION.sub(" ", capture))) for capture in captures]
     kept: list[Proposal] = []
@@ -214,7 +361,14 @@ def check(proposals: Sequence[Proposal], sessions: Sequence[Session], captures: 
     for proposal in proposals:
         quote = _collapsed(proposal.quote)
         stands_in = _where_it_stands(quote, said.get(proposal.session, ()))
-        if len(quote.split()) < QUOTE_WORDS or stands_in is None:
+        stands = stands_in is not None and len(quote.split()) >= QUOTE_WORDS
+        if stands and proposal.lesson is not None:
+            stands = stands_in is not None and _lesson_stands(proposal, stands_in.source, by_id)
+        if stands and proposal.pointer is not None:
+            # A pointer points to what its session wrote, or it points nowhere.
+            session = by_id.get(proposal.session)
+            stands = session is not None and proposal.pointer.path in session.written
+        if not stands or stands_in is None:
             not_quoted.append(proposal)
         elif _is_captured(quote, stands_in.texts, captured):
             already_captured.append(proposal)
@@ -222,6 +376,27 @@ def check(proposals: Sequence[Proposal], sessions: Sequence[Session], captures: 
             kept.append(dataclasses.replace(proposal, source=stands_in.source))
             kept_at.append(stands_in.first_at)
     return Checked(tuple(kept), tuple(not_quoted), tuple(already_captured), tuple(kept_at))
+
+
+def _lesson_stands(proposal: Proposal, source: str, sessions: Mapping[str, Session]) -> bool:
+    """Whether a lesson's two quotes stand typed in their two sessions and an action's words in a
+    command of a turn either of them answers."""
+    lesson = proposal.lesson
+    assert lesson is not None
+    first = _typed_in(proposal.quote, sessions.get(proposal.session))
+    second = _typed_in(lesson.quote, sessions.get(lesson.session))
+    if source != TYPED or not first or not second or len(lesson.quote.split()) < QUOTE_WORDS:
+        return False
+    if lesson.kind != lessons.ACTION:
+        return True
+    commands = [command for prompt in (*first, *second) for command in prompt.commands]
+    return any(all(holds_word(command, word) for word in lesson.words) for command in commands)
+
+
+def _typed_in(quote: str, session: Session | None) -> list[Prompt]:
+    """The prompts of the session whose typed text holds the quote, white space aside."""
+    wanted = _collapsed(quote)
+    return [prompt for prompt in (session.prompts if session else ()) if wanted and wanted in _collapsed(prompt.text)]
 
 
 @dataclass(frozen=True)
@@ -245,16 +420,26 @@ def _where_it_stands(quote: str, prompts: Sequence[tuple[datetime.datetime, str,
 
 
 def _as_shown(prompt: Prompt) -> str | dict[str, Any]:
-    """A prompt as the model reads it: its text, or what was typed and what was pasted, kept apart."""
-    return {"typed": prompt.text, "pasted": list(prompt.pasted)} if prompt.pasted else prompt.text
+    """A prompt as the model reads it: its text, or what was typed, what was pasted and the turn it
+    answers (the end of Claude's answer before it, the Bash commands of that turn), kept apart."""
+    if not (prompt.pasted or prompt.answer_before or prompt.commands):
+        return prompt.text
+    shown: dict[str, Any] = {"typed": prompt.text}
+    if prompt.pasted:
+        shown["pasted"] = list(prompt.pasted)
+    if prompt.answer_before:
+        shown["answer_before"] = prompt.answer_before
+    if prompt.commands:
+        shown["commands"] = list(prompt.commands)
+    return shown
 
 
 def _as_given(example: Example) -> dict[str, str]:
     return {"kind": example.kind, "text": example.text, "quote": example.quote}
 
 
-def _entries(answer: str) -> list[Any]:
-    """The list under ``proposals`` of the first JSON object in the answer that has one."""
+def _answer_object(answer: str) -> dict[str, Any]:
+    """The first JSON object in the answer that has a list under ``proposals``."""
     decoder = json.JSONDecoder()
     for start in (match.start() for match in re.finditer(r"\{", answer)):
         try:
@@ -262,8 +447,7 @@ def _entries(answer: str) -> list[Any]:
         except ValueError:
             continue
         if isinstance(found, dict) and isinstance(found.get("proposals"), list):
-            entries: list[Any] = found["proposals"]
-            return entries
+            return found
     raise GleanError("the answer holds no JSON object with a list of proposals")
 
 
@@ -277,7 +461,7 @@ def _proposal(entry: object, sessions: Sequence[Session]) -> Proposal | None:
         due = _due(entry.get("due"))
     except ValueError:
         return None
-    if kind not in KINDS or not isinstance(quote, str) or not quote.strip():
+    if kind not in READ_KINDS or not isinstance(quote, str) or not quote.strip():
         return None
     if not text or len(text) > TEXT_LENGTH:
         return None
@@ -289,7 +473,43 @@ def _proposal(entry: object, sessions: Sequence[Session]) -> Proposal | None:
         return None
     if unsafe_characters(text + quote + topic) or not can_be_written(text + quote + topic):
         return None
-    return Proposal(kind, text, quote, sessions[number - 1].session_id, topic or None, due)
+    session_id = sessions[number - 1].session_id
+    if kind == POINTER:
+        path = entry.get("file")
+        if not isinstance(path, str) or not path.strip() or due is not None or not can_be_written(path):
+            return None
+        # The topic is the project's, which code knows; the model names none.
+        return Proposal(kind, text, quote, session_id, pointer=PointerPart(path))
+    if kind != LESSON:
+        return Proposal(kind, text, quote, session_id, topic or None, due)
+    lesson = _lesson_part(entry.get("lesson"), sessions)
+    if lesson is None or lesson.session == session_id or due is not None:
+        return None
+    return Proposal(kind, text, quote, session_id, topic or None, None, lesson=lesson)
+
+
+def _lesson_part(value: object, sessions: Sequence[Session]) -> LessonPart | None:
+    """The part of a lesson's entry beside its text; None for one that is not in the form."""
+    if not isinstance(value, dict):
+        return None
+    kind, target, quote = value.get("kind"), value.get("target"), value.get("quote")
+    number = _session_number(value.get("session"))
+    words = value.get("words", [])
+    if kind not in lessons.KINDS or target not in LESSON_TARGETS or not isinstance(quote, str) or not quote.strip():
+        return None
+    if number is None or not 1 <= number <= len(sessions):
+        return None
+    if not isinstance(words, list) or not all(isinstance(word, str) for word in words):
+        return None
+    cleaned = tuple(dict.fromkeys(" ".join(word.split()) for word in words if word.strip()))
+    if (kind == lessons.ACTION) != bool(cleaned) or len(cleaned) > kept_lessons.MAX_WORDS:
+        return None
+    if any(len(word) > MAX_WORD for word in cleaned):
+        return None
+    said = quote + "".join(cleaned)
+    if unsafe_characters(said) or not can_be_written(said):
+        return None
+    return LessonPart(kind, target, cleaned, quote, sessions[number - 1].session_id)
 
 
 def _one_line(value: object) -> str | None:

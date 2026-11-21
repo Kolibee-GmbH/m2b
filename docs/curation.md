@@ -46,12 +46,12 @@ flowchart LR
 |---|---|---|
 | Preflight | code | removes leftover temp files, downloads the files the run reads, loads the profile |
 | Migrate | code, only when the store's format is older than this m2b | brings `memory/` up to the rules of this m2b, one format at a time, each checked in code; a failing one puts `memory/` back, keeps the format and ends the run with the review |
-| Harvest | code | settles the memory candidates and "Still current? ..." questions you ticked or dropped, and the proposals you kept or dropped |
-| Glean | code and one model call without tools, only with `curation.read_sessions` | reads what you typed in Claude Code since the last reading and keeps what the model proposes for your memory ([Reading your sessions](#reading-your-sessions)) |
+| Harvest | code | settles the memory candidates, the "Still current? ..." and "Still needed? ..." questions you ticked or dropped, and the proposals you kept or dropped; writes the lessons you kept into `memory/lessons/` and keeps the fixes |
+| Glean | code and up to three model calls without tools, only with `curation.read_sessions` | reads what you typed in Claude Code since the last reading and keeps what the model proposes for your memory ([Reading your sessions](#reading-your-sessions)) |
 | Ingest | model, only with captures in the inbox | files facts and what is going on into memory, under its topic what concerns one subject only, tasks into your list, each capture into `corpus/YYYY/MM/`; reads a PDF whole up to its 60th page and writes what stands on which page into the note beside it ([A document in the inbox](#a-document-in-the-inbox)) |
 | Refresh | model, only when a fact is past its day | rewrites the facts whose `until` has passed |
 | Sort | model, only with `m2b curate --sort-facts` | moves facts lines of an older distillate into topics; code puts the file back if a statement changed |
-| Lint | code; the model only to repair a broken memory link with exactly one candidate | checks names, links, conflict copies and the distillate's size |
+| Lint | code; the model only to repair a broken memory link with exactly one candidate | moves a current item above the topics that names exactly one topic under it, then checks names, links, conflict copies and the distillate's size |
 | Journal | code | adds the tasks you completed to the month's `corpus/YYYY/MM/YYYYMM-done.md` |
 | Proposals task | code | takes in what sessions handed in ([What a session hands in](#what-a-session-hands-in)), lets unanswered proposals expire, and keeps one task in your list while proposals wait for your answer, completed once none waits |
 | Review task | code | one task in your list when something needs you |
@@ -76,6 +76,9 @@ turn, so whatever a prompt says, the model can call nothing.
 After each model step that may edit `memory/`, code compares it with a copy taken just before the
 step:
 
+- **No step** may add, change or remove a file under `memory/lessons/`: a lesson reaches every
+  session as a correction you kept, and a model step reads captures, which can claim to be one. Such
+  a change puts `memory/` back and fails the step.
 - **Refresh** may change only the facts that are due: their fact files and their lines in
   `MEMORY.md`. Any other change puts `memory/` back and fails the step.
 - **Ingest and lint** keep their edits. Each facts line they removed or rewrote, and each fact file
@@ -272,7 +275,8 @@ nothing a run filed is final:
 - **A fact stands under a topic and every session should start with it.** Move its line in
   `memory/MEMORY.md` above the first `###` heading. The other way round, a line moved under a
   `### <name> (<word>, <word>)` heading reaches a session only when it is about that topic
-  ([Store format](store-format.md)).
+  ([Store format](store-format.md)). A current item you move above the topics goes back under its
+  topic at the next run while it names a word of exactly that one topic; say it without the word.
 - **The review task names a finding of lint,** such as "in memory/MEMORY.md, the topic Mill Lane
   has 1 word in the brackets of its heading; it needs 2 to 5". Change the file the finding names,
   here by adding a word a prompt about the topic would use, as in
@@ -298,9 +302,12 @@ curates, and `m2b config set curation.read_sessions true` or `false` changes the
 
 **What is read.** Claude Code's transcripts on this machine, and of them only the prompts Claude
 Code marks as typed by a human, in the terminal or the desktop app, also a message you send while
-Claude is working, with what you pasted into one kept apart from what you typed. Left out: Claude's
-answers and tool results, what a plugin, a finished task or another agent sent, a suggested prompt
-you only accepted, and the blocks Claude Code writes into a prompt. Credentials are redacted, and a
+Claude is working, with what you pasted into one kept apart from what you typed. Beside each prompt,
+never as your words, goes the turn it answers: the last 500 characters of what Claude wrote before
+it and the shell commands Claude ran in that turn, so a correction can be told by what it corrects.
+Left out: the rest of Claude's answers, what a tool printed, what a plugin, a finished task or
+another agent sent, a suggested prompt you only accepted, and the blocks Claude Code writes into a
+prompt. Credentials are redacted, and a
 prompt ends after 2,000 characters, what you typed first and what you pasted in the room that is
 left. A longer text you wrote elsewhere reaches a prompt as pasted text, and so does a mail or a
 piece of an agent's answer, so a proposal says which of the two it stands on (below). A session
@@ -314,15 +321,51 @@ is gone and nothing was noted for it or git does not answer. The run's informati
 **When.** The step `glean` runs after harvest and before ingest, so what you captured yourself is
 in the store by then. It covers the time since the last reading ended: the last 24 hours at the
 first reading and never more than 7 days; what lies before is named as not read. Without a prompt
-of yours in that time no model starts.
+of yours in that time the reading starts no model; the check of your lessons against the files
+every session loads (below) still asks one when those lessons or files changed.
 
 **What is kept.** The model gets the distillate, so it can leave out what is known, the proposals
-you kept and dropped lately (below), and per session its folder, its day and its prompts. It answers with proposals of four kinds, a person, an
-agreement, a commitment and something personal, each with the words it stands on. Code keeps a
+you kept and dropped lately (below), per session its folder, its day and its prompts, and the
+lessons you kept, each with the day it was kept. Beside its proposals it names the prompts that
+correct Claude on a kept lesson again; code counts such a correction only where its words, at
+least three, stand in what you typed after that day. It answers with proposals of six kinds, a person, an
+agreement, a commitment, something personal, a lesson and a pointer, each with the words it stands on. A
+lesson is a correction of how Claude works that you made in two sessions, such as "only the quick
+round" after Claude ran the whole proof: code keeps it only when both of your sentences stand in
+what you typed, in two sessions, and for a command when its words stand in a command Claude ran
+there. One for a single project names that project's repository, where both sessions' folders
+name the same one by a git remote; without one it is left out. Before a lesson is proposed, a second
+model run without tools reads it with the files a session in its folders loads (the `CLAUDE.md`
+files, the rules, the output style, Claude Code's memory, the list `m2b status` measures), each
+line numbered. Where a line says the matter wrongly, the lesson becomes a fix of that line, with
+the new wording; where a line says it rightly, a pointer to that line, without text of its own; a
+lesson for one project that no file states becomes a fix that adds it to that project's
+`CLAUDE.md`. Code keeps a verdict only for a line that stands in a file it showed, and a fix only
+for a file under `~/.claude/` or in a repository. A fix you keep waits in the store until the next
+session where the file lies applies it with you ([Fixes](using.md#fixes-for-the-files-claude-reads)),
+and the reading goes on counting corrections of its lesson under the fix's name until you give the
+fix up; a pointer is kept as a lesson that names its file and stays out of the block every session gets.
+The files change after that, so every reading asks again, before it reads the sessions, whether a
+file every session on this machine loads (`~/.claude/CLAUDE.md`, its rules without `paths`, the
+output style chosen there) states a lesson of the block now. The model is asked only when those
+lessons or files changed since its last answer; a lesson it finds stated, at a line code finds in
+the file, keeps that file as its source and leaves the block, and the run says so. Code keeps a
 proposal only when those words stand in one prompt of the session it names, typed or pasted, with
 at least three words, and when you did not capture the same thing in that time. A proposal like one that
 waits, or like one you kept or dropped or that expired within 90 days, is not kept a second time,
 so reading a period again adds nothing.
+
+A pointer is a decision, an agreement, a person or a deadline of a project you stated in a session
+that Claude wrote into a file of the repository, such as `docs/records/014-login.md`. The model
+sees the files a session wrote only where its repository has a project topic, by their path in
+the repository; code keeps a pointer only to a file its session wrote. Kept, it becomes a line of
+that project's topic, `- <sentence> → <path>`, so the decision stays in the repository and the
+second brain knows where.
+
+Code proposes one more kind by itself, with no model and on no words: a `project`, a repository
+whose remote the session start noted and that you typed in on two days, in this reading or in one
+of the last 30 days, while no topic names it and no capture of it waits in the inbox
+([A project](using.md#a-project)). A session in a folder that is left out counts for none.
 
 **Your answer.** `m2b proposals` lists what waits, each with its id, its kind, the text, the words
 it stands on and their day: `said on <day>` before words you typed, `pasted on <day>` before words
@@ -371,8 +414,8 @@ the sessions.
 **What your answers change.** The next reading shows the model what you answered: up to 30
 proposals you kept and up to 30 you dropped, of each those a run settled last, with the kind, the
 text and the words it stood on. The model is told to leave out what is like something you dropped, also where
-it would otherwise propose it, and in doubt to propose what is like something you kept; the four
-kinds and what is never proposed stay as they are. So dropping the time of a call a few times is
+it would otherwise propose it, and in doubt to propose what is like something you kept; the kinds
+and what is never proposed stay as they are. So dropping the time of a call a few times is
 how you say that such things do not belong in your memory. It is a rule a model follows, not a
 check in code. An expired proposal is not shown: you did not look at it, which says nothing about
 it. A proposal is no example any more 90 days after a run settled your answer to it. The model is
@@ -496,7 +539,8 @@ m2b curate --sort-facts    # sorts the facts of an older distillate into topics
 capture names the day. `--sort-facts` moves the lines that matter for one subject under its topic;
 code then compares the file and puts the old one back if any statement changed. It leaves
 `## Current` as it is: an item above the topics there moves under its topic when ingest files a
-capture about the same thing, or when you move it by hand.
+capture about the same thing, and at every run's lint when it names a word of exactly one topic.
+One that names two topics, or none, stays until you move it by hand.
 
 ## Pausing
 
@@ -586,7 +630,7 @@ color of a warning. It is refreshed about once a minute and after each of your t
 |---|---|
 | `last curation run failed` | the last run failed; the review task in your list names the step and the cause, and `/m2b-review` shows it |
 | `last curation run interrupted` | the last run ended without finishing, for example because the computer shut down or its process was killed |
-| `could not read the last curation run` or `could not read the inbox` | that part of the store could not be read |
+| `could not read the last curation run`, `could not read the inbox` or `could not read the lessons` | that part of the store could not be read |
 | `could not read store.json`, `tasks not reachable` (likewise for the store and the calendar) | that file or backend; the task list, store and calendar are checked every 5 minutes, so such a problem can show up or clear that much later |
 | `could not look` | `m2b status` gave no answer at all; run it in a terminal to see why |
 

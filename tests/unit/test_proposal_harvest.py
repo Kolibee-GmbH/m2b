@@ -2,24 +2,26 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import json
 import unittest
 from typing import Any
 from unittest import mock
 
-from m2b import harvest, proposal_answers, proposals
+from m2b import fixes, glean, harvest, lessons, project_proposals, proposal_answers, proposals
 from m2b.glean import Proposal
 from m2b.notes.frontmatter import Note
 from m2b.proposal_answers import DROP, KEEP
 from m2b.tasks.base import UnconfirmedTaskError
 from m2b.tasks.markdown import MarkdownTasks
 from test_proposal_answers import DANA_ID, LADDER_ID, NOBODYS_ID, AnswerFixture
-from test_proposals import DANA, LADDER, NOW, counts
+from test_proposals import DANA, LADDER, LESSON, NOW, POINTER, counts
 
 LATER = NOW + datetime.timedelta(days=1)
 SOMEDAY = Proposal("commitment", "Send Dana the offer.", "I still have to send Dana the offer", "shed")
 SOMEDAY_ID = proposals.proposal_id(SOMEDAY)
+LESSON_ID = proposals.proposal_id(LESSON)
 
 
 class ProposalHarvestFixture(AnswerFixture):
@@ -46,6 +48,167 @@ class ProposalHarvestFixture(AnswerFixture):
         return note.frontmatter
 
 
+class KeptLessonTest(ProposalHarvestFixture):
+    def test_a_kept_lesson_is_filed_in_code_as_a_lesson_and_never_as_a_capture(self) -> None:
+        """Covers: B272"""
+        self.answered(KEEP, LESSON)
+
+        report = self.harvest()
+
+        self.assertEqual(self.captures(), [])
+        (filed,) = lessons.read_all(self.store)
+        self.assertEqual(
+            (filed.text, filed.kind, filed.target, filed.words),
+            (LESSON.text, "action", "github.com/acme/portal", ("scripts/check",)),
+        )
+        self.assertEqual(self.state(LESSON_ID)[0], "kept")
+        self.assertEqual(self.answer_files(), [])
+        self.assertEqual(report.problems, [])
+        self.assertEqual(len(report.lessons), 1)
+
+    def test_a_kept_lesson_that_replaces_another_removes_it(self) -> None:
+        """Covers: B284"""
+        weak = self.root / "memory" / "lessons" / "weak.md"
+        weak.parent.mkdir(parents=True, exist_ok=True)
+        weak.write_text(
+            "---\nkind: knowledge\ntarget: every project\nkept: 2026-02-01\n---\n# Weak\n\nKeep it short.\n"
+        )
+        part = dataclasses.replace(
+            LESSON.lesson, kind="knowledge", target="every project", words=(), replaces="weak.md"
+        )
+        self.answered(KEEP, dataclasses.replace(LESSON, lesson=part))
+
+        report = self.harvest()
+
+        self.assertFalse(weak.exists())
+        self.assertEqual(report.replaced, ["weak.md"])
+        self.assertEqual(self.written()["format"], 4)
+
+    def test_a_replaced_lesson_that_left_the_block_meanwhile_stays(self) -> None:
+        """Covers: B284"""
+        weak = self.root / "memory" / "lessons" / "weak.md"
+        weak.parent.mkdir(parents=True, exist_ok=True)
+        weak.write_text(
+            "---\nkind: knowledge\ntarget: every project\nkept: 2026-02-01\nkept_at: ~/.claude/CLAUDE.md\n---\n"
+            "# Weak\n\nKeep it short.\n"
+        )
+        part = dataclasses.replace(
+            LESSON.lesson, kind="knowledge", target="every project", words=(), replaces="weak.md"
+        )
+        self.answered(KEEP, dataclasses.replace(LESSON, lesson=part))
+
+        report = self.harvest()
+
+        self.assertTrue(weak.exists())
+        self.assertEqual(report.replaced, [])
+
+    def kept_at(self, at_source: glean.AtSource, kind: str = "action") -> proposals.Entry:
+        words = ("scripts/check",) if kind == "action" else ()
+        part = dataclasses.replace(LESSON.lesson, kind=kind, words=words, at_source=at_source)
+        self.answered(KEEP, dataclasses.replace(LESSON, lesson=part))
+        return proposals.load(self.store).entries[LESSON_ID]
+
+    def test_a_lesson_a_source_states_already_is_kept_as_a_pointer_to_it(self) -> None:
+        """Covers: B272"""
+        self.kept_at(glean.AtSource(glean.STATED, "~/.claude/CLAUDE.md", "- Run only the quick checks."), "knowledge")
+
+        report = self.harvest()
+
+        (filed,) = lessons.read_all(self.store)
+        self.assertEqual(
+            (filed.kept_at, filed.kind, filed.target), ("~/.claude/CLAUDE.md", "knowledge", "github.com/acme/portal")
+        )
+        self.assertEqual(lessons.block([filed]), "")
+        self.assertEqual((self.state(LESSON_ID)[0], report.problems, self.captures()), ("kept", [], []))
+
+    def test_a_pointer_to_a_file_of_a_repository_names_it_as_a_fix_would_not_by_this_machines_checkout(self) -> None:
+        """Covers: B272"""
+        stated = glean.AtSource(
+            glean.STATED, "~/code/portal/CLAUDE.md", "- Never push.", None, "CLAUDE.md", ("github.com/acme/portal",)
+        )
+        self.kept_at(stated)
+
+        self.harvest()
+
+        (filed,) = lessons.read_all(self.store)
+        self.assertEqual(filed.kept_at, "CLAUDE.md in github.com/acme/portal")
+
+    def test_a_fix_marked_done_or_dropped_before_stays_so_and_the_review_says_it(self) -> None:
+        """Covers: B272"""
+        home = glean.AtSource(
+            glean.FIX, "~/.claude/CLAUDE.md", "- Run the whole proof.", "- Run the quick checks.", "~/.claude/CLAUDE.md"
+        )
+        before = fixes.new_fix(
+            "~/.claude/CLAUDE.md",
+            (),
+            "sb-test-m1",
+            "- Run the whole proof.",
+            "- Run the quick checks.",
+            "x",
+            "2026-03-01",
+        )
+        fixes.keep(self.store, before)
+        fixes.settle(self.store, before.name, fixes.DROPPED)
+        self.kept_at(home)
+
+        report = harvest.harvest(self.store, self.tasks, "Remember? ", LATER, machine_id="sb-test-m1")
+
+        self.assertEqual(report.fixes, [])
+        self.assertEqual(
+            report.problems,
+            ["the lesson you kept is a fix of ~/.claude/CLAUDE.md you marked dropped before; it stays dropped"],
+        )
+        self.assertEqual(self.state(LESSON_ID)[0], "kept")
+
+    def test_a_lesson_that_is_a_fix_of_its_source_is_kept_as_a_fix_for_this_machine_or_its_repository(self) -> None:
+        """Covers: B272"""
+        home = glean.AtSource(
+            glean.FIX, "~/.claude/CLAUDE.md", "- Run the whole proof.", "- Run the quick checks.", "~/.claude/CLAUDE.md"
+        )
+        added = glean.AtSource(
+            glean.FIX,
+            "CLAUDE.md in github.com/acme/portal",
+            None,
+            "Name releases after the version.",
+            "CLAUDE.md",
+            ("github.com/acme/portal",),
+        )
+        for at_source, machine, line in ((home, "sb-test-m1", "- Run the whole proof."), (added, None, None)):
+            with self.subTest(file=at_source.file):
+                for leftover in (self.root / fixes.FOLDER).glob("*") if (self.root / fixes.FOLDER).is_dir() else ():
+                    leftover.unlink()
+                (self.root / proposals.PROPOSALS_FILE).unlink(missing_ok=True)
+                self.kept_at(at_source)
+
+                report = harvest.harvest(self.store, self.tasks, "Remember? ", LATER, machine_id="sb-test-m1")
+
+                (kept,) = fixes.read_all(self.store)
+                self.assertEqual(
+                    (kept.fix.path, kept.fix.machine, kept.fix.line, kept.fix.wording, kept.state),
+                    (at_source.path, machine, line, at_source.wording, fixes.WAITING),
+                )
+                self.assertIn(LESSON.quote, kept.fix.why)
+                self.assertEqual(kept.fix.lesson, LESSON.text)
+                self.assertEqual((lessons.read_all(self.store), self.captures(), report.problems), ([], [], []))
+                self.assertEqual(report.fixes, [kept.fix.place])
+                self.assertEqual(self.state(LESSON_ID)[0], "kept")
+
+    def test_a_knowledge_lesson_for_one_project_waits_with_its_answer_and_says_why(self) -> None:
+        """Covers: B272"""
+        for_one_project = dataclasses.replace(
+            LESSON, lesson=dataclasses.replace(LESSON.lesson, kind="knowledge", words=())
+        )
+        self.answered(KEEP, for_one_project)
+
+        report = self.harvest()
+
+        self.assertEqual((self.captures(), lessons.read_all(self.store)), ([], []))
+        self.assertEqual(self.state(LESSON_ID)[0], "open")
+        self.assertEqual(len(self.answer_files()), 1)
+        (problem,) = report.problems
+        self.assertTrue(problem.startswith(f"the lesson you kept waits: {LESSON.text}"))
+
+
 class KeepTest(ProposalHarvestFixture):
     def test_a_kept_proposal_becomes_a_capture_stays_known_as_kept_and_its_answer_goes(self) -> None:
         """Covers: B121"""
@@ -61,6 +224,39 @@ class KeepTest(ProposalHarvestFixture):
         self.assertEqual(self.answer_files(), [])
         self.assertEqual((len(report.captured), report.dropped, report.problems), (1, [], []))
         self.assertEqual(self.tasks.items(include_completed=True), [])
+
+    def test_a_kept_project_becomes_the_capture_of_keep_this_project(self) -> None:
+        """Covers: B276"""
+        two = project_proposals.proposal(
+            ("github.com/acme/portal", "gitlab.com/alex/portal"), [datetime.date(2026, 3, 1), NOW.date()]
+        )
+        self.answered(KEEP, two)
+
+        report = self.harvest()
+
+        (note,) = self.captures()
+        self.assertEqual(
+            note.body,
+            "Keep this project: portal\nRepository: github.com/acme/portal\nRepository: gitlab.com/alex/portal\n",
+        )
+        self.assertEqual(self.frontmatter(note).get("from_proposal"), proposals.proposal_id(two))
+        self.assertEqual(self.state(proposals.proposal_id(two))[0], "kept")
+        self.assertEqual(report.problems, [])
+
+    def test_a_kept_pointer_becomes_a_capture_of_its_line_with_its_repository(self) -> None:
+        """Covers: B279"""
+        self.answered(KEEP, POINTER)
+
+        report = self.harvest()
+
+        (note,) = self.captures()
+        self.assertEqual(
+            note.body,
+            "Keep this pointer: Login moves to the customer's identity provider in March → docs/records/014-login.md\n"
+            "Repository: github.com/acme/portal\n",
+        )
+        self.assertEqual(self.state(proposals.proposal_id(POINTER))[0], "kept")
+        self.assertEqual(report.problems, [])
 
     def test_a_kept_commitment_with_a_day_has_its_task_at_once(self) -> None:
         """Covers: B121"""
@@ -169,7 +365,7 @@ class CandidatesFailTest(ProposalHarvestFixture):
         """Covers: B121"""
         self.answered(KEEP, DANA)
         raw = self.written()
-        raw["format"] = 4
+        raw["format"] = proposals.FORMAT + 1
         self.write(raw)
         report = harvest.HarvestReport()
 
@@ -358,7 +554,7 @@ class CannotTellTest(ProposalHarvestFixture):
         """Covers: B121"""
         self.answered(KEEP, DANA)
         raw = self.written()
-        raw["format"] = 4
+        raw["format"] = proposals.FORMAT + 1
         self.write(raw)
 
         report = self.harvest()

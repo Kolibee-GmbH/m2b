@@ -13,11 +13,15 @@ integration needs, generated from `store.json`.
 ├── profile.json    the owner's profile
 ├── inbox/          new captures; every client only adds files here
 ├── corpus/YYYY/MM/ the archive, by month, no topic folders
-├── memory/         MEMORY.md (the distillate) and one file per fact
+├── memory/         MEMORY.md (the distillate), one file per fact, and lessons/ with one file
+│                   per lesson you kept
 ├── tasks/          only with the markdown task backend: one file per task
 └── state/
-    ├── core/       the run record, the memory candidates, the open "Still current?" questions,
-    │               the proposals from your sessions and your answers to them
+    ├── core/       the run record, the memory candidates, the open "Still current?" and
+    │               "Still needed?" questions (lesson-questions.json), the proposals from your
+    │               sessions and your answers to them, lessons kept in a session (lessons-kept/),
+    │               the fixes (fixes/) and how often you corrected Claude on a lesson again
+    │               (lesson-counts.json)
     ├── addons/<add-on>/
     └── integrations/<integration>/
 ```
@@ -127,6 +131,50 @@ starts with aims at 2 KB, and so does each topic; lint reports more. A topic ove
 with no prompt, because a prompt brings whole topics only: lint reports it as something to act on,
 to shorten the topic or split it in two.
 
+A topic about a project may name the project's repository in one line of its own,
+`- Repository: github.com/acme/portal (acme-portal.md)`: the address of its git remote, host and
+path, which is the same on every machine. The store never names a folder on a machine. Where the
+topic comes into a session, the line comes with one more below it, `  on this machine:` and the
+folder the repository lies in here, or `  not cloned on this machine`; the folder is found in the
+notes the session start keeps in this machine's state of the remotes of every folder a session
+starts in, the one seen last that is still there.
+
+Its other lines can point into the repository: a sentence, `→` and a path in the repository, with a
+heading where it helps; the path follows the last `→` and is one word with a `/` or a `.`,
+`- Login moves to the customer's identity provider in March →
+docs/records/014-login.md (acme-portal.md)`. The content stays in the repository; the line says that
+it exists and where. Where such a topic has a clone on the machine, its place line ends with
+`; the paths after → lie in it`. Lint on the curating machine reports a pointer whose file that
+clone does not hold, a pointer that leaves the repository, and, as information, a repository no
+folder there was opened in for 30 days; a project topic is measured against the 4 KB with its place
+line.
+
+A lesson you kept is a file of its own under `memory/lessons/`, written by a curation run:
+
+```markdown
+---
+kind: knowledge
+target: every project
+kept: 2026-11-20
+---
+# The checks a change touches
+
+Run only the checks the change touches; the whole proof only when the change gives a reason.
+
+## Evidence
+
+- [[20261120T101500Z-claude-a1b2.md]]
+```
+
+An action lesson names the words a command holds when it applies, `words: [scripts/check]`, and
+those that keep it silent, `unless: [--quick]`; `ask: true` has Claude Code ask you before the
+call. A lesson you keep in a session waits in `state/core/lessons-kept/` until the next run files it.
+`kind` is `knowledge` (how to name or judge a thing) or `action` (about a command), `target` is
+`every project` or a repository's address, and `kept_at` names the source that states it now,
+such as `~/.claude/CLAUDE.md`, written when the lesson is kept or when a later reading finds the
+source stating it. Every session starts with the knowledge lessons for every project
+that no source states, in an output of their own beside the distillate, which keeps its 8 KB.
+
 `## Current` holds topics under the same headings: a current item above its first `###` heading
 reaches every session, one under a topic comes in with that topic, below its facts under
 `#### Current`. Headings with the same name, in either section, are one topic, and a word of any of
@@ -134,7 +182,8 @@ them names it; a topic may stand under `## Current` alone. Ingest puts a new ite
 fact: one that holds everywhere above the first `###` there, one about a single subject under that
 subject's heading, which it copies from `## Facts` when the topic has one there. An item above the
 topics that is about one subject moves under its topic when ingest files a capture about the same
-thing; an item under a topic stays there, and no other step moves an item. When a "Still current?" answer takes a topic's last item out,
+thing, and at every run, in code, when it names a word of exactly one topic, as a prompt would; an
+item under a topic stays there, and no other step moves an item. When a "Still current?" answer takes a topic's last item out,
 its heading under `## Current` goes with it, unless another line is left below it; ingest is told
 to remove the heading with the last item it takes out.
 
@@ -142,7 +191,8 @@ to remove the heading with the last item it takes out.
 
 The curator's own tasks carry a marker as the first line of their notes, so they are found by
 marker, never by title: `m2b:review` for the review task, `m2b:candidate` for a memory candidate,
-`m2b:current` for a "Still current? ..." question about a current item, `m2b:proposals` for the
+`m2b:current` for a "Still current? ..." question about a current item, `m2b:lesson <key>` for a
+"Still needed? ..." question about a lesson, `m2b:proposals` for the
 one task that says proposals from your sessions wait for an answer, and
 `m2b:capture <file> <key>` for a task ingest made from a capture. On Apple Reminders, which has
 no dropped state, a dropped curator task carries the line `m2b:dropped` in its notes.
@@ -205,8 +255,13 @@ field; without such an entry the format is 1.
 `read_until` is the moment up to which the sessions were read. `announced_until` is when the
 newest proposal was added that the task for the waiting proposals has told you of: a task you
 completed or deleted comes back only for a proposal added after it. A proposal's id comes from its
-session and its `quote`, the words of the session it stands on; `kind` is `person`, `agreement`, `commitment` or
-`personal`; `day` is the day those words were sent, `due` the day a commitment names. `state` is `open`,
+session and its `quote`, the words of the session it stands on; `kind` is `person`, `agreement`, `commitment`,
+`personal`, `lesson`, `pointer` or `project`; `day` is the day those words were sent, `due` the day a commitment names. A
+`project` stands on no words: its `quote` is the addresses of the repository's remotes, its
+`"source": "worked"`, its id comes from the addresses alone, and `day` is the last day a session
+worked in it. A `pointer` has `"pointer": {"path": "docs/records/014-login.md", "repositories":
+["github.com/acme/portal"]}`, the file in its repository and that repository's addresses, and its
+`text` is the line it becomes. `state` is `open`,
 `kept`, `dropped` or `expired`, and `since` the moment it got that state. An open proposal that
 has no answer 14 days after it was added expires. A kept, dropped or expired proposal stays for 90
 days, so the same one is not proposed again; the first curation run after that removes it. The
@@ -252,15 +307,59 @@ and is null otherwise; `at` is the time of the call. The file holds no folder. T
 `format` is 3, and an m2b that knows format 2 answers "update m2b on this machine" where it would
 show the proposal as said or under a source it does not know and write it back without the fields.
 
+A proposed lesson, a correction of Claude you made in two sessions, has one more field:
+
+```json
+"lesson": {
+  "kind": "action",
+  "target": "github.com/acme/portal",
+  "words": ["scripts/check"],
+  "quote": "no full check without a reason",
+  "session": "0a1b2c3d-1111-4222-8333-444455556666"
+}
+```
+
+`kind` is `knowledge` or `action`, as in a [lesson](using.md#lessons); `target` is `every project` or the
+address of the repository both sessions worked in; `words` are, for an action, the words a command
+holds when the lesson applies; `quote` and `session` are the same correction in the second session.
+While the file holds a lesson, a project or a pointer its `format` is 4, and an m2b that knows format
+3 answers "update m2b on this machine" where it would leave them out and write the file back without
+them.
+
+## Fixes for the files Claude reads
+
+A fix you keep is one file a client adds, `state/core/fixes/<name>.json`:
+
+```json
+{
+  "version": 1,
+  "name": "fix-3f9c2a71b0de",
+  "file": {"repositories": ["github.com/acme/portal"], "path": "CLAUDE.md"},
+  "line": "- Run the whole proof before every commit.",
+  "wording": "- Run the checks the change touches; the whole proof only before a release.",
+  "why": "The whole proof takes twenty minutes and a small change does not need it.",
+  "kept": "2026-11-20"
+}
+```
+
+A repository is named by the addresses of its remotes, host and path in lower case, and the file
+by its path in the repository; a file under `~/.claude/` by `{"home": "~/.claude/CLAUDE.md",
+"machine": "<machine id>"}`. `line` is null for a fix that only adds. The name is `fix-` and twelve
+letters and digits drawn from the file, the line and the wording. A fix a curation run kept from a
+lesson also holds the lesson's sentence, `"lesson": "..."`, under which the reading of your sessions
+goes on counting corrections. What became of a fix is an empty
+file a client adds beside it, `<name>.done` or `<name>.dropped`; where both are there, done stands.
+The session start only reads the fixes.
+
 ## Who writes what
 
 | What | Created by | Changed by | Removed by |
 |---|---|---|---|
 | `inbox/` | clients, integrations, harvest (a ticked candidate, a kept proposal), the worklog | the curating machine (name, frontmatter, trailer; never the text) | ingest moves files into the archive; normalize removes conflict copies identical to their original |
 | `corpus/` | ingest, the journal | the journal (appends to the month's file) | lint, only conflict copies identical to their original |
-| `memory/` | ingest | ingest, refresh, the sorting step, a migration after an update, harvest (only `## Current`, from "Still current?" answers), lint (a broken link it repairs) | nobody |
-| `state/core/` | the curation run; any client adds an answer to a proposal under `proposal-answers/` and a proposal a session hands in under `handed-in/` | the curating machine | harvest prunes settled candidates and removes the answers it settled; the run removes the handed-in proposals it took in; every curation run removes the proposals kept, dropped or expired 90 days ago or longer |
-| tasks (`tasks/` with the `markdown` backend, or the Reminders list) | you, integrations, capture (a follow-up), ingest, `m2b tasks add --candidate` (a memory candidate), the curation run (review, "Still current?" questions, the task for waiting proposals) | you, also through the todos skill, which ticks a task you say is done, and through the m2b pane, which ticks one of your tasks with `done` and ticks or drops a curator task with keep, drop or `ok`; the curation run completes its review task when nothing needs you, and the task for waiting proposals when none waits | harvest and the refresh step, once a curator task is settled or its item is gone; lint, with the `markdown` backend, only conflict copies of task files identical to their original; you |
+| `memory/` | ingest; harvest (a lesson under `memory/lessons/`) | ingest, refresh, the sorting step, a migration after an update, harvest (only `## Current`, from "Still current?" answers), lint (a broken link it repairs, a current item it moves under its topic), the reading of your sessions (`kept_at` of a lesson a source states) | harvest (a lesson a kept one replaces) and the curation run (a lesson whose "Still needed?" you dropped) |
+| `state/core/` | the curation run; any client adds an answer to a proposal under `proposal-answers/`, a proposal a session hands in under `handed-in/`, and a fix and what became of it under `fixes/` | the curating machine | harvest prunes settled candidates and removes the answers it settled; the run removes the handed-in proposals it took in; every curation run removes the proposals kept, dropped or expired 90 days ago or longer |
+| tasks (`tasks/` with the `markdown` backend, or the Reminders list) | you, integrations, capture (a follow-up), ingest, `m2b tasks add --candidate` (a memory candidate), the curation run (review, "Still current?" and "Still needed?" questions, the task for waiting proposals) | you, also through the todos skill, which ticks a task you say is done, and through the m2b pane, which ticks one of your tasks with `done` and ticks or drops a curator task with keep, drop or `ok`; the curation run completes its review task when nothing needs you, and the task for waiting proposals when none waits | harvest and the refresh step, once a curator task is settled or its item is gone; lint, with the `markdown` backend, only conflict copies of task files identical to their original; you |
 | `state/addons/<a>/`, `state/integrations/<i>/` | that add-on or integration | the same | the same |
 
 Nothing captured is ever deleted by m2b.

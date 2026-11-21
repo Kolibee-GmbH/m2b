@@ -2,8 +2,17 @@
 
 ``tests/glean/day.json`` is an invented day: sessions with what the person typed and what they
 pasted into a prompt, some of it planted (a person, an agreement, a
-commitment, something personal) and some of it a trap, one of each class a proposal must never
-come from. The day is written as transcripts in Claude Code's format, read back with
+commitment, something personal, and a lesson: the same correction of Claude in two sessions, each
+after an answer of Claude's that ran ``scripts/check``) and some of it a trap, one of each class a
+proposal must never come from, among them a correction made in one session only and one about the
+task at hand, and a pointer: a decision stated in a session in a repository the memory has a
+project topic for, which Claude wrote into a file there, with the same sort of decision in a session
+that wrote nothing as a trap. A prompt that answers a turn has the answer and the commands before it in the
+transcript, as Claude Code writes them; a lesson stands on both its statements, one per quote. The
+check of a lesson's sources against the files a session loads is not run here: the day has no
+such files, so every lesson would stay one. What the step leaves out in code before that check is
+left out here too: a lesson for this project, since no session of the day has noted git remotes,
+and one the way a lesson is kept refuses. The day is written as transcripts in Claude Code's format, read back with
 ``m2b.sessions`` and handed to the model the way the curation step hands it over: with the step's
 own instruction (``m2b.glean.instruction``), through the core's run without tools
 (``m2b.curate.model``). The answer goes through ``m2b.glean``, the step's parser and checks. So
@@ -55,7 +64,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from m2b import claude_code, folders_left_out, glean
+from m2b import claude_code, folders_left_out, glean, kept_lessons, lessons, project_capture, project_files
 from m2b.config.machine import CURATION_MODELS, DEFAULT_CURATION_MODEL
 from m2b.curate import model as model_run
 from m2b.paths import HOME_VARIABLE, machine_paths
@@ -93,6 +102,11 @@ TRAPS = (
     AUTOMATION,
     STEERED,
     WAITING,
+    # A correction of Claude made in one session only, and one about the task at hand: no lesson.
+    "one-session",
+    "task-correction",
+    # A decision of a project stated in a session that wrote no file of the repository: no pointer.
+    "unwritten",
 )
 # Their words must not be among the prompts the reader gives; no model is asked to resist them.
 TRAPS_OF_THE_READER = (AUTOMATION,)
@@ -123,6 +137,8 @@ class Statement:
     pasted: bool = False
     # For a trap that steers: what a proposal names when it took the bait, whatever it quotes.
     names: str = ""
+    # For a pointer: the file it points to, by its path in the repository.
+    file: str = ""
 
 
 @dataclass(frozen=True)
@@ -139,6 +155,8 @@ class Day:
     names: Mapping[str, str]
     planted: tuple[Statement, ...]
     traps: tuple[Statement, ...]
+    # A session's folder to the project its repository is, as the step finds it from noted remotes.
+    projects: Mapping[str, project_files.Project] = dataclasses.field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -204,20 +222,65 @@ def load_day(path: Path) -> Day:
         for index, prompt in enumerate(session["prompts"]):
             entry = {"text": prompt} if isinstance(prompt, str) else prompt
             moment = first + datetime.timedelta(minutes=4 * index)
+            if "answer_before" in entry or "commands" in entry:
+                answered_at = moment - datetime.timedelta(seconds=30)
+                transcripts[session_id].append(_answer(entry, session["folder"], answered_at))
             transcripts[session_id].append(_record(entry, session["folder"], moment, index))
+            if "wrote" in entry:
+                wrote_at = moment + datetime.timedelta(seconds=60)
+                transcripts[session_id].append(_wrote(entry["wrote"], session["folder"], wrote_at))
             for label, into in ((entry.get("planted"), planted), (entry.get("trap"), traps)):
                 if label is not None:
                     _must_hold(entry, session["name"])
                     is_pasted = entry["statement"] not in entry["text"]
-                    into.append(Statement(session_id, label, entry["statement"], is_pasted, entry.get("names", "")))
+                    file = entry["wrote"][0] if label == glean.POINTER else ""
+                    statement = Statement(
+                        session_id, label, entry["statement"], is_pasted, entry.get("names", ""), file
+                    )
+                    into.append(statement)
     memory = "\n".join(raw["memory"]) + "\n"
+    projects = _projects(raw.get("repositories", {}), memory)
     answered = raw.get("answered", {})
     examples = _examples(answered)
     waiting = _of(answered.get("waiting", ()))
     day = Day(
-        start, memory, tuple(raw["captures"]), examples, waiting, transcripts, names, tuple(planted), tuple(traps)
+        start,
+        memory,
+        tuple(raw["captures"]),
+        examples,
+        waiting,
+        transcripts,
+        names,
+        tuple(planted),
+        tuple(traps),
+        projects,
     )
     return day
+
+
+def _projects(repositories: Mapping[str, str], memory: str) -> dict[str, project_files.Project]:
+    """Each folder the day names with the address of its repository, as the project the memory's topic is."""
+    projects = {}
+    for folder, address in repositories.items():
+        topic = project_capture.topic_naming(memory, (address,))
+        if topic is None:
+            raise FixtureError(f"no topic of the memory has a Repository: line for {address}")
+        projects[folder] = project_files.Project(topic, folder, (address,))
+    return projects
+
+
+def _wrote(paths: Sequence[str], folder: str, moment: datetime.datetime) -> dict[str, Any]:
+    """Claude's answer that writes each file, by its path below the session's folder, with ``Write``."""
+    content = [
+        {"type": "tool_use", "id": f"write-{number}", "name": "Write", "input": {"file_path": f"{folder}/{path}"}}
+        for number, path in enumerate(paths)
+    ]
+    return {
+        "type": "assistant",
+        "timestamp": moment.isoformat().replace("+00:00", "Z"),
+        "cwd": folder,
+        "message": {"role": "assistant", "content": content},
+    }
 
 
 def _examples(answered: Mapping[str, Any]) -> glean.Examples:
@@ -232,6 +295,21 @@ def _must_hold(entry: Mapping[str, Any], session_name: str) -> None:
     statement = entry.get("statement")
     if not statement or statement not in entry["text"] + entry.get("pasted", ""):
         raise FixtureError(f"a prompt in {session_name} does not hold its statement: {statement!r}")
+
+
+def _answer(entry: Mapping[str, Any], folder: str, moment: datetime.datetime) -> dict[str, Any]:
+    """Claude's answer before a prompt as Claude Code writes it: its text and a Bash call per command."""
+    content: list[dict[str, Any]] = [{"type": "text", "text": entry.get("answer_before", "")}]
+    content += [
+        {"type": "tool_use", "id": f"bash-{number}", "name": "Bash", "input": {"command": command}}
+        for number, command in enumerate(entry.get("commands", ()))
+    ]
+    return {
+        "type": "assistant",
+        "timestamp": moment.isoformat().replace("+00:00", "Z"),
+        "cwd": folder,
+        "message": {"role": "assistant", "content": content},
+    }
 
 
 def _record(entry: Mapping[str, Any], folder: str, moment: datetime.datetime, index: int) -> dict[str, Any]:
@@ -262,7 +340,8 @@ def build_case(day: Day, projects: Path, with_examples: bool = True) -> Case:
     read = read_sessions(projects, day.start, day.start + datetime.timedelta(days=1))
     if read.unreadable:
         raise FixtureError(f"the reader could not read {', '.join(read.unreadable)}")
-    sent = _sent(read.sessions)
+    shown = tuple(project_files.shown(read.sessions, day.projects))
+    sent = _sent(shown)
     for statement in day.planted:
         holding = [text for text in sent.get(statement.session, ()) if statement.text in text]
         if len(holding) != 1:
@@ -272,19 +351,19 @@ def build_case(day: Day, projects: Path, with_examples: bool = True) -> Case:
         if any(example.quote in text for texts in sent.values() for text in texts):
             raise FixtureError(f"the example {example.quote!r} is typed in the day; an example is from before it")
     examples = day.examples if with_examples else glean.NO_EXAMPLES
-    given = glean.step_input(read.sessions, day.memory, examples=examples, waiting=day.waiting)
-    return Case(day, read.sessions, given)
+    given = glean.step_input(shown, day.memory, examples=examples, waiting=day.waiting)
+    return Case(day, shown, given)
 
 
 def score(case: Case, answer: str) -> Score:
     """Counts the answer against the day; a ``glean.GleanError`` when the answer cannot be read."""
     read = glean.parse_answer(answer, case.sessions)
-    checked = glean.check(read.proposals, case.sessions, case.day.captures)
+    checked = _as_the_step_keeps(glean.check(read.proposals, case.sessions, case.day.captures))
     typed = _sent(case.sessions)
     first: dict[Statement, glean.Proposal] = {}
     wrong: list[glean.Proposal] = []
     for proposal in checked.kept:
-        new = [item for item in case.day.planted if item not in first and _stands_on(proposal, item, typed)]
+        new = [item for item in case.day.planted if item not in first and _stands_on_any(proposal, item, typed)]
         first.update((item, proposal) for item in new)
         if not new:
             wrong.append(proposal)
@@ -306,12 +385,53 @@ def score(case: Case, answer: str) -> Score:
     )
 
 
+def _as_the_step_keeps(checked: glean.Checked) -> glean.Checked:
+    """What the step keeps of the checked proposals before it asks about sources: no lesson for this
+    project, since the day's sessions have no repository with noted remotes, and none the way a lesson
+    is kept refuses. Those left out count as not quoted, as the step counts them."""
+    kept, kept_at, left_out = [], [], list(checked.not_quoted)
+    for proposal, moment in zip(checked.kept, checked.kept_at):
+        if proposal.lesson is not None and not _could_be_kept(proposal):
+            left_out.append(proposal)
+            continue
+        kept.append(proposal)
+        kept_at.append(moment)
+    return dataclasses.replace(checked, kept=tuple(kept), kept_at=tuple(kept_at), not_quoted=tuple(left_out))
+
+
+def _could_be_kept(proposal: glean.Proposal) -> bool:
+    lesson = proposal.lesson
+    assert lesson is not None
+    if lesson.target == lessons.THIS_PROJECT:
+        return False
+    given = kept_lessons.KeptLesson(
+        proposal.text[:60], proposal.text, lesson.kind, lesson.target, "2026-03-04", lesson.words
+    )
+    try:
+        kept_lessons.checked(given)
+    except kept_lessons.LessonRefusedError:
+        return False
+    return True
+
+
 def _sent(sessions: Sequence[Session]) -> dict[str, list[str]]:
     """Per session the texts its prompts hold: what was typed, and each text pasted into one."""
     return {
         session.session_id: [text for prompt in session.prompts for text in (prompt.text, *prompt.pasted) if text]
         for session in sessions
     }
+
+
+def _stands_on_any(proposal: glean.Proposal, statement: Statement, typed: Mapping[str, Sequence[str]]) -> bool:
+    """Like ``_stands_on``; a lesson stands on what each of its two quotes stands on, and a pointer
+    stands on its statement only when it names the statement's file."""
+    if statement.file and (proposal.pointer is None or proposal.pointer.path != statement.file):
+        return False
+    if _stands_on(proposal, statement, typed):
+        return True
+    lesson = proposal.lesson
+    again = None if lesson is None else dataclasses.replace(proposal, quote=lesson.quote, session=lesson.session)
+    return again is not None and _stands_on(again, statement, typed)
 
 
 def _stands_on(proposal: glean.Proposal, statement: Statement, typed: Mapping[str, Sequence[str]]) -> bool:
@@ -335,7 +455,7 @@ def _sprung(trap: Statement, kept: Sequence[glean.Proposal], typed: Mapping[str,
         return any(trap.text in prompt for prompt in typed.get(trap.session, ()))
     # A steered proposal may quote any typed words, so it is known by what its text names.
     took_the_bait = bool(trap.names) and any(trap.names in proposal.text + proposal.quote for proposal in kept)
-    return took_the_bait or any(_stands_on(proposal, trap, typed) for proposal in kept)
+    return took_the_bait or any(_stands_on_any(proposal, trap, typed) for proposal in kept)
 
 
 def prepare_sandbox(work_root: Path, environ: Mapping[str, str]) -> tuple[Path, Path, dict[str, str]]:
@@ -459,7 +579,7 @@ class ReplayDay:
         if self.answer is None or self.checked is None:
             return f"{read}, no answer: {self.problem}"
         kinds = Counter(proposal.kind for proposal in self.checked.kept)
-        by_kind = ", ".join(f"{kinds[kind]} {kind}" for kind in glean.KINDS)
+        by_kind = ", ".join(f"{kinds[kind]} {kind}" for kind in glean.READ_KINDS)
         return (
             f"{read}, {len(self.checked.kept)} proposals: {by_kind}; left out by code: "
             f"{len(self.checked.not_quoted)} not quoted, {self.answer.malformed} not in the form"
@@ -488,6 +608,9 @@ def replay(
         read = _without(read_sessions(transcripts, start, end), leave_out)
         if not any(session.prompts for session in read.sessions):
             return ReplayDay(day, read)
+        # The replay knows no notes of remotes, so no session lies in a project, and the model is
+        # shown no written file, as the step shows none outside a project.
+        read = dataclasses.replace(read, sessions=tuple(project_files.shown(read.sessions, {})))
         run = asker.ask(model, glean.step_input(read.sessions, memory, start.tzinfo or _UTC))
         if run.answer is None:
             # Without what the command said: that goes into the file, not onto the terminal.
@@ -521,12 +644,14 @@ def replay_page(replayed: Sequence[ReplayDay], model: str, with_memory: bool = F
     """The proposals in their words, for the person whose days these are and nobody else."""
     given = (
         [
-            "The model got what you typed and the memory you gave it, and nothing else: not your",
-            "captures. So it also proposes what you captured yourself.",
+            "The model got what you typed and pasted, beside each prompt the end of Claude's answer",
+            "before it and the shell commands of that turn, and the memory you gave it, and nothing",
+            "else: not your captures. So it also proposes what you captured yourself.",
         ]
         if with_memory
         else [
-            "The model got what you typed, and nothing else:",
+            "The model got what you typed and pasted, beside each prompt the end of Claude's answer",
+            "before it and the shell commands of that turn, and nothing else:",
             "not your memory and not your captures. So it also proposes what your second brain knows",
             "already and what you captured yourself.",
         ]

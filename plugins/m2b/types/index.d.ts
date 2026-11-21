@@ -59,6 +59,22 @@ export type BandHealth = {
   troubles: string[]
   curates: boolean | null
   isCurating: boolean
+  // The lessons the owner kept, where there are any; a band before them shared its answer without.
+  lessons?: LessonStanding[]
+}
+
+/**
+ * How a lesson the owner kept does since it was kept, as `m2b status` counts it: `correctedAgain`
+ * is null where the counts could not be read; `fired` and `calls` are there for a lesson about a
+ * command only, and count on this machine.
+ */
+export type LessonStanding = {
+  name: string
+  kind: string
+  kept: string
+  correctedAgain: number | null
+  fired?: number
+  calls?: number
 }
 
 /** What a press on keep or drop asks the task list for. */
@@ -109,7 +125,23 @@ export type BandProposal = {
   tool?: string | null
   /** Who proposed where it was no reading: `session` for a proposal a session handed in. */
   by?: string | null
+  /** For a lesson: its kind, whom it is for, the words of a command it fires on, and the same correction said again. */
+  lesson?: BandLesson | null
 }
+
+/** What a proposed lesson carries beside its text, as `m2b band --json` names it. */
+export type BandLesson = {
+  kind: string
+  target: string
+  words: string[]
+  quote: string
+  at_source?: BandAtSource | null
+  // The kept lesson this one takes the place of, where every session's start is past its target.
+  replaces?: string | null
+}
+
+/** What a source a lesson is kept at says: `fix` replaces `line` (or adds, without one) with `wording`; `stated` names the line that says it. */
+export type BandAtSource = { verdict: string; file: string; line: string | null; wording: string | null }
 
 /**
  * The proposals that wait for keep or drop, as `m2b band --json` names them, how many answers

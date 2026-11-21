@@ -67,9 +67,9 @@
       "run": [
         "m2b",
         "hook",
-        "distillate"
+        "start-notes"
       ],
-      "stdout": "\\Am2b: the last curation run on sb-test-e2e failed at [^\\n]+ in ingest; m2b status says why\\. "
+      "stdout": "\\Am2b at session start, beside the distillate[^\\n]*\\n\\nm2b: the last curation run on sb-test-e2e failed at [^\\n]+ in ingest; m2b status says why\\. "
     },
     {
       "run": [

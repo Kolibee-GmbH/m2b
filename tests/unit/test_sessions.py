@@ -117,7 +117,7 @@ class TypedPromptsTest(SessionsFixture):
             session.prompts,
             (
                 Prompt(at(9), "Dana runs IT at Northwind and signs the renewals."),
-                Prompt(at(9, 30), "Who else is in the team?"),
+                Prompt(at(9, 30), "Who else is in the team?", answer_before="Noted."),
             ),
         )
         self.assertEqual(session.left_out, NOTHING_LEFT_OUT)
@@ -661,6 +661,174 @@ class NotThePersonTest(SessionsFixture):
 
         self.assertEqual([prompt.text for prompt in session.prompts], ["build the shed door"])
         self.assertEqual(session.left_out, NOTHING_LEFT_OUT)
+
+
+def answered(text: str, when: datetime.datetime, *commands: str, **changes: Any) -> dict[str, Any]:
+    """An assistant record as Claude Code writes one: a text, and a Bash call per command."""
+    content: list[dict[str, Any]] = [{"type": "text", "text": text}]
+    content += [
+        {"type": "tool_use", "id": f"t{number}", "name": "Bash", "input": {"command": command}}
+        for number, command in enumerate(commands)
+    ]
+    record = {
+        "type": "assistant",
+        "timestamp": when.isoformat().replace("+00:00", "Z"),
+        "message": {"role": "assistant", "content": content},
+    }
+    record.update(changes)
+    return record
+
+
+def wrote(when: datetime.datetime, *calls: tuple[str, str], **changes: Any) -> dict[str, Any]:
+    """An assistant record with a call of a writing tool per (tool, path)."""
+    record = answered("Done.", when, **changes)
+    for number, (tool, path) in enumerate(calls):
+        field_name = "notebook_path" if tool == "NotebookEdit" else "file_path"
+        record["message"]["content"].append(
+            {"type": "tool_use", "id": f"w{number}", "name": tool, "input": {field_name: path, "content": "secret"}}
+        )
+    return record
+
+
+class WrittenTest(SessionsFixture):
+    def test_a_session_names_the_files_claude_wrote_in_the_period_once_each_in_order(self) -> None:
+        """Covers: B277"""
+        self.transcript(
+            wrote(DAY - datetime.timedelta(minutes=1), ("Write", "/home/alex/projects/portal/old.md")),
+            typed("write down that the login moves in March", at(9)),
+            wrote(
+                at(9, 1),
+                ("Write", "/home/alex/projects/portal/docs/records/014-login.md"),
+                ("Edit", "/home/alex/projects/portal/README.md"),
+                ("Read", "/home/alex/projects/portal/CLAUDE.md"),
+            ),
+            wrote(
+                at(9, 2),
+                ("MultiEdit", "/home/alex/projects/portal/docs/records/014-login.md"),
+                ("NotebookEdit", "/home/alex/projects/portal/notes.ipynb"),
+            ),
+            wrote(at(9, 3), ("Write", "/home/alex/projects/portal/agent.md"), isSidechain=True),
+        )
+
+        session = self.only_session()
+
+        self.assertEqual(
+            session.written,
+            (
+                "/home/alex/projects/portal/docs/records/014-login.md",
+                "/home/alex/projects/portal/README.md",
+                "/home/alex/projects/portal/notes.ipynb",
+            ),
+        )
+        # Of a writing call only the path is read, never what it wrote.
+        self.assertNotIn("secret", repr(session))
+
+    def test_a_session_gives_its_first_fifty_files(self) -> None:
+        """Covers: B277"""
+        many = [("Write", f"/home/alex/projects/portal/file{number:02d}.md") for number in range(60)]
+        self.transcript(typed("split the notes", at(9)), wrote(at(9, 1), *many))
+
+        written = self.only_session().written
+
+        self.assertEqual(len(written), sessions.MAX_WRITTEN)
+        self.assertEqual(written[-1], "/home/alex/projects/portal/file49.md")
+
+
+class TurnBeforeTest(SessionsFixture):
+    def test_a_prompt_comes_with_the_last_500_characters_of_the_answer_before_and_the_turns_bash_commands(
+        self,
+    ) -> None:
+        """Covers: B269"""
+        long_answer = " ".join(f"word{number:03d}" for number in range(100))
+        self.transcript(
+            typed("run the checks", at(9)),
+            answered(long_answer, at(9, 1), "scripts/check"),
+            unmarked([{"type": "tool_result", "tool_use_id": "t0", "content": "Dana runs IT"}], at(9, 2)),
+            answered("All checks passed.", at(9, 3), "git status"),
+            typed("only the quick round next time", at(9, 4)),
+        )
+
+        first, second = self.only_session().prompts
+
+        self.assertEqual((first.answer_before, first.commands), ("", ()))
+        self.assertEqual(second.commands, ("scripts/check", "git status"))
+        self.assertTrue(second.answer_before.endswith("word099 All checks passed."))
+        self.assertLessEqual(len(second.answer_before), sessions.ANSWER_LENGTH)
+        self.assertGreater(len(second.answer_before), sessions.ANSWER_LENGTH - 10)
+        self.assertNotIn("Dana", second.answer_before)
+        self.assertEqual(second.text, "only the quick round next time")
+
+    def test_a_turn_ends_at_any_message_so_a_prompt_gets_only_the_answer_right_before_it(self) -> None:
+        """Covers: B269"""
+        self.transcript(
+            typed("first", at(9)),
+            answered("First answer.", at(9, 1), "make build"),
+            sent_by("task-notification", "<task-notification>done</task-notification>", at(9, 2)),
+            answered("Between.", at(9, 2), "make lint"),
+            sent_by("peer", "<agent-message>found it</agent-message>", at(9, 2), isMeta=True),
+            answered("Second answer.", at(9, 3)),
+            typed("second", at(9, 4)),
+        )
+
+        prompt = self.only_session().prompts[1]
+
+        self.assertEqual((prompt.answer_before, prompt.commands), ("Second answer.", ()))
+
+    def test_a_turn_the_person_stopped_or_a_skill_loaded_into_stays_the_turn_the_next_prompt_answers(self) -> None:
+        """Covers: B269"""
+        self.transcript(
+            typed("run the checks", at(9)),
+            answered("Running the whole proof.", at(9, 1), "scripts/check"),
+            unmarked("Base directory for this skill: /plugins/x", at(9, 2), isMeta=True),
+            unmarked("[Request interrupted by user for tool use]", at(9, 3)),
+            typed("only the quick round", at(9, 4)),
+        )
+
+        prompt = self.only_session().prompts[1]
+
+        self.assertEqual((prompt.answer_before, prompt.commands), ("Running the whole proof.", ("scripts/check",)))
+
+    def test_a_subagents_answer_and_other_tools_are_not_read(self) -> None:
+        """Covers: B269"""
+        sidechain = answered("A subagent found Sam owes 40 euros.", at(9, 1), "rm -rf build", isSidechain=True)
+        read_call = answered("Reading.", at(9, 2))
+        read_call["message"]["content"].append(
+            {"type": "tool_use", "id": "r", "name": "Read", "input": {"file_path": "/x"}}
+        )
+        self.transcript(typed("go", at(9)), sidechain, read_call, typed("next", at(9, 3)))
+
+        prompt = self.only_session().prompts[1]
+
+        self.assertEqual((prompt.answer_before, prompt.commands), ("Reading.", ()))
+
+    def test_the_answer_and_the_commands_are_redacted_and_a_turn_keeps_its_last_commands(self) -> None:
+        """Covers: B269"""
+        token = "sk-ant-api03-" + "a" * 40
+        commands = [f"echo {number}" for number in range(sessions.MAX_COMMANDS + 2)]
+        self.transcript(
+            typed("go", at(9)),
+            answered(f"Set the key {token} in the env.", at(9, 1), f"export ANTHROPIC_API_KEY={token}", *commands),
+            typed("next", at(9, 2)),
+        )
+
+        prompt = self.only_session().prompts[1]
+
+        self.assertNotIn(token, prompt.answer_before)
+        self.assertTrue(all(token not in command for command in prompt.commands))
+        self.assertEqual(len(prompt.commands), sessions.MAX_COMMANDS)
+        self.assertEqual(prompt.commands[-1], f"echo {sessions.MAX_COMMANDS + 1}")
+
+    def test_the_turn_before_the_first_prompt_of_the_period_still_counts(self) -> None:
+        """Covers: B269"""
+        self.transcript(
+            typed("the evening before", DAY - datetime.timedelta(minutes=2)),
+            answered("Done.", DAY - datetime.timedelta(minutes=1), "git push"),
+            typed("never push without asking", DAY),
+        )
+
+        prompt = self.only_session().prompts[0]
+
+        self.assertEqual((prompt.answer_before, prompt.commands), ("Done.", ("git push",)))
 
 
 class WhichSessionsTest(SessionsFixture):

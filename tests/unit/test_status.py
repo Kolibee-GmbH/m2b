@@ -9,7 +9,7 @@ from typing import Any
 from unittest import mock
 
 import test_runner
-from m2b import cli, handed_in, proposal_answers, proposals
+from m2b import action_lessons, cli, fixes, handed_in, lesson_counts, proposal_answers, proposals
 from m2b.curate import machine_state
 from m2b.run_record import RUN_RECORD
 from m2b.store.base import StoreError
@@ -41,6 +41,127 @@ class StatusTest(test_runner.RunnerTest):
         out = self.run_command("status")[1]
         self.assertIn("handed in: 2 waiting for the next curation run\n", out)
         self.assertNotIn("words no check has seen", out)
+
+    def test_it_says_how_many_lessons_every_session_starts_with_and_which_are_kept_at_their_source(self) -> None:
+        """Covers: B258"""
+        self.curating()
+        lesson = (
+            "---\nkind: knowledge\ntarget: every project\nkept: 2026-11-20\n{more}---\n# A lesson\n\nSay it once.\n"
+        )
+        self.write("memory/lessons/once.md", lesson.format(more=""))
+        self.write("memory/lessons/checks.md", lesson.format(more="kept_at: ~/.claude/CLAUDE.md\n"))
+
+        answer = self.run_json("status")["lessons"]
+        self.assertEqual(
+            (answer["in_every_session"], answer["kept_at_source"]),
+            (1, [{"name": "checks.md", "source": "~/.claude/CLAUDE.md"}]),
+        )
+        self.assertIn(
+            "lessons: 1 in every session; checks.md is kept at its source, ~/.claude/CLAUDE.md\n",
+            self.run_command("status")[1],
+        )
+
+    def test_a_lesson_kept_as_a_fix_says_how_often_claude_was_corrected_on_it_again_since(self) -> None:
+        """Covers: B289"""
+        self.curating()
+        fix = fixes.new_fix(
+            "CLAUDE.md",
+            ("github.com/acme/portal",),
+            None,
+            None,
+            "Run only the quick checks.",
+            "you said it twice",
+            "2026-11-20",
+            lesson="Run only the quick checks.",
+        )
+        by_hand = fixes.new_fix(
+            "CLAUDE.md", ("github.com/acme/portal",), None, None, "Name releases.", "why", "2026-11-20"
+        )
+        for each in (fix, by_hand):
+            fixes.keep(self.store, each)
+        self.write(
+            lesson_counts.COUNTS_FILE,
+            json.dumps(
+                {"format": 1, "lessons": {fix.name: {"kept": "2026-11-20", "corrected_again": ["a1b2c3d4e5f6"]}}}
+            ),
+        )
+
+        each = self.run_json("status")["lessons"]["each"]
+        out = self.run_command("status")[1]
+
+        self.assertEqual(each, [{"name": fix.name, "kind": "fix", "kept": "2026-11-20", "corrected_again": 1}])
+        self.assertIn(f"lesson {fix.name} (fix, kept 2026-11-20): corrected again 1 time: not working\n", out)
+
+    def test_lessons_that_are_not_downloaded_are_said_and_never_counted_as_none(self) -> None:
+        """Covers: B258"""
+        self.curating()
+        self.write(
+            "memory/lessons/once.md",
+            "---\nkind: knowledge\ntarget: every project\nkept: 2026-11-20\n---\n# Once\n\nSay it once.\n",
+        )
+
+        with mock.patch.object(DatalessGuard, "is_evicted", side_effect=lambda path: Path(path).name == "once.md"):
+            answer = self.run_json("status")["lessons"]
+            out = self.run_command("status")[1]
+
+        fetch = "m2b store fetch memory/lessons/once.md"
+        self.assertEqual(answer, {"error": f"memory/lessons/once.md is not downloaded to this machine; run: {fetch}"})
+        self.assertIn(f"lessons: could not look: {answer['error']}\n", out)
+
+    def test_each_lesson_says_how_often_it_fired_in_how_many_calls_and_was_corrected_again_since_kept(self) -> None:
+        """Covers: B281"""
+        self.curating()
+        self.write(
+            "memory/lessons/proof.md",
+            "---\nkind: action\ntarget: every project\nkept: 2026-11-20\nwords: [scripts/check]\n---\n"
+            "# Proof\n\nRun the whole proof only with a reason.\n",
+        )
+        self.write(
+            "memory/lessons/once.md",
+            "---\nkind: knowledge\ntarget: every project\nkept: 2026-11-20\n---\n# Once\n\nSay it once.\n",
+        )
+        self.write(
+            lesson_counts.COUNTS_FILE,
+            json.dumps(
+                {"format": 1, "lessons": {"proof.md": {"kept": "2026-11-20", "corrected_again": ["a1b2c3d4e5f6"]}}}
+            ),
+        )
+        state = self.machine.state_dir
+        (state / action_lessons.CALLS_FOLDER).mkdir(parents=True)
+        (state / action_lessons.CALLS_FOLDER / "2026-11-19").write_bytes(b"." * 50)
+        (state / action_lessons.CALLS_FOLDER / "2026-11-21").write_bytes(b"." * 40)
+        (state / action_lessons.FIRED).write_text(
+            "2026-11-19T09:00:00+00:00\tproof.md\n2026-11-21T09:00:00+00:00\tproof.md\n", encoding="utf-8"
+        )
+
+        each = self.run_json("status")["lessons"]["each"]
+        out = self.run_command("status")[1]
+
+        self.assertEqual(
+            sorted(each, key=lambda item: item["name"]),
+            [
+                {"name": "once.md", "kind": "knowledge", "kept": "2026-11-20", "corrected_again": 0},
+                {
+                    "name": "proof.md",
+                    "kind": "action",
+                    "kept": "2026-11-20",
+                    "corrected_again": 1,
+                    "fired": 1,
+                    "calls": 40,
+                },
+            ],
+        )
+        self.assertIn(
+            "lesson proof.md (action, kept 2026-11-20): fired 1 time in 40 Bash calls (2%), "
+            "corrected again 1 time: not working\n",
+            out,
+        )
+        self.assertIn("lesson once.md (knowledge, kept 2026-11-20): corrected again 0 times\n", out)
+
+        self.write(lesson_counts.COUNTS_FILE, "{not json")
+        self.assertIn(
+            "lesson once.md (knowledge, kept 2026-11-20): corrections not counted\n", self.run_command("status")[1]
+        )
 
     def test_a_folder_of_handed_in_proposals_that_cannot_be_listed_is_said_and_the_other_parts_answer(self) -> None:
         """Covers: B240"""
@@ -285,6 +406,9 @@ class StatusTest(test_runner.RunnerTest):
                     "agreement": nothing,
                     "commitment": nothing,
                     "personal": nothing,
+                    "lesson": nothing,
+                    "pointer": nothing,
+                    "project": nothing,
                 },
                 "ways": {"reading": {"typed": {"waiting": 1, "answered": 0, "kept": 2, "dropped": 1, "expired": 1}}},
             },
@@ -322,6 +446,7 @@ class StatusTest(test_runner.RunnerTest):
             "000000000003": entry(3, "dropped", 31, "tool", "session", "Read"),
             "000000000004": entry(4, "open", 1, "agent", "session"),
             "000000000005": entry(5, "expired", 5, "pasted", None),
+            "000000000006": entry(6, "open", 1, "worked", None),
         }
         proposals.save(self.store, proposals.Proposals(entries))
 
@@ -331,7 +456,10 @@ class StatusTest(test_runner.RunnerTest):
         self.assertEqual(
             status["proposal_answers"]["ways"],
             {
-                "reading": {"pasted": {"waiting": 0, "answered": 0, "kept": 0, "dropped": 0, "expired": 1}},
+                "reading": {
+                    "pasted": {"waiting": 0, "answered": 0, "kept": 0, "dropped": 0, "expired": 1},
+                    "worked": {"waiting": 1, "answered": 0, "kept": 0, "dropped": 0, "expired": 0},
+                },
                 "session": {
                     "agent": {"waiting": 1, "answered": 0, "kept": 0, "dropped": 0, "expired": 0},
                     "tool": {"waiting": 1, "answered": 0, "kept": 1, "dropped": 0, "expired": 0},
@@ -340,6 +468,8 @@ class StatusTest(test_runner.RunnerTest):
         )
         for line in (
             "proposals a reading found in pasted text: 0 waiting, 0 kept, 0 dropped, 1 expired in the last 30 days",
+            "proposals a reading found in repositories worked in on two days: 1 waiting, 0 kept, 0 dropped, "
+            "0 expired in the last 30 days",
             "proposals sessions handed in from an answer of Claude: 1 waiting, 0 kept, 0 dropped, 0 expired "
             "in the last 30 days",
             "proposals sessions handed in from a tool's result: 1 waiting, 1 kept, 0 dropped, 0 expired "
@@ -444,11 +574,11 @@ class StatusTest(test_runner.RunnerTest):
     def test_a_proposals_file_that_cannot_be_used_says_so_instead_of_nothing(self) -> None:
         """Covers: B133"""
         self.curating()
-        self.write(proposals.PROPOSALS_FILE, json.dumps({"format": 4, "proposals": {}}))
+        self.write(proposals.PROPOSALS_FILE, json.dumps({"format": proposals.FORMAT + 1, "proposals": {}}))
 
         _, out, _ = self.run_command("status")
 
-        self.assertIn("format 4", self.status()["proposal_answers"]["error"])
+        self.assertIn(f"format {proposals.FORMAT + 1}", self.status()["proposal_answers"]["error"])
         self.assertIn("\nproposals: could not look: ", out)
 
     def set_curating(self, machine_id: str) -> None:

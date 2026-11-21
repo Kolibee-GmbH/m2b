@@ -58,9 +58,9 @@ regard to upper and lower case, and one written like a web address also finds th
 configuration writes it and as git rewrites it (`url.<base>.insteadOf`), so the address
 `git remote -v` shows is found too.
 
-A worktree is often gone by the time the worklog runs, and then nobody can ask git there. So on a
-machine that reads sessions (this add-on on, or `curation.read_sessions`), every Claude Code
-session notes the remotes of the folder it starts in, in `~/.local/state/m2b/session-remotes/`:
+A worktree is often gone by the time the worklog runs, and then nobody can ask git there. So
+every Claude Code session notes the remotes of the folder it starts in, in
+`~/.local/state/m2b/session-remotes/`:
 on this machine only, never in the store, and without the user name or token a URL may carry. The
 worklog takes what was noted for a folder and what git says there when it runs. What to know:
 

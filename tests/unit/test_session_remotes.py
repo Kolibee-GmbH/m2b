@@ -19,6 +19,7 @@ from m2b.session_remotes import ByRemote, RemoteRule
 NOW = datetime.datetime(2026, 11, 7, 9, 0, tzinfo=datetime.timezone.utc)
 DAY = datetime.timedelta(days=1)
 GLOBEX = "https://git.globex.example/globex-ag/portal.git"
+LOCAL_REMOTES = ("/srv/mirror/portal.git", "file://localhost/srv/mirror/portal.git", "FILE:///srv/portal.git")
 
 
 class Fixture(unittest.TestCase):
@@ -121,6 +122,25 @@ class RemotesInTest(Fixture):
         self.assertEqual(self.remotes(), frozenset())
         self.assertEqual(self.remotes(plain), frozenset())
 
+    def test_a_remote_without_a_host_names_no_repository_so_no_path_of_this_machine_reaches_the_store(self) -> None:
+        """Covers: B151"""
+        self.git("init", "-q")
+        self.git("remote", "add", "origin", str(self.base / "mirror" / "portal.git"))
+        self.git("remote", "add", "backup", f"file://{self.base}/backup/portal.git")
+
+        with self.assertRaises(session_remotes.RepositoryNotKnownError) as raised:
+            session_remotes.repository_of(self.repo, self.environ)
+        self.assertEqual(raised.exception.reason, session_remotes.NO_REMOTE)
+
+        self.git("remote", "add", "github", GLOBEX)
+        found = session_remotes.repository_of(self.repo, self.environ)
+
+        self.assertEqual(found.addresses, ("git.globex.example/globex-ag/portal",))
+        self.assertEqual(
+            session_remotes.hosted_addresses({GLOBEX, *LOCAL_REMOTES}),
+            {"git.globex.example/globex-ag/portal"},
+        )
+
     def test_a_folder_that_is_gone_and_a_git_that_does_not_answer_say_nothing(self) -> None:
         """Covers: B151"""
         self.git("init", "-q")
@@ -200,7 +220,7 @@ class NotesTest(Fixture):
         [written] = self.notes.glob("*.json")
         self.assertEqual(list(json.loads(written.read_text(encoding="utf-8"))["remotes"]), [moved])
 
-    def test_a_note_nobody_renewed_for_thirty_days_says_nothing_and_is_forgotten(self) -> None:
+    def test_a_note_nobody_renewed_for_thirty_days_says_nothing_and_goes_once_its_folder_is_gone(self) -> None:
         """Covers: B151"""
         self.note(self.repo, GLOBEX)
         [old] = self.notes.glob("*.json")
@@ -213,6 +233,9 @@ class NotesTest(Fixture):
         session_remotes.forget_old_notes(self.notes, late)
         session_remotes.forget_old_notes(self.base / "no-notes-yet", late)
 
+        self.assertTrue(old.exists(), "a note whose folder is there is kept")
+        shutil.rmtree(self.repo)
+        session_remotes.forget_old_notes(self.notes, late)
         self.assertFalse(old.exists())
         self.assertEqual(len(list(self.notes.glob("*.json"))), 1)
 

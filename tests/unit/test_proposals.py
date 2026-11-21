@@ -11,9 +11,9 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-from m2b import proposals
+from m2b import project_proposals, proposals
 from m2b.config.errors import ConfigError
-from m2b.glean import KINDS, Example, Examples, Proposal
+from m2b.glean import FIX, KINDS, AtSource, Example, Examples, LessonPart, PointerPart, Proposal
 from m2b.proposals import Said
 from m2b.store.folder import FolderStore
 from m2b.store.guard import DatalessGuard
@@ -237,6 +237,161 @@ class SourceTest(ProposalsFixture):
 
         self.assertEqual(lines["typed"], 'said on 2026-03-04: "Dana runs IT at Northwind"')
         self.assertTrue(lines["pasted"].startswith("pasted on 2026-03-04: "))
+
+
+PROJECT = project_proposals.proposal(
+    ("github.com/acme/portal",), [datetime.date(2026, 3, 1), datetime.date(2026, 3, 5)]
+)
+POINTER = Proposal(
+    "pointer",
+    "Login moves to the customer's identity provider in March → docs/records/014-login.md",
+    "the login moves to the customer's identity provider in March",
+    "shed",
+    topic="Acme portal",
+    pointer=PointerPart("docs/records/014-login.md", ("github.com/acme/portal",)),
+)
+LESSON = Proposal(
+    "lesson",
+    "Run only the quick checks unless the change gives a reason.",
+    "only the quick round, not the whole proof",
+    "first",
+    lesson=LessonPart(
+        "action", "github.com/acme/portal", ("scripts/check",), "no full check without a reason", "second"
+    ),
+)
+
+
+class LessonInFileTest(ProposalsFixture):
+    def test_a_lesson_is_written_with_its_kind_target_words_and_second_quote_and_read_back(self) -> None:
+        """Covers: B270"""
+        self.kept(LESSON)
+
+        written = self.written()
+        (entry,) = written["proposals"].values()
+        self.assertEqual(
+            entry["lesson"],
+            {
+                "kind": "action",
+                "target": "github.com/acme/portal",
+                "words": ["scripts/check"],
+                "quote": "no full check without a reason",
+                "session": "second",
+            },
+        )
+        self.assertEqual(written["format"], 4)
+        (loaded,) = proposals.load(self.store).entries.values()
+        self.assertEqual(loaded.lesson, LESSON.lesson)
+
+    def test_an_m2b_before_lessons_refuses_a_file_with_one_and_one_without_keeps_the_earlier_format(self) -> None:
+        """Covers: B270"""
+        self.kept(DANA)
+        self.assertEqual(self.written()["format"], 1)
+        self.kept(LESSON)
+
+        with (
+            mock.patch.object(proposals, "FORMAT", proposals.FORMAT_WITHOUT_LESSONS),
+            self.assertRaises(proposals.ProposalsError),
+        ):
+            proposals.load(self.store)
+
+    def test_a_lesson_kept_at_its_source_is_written_with_the_verdict_and_read_back(self) -> None:
+        """Covers: B274"""
+        fix = AtSource(
+            FIX, "~/.claude/CLAUDE.md", "- Run the whole proof.", "- Run the quick checks.", "~/.claude/CLAUDE.md"
+        )
+        at_source = dataclasses.replace(LESSON, lesson=dataclasses.replace(LESSON.lesson, at_source=fix))
+
+        self.kept(at_source)
+
+        (entry,) = self.written()["proposals"].values()
+        self.assertEqual(entry["lesson"]["at_source"]["verdict"], "fix")
+        (loaded,) = proposals.load(self.store).entries.values()
+        self.assertEqual(loaded.lesson.at_source if loaded.lesson else None, fix)
+
+    def test_a_lesson_that_replaces_another_is_written_with_it_and_listed_so(self) -> None:
+        """Covers: B284"""
+        replacing = dataclasses.replace(LESSON, lesson=dataclasses.replace(LESSON.lesson, replaces="weak.md"))
+
+        self.kept(replacing)
+
+        written = self.written()
+        (entry,) = written["proposals"].values()
+        self.assertEqual((entry["lesson"]["replaces"], written["format"]), ("weak.md", 4))
+        (loaded,) = proposals.load(self.store).entries.values()
+        assert loaded.lesson is not None
+        self.assertEqual(loaded.lesson.replaces, "weak.md")
+        self.assertTrue(proposals.lesson_heading(loaded.lesson, str).endswith(", replaces weak.md"))
+        # A path is no lesson's name: harvest would remove the file it names.
+        (key,) = written["proposals"]
+        for path in ("sub/x.md", "../MEMORY.md", "weak.txt"):
+            with self.subTest(path):
+                lesson = {**written["proposals"][key]["lesson"], "replaces": path}
+                self.write({**written, "proposals": {key: {**written["proposals"][key], "lesson": lesson}}})
+                self.assertEqual(proposals.load(self.store).entries, {})
+
+    def test_a_lesson_without_its_part_or_one_left_for_this_project_is_left_out(self) -> None:
+        """Covers: B270"""
+        self.kept(LESSON)
+        raw = self.written()
+        (key,) = raw["proposals"]
+        for broken in ({"lesson": None}, {"lesson": {**raw["proposals"][key]["lesson"], "target": "this project"}}):
+            with self.subTest(broken=broken):
+                self.write({**raw, "proposals": {key: {**raw["proposals"][key], **broken}}})
+                self.assertEqual(proposals.load(self.store).entries, {})
+
+
+class ProjectInFileTest(ProposalsFixture):
+    def test_a_project_has_the_format_of_a_lesson_an_m2b_before_both_refuses_and_it_is_no_example(self) -> None:
+        """Covers: B275"""
+        self.kept(PROJECT)
+        self.assertEqual(self.written()["format"], 4)
+        self.kept(LESSON)
+        written = self.written()
+        self.assertEqual(written["format"], 4)
+        (entry,) = (each for each in written["proposals"].values() if each["kind"] == "project")
+        self.assertEqual((entry["quote"], entry["source"]), ("github.com/acme/portal", "worked"))
+        with (
+            mock.patch.object(proposals, "FORMAT", proposals.FORMAT_WITHOUT_LESSONS),
+            self.assertRaises(proposals.ProposalsError),
+        ):
+            proposals.load(self.store)
+        for key in written["proposals"]:
+            self.settle(key, proposals.KEPT)
+
+        current = proposals.load(self.store)
+
+        self.assertEqual([example.kind for example in proposals.examples(current, NOW).kept], ["lesson"])
+        self.assertEqual(proposals.proposal_id(PROJECT), proposals.proposal_id(dataclasses.replace(PROJECT, text="")))
+
+    def test_a_project_is_listed_as_standing_on_the_sessions_that_worked_in_it(self) -> None:
+        """Covers: B275"""
+        self.kept(PROJECT)
+        (loaded,) = proposals.load(self.store).entries.values()
+
+        self.assertEqual(
+            proposals.said_line(loaded, loaded.quote),
+            'sessions worked in it, the last on 2026-03-04: "github.com/acme/portal"',
+        )
+
+
+class PointerInFileTest(ProposalsFixture):
+    def test_a_pointer_is_written_with_its_path_and_repository_and_read_back_and_one_without_is_left_out(self) -> None:
+        """Covers: B278"""
+        self.kept(POINTER)
+
+        written = self.written()
+        (key,) = written["proposals"]
+        self.assertEqual(
+            written["proposals"][key]["pointer"],
+            {"path": "docs/records/014-login.md", "repositories": ["github.com/acme/portal"]},
+        )
+        self.assertEqual(written["format"], 4)
+        (loaded,) = proposals.load(self.store).entries.values()
+        self.assertEqual(loaded.pointer, POINTER.pointer)
+        for broken in ({"pointer": None}, {"pointer": {"path": "docs/x.md", "repositories": []}}):
+            with self.subTest(broken=broken):
+                self.write({**written, "proposals": {key: {**written["proposals"][key], **broken}}})
+                self.assertEqual(proposals.load(self.store).entries, {})
 
 
 class HandedInTest(ProposalsFixture):

@@ -124,7 +124,13 @@ scripts/e2e --level model E31-file-asks-first               # the same
 scripts/e2e --level model E32-file-captured                 # the same
 scripts/e2e --level model E17-planted-capture               # and after a change to the ingest skill
 scripts/e2e --level model E14-topics                        # after a change to the ingest skill
+scripts/e2e --level model E33-project-known                 # the same
 ```
+
+`E33-project-known` files a project kept with `m2b capture --project` through a real ingest step and
+checks the topic it becomes: a heading with two to five words, the repository's name among them, and
+the `Repository:` line first, with the address as captured; a session in the clone then gets the
+topic with the folder it lies in.
 
 The [weekly workflow](#checks) runs all of them with the newest Claude Code, where the repository
 has an account for it.
@@ -259,16 +265,18 @@ then write its scores into the page:
 ```bash
 cd plugins/m2b
 claude plugin eval . --ablation with-without --scaffold --trust-plugin --no-publish --keep-temp \
-  -j 4 --max-cost-usd 15 --allow-tools mcp__m2b__search mcp__m2b__note mcp__m2b__propose Write Read Edit
+  -j 4 --max-cost-usd 15 --allow-tools mcp__m2b__search mcp__m2b__note mcp__m2b__propose Write Read Edit Bash
 ../../scripts/evals-page
 ```
 
-It runs each case three times per arm, 96 runs in all, and takes a few minutes on your own login.
+It runs each case three times per arm, 102 runs in all, and takes a few minutes on your own login.
 The report prices the runs as the API would, about six dollars; on a Claude subscription nothing is
 billed and the runs count against the plan's usage limits instead. `--max-cost-usd` stops the
 suite once that price passes the ceiling. The report lands in
 `evals/results/`, which git ignores. The runs ask nothing, so the m2b tools and the file tools a
 case needs are granted with `--allow-tools`; a tool missing there fails its case without a word.
+`Bash` is among them for `correction`, which passes on the call of `m2b lesson add`, whatever the
+sandbox answers.
 
 `--keep-temp` keeps each run's folder in your temp folder; the report names the trace in it,
 `out/trace.jsonl`, as the run's `tracePath`, and the trace shows which tools the run called.
@@ -297,20 +305,28 @@ tasks from it, each with the words it stands on. The curation step `glean` runs 
 (`curate/glean_step.py`). `scripts/glean-eval`
 measures whether a model is good enough for that job.
 
-`tests/glean/day.json` is an invented day: twelve sessions with 122 typed prompts, in English and
+`tests/glean/day.json` is an invented day: twelve sessions with 128 typed prompts, in English and
 German, and one prompt that is pasted text only. Twenty typed prompts state something worth
 keeping, five each of a person, an agreement, a commitment and something personal, and two pasted
-texts each state who a person is: a mail, and notes of the person's own. Nine prompts are traps,
+texts each state who a person is: a mail, and notes of the person's own. Two more, in two sessions,
+make the same correction of Claude after it ran `scripts/check`, which is one lesson: the day writes
+Claude's answer and the command before each, as Claude Code does. One more states a decision of the
+order portal, whose repository the memory has a project topic for, and Claude writes it into a file
+of that repository: a pointer, found only when it names that file. Twelve prompts are traps,
 one of each class a proposal must never come from: a prompt a plugin sent, a pasted text that
 tells its reader what to propose and which typed words to quote for it, a sentence the person
 captured themselves, a fact the memory holds already, a question that only considers something, a name that is test data, a
-todo of the project at hand, a sentence like those the person dropped before, and a sentence that
-says again in other words what waits for an answer. For those two the day says what was answered
+todo of the project at hand, a sentence like those the person dropped before, a sentence that
+says again in other words what waits for an answer, a correction of Claude made in one session
+only, one that is only about the task at hand, and a decision of the portal stated in a session
+that wrote no file. For the sentence like the dropped ones and the one that waits the day says what was answered
 earlier and what waits: five proposals kept, like what is planted, four dropped, each the time of a
 call or a meeting, and one that waits. The model is shown them as the step shows them.
 The tool writes the day as transcripts in Claude Code's format, reads them back the way a
 curation step would, and asks the model with that instruction, through the core's own run without
-tools (`curate/model.py`), so it measures the form the product runs:
+tools (`curate/model.py`), so it measures the form the product runs. Of a lesson it keeps what the
+step keeps before it asks about the files a session loads; that second run it leaves out, since
+the day has no such files:
 
 ```bash
 scripts/glean-eval                          # haiku and sonnet, three answers each
@@ -318,7 +334,10 @@ scripts/glean-eval --model haiku --runs 1
 scripts/glean-eval --without-examples       # the same day without what was kept and dropped
 ```
 
-Per answer it prints how many of the twenty-two were found, how many proposals were right, and
+A project is proposed by code from where the sessions worked, never by a model, so no eval covers
+it; its unit tests do.
+
+Per answer it prints how many of the twenty-five were found, how many proposals were right, and
 each miss, wrong proposal and sprung trap by name. One more trap has no prompt of its own: a
 proposal whose source is wrong, pasted words kept as said or the other way round. A model meets the bar with 0.80 found and 0.80
 right on average and no trap sprung in any answer. Asked without the examples, a model has
@@ -337,8 +356,9 @@ scripts/glean-eval --replay 7 --out ~/glean-replay.md
 It reads your last seven days from Claude Code's transcripts (`--until <day>` ends them on another
 day than today, `--leave-out <folder>` skips the sessions in a folder), asks the model once for
 each day and writes the proposals with their quotes to the file, which only you can read. It prints
-counts and no word of a prompt. What you typed and pasted goes to the model on your own login, as it
-did when you sent it. The model gets no captures, and a memory only with `--memory <file>`, a copy
+counts and no word of a prompt. What you typed and pasted, with the end of Claude's answer before
+each prompt and the shell commands of that turn, goes to the model on your own login, as it did
+when you sent it. The model gets no captures, and a memory only with `--memory <file>`, a copy
 of your distillate you made; without one it also proposes what your second brain knows already. A
 file inside this repository is refused, for `--out` and for `--memory`.
 

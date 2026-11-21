@@ -6,7 +6,7 @@ import re
 import unittest
 
 from locations import PLUGIN_ROOT
-from m2b import glean
+from m2b import glean, project_capture
 from m2b.notes.memory_index import MemoryIndex
 
 SKILLS = PLUGIN_ROOT / "skills"
@@ -185,7 +185,7 @@ class ProposeToolTest(unittest.TestCase):
         """Covers: B178"""
         description = one_line(tool_description(PROPOSE_RULES))
         instruction = one_line(glean.INSTRUCTION.read_text(encoding="utf-8"))
-        self.assertEqual(tuple(KIND_IN_THE_READINGS_WORDS), glean.KINDS)
+        self.assertEqual(tuple(KIND_IN_THE_READINGS_WORDS), glean.HANDED_IN_KINDS)
         for kind, words in KIND_IN_THE_READINGS_WORDS.items():
             for said in (f"`{kind}`: ", *words):
                 with self.subTest(kind=kind, said=said):
@@ -230,7 +230,10 @@ PLACES_CURRENT_ITEMS = (
     "start one at the end of `## Current`: the topic's heading under `## Facts`, copied character for character",
     "A line that already stands under a topic in `## Current` stays there; change it in place.",
     "moves under that subject's heading when a capture is about the same thing",
-    "A line no capture of this run is about stays where it is.",
+    "A line no capture of this run is about stays where it is: one that names a word of exactly one topic is "
+    "moved later in the run, in code.",
+    "A line from the worklog is one sentence: the work and where it stands, without the steps that led there "
+    "and without links.",
     "remove that heading there too; the topic's heading under `## Facts` stays.",
     "put each line where the paragraph on Current says, work for a customer under that customer's topic",
     "A topic that stands under `## Current` keeps its heading, copied character for character",
@@ -331,6 +334,94 @@ class CaptureFileSkillTest(unittest.TestCase):
             for pattern in allowed_patterns(skill):
                 with self.subTest(skill=skill, pattern=pattern):
                     self.assertFalse(covers(pattern, command))
+
+    def test_the_capture_skill_keeps_the_project_of_the_session_with_its_remote(self) -> None:
+        """Covers: B252"""
+        text = one_line(skill_text("capture"))
+
+        self.assertTrue(
+            any(block.startswith("m2b capture --project --source claude -") for block in bash_examples("capture"))
+        )
+        for said in (
+            "merk dir dieses Projekt",
+            "capture it with `--project`, even where the tool is offered",
+            "a folder without a remote, which m2b needs to know the project on another machine",
+        ):
+            with self.subTest(said=said):
+                self.assertIn(said, text)
+        self.assertIn(
+            "The project a session works in, when the user asks to keep it, is not a note either: the skill "
+            "m2b:capture keeps it with its repository.",
+            tool_description("NOTE_RULES"),
+        )
+
+    def test_ingest_files_a_project_capture_as_one_topic_with_its_repository_line(self) -> None:
+        """Covers: B253"""
+        text = one_line(skill_text("ingest"))
+
+        for said in (
+            "A capture that begins `Keep this project:` is the owner making a project known",
+            "among its two to five words the repository's name",
+            "where it has 3 to 40 characters, and what the owner calls it",
+            "`- Repository: <address> (<file>.md)` for each `Repository:` line of the capture",
+            "Where a topic already has a `- Repository:` line with one of those addresses, it is that project: "
+            "add to that topic and start no second one.",
+        ):
+            with self.subTest(said=said[:40]):
+                self.assertIn(said, text)
+        self.assertIn(project_capture.FIRST_LINE.strip(), text)
+
+    def test_ingest_files_a_kept_pointer_as_a_line_of_the_topic_its_repository_names(self) -> None:
+        """Covers: B279"""
+        text = one_line(skill_text("ingest"))
+
+        for said in (
+            "A capture that begins `Keep this pointer:` is a line the owner kept for a project topic",
+            "File it in the topic whose `- Repository:` line names one of the capture's `Repository:` addresses, "
+            "as `- <sentence> → <path> (<file>.md)`",
+            "Where no topic has such a line, file the sentence alone as a fact, without the arrow and the path.",
+        ):
+            with self.subTest(said=said[:40]):
+                self.assertIn(said, text)
+        self.assertIn(project_capture.POINTER_FIRST_LINE.strip(), text)
+
+    def test_the_capture_skill_keeps_a_lesson_about_a_command_with_its_words(self) -> None:
+        """Covers: B267"""
+        text = one_line(skill_text("capture"))
+
+        self.assertTrue(any(block.startswith("m2b lesson add -") for block in bash_examples("capture")))
+        for said in (
+            "merk dir als Lehre",
+            "keep it with `m2b lesson add`, even where the tool is offered",
+            "with the words that command holds (`words`) and those that keep the lesson silent (`unless`)",
+        ):
+            with self.subTest(said=said):
+                self.assertIn(said, text)
+        self.assertIn(
+            "A correction the user asks to keep as a lesson is not a note either: the skill m2b:capture keeps it as a "
+            "lesson.",
+            tool_description("NOTE_RULES"),
+        )
+
+    def test_the_capture_skill_keeps_a_fix_for_a_file_claude_reads_with_the_fix_command(self) -> None:
+        """Covers: B248"""
+        text = one_line(skill_text("capture"))
+
+        self.assertTrue(any(block.startswith("m2b fix add -") for block in bash_examples("capture")))
+        for said in (
+            "merk dir als Fix",
+            "it is no note: keep it with `m2b fix add`, even where the tool is offered",
+            "the line it replaces exactly as the file has it",
+            "Do not edit the file here",
+            "run `m2b fix done <name>` only once they confirm the change",
+        ):
+            with self.subTest(said=said):
+                self.assertIn(said, text)
+        self.assertIn(
+            "A fix for a file Claude reads, a CLAUDE.md or a rule file under ~/.claude/, is not a note either: the "
+            "skill m2b:capture keeps it as a fix.",
+            tool_description("NOTE_RULES"),
+        )
 
     def test_the_capture_skill_copies_a_file_the_user_named_with_the_command_and_their_words(self) -> None:
         """Covers: B235"""

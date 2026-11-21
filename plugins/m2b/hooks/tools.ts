@@ -27,7 +27,7 @@ const NOTE_RULES = [
   'Use it when the user says "remember this", "note that", "remind me to", "merk dir das", "notier das", "erinnere mich an", or when something personal without a home in the current repository comes up and the user wants to keep it.',
   'It only adds; curation files the note later.',
   'What goes in: personal things without a home in a repository (facts, ideas, open questions, tasks), and what the user learns about people and verbal agreements: who is who, which role, what was agreed, from work too.',
-  "A project's own todos and decisions belong in that project's repository, not here. When something touches both, the repository gets the content and the capture gets a pointer.",
+  "A project's own todos and decisions belong in that project's repository, not here. When something touches both, the repository gets the content and the capture one sentence naming the file it stands in.",
   'Write the text in the user\'s words, as they said it after the request itself, turned into a plain sentence where the request made it a clause ("merk dir, dass ich lieber am Fenster sitze" becomes "Ich sitze lieber am Fenster.").',
   'Do not summarize, correct or translate it, and add nothing the user did not say, no year to a date, no surname to a first name.',
   'Keep "I", "my" and "we": in the second brain they always mean the owner, so never put the owner\'s name in their place.',
@@ -42,6 +42,9 @@ const NOTE_RULES = [
   'A calendar entry is not a note: the skill m2b:capture adds those.',
   'A file the user names with its path, a PDF, a scan or a picture, is not a note either: the skill m2b:capture copies it into the inbox, and Claude Code asks the user first.',
   'A task the user says is done is not a note either: the skill m2b:todos ticks it.',
+  'A fix for a file Claude reads, a CLAUDE.md or a rule file under ~/.claude/, is not a note either: the skill m2b:capture keeps it as a fix.',
+  'The project a session works in, when the user asks to keep it, is not a note either: the skill m2b:capture keeps it with its repository.',
+  'A correction the user asks to keep as a lesson is not a note either: the skill m2b:capture keeps it as a lesson.',
 ] as const
 
 const SEARCH_RULES = [

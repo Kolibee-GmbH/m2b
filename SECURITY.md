@@ -43,11 +43,16 @@ pattern before the model sees them, which stays incomplete. Work that must not r
 all, such as a customer's under a confidentiality agreement, can be left out by folder or by a
 git remote of its repository
 ([docs/addons/worklog.md](docs/addons/worklog.md#leaving-work-out), with what the setting does not
-cover). For that, on a machine that reads sessions (the worklog add-on on, or
-`curation.read_sessions`), every session start notes the URLs of the git remotes of the folder it
-starts in, without the user name or token a URL may carry, in
-`~/.local/state/m2b/session-remotes/`. A note reaches neither the store nor a model, and one that
-no session start renewed for 30 days is removed at the next session start on the machine.
+cover). For that, and so that a project topic can name the folder its repository lies in on this
+machine, every session start notes the URLs of the git remotes of the folder it starts in, without
+the user name or token a URL may carry, in `~/.local/state/m2b/session-remotes/`. A note reaches
+no curation model. The folder it names is printed into a session that gets the project topic of its
+repository, and a remote's address can reach the store: as a project the reading of your sessions
+proposes, and as the repository a lesson or a fix is kept for. The folder itself never reaches the
+store. The days a repository was worked in are kept on this machine, in
+`~/.local/state/m2b/project-days.json`. For leaving work out a note counts for 30 days after it was last
+renewed; the note itself stays while its folder is there and is removed at a session start once
+the folder is gone and no session start renewed it for 30 days.
 
 The model runs only fenced: from an empty folder, without your settings or other plugins, with
 exactly the commands and store paths its step lists, and nothing else allowed. A tool call outside
@@ -146,7 +151,19 @@ looks like an instruction. So:
 - read `memory/MEMORY.md` now and then, or keep the store in a folder whose changes you see (a git
   repository, a backup with history);
 - `m2b distillate off` keeps the distillate out of projects where it must not appear, on the
-  machine you run it on.
+  machine you run it on, and with it m2b's notices, the routing rule, the lessons and the hook
+  before each Bash call.
+
+The lessons you kept are printed at session start in a second output beside the distillate, not
+under its data header: a session is told to follow them. So no model step of a run may add, change
+or remove a file under `memory/lessons/`, and a capture is never a lesson, whatever it says about
+itself. A lesson reaches that folder only from a proposal you keep or through `m2b lesson add`,
+before which Claude Code asks you unless a permission rule or mode lets the command through.
+Whoever can write the store can write a lesson there too, or a file under `state/core/lessons-kept/`
+that the next run files without asking. A lesson about a command can stop a Bash call or have Claude
+Code ask before it. `m2b fix add` runs without asking: a fix's wording, written by a session or by
+the model of a reading, waits in the store until a later session applies it with you to the file it
+is for. Read a fix with `m2b fix show <name>` before you say yes.
 
 The tests contain hostile samples on purpose, to check the defences of m2b this section
 describes. In `tests/unit/` and in the band's tests they are lines with characters that hide or
@@ -231,18 +248,33 @@ Off until you say yes in setup or turn `curation.read_sessions` on yourself, wit
 not refused inside a Claude Code session: a session that may run `m2b` can turn it on. A
 curation run then gives a model what you typed in Claude Code since the last reading, with the
 folder and the day of each session: the prompts Claude Code marks as typed by you, with what you
-pasted into them kept apart from what you typed, without Claude's answers, tool results and what a
-plugin or another agent sent, each cut at 2,000 characters, with credentials redacted by pattern,
-which stays incomplete. Pasted text may be anyone's words: a mail, a document, an agent's answer. A session you left out,
+pasted into them kept apart from what you typed, and beside each, never as your words, the last 500
+characters of Claude's answer before it and the shell commands Claude ran in that turn (at most 10,
+each cut at 300 characters). Of a session in a repository that has a project topic, the paths of up
+to 50 files Claude wrote there go too, never what it wrote. Left out are the rest of Claude's
+answers, tool results and what a plugin or another agent sent. Each prompt is cut at 2,000
+characters, and credentials are redacted by pattern, which stays incomplete. Pasted text may be anyone's words: a mail, a document, an agent's answer. A session you left out,
 by its folder or by a git remote of its repository, does not reach it. With the prompts the model gets the distillate and, from
 `state/core/proposals.json` in the store, up to 30 proposals of a reading you kept, 30 you
 dropped and 30 that wait, none a session handed in, each with the words it stood on, typed or
 pasted; so words of an earlier period go to the model again while such a proposal waits or until
-90 days after a run settled your answer to it.
+90 days after a run settled your answer to it. It also gets the lessons you kept, by name, text
+and the day each was kept, to tell which prompts correct Claude on one again.
 
-That model can call nothing: it reads its input and answers once. Code keeps a proposal of a
-reading only when the words it quotes stand in a prompt of the period, and nothing is filed before
-you say keep. The
+Where the reading finds a lesson, a second model call gets the lesson and every line of the files a
+session in its folders loads: `~/.claude/CLAUDE.md` and its rules, every `CLAUDE.md`,
+`CLAUDE.local.md` and `.claude/rules/` file from the folder up to your home folder, the output style
+and Claude Code's memory of that project, lines numbered and redacted the same way, up to 200,000
+characters. At every reading, when the lessons every session starts with or the files under
+`~/.claude/` that every session loads changed since the last check, a third call gets those lessons
+with `~/.claude/CLAUDE.md`, its rules without `paths` and the output style chosen there; it may run
+in a run in which you typed nothing.
+
+None of these models can call anything: each reads its input and answers once. Code keeps a
+proposal of a reading only when the words it quotes stand in a prompt of the period, and nothing is
+filed before you say keep, with one exception: where the third call names a line of a file under
+`~/.claude/` that states a lesson, and code finds that line in the file, the lesson is marked as
+kept at that source (`kept_at`), leaves the block every session starts with, and the run says so. The
 distillate and the proposals file lie in the store, so whoever can write the store can try to
 steer that model through them, and so can whoever wrote a mail, a page or an agent's answer you
 pasted into a prompt. What this reaches is which proposals you are shown and their text,

@@ -6,6 +6,8 @@ import {
   curatingMachineOf,
   curationLine,
   healthOf,
+  isLessonStanding,
+  lessonLine,
   noRunStarted,
   parseRunStart,
   statusLine,
@@ -73,6 +75,11 @@ describe('the status line', () => {
     expect(statusLine(answer({ run: undefined }))).toBe('could not read the last curation run')
     expect(statusLine(answer({ inbox: { error: 'gone' } }))).toBe('could not read the inbox')
     expect(statusLine(answer({ store_error: 'bad json' }))).toBe('could not read store.json')
+    expect(statusLine(answer({ lessons: { error: 'memory/lessons is not downloaded to this machine' } }))).toBe(
+      'could not read the lessons',
+    )
+    expect(statusLine(answer({ lessons: { in_every_session: 0, kept_at_source: [], each: [] } }))).toBeNull()
+    expect(statusLine(answer({ lessons: undefined }))).toBeNull()
   })
 
   test('joins everything that is wrong in one line, the run first', () => {
@@ -209,6 +216,12 @@ describe('how m2b stands, for the part of the pane about m2b itself', () => {
     expect(healthOf(answer({ inbox: undefined }), NOW).troubles).toEqual(['m2b could not read the inbox.'])
   })
 
+  test('lessons m2b could not read are a sentence with the error, never no lessons', () => {
+    // Covers: B206
+    const lessons = { error: 'memory/lessons is not downloaded to this machine; run: m2b store fetch memory/lessons' }
+    expect(healthOf(answer({ lessons }), NOW).troubles).toEqual([`m2b could not read the lessons: ${lessons.error}`])
+  })
+
   test('an answer without a part about m2b is one trouble, where the status line says that it could not look', () => {
     // Covers: B206
     for (const noAnswer of [undefined, null, 'ok', 7]) {
@@ -326,6 +339,41 @@ describe('what m2b knows of curation on this machine, for the button that starts
       curates: null,
       isCurating: true,
     })
+  })
+
+  test('the lessons are read with their counts, a lesson not in the form left out, and none where there are none', () => {
+    // Covers: B282
+    const each = [
+      { name: 'proof.md', kind: 'action', kept: '2026-11-20', corrected_again: 2, fired: 3, calls: 40 },
+      { name: 'once.md', kind: 'knowledge', kept: '2026-11-20', corrected_again: null },
+      { name: 'odd.md', kind: 'action', kept: '2026-11-20', corrected_again: -1 },
+      { name: 7, kind: 'action', kept: '2026-11-20', corrected_again: 0 },
+    ]
+
+    expect(healthOf(answer({ lessons: { each } }), NOW).lessons).toEqual([
+      { name: 'proof.md', kind: 'action', kept: '2026-11-20', correctedAgain: 2, fired: 3, calls: 40 },
+      { name: 'once.md', kind: 'knowledge', kept: '2026-11-20', correctedAgain: null },
+    ])
+    expect('lessons' in healthOf(answer({ lessons: { each: [] } }), NOW)).toBe(false)
+    // A share that ends in a half is rounded to the even number, as `m2b status` rounds it.
+    const action = { name: 'proof.md', kind: 'action', kept: '2026-11-20', correctedAgain: 0 }
+    expect(lessonLine({ ...action, fired: 1, calls: 40 })).toContain('in 40 Bash calls (2%)')
+    expect(lessonLine({ ...action, fired: 3, calls: 40 })).toContain('in 40 Bash calls (8%)')
+    expect(isLessonStanding({ ...action, fired: 'x', calls: 'y' })).toBe(false)
+    expect(isLessonStanding({ ...action, fired: 1, calls: 40 })).toBe(true)
+    expect(lessonLine({ name: 'a\u001b[2Jb.md', kind: 'knowledge', kept: '2026-11-20', correctedAgain: 0 })).toBe(
+      'lesson ab.md (knowledge, kept 2026-11-20): corrected again 0 times',
+    )
+  })
+
+  test('a lesson kept as a fix is read and said with its counts like any other', () => {
+    // Covers: B289
+    const each = [{ name: 'fix-3f9c2a71b0de', kind: 'fix', kept: '2026-11-20', corrected_again: 1 }]
+
+    const [lesson] = healthOf(answer({ lessons: { each } }), NOW).lessons ?? []
+
+    expect(lesson).toEqual({ name: 'fix-3f9c2a71b0de', kind: 'fix', kept: '2026-11-20', correctedAgain: 1 })
+    expect(lessonLine(lesson!)).toBe('lesson fix-3f9c2a71b0de (fix, kept 2026-11-20): corrected again 1 time: not working')
   })
 
   test('where m2b gave no answer about itself nothing is known of curation and nothing is said', () => {

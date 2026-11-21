@@ -41,7 +41,12 @@ not read, so this one never writes over what it does not know. That is why the f
 lowest format that an m2b which reads it shows rightly (``_format_of``): an m2b before the source
 would show a proposal from pasted text as said and write it back without the field, and one
 before a session could hand in would show a handed-in proposal as said or under a source it does
-not know and write it back without who proposed it and without the tool.
+not know and write it back without who proposed it and without the tool; one before a lesson or a
+project could be proposed would leave such a proposal out and write the file back without it.
+
+A project is proposed by code, not by a model (``project_proposals``): a repository the person
+worked in on two days that has no topic. Its quote is the repository's addresses, its source
+``WORKED``; it is no example for a reading's model, which proposes no project.
 """
 
 from __future__ import annotations
@@ -50,20 +55,42 @@ import dataclasses
 import datetime
 import hashlib
 import re
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from m2b import lessons
 from m2b.candidates import REMEMBER_DROPPED as REMEMBER_SETTLED
 from m2b.candidates import same_text
 from m2b.config.json_file import read_store_json_object, write_store_json_object
-from m2b.glean import AGENT, KINDS, PASTED, TOOL, TYPED, Example, Examples, Proposal
+from m2b.glean import (
+    AGENT,
+    FIX,
+    KINDS,
+    LESSON,
+    PASTED,
+    POINTER,
+    PROJECT,
+    READ_KINDS,
+    STATED,
+    TOOL,
+    TYPED,
+    WORKED,
+    AtSource,
+    Example,
+    Examples,
+    LessonPart,
+    PointerPart,
+    Proposal,
+)
 from m2b.notes.characters import can_be_written
 from m2b.notes.layout import STATE
 from m2b.store.base import Store
 
 PROPOSALS_FILE = f"{STATE}/core/proposals.json"
-FORMAT = 3
+FORMAT = 4
+# What an m2b before a lesson could be proposed wrote and reads: no kind ``lesson``.
+FORMAT_WITHOUT_LESSONS = 3
 # What an m2b before a proposal had a source wrote and reads.
 FORMAT_WITHOUT_SOURCE = 1
 # What an m2b before a session could hand a proposal in wrote and reads: typed and pasted words.
@@ -91,6 +118,7 @@ _SOURCE = re.compile(r"[a-z][a-z-]{0,19}")
 # A tool as Claude Code names it, its own or one of an MCP server: letters, digits and the signs
 # such names are joined with. The name is shown to the person, so nothing else is taken for one.
 _TOOL = re.compile(r"[A-Za-z][A-Za-z0-9_.-]{0,127}")
+_LESSON_FILE = re.compile(r"[^/\\\x00]+\.md")
 
 
 class ProposalsError(Exception):
@@ -116,6 +144,10 @@ class Entry:
     tool: str | None = None
     # Who proposed where it was no reading: ``SESSION`` for a proposal a session handed in.
     by: str | None = None
+    # For a lesson: its kind, target, words and the same correction in a second session.
+    lesson: LessonPart | None = None
+    # For a pointer: the file in its repository and the repository's addresses.
+    pointer: PointerPart | None = None
 
 
 @dataclass(frozen=True)
@@ -261,10 +293,13 @@ def is_tool_name(text: str) -> bool:
 
 
 def _format_of(entries: Collection[Entry]) -> int:
-    """The format the file needs: 3 with a proposal that names who proposed or a tool, or whose
-    source is neither typed nor pasted; else 2 with one from pasted text; else 1."""
-    if any(entry.by is not None or entry.tool is not None or entry.source not in (TYPED, PASTED) for entry in entries):
+    """The format the file needs: 4 with a lesson, a project or a pointer; 3 with a proposal that names
+    who proposed or a tool, or whose source is neither typed nor pasted; else 2 with one from pasted
+    text; else 1."""
+    if any(entry.kind in (LESSON, PROJECT, POINTER) for entry in entries):
         return FORMAT
+    if any(entry.by is not None or entry.tool is not None or entry.source not in (TYPED, PASTED) for entry in entries):
+        return FORMAT_WITHOUT_LESSONS
     return FORMAT_WITHOUT_SOURCE if all(entry.source == TYPED for entry in entries) else FORMAT_OF_A_READING
 
 
@@ -298,6 +333,8 @@ def add(current: Proposals, found: Sequence[Said], now: datetime.datetime) -> Ad
             proposal.source,
             said.tool,
             said.by,
+            proposal.lesson,
+            proposal.pointer,
         )
         counts = _counted(counts, proposal.kind, "proposed")
         added += 1
@@ -365,8 +402,9 @@ def examples(current: Proposals, now: datetime.datetime) -> Examples:
             (
                 (entry.since, key, entry)
                 for key, entry in _remembered(current.entries, now).items()
-                # What a session handed in is none: its quote can be anyone's text.
-                if entry.state == state and entry.by is None
+                # What a session handed in is none: its quote can be anyone's text. Nor is a
+                # project: it stands on no words, and no model proposes one.
+                if entry.state == state and entry.by is None and entry.kind in READ_KINDS
             ),
             key=lambda item: item[:2],
             reverse=True,
@@ -387,7 +425,7 @@ def waiting_examples(current: Proposals) -> tuple[Example, ...]:
         (
             (entry.since, key, entry)
             for key, entry in current.entries.items()
-            if entry.state == OPEN and entry.by is None
+            if entry.state == OPEN and entry.by is None and entry.kind in READ_KINDS
         ),
         key=lambda item: item[:2],
         reverse=True,
@@ -449,11 +487,75 @@ def _entry(value: object) -> Entry | None:
         return None
     if not (by is None or (isinstance(by, str) and _SOURCE.fullmatch(by))):
         return None
-    return Entry(kind, text, quote, day, state, since, topic, due, source, tool, by)
+    lesson = _lesson_of(value.get("lesson"))
+    if (kind == LESSON) != (lesson is not None):
+        return None
+    pointer = _pointer_of(value.get("pointer"))
+    if (kind == POINTER) != (pointer is not None):
+        return None
+    return Entry(kind, text, quote, day, state, since, topic, due, source, tool, by, lesson, pointer)
+
+
+def _pointer_of(value: object) -> PointerPart | None:
+    """A pointer's part as the file holds it: a path in a repository and at least one address."""
+    if not isinstance(value, dict):
+        return None
+    path, repositories = value.get("path"), value.get("repositories")
+    if not isinstance(path, str) or not path or not can_be_written(path):
+        return None
+    if not isinstance(repositories, list) or not repositories:
+        return None
+    if not all(isinstance(each, str) and each and can_be_written(each) for each in repositories):
+        return None
+    return PointerPart(path, tuple(repositories))
+
+
+def _lesson_of(value: object) -> LessonPart | None:
+    """A lesson's part as the file holds it; its target there is ``every project`` or an address."""
+    if not isinstance(value, dict):
+        return None
+    kind, target, quote, session, words = (value.get(name) for name in ("kind", "target", "quote", "session", "words"))
+    if kind not in lessons.KINDS or not isinstance(target, str) or not target or target == lessons.THIS_PROJECT:
+        return None
+    if not isinstance(quote, str) or not isinstance(session, str) or not isinstance(words, list):
+        return None
+    if not all(isinstance(word, str) for word in words) or not all(
+        can_be_written(part) for part in (quote, target, *words)
+    ):
+        return None
+    at_source = value.get("at_source")
+    source = None if at_source is None else _at_source_of(at_source)
+    if at_source is not None and source is None:
+        return None
+    replaces = value.get("replaces")
+    # A lesson's file name, never a path: harvest removes the file it names.
+    if not (
+        replaces is None
+        or (isinstance(replaces, str) and _LESSON_FILE.fullmatch(replaces) and can_be_written(replaces))
+    ):
+        return None
+    return LessonPart(kind, target, tuple(words), quote, session, source, replaces)
+
+
+def _at_source_of(value: object) -> AtSource | None:
+    if not isinstance(value, dict):
+        return None
+    verdict, file, line, wording, path = (value.get(name) for name in ("verdict", "file", "line", "wording", "path"))
+    repositories = value.get("repositories", [])
+    texts = (file, *(part for part in (line, wording, path) if part is not None))
+    if verdict not in (FIX, STATED) or not all(isinstance(part, str) and can_be_written(part) for part in texts):
+        return None
+    if not isinstance(file, str):
+        return None
+    if not isinstance(repositories, list) or not all(isinstance(each, str) for each in repositories):
+        return None
+    if (verdict == FIX) != (wording is not None and path is not None):
+        return None
+    return AtSource(verdict, file, line, wording, path, tuple(repositories))
 
 
 def _as_json(entry: Entry) -> dict[str, Any]:
-    written = {
+    written: dict[str, Any] = {
         "kind": entry.kind,
         "text": entry.text,
         "quote": entry.quote,
@@ -471,6 +573,20 @@ def _as_json(entry: Entry) -> dict[str, Any]:
         written["tool"] = entry.tool
     if entry.by is not None:
         written["by"] = entry.by
+    if entry.lesson is not None:
+        written["lesson"] = {
+            "kind": entry.lesson.kind,
+            "target": entry.lesson.target,
+            "words": list(entry.lesson.words),
+            "quote": entry.lesson.quote,
+            "session": entry.lesson.session,
+        }
+        if entry.lesson.at_source is not None:
+            written["lesson"]["at_source"] = dataclasses.asdict(entry.lesson.at_source)
+        if entry.lesson.replaces is not None:
+            written["lesson"]["replaces"] = entry.lesson.replaces
+    if entry.pointer is not None:
+        written["pointer"] = {"path": entry.pointer.path, "repositories": list(entry.pointer.repositories)}
     return written
 
 
@@ -486,9 +602,33 @@ def said_line(entry: Entry, quote: str) -> str:
         PASTED: "pasted on",
         TOOL: f"in a result of {entry.tool or 'a tool'} on",
         AGENT: "Claude wrote on",
+        WORKED: "sessions worked in it, the last on",
     }
     lead = leads.get(entry.source, f"from {entry.source} on")
     return f'{lead} {entry.day.isoformat()}: "{quote}"'
+
+
+def lesson_heading(lesson: LessonPart, shown: Callable[[str], str]) -> str:
+    """What a proposed lesson is, beside its kind in a listing: ``action for every project, on a
+    command with scripts/check``; ``shown`` is how the caller shows text."""
+    words = f", on a command with {' '.join(shown(word) for word in lesson.words)}" if lesson.words else ""
+    replaces = f", replaces {shown(lesson.replaces)}" if lesson.replaces else ""
+    return f"{lesson.kind} for {shown(lesson.target)}{words}{replaces}"
+
+
+def again_line(quote: str) -> str:
+    """The line that shows a lesson's second quote, as the caller shows it: what was said again."""
+    return f'and again in another session: "{quote}"'
+
+
+def source_line(at_source: AtSource, shown: Callable[[str], str]) -> str:
+    """What becomes of a source a lesson is kept at: the line a fix replaces and its new wording, the
+    wording a fix adds, or the line that says the lesson already."""
+    if at_source.verdict == STATED:
+        return f'stated already in {shown(at_source.file)}: "{shown(at_source.line or "")}"'
+    if at_source.line is None:
+        return f'adds to {shown(at_source.file)}: "{shown(at_source.wording or "")}"'
+    return f'fixes {shown(at_source.file)}: "{shown(at_source.line)}" becomes "{shown(at_source.wording or "")}"'
 
 
 def proposer_of(entry: Entry) -> str | None:

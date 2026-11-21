@@ -1,0 +1,163 @@
+{
+  "description": "E33 a project made known (stub level): in a clone whose remote is git@github.com:acme/portal.git, `m2b capture --project` keeps the owner's words and the repository's address; a clone without a remote captures nothing; the curation run files the capture as the topic Acme portal with its `Repository:` line; a session that starts in the clone gets the topic with the folder it lies in on this machine; asking again names the topic and captures nothing.",
+  "model": {
+    "skills": {
+      "/m2b:ingest": {
+        "actions": [
+          {
+            "tool": "Bash",
+            "command": "m2b ingest list --json"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/memory/MEMORY.md"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/inbox/<capture:claude>"
+          },
+          {
+            "tool": "Write",
+            "file_path": "<store>/memory/acme-portal.md",
+            "content": "# Acme portal\n\n- Repository: github.com/acme/portal\n\n## Evidence\n\n- [[<capture:claude>]]\n"
+          },
+          {
+            "tool": "Edit",
+            "file_path": "<store>/memory/MEMORY.md",
+            "old_string": "## Facts\n\n",
+            "new_string": "## Facts\n\n### Acme portal (Acme portal, portal)\n- Repository: github.com/acme/portal (acme-portal.md)\n\n"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest facts-filed <capture:claude>"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest note <capture:claude> 'filed: project topic Acme portal, acme-portal.md'"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest finish <capture:claude>"
+          }
+        ]
+      }
+    }
+  },
+  "steps": [
+    {
+      "run": [
+        "git",
+        "init",
+        "-q"
+      ],
+      "cwd": "portal",
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      }
+    },
+    {
+      "run": [
+        "git",
+        "remote",
+        "add",
+        "origin",
+        "git@github.com:acme/portal.git"
+      ],
+      "cwd": "portal",
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      }
+    },
+    {
+      "run": [
+        "git",
+        "init",
+        "-q"
+      ],
+      "cwd": "scratch",
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "--project",
+        "--source",
+        "claude",
+        "-"
+      ],
+      "cwd": "scratch",
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdin": "my scratch folder",
+      "exit": 2
+    },
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "--project",
+        "--source",
+        "claude",
+        "-"
+      ],
+      "cwd": "portal",
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdin": "Acme portal",
+      "stdout": "\\Ainbox/\\d{8}T\\d{6}Z-claude-[0-9a-f]{4}\\.md\\n\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdout": "\\Athe curation run succeeded\\ninbox: 1 capture filed, 0 waiting\\n\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "hook",
+        "distillate"
+      ],
+      "cwd": "portal",
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdin": "{\"session_id\": \"0a1b2c3d-1111-4222-8333-444455556666\"}",
+      "stdout": "### Acme portal \\(Acme portal, portal\\)\\n- Repository: github\\.com/acme/portal \\(acme-portal\\.md\\)\\n  on this machine: [^\\n]*/portal\\n"
+    },
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "--project",
+        "--source",
+        "claude",
+        "-"
+      ],
+      "cwd": "portal",
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdin": "the portal",
+      "stdout": "already known as the topic Acme portal; nothing was captured"
+    }
+  ]
+}

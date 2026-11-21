@@ -59,7 +59,19 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from m2b import current_check, expiry, ingest, launcher, lint, proposal_answers, proposals, proposals_task
+from m2b import (
+    current_check,
+    current_topics,
+    expiry,
+    ingest,
+    launcher,
+    lesson_check,
+    lint,
+    proposal_answers,
+    proposals,
+    proposals_task,
+    session_remotes,
+)
 from m2b.addons import CURATION_SLOTS, Addon, names_on, steps_in
 from m2b.candidates import PREFIX_KEY
 from m2b.config.errors import ConfigError, NotSetUpError
@@ -177,6 +189,9 @@ LINT_RULES = (
     "Edit(<store>/memory/**)",
 )
 MODEL_STEPS = 3
+# The reading of the sessions asks up to three models: the check of the block again, the reading,
+# the check of a new lesson's sources.
+READING_MODEL_STEPS = 3
 # Harvest, journal, the proposals task and review have no timeout of their own; they get this much
 # in the deadline. The journal's fetch of evicted month files is counted with the preflight fetch.
 CODE_STEPS_MARGIN = datetime.timedelta(minutes=10)
@@ -645,11 +660,28 @@ class _Run:
     def _harvest(self, tasks: Tasks, locale: Locale) -> None:
         result = HarvestReport()
         try:
-            harvest(self.store, tasks, locale.text(PREFIX_KEY), self.clock(), result)
+            harvest(self.store, tasks, locale.text(PREFIX_KEY), self.clock(), result, self.config.machine_id)
         finally:
             # A harvest that fails has still said what waits and why.
             self.findings += [report.Finding(HARVEST, report.ACTION, problem) for problem in result.problems]
+            self.findings += [
+                report.Finding(
+                    HARVEST, report.INFO, f"a fix you kept waits for {place}: the next session there applies it"
+                )
+                for place in result.fixes
+            ]
+            self.findings += [
+                report.Finding(
+                    HARVEST, report.INFO, f"the lesson {name} is removed: the lesson you kept takes its place"
+                )
+                for name in result.replaced
+            ]
         current_check.settle(self.store, tasks, self.clock().date(), task_list=self._task_list())
+        removed = lesson_check.settle(self.store, tasks, self.clock().date(), task_list=self._task_list())
+        self.findings += [
+            report.Finding(HARVEST, report.INFO, f"the lesson {name} is removed: you said it no longer holds")
+            for name in removed
+        ]
 
     def _take_in_handed_in(self) -> bool:
         """What sessions handed in becomes proposals that wait; whether there was anything to say of it.
@@ -685,6 +717,9 @@ class _Run:
     def _glean(self) -> Skipped | None:
         """What the person typed since the last reading; the model only when a session has a prompt."""
         started = self.started or self.clock()
+        # Before the reading, so a lesson a source states now is out of the block when a new one is weighed.
+        rechecked = glean_step.recheck_lessons(self.store, self.config, self.machine, self.environ, self.lock.pass_fds)
+        self.findings += [report.Finding(GLEAN, report.INFO, note) for note in rechecked]
         try:
             reading = glean_step.propose(
                 self.store, self.config, self.machine, self.environ, started, self.lock.pass_fds
@@ -812,10 +847,15 @@ class _Run:
 
     def _refresh(self, tasks: Tasks, locale: Locale, token: str) -> Skipped | None:
         """The model only for facts past their day, and allowed to edit those files alone (B41); quiet
-        current items become questions to the owner (B42)."""
+        current items and quiet lessons about a command become questions to the owner (B42, B283)."""
         found = expiry.due(self.store, self.clock().date())
         prefix = locale.text(current_check.PREFIX_KEY)
         current_check.ask(self.store, tasks, found.current, prefix, task_list=self._task_list())
+        quiet_lessons = lesson_check.quiet(
+            self.store, self.machine, self.clock().date(), corrections_counted=self.config.curation.read_sessions
+        )
+        lesson_prefix = locale.text(lesson_check.PREFIX_KEY)
+        lesson_check.ask(self.store, tasks, quiet_lessons, lesson_prefix, task_list=self._task_list())
         if self.refresh_all:
             return self._backfill([fact.path for fact in found.facts], token)
         if not found.facts:
@@ -902,15 +942,21 @@ class _Run:
 
         Otherwise the code does what the lint skill would: the safe fixes, then every finding left
         goes to the run's review. A model step costs money and time at every run, so the code takes
-        everything it can decide.
+        everything it can decide. First, in code, a current item above the topics that names one
+        topic moves under it, so the scan measures the distillate a session will get.
         """
-        scanned = lint.scan(self.store, tasks)
+        current_topics.place(self.store)
+        scanned = lint.scan(self.store, tasks, self._remote_notes(), self.clock())
         if any(finding.code == lint.BROKEN_LINK and len(finding.candidates) == 1 for finding in scanned.findings):
             self._guarded(LINT, LINT_SKILL, LINT_RULES, token)
             return
         if lint.fix(self.store, tasks, self.clock()):
-            scanned = lint.scan(self.store, tasks)
+            scanned = lint.scan(self.store, tasks, self._remote_notes(), self.clock())
         self.findings += [report.Finding(LINT, finding.kind, finding.text) for finding in scanned.findings]
+
+    def _remote_notes(self) -> Path:
+        """Where this machine notes the remotes of session folders: lint checks project topics by them."""
+        return self.machine.state_dir / session_remotes.NOTES_FOLDER
 
     def _guarded(
         self,
@@ -956,7 +1002,7 @@ class _Run:
     ) -> str | None:
         """Why ``memory/`` went back to ``before``, or None when the step's edits stay (and are reported)."""
         after = memory_guard.Snapshot.take(self.store)
-        problem = memory_guard.unsafe_line(before, after)
+        problem = memory_guard.unsafe_line(before, after) or memory_guard.lessons_changed(before, after)
         if problem is None and scope is not None:
             problem = memory_guard.refresh_problem(before, after, scope.files, scope.current)
         if problem is not None:
@@ -1118,7 +1164,7 @@ class _Run:
         # Preflight fetches once, the journal once more for older month files.
         fetch = 2 * datetime.timedelta(seconds=self.fetch_timeout_seconds)
         backfill = len(expiry.batches(self.undated, BACKFILL_BATCH)) - 1 if self.undated is not None else 0
-        optional = (1 if self.sort_facts else 0) + (1 if self.config.curation.read_sessions else 0)
+        optional = (1 if self.sort_facts else 0) + (READING_MODEL_STEPS if self.config.curation.read_sessions else 0)
         model_steps = MODEL_STEPS + max(backfill, 0) + addon_steps + optional
         return fetch + step * model_steps + CODE_STEPS_MARGIN
 
@@ -1184,6 +1230,12 @@ def _interrupted_changes(copy: Path, store: Store) -> list[report.Finding]:
     findings = [
         report.Finding(RUN, report.ACTION, f"{run}: {without_hidden(change.described())}", _shown_change(change))
         for change in records
+    ]
+    # The harvest writes lessons in code after the copy was saved, so a changed lesson is not
+    # necessarily a model's writing; the owner compares it with the copy. Named, since it stays.
+    findings[:0] = [
+        report.Finding(RUN, report.ACTION, f"{run}: {with_hidden_written_out(path)} changed since the copy")
+        for path in memory_guard.changed_lessons(before, after)
     ]
     problem = memory_guard.unsafe_line(before, after, added_files_stay=True)
     if problem is not None:

@@ -78,6 +78,8 @@ def entry(case: glean_eval.Case, statement: glean_eval.Statement, **changes: Any
     """A proposal that stands on the statement, as a model would write it."""
     number = [each.session_id for each in case.sessions].index(statement.session) + 1
     proposal = {"kind": statement.label, "text": "A fact.", "quote": statement.text, "session": number}
+    if statement.file:
+        proposal["file"] = statement.file
     proposal.update(changes)
     return proposal
 
@@ -87,7 +89,12 @@ def answer(*entries: dict[str, Any]) -> str:
 
 
 def every_planted(case: glean_eval.Case) -> list[dict[str, Any]]:
-    return [entry(case, statement) for statement in case.day.planted]
+    """One proposal per planted statement; the planted lessons, a correction said in two sessions, as one."""
+    facts = [entry(case, statement) for statement in case.day.planted if statement.label != glean.LESSON]
+    first, second = (statement for statement in case.day.planted if statement.label == glean.LESSON)
+    again = entry(case, second)
+    part = {"kind": "action", "target": "every project", "words": ["scripts/check"], "quote": second.text}
+    return [*facts, entry(case, first, lesson={**part, "session": again["session"]})]
 
 
 def trap(case: glean_eval.Case, label: str) -> glean_eval.Statement:
@@ -96,22 +103,24 @@ def trap(case: glean_eval.Case, label: str) -> glean_eval.Statement:
 
 
 class InventedDayTest(Sandbox):
-    def test_the_day_plants_twenty_typed_statements_five_of_each_kind_and_two_pasted_ones(self) -> None:
+    def test_the_day_plants_five_of_each_fact_kind_a_lesson_in_two_sessions_a_pointer_and_two_pasted(
+        self,
+    ) -> None:
         planted = self.case().day.planted
         typed = Counter(statement.label for statement in planted if not statement.pasted)
 
-        self.assertEqual(typed, dict.fromkeys(glean.KINDS, 5))
+        self.assertEqual(typed, {**dict.fromkeys(glean.FACT_KINDS, 5), glean.LESSON: 2, glean.POINTER: 1})
         self.assertEqual([statement.label for statement in planted if statement.pasted], [glean.PERSON, glean.PERSON])
 
     def test_the_day_holds_one_trap_of_each_class(self) -> None:
         self.assertEqual(sorted(each.label for each in self.case().day.traps), sorted(glean_eval.TRAPS))
 
-    def test_the_reader_gives_twelve_sessions_with_122_typed_prompts_and_one_that_is_pasted_whole(self) -> None:
+    def test_the_reader_gives_twelve_sessions_with_128_typed_prompts_and_one_that_is_pasted_whole(self) -> None:
         case = self.case()
         prompts = [prompt for each in case.sessions for prompt in each.prompts]
 
         self.assertEqual(len(case.sessions), 12)
-        self.assertEqual(sum(1 for prompt in prompts if prompt.text), 122)
+        self.assertEqual(sum(1 for prompt in prompts if prompt.text), 128)
         self.assertEqual([len(prompt.pasted) for prompt in prompts if not prompt.text], [1])
         self.assertEqual(sum(len(prompt.pasted) for prompt in prompts), 3)
 
@@ -205,7 +214,7 @@ class InventedDayTest(Sandbox):
         answered = json.loads(case.step_input)["answered"]
 
         self.assertEqual((len(answered["kept"]), len(answered["dropped"])), (5, 4))
-        self.assertEqual({each["kind"] for each in answered["kept"]}, set(glean.KINDS))
+        self.assertEqual({each["kind"] for each in answered["kept"]}, set(glean.FACT_KINDS))
         self.assertEqual(case.day.examples.kept[0].quote, answered["kept"][0]["quote"])
 
     def test_asked_without_examples_the_model_is_shown_none_and_the_day_stays_the_same(self) -> None:
@@ -225,7 +234,7 @@ class InventedDayTest(Sandbox):
     def test_the_instruction_names_every_kind_and_every_field_of_a_proposal(self) -> None:
         instruction = glean.instruction()
 
-        for word in (*glean.KINDS, "text", "quote", "session", "topic", "due", "proposals"):
+        for word in (*glean.READ_KINDS, "text", "quote", "session", "topic", "due", "proposals"):
             with self.subTest(word):
                 self.assertIn(f"`{word}`" if word != "proposals" else '"proposals"', instruction)
 
@@ -287,24 +296,78 @@ class ScoreTest(Sandbox):
     def score(self, *entries: dict[str, Any]) -> glean_eval.Score:
         return glean_eval.score(self.given, answer(*entries))
 
+    def test_a_pointer_counts_on_its_statement_and_its_file_and_the_decision_without_a_file_is_a_trap(self) -> None:
+        pointer = next(statement for statement in self.given.day.planted if statement.label == glean.POINTER)
+        unwritten = trap(self.given, "unwritten")
+
+        shown = json.loads(self.given.step_input)["sessions"]
+        self.assertEqual(
+            [session["written"] for session in shown if "written" in session],
+            [["docs/decisions/003-export-formats.md"]],
+        )
+        elsewhere = self.score(entry(self.given, pointer, file="docs/decisions/004-other.md"))
+        self.assertEqual((elsewhere.found, elsewhere.not_quoted), (0, 1))
+        sprung = self.score(entry(self.given, unwritten, kind="agreement"))
+        self.assertEqual((sprung.found, sprung.sprung), (0, ("unwritten",)))
+
     def test_an_answer_with_every_planted_statement_and_nothing_else_is_all_found_and_all_right(self) -> None:
         result = self.score(*every_planted(self.given))
 
-        self.assertEqual((result.found, result.kept, result.right, result.right_kind), (22, 22, 22, 22))
+        self.assertEqual((result.found, result.kept, result.right, result.right_kind), (25, 24, 24, 25))
         self.assertEqual((result.recall, result.precision), (1.0, 1.0))
         self.assertEqual((result.missed, result.wrong, result.sprung), ((), (), ()))
+
+    def test_a_proposal_on_a_correction_of_one_session_or_of_the_task_springs_its_trap(self) -> None:
+        traps = {trap.label: trap for trap in self.given.day.traps}
+        for label in ("one-session", "task-correction"):
+            with self.subTest(label=label):
+                taken = entry(self.given, traps[label], kind="personal")
+
+                result = self.score(*every_planted(self.given), taken)
+
+                self.assertIn(label, result.sprung)
+            with self.subTest(label=label, by="a lesson's second quote"):
+                first = next(statement for statement in self.given.day.planted if statement.label == glean.LESSON)
+                again = entry(self.given, traps[label])
+                part = {"kind": "knowledge", "target": "every project", "words": [], "quote": traps[label].text}
+                paired = entry(self.given, first, text="Another rule.", lesson={**part, "session": again["session"]})
+
+                result = self.score(paired)
+
+                self.assertIn(label, result.sprung)
+
+    def test_a_lesson_the_step_would_leave_out_finds_nothing(self) -> None:
+        planted = every_planted(self.given)
+        lesson = planted[-1]
+        for broken in ({"target": "this project"}, {"words": ["--select=E,W"]}):
+            with self.subTest(broken=broken):
+                result = self.score(*planted[:-1], {**lesson, "lesson": {**lesson["lesson"], **broken}})
+
+                self.assertEqual((result.found, result.not_quoted), (23, 1))
+
+    def test_a_prompt_that_answers_a_turn_comes_with_the_answer_and_the_command_before_it(self) -> None:
+        lessons = [statement for statement in self.given.day.planted if statement.label == glean.LESSON]
+        prompts = [
+            prompt
+            for session in self.given.sessions
+            for prompt in session.prompts
+            if any(statement.text in prompt.text for statement in lessons)
+        ]
+
+        self.assertEqual([prompt.commands for prompt in prompts], [("scripts/check",), ("./scripts/check --all",)])
+        self.assertTrue(all(prompt.answer_before for prompt in prompts))
 
     def test_an_answer_without_proposals_finds_nothing_and_is_right_about_nothing(self) -> None:
         result = self.score()
 
-        self.assertEqual((result.recall, result.precision, len(result.missed)), (0.0, 0.0, 22))
+        self.assertEqual((result.recall, result.precision, len(result.missed)), (0.0, 0.0, 25))
 
     def test_a_second_proposal_for_the_same_statement_is_not_right(self) -> None:
         first = self.given.day.planted[0]
 
         result = self.score(*every_planted(self.given), entry(self.given, first, text="The same again."))
 
-        self.assertEqual((result.found, result.right, result.kept), (22, 22, 23))
+        self.assertEqual((result.found, result.right, result.kept), (25, 24, 25))
         self.assertEqual([wrong.text for wrong in result.wrong], ["The same again."])
 
     def test_a_quote_that_shares_half_of_itself_with_the_statement_stands_on_it(self) -> None:
@@ -409,7 +472,7 @@ class MainTest(WithFakeClaude):
 
         self.assertEqual(code, glean_eval.EXIT_PASSED, out)
         self.assertIn("haiku run 2 (claude-haiku-test", out)
-        self.assertIn("found 22 of 22, right 22 of 22 proposals, kind right 22 of 22", out)
+        self.assertIn("found 25 of 25, right 24 of 24 proposals, kind right 25 of 25", out)
         self.assertIn("glean-eval: haiku: found 1.00, right 1.00 over 2 runs, traps sprung: none; meets", out)
 
     def test_without_a_model_named_every_curation_model_is_asked_three_times(self) -> None:
@@ -428,7 +491,7 @@ class MainTest(WithFakeClaude):
         code, out = self.run_main("--runs", "1")
 
         self.assertEqual(code, glean_eval.EXIT_FAILED, out)
-        self.assertIn("glean-eval: haiku: found 0.45, right 1.00 over 1 runs, traps sprung: none; misses", out)
+        self.assertIn("glean-eval: haiku: found 0.40, right 1.00 over 1 runs, traps sprung: none; misses", out)
         self.assertIn("missed person in portal-morning: 'Dana runs IT at Northwind and signs off every release'", out)
         self.assertIn("glean-eval: sonnet: found 1.00, right 1.00 over 1 runs, traps sprung: none; meets", out)
 
@@ -552,6 +615,27 @@ class ReplayTest(WithFakeClaude):
     def replay(self, *arguments: str) -> tuple[int, str]:
         return self.run_main("--replay", "3", "--out", str(self.out), "--until", str(self.TODAY), *arguments)
 
+    def test_the_replay_shows_the_model_no_written_file_as_the_step_shows_none_outside_a_project(self) -> None:
+        path = self.projects / "-home-alex-second" / "second.jsonl"
+        wrote = {
+            "type": "assistant",
+            "timestamp": f"{self.TODAY}T12:05:00Z",
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {"type": "tool_use", "id": "w", "name": "Write", "input": {"file_path": "/home/alex/second/a.md"}}
+                ],
+            },
+        }
+        with path.open("a", encoding="utf-8") as transcript:
+            transcript.write(json.dumps(wrote) + "\n")
+
+        code, out = self.replay()
+
+        self.assertEqual(code, glean_eval.EXIT_PASSED, out)
+        for call in self.calls():
+            self.assertTrue(all("written" not in session for session in json.loads(call["stdin"])["sessions"]))
+
     def test_the_proposals_of_each_day_go_to_the_file_with_the_words_they_stand_on(self) -> None:
         code, out = self.replay()
 
@@ -611,11 +695,11 @@ class ReplayTest(WithFakeClaude):
             [
                 "2026-03-03: no prompts",
                 "2026-03-04: 2 prompts in 1 sessions (with 0 pasted texts; left out: 0 sent by others, 0 suggested, "
-                "0 unmarked, 0 transcripts not read), 1 proposals: 1 person, 0 agreement, 0 commitment, 0 personal; "
-                "left out by code: 0 not quoted, 0 not in the form",
+                "0 unmarked, 0 transcripts not read), 1 proposals: 1 person, 0 agreement, 0 commitment, 0 personal, "
+                "0 lesson, 0 pointer; left out by code: 0 not quoted, 0 not in the form",
                 "2026-03-05: 1 prompts in 1 sessions (with 0 pasted texts; left out: 0 sent by others, 0 suggested, "
-                "0 unmarked, 0 transcripts not read), 0 proposals: 0 person, 0 agreement, 0 commitment, 0 personal; "
-                "left out by code: 1 not quoted, 0 not in the form",
+                "0 unmarked, 0 transcripts not read), 0 proposals: 0 person, 0 agreement, 0 commitment, 0 personal, "
+                "0 lesson, 0 pointer; left out by code: 1 not quoted, 0 not in the form",
                 f"glean-eval: 1 proposals from 3 days written to {self.out}",
             ],
         )

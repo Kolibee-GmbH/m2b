@@ -16,6 +16,9 @@ need none of it: you say what you want kept or want to know, and the session doe
 | "remind me to call the plumber on Friday" | the same | the note, and a task due that day in your task list |
 | "keep this contract, ~/Documents/lease.pdf" | the `capture` skill, and Claude Code asks you before the copy | a copy of the file in `inbox/` with a note beside it that holds your words; the next curation run reads it |
 | "put it in my calendar: dentist, Tuesday at 10" | the `capture` skill | an event in the calendar you name (macOS, with a calendar set up) |
+| "remember this project", "merk dir dieses Projekt" | the `capture` skill | `m2b capture --project` keeps the project with the address of the folder's git remote; the next curation run makes it a topic, which then comes into a session that names it, with the folder it lies in on that machine. Without a remote nothing is kept |
+| "keep this as a lesson: run the whole proof only with a reason, when you start scripts/check" | the `capture` skill | `m2b lesson add` keeps it, after Claude Code asks you; the next curation run files it under `memory/lessons/`. A lesson about a command then stops the first Bash call of a session whose command holds its words, with the lesson as the reason, and comes beside the next; any other lesson comes into every session's start |
+| "keep this as a fix: CLAUDE.md, the line about the whole proof is out of date, it should say ..." | the `capture` skill | `m2b fix add` keeps the fix in the store; the next session in a clone of that repository, or on this machine for a file under `~/.claude/`, names it, applies it with you and marks it done on your word |
 | "what did I note about the shed?" | the search tool, or the `search` skill | the lines that match, each with its file |
 | "what exactly does the rowing club's handbook say about lockers?" | the same, called with the fact file's name | the whole fact file, then the note of the document behind it with its outline |
 | "what's open?", "what's on today?" | the `todos` skill | open tasks by due date, and today's events where a calendar is set up |
@@ -77,14 +80,35 @@ command answers as JSON with it.
 
 | Command | What it does |
 |---|---|
-| `m2b capture [--follow-up <day>] [--quiet] [--source <name>] [--json] <text>` | writes a new note into the inbox; with `--follow-up YYYY-MM-DD` also a task due that day; `--quiet` keeps the note out of everything proactive; `--source` says who wrote it, `cli` when left out ([Integrations](integrations.md)); without text, or with `-`, it reads standard input |
+| `m2b capture [--follow-up <day>] [--quiet] [--project] [--source <name>] [--json] <text>` | writes a new note into the inbox; with `--follow-up YYYY-MM-DD` also a task due that day; `--quiet` keeps the note out of everything proactive; `--project` keeps the project of the working folder, named by its git remote, and says so instead where the project already has a topic or its capture waits, and refuses a folder without a remote with exit 2, and together with `--follow-up` with exit 2; `--source` says who wrote it, `cli` when left out ([Integrations](integrations.md)); without text, or with `-`, it reads standard input |
 | `m2b capture-file [--source <name>] <path> [<words>]` | copies a file into the inbox, the original stays where it is: the file under a new name and a note beside it with the words (with `-`, from standard input) and the file's original name, which the next curation run reads. A relative path, a folder, a symbolic link, a text file (capture its words with `m2b capture`) and a file over `capture.file_limit_mb` megabytes are refused in one line with exit 2. No skill may run it without asking |
 | `m2b search [--any] [--word] [--json] <terms>` | full text over archive, memory and inbox; the terms are one phrase, with `--any` each term counts on its own |
 | `m2b source [--json [--viewer]] <name>` | one fact file or note, read whole by its name: the name a distillate line ends with (`dana.md`), or a note's name from the archive (a document's or picture's name answers its note); a fact file with its lines, last day, earlier values and evidence, a note with its words and what curation added, a document's note with its original name and outline. A path or any other name is refused with exit 2; a file not on this machine is named with the command that fetches it. `--viewer` adds for a note whether `m2b store open` opens its file, why not, and where it lies; the pane passes it, the skill `m2b:search` cannot |
 | `m2b todos [--json]` | open tasks by due date, and today's events |
 | `m2b rediscover [--count <n>] [--month <YYYY-MM>] [--today <day>] [--json]` | old notes back into view, three without `--count`; `--today YYYY-MM-DD` sets the day that counts as today |
-| `m2b status [--json]` | the inbox, the last curation run, whether one is due, the backends, and how many proposals sessions handed in wait for the next run |
+| `m2b status [--json]` | the inbox, the last curation run, whether one is due, the backends, how many proposals sessions handed in wait for the next run, and how large everything is that a session in this folder starts with (the `CLAUDE.md` files and rules, the output style, Claude Code's auto memory, m2b's part), in KB and list points with the sum, and the lessons: how many every session starts with, which are kept at their source, and each lesson (a fix kept from one too) with how often you corrected Claude on it again and, for a lesson about a command, how often it fired in how many Bash calls, `not working` after a correction, `corrections not counted` where nothing counts them, `could not look` where the lessons cannot be read |
 | `m2b doctor [--json]` | checks every backend and the programs m2b starts; the first thing to run when something looks wrong |
+
+### Fixes for the files Claude reads
+
+A fix changes a file Claude Code reads as instructions, a `CLAUDE.md`, a rule, an output style or
+Claude Code's memory, where it says something wrongly.
+m2b keeps it and never writes that file: a session in its place applies it, where you see and
+commit the change ([Using m2b](using.md#fixes-for-the-files-claude-reads)).
+
+| Command | What it does |
+|---|---|
+| `m2b fix add` | keeps a fix, read as one JSON object from standard input: `file` (its path), `wording` (the new text), `why` (what is wrong, one line) and `line` (the line it replaces), which a fix that only adds leaves out. A file under `~/.claude/` waits for this machine; a file in a repository waits for a clone of it, found by its remote. A file in neither, in a repository without a remote, a file Claude Code does not read as instructions, or one that does not hold the line, is refused with exit 2 |
+| `m2b fix list [--json]` | every kept fix and what became of it: waiting, done or dropped |
+| `m2b fix show <name>` | one fix, whole: the file, what is wrong, the line it replaces and the new wording; a name that is no fix's ends with exit 2, one nobody kept with exit 1, as for `done` and `drop` |
+| `m2b fix done <name>` | marks the fix applied, once you confirmed it |
+| `m2b fix drop <name>` | gives the fix up |
+
+### Lessons
+
+| Command | What it does |
+|---|---|
+| `m2b lesson add` | keeps a lesson, read as one JSON object from standard input: `text`, `kind` (`knowledge` or `action`), `title`, for an action `words`, `unless` and `ask`, and `for` (`every project`, or `this project`, the working folder's repository by its remote); the next curation run files it under `memory/lessons/`. A knowledge lesson for one project (keep a fix of its `CLAUDE.md` instead), an action lesson without `words`, a lesson of more than one sentence or 500 characters, more than five `words` or five `unless`, and one for this project in a folder without a remote m2b can read are refused with exit 2 |
 
 ### Tasks and calendar
 
@@ -132,7 +156,7 @@ To pause the runs on a machine: `m2b config set curation.paused true`
 | `m2b profile get [--json] [<key>]` | the owner's profile, or one key of it |
 | `m2b profile set <key> <value>` | sets one key of the profile |
 | `m2b profile merge <json>` | merges a JSON object into the profile |
-| `m2b distillate off [<folder>]` | no distillate in sessions in this folder and below, on this machine |
+| `m2b distillate off [<folder>]` | no distillate, no m2b notices, routing rule or lessons at session start, and no lesson before a Bash call, in sessions in this folder and below, on this machine |
 | `m2b distillate on [<folder>]` | the distillate again in this folder |
 | `m2b distillate topic [--json] <name>` | the facts and current items of one topic, as the distillate holds them now; the m2b pane reads a topic's lines with it |
 | `m2b distillate topics [--json]` | what every session starts with (the facts outside any topic, each with its fact file, and the current items) and each topic with its counts; the m2b pane's tab `Facts` reads it |
@@ -164,7 +188,8 @@ These are listed by `--help`, but the plugin is their caller.
 
 The commands of the curation run's own steps (`m2b ingest ...`, `m2b harvest`, `m2b journal`) and
 `m2b hook <name>` are left out of `--help`. Those among them that move or edit store files refuse
-to run outside a curation run; the hooks run at a session start. The worklog add-on has a command of its own, `m2b-worklog` ([Worklog](addons/worklog.md)).
+to run outside a curation run; the hooks run at a session start. The prompt hook and the hook before each Bash call run commands of their own, `m2b-prompt-hook` and
+`m2b-tool-hook`. The worklog add-on has a command of its own, `m2b-worklog` ([Worklog](addons/worklog.md)).
 
 ## Exit codes
 

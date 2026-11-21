@@ -67,6 +67,13 @@ export type FakeProposal = {
   source?: string
   tool?: string | null
   by?: string | null
+  lesson?: {
+    kind: string
+    target: string
+    words: string[]
+    quote: string
+    at_source?: { verdict: string; file: string; line: string | null; wording: string | null } | null
+  } | null
   answer?: 'keep' | 'drop'
 }
 

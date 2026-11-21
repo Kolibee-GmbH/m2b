@@ -9,9 +9,14 @@ task whose capture exists is deleted in whatever state it is: Apple Reminders re
 reminder to delete it, so a failed delete can leave it open. A candidate gone from the task list
 counts as dropped, unless its capture exists: then the crash came after the delete.
 
+A lesson the owner kept by hand (``kept_lessons``) is written into ``memory/lessons/`` here, in
+code, before anything else: no model step may write there.
+
 A kept proposal goes the same way: the capture first, marked ``from_proposal``, then the
 proposals file, then the answer file. A commitment that names its day gets its follow-up task with
-the capture; any other proposal is a plain capture, and the filing decides what it becomes. Kept or
+the capture; a project is the capture the owner's "keep this project" makes (``project_capture``),
+a pointer a capture of its line with its repository;
+any other proposal is a plain capture, and the filing decides what it becomes. Kept or
 dropped, the proposal stays known to the proposals file, so the next reading does not bring it
 back.
 
@@ -26,10 +31,19 @@ import datetime
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 
-from m2b import candidates, proposal_answers, proposals
+from m2b import (
+    candidates,
+    fixes,
+    kept_lessons,
+    lessons,
+    project_capture,
+    project_proposals,
+    proposal_answers,
+    proposals,
+)
 from m2b.capture import capture
 from m2b.config.errors import ConfigError
-from m2b.glean import COMMITMENT
+from m2b.glean import COMMITMENT, FIX, POINTER, PROJECT, AtSource
 from m2b.notes import frontmatter as keys
 from m2b.notes.frontmatter import Note, NoteFormatError
 from m2b.notes.layout import CORPUS, INBOX
@@ -52,6 +66,11 @@ class HarvestReport:
     captured: list[str] = field(default_factory=list)
     dropped: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
+    lessons: list[str] = field(default_factory=list)
+    # Where the fixes kept from proposed lessons are for, as ``Fix.place`` names them.
+    fixes: list[str] = field(default_factory=list)
+    # The lessons a kept lesson took the place of, by name.
+    replaced: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -73,6 +92,7 @@ def harvest(
     prefix: str,
     now: datetime.datetime | None = None,
     report: HarvestReport | None = None,
+    machine_id: str | None = None,
 ) -> HarvestReport:
     """Settles the candidates, then the answers to proposals.
 
@@ -83,15 +103,19 @@ def harvest(
     """
     now = now or datetime.datetime.now(datetime.timezone.utc)
     report = report if report is not None else HarvestReport()
+    # Lessons kept by hand need no task list, so they are filed first, whatever the candidates do.
+    filed = kept_lessons.file_kept(store)
+    report.lessons += filed.lessons
+    report.problems += filed.problems
     try:
         _harvest_candidates(store, tasks, prefix, now, report)
     except Exception:
         try:
-            _settle_proposals(store, tasks, now, report)
+            _settle_proposals(store, tasks, now, report, machine_id)
         except Exception as error:
             report.problems.append(f"the answers to proposals were not settled ({error}); the next run settles them")
         raise
-    _settle_proposals(store, tasks, now, report)
+    _settle_proposals(store, tasks, now, report, machine_id)
     return report
 
 
@@ -166,7 +190,9 @@ def _oldest(items: list[Task], gone: list[str], entries: dict[str, candidates.En
     return oldest - CLOCK_MARGIN if oldest > _EVER + CLOCK_MARGIN else _EVER
 
 
-def _settle_proposals(store: Store, tasks: Tasks, now: datetime.datetime, report: HarvestReport) -> None:
+def _settle_proposals(
+    store: Store, tasks: Tasks, now: datetime.datetime, report: HarvestReport, machine_id: str | None = None
+) -> None:
     """Settles the answers to proposals; what stops it is a problem for the review, and the answers wait."""
     try:
         answers = proposal_answers.read(store)
@@ -181,12 +207,17 @@ def _settle_proposals(store: Store, tasks: Tasks, now: datetime.datetime, report
     to_keep = [
         key
         for key, answer in answers.items()
-        if answer == proposal_answers.KEEP and key in current.entries and _takes(current.entries[key], answer)
+        if answer == proposal_answers.KEEP
+        and key in current.entries
+        and _takes(current.entries[key], answer)
+        # A lesson writes no capture, so none is looked for.
+        and current.entries[key].lesson is None
     ]
     since = min((current.entries[key].since for key in to_keep), default=None)
     earlier = _earlier(store, since - CLOCK_MARGIN if since else None, PROPOSAL_SOURCE, keys.FROM_PROPOSAL)
     report.problems += _uncertain(earlier, "proposal", "kept proposals")
     settled: list[str] = []
+    lessons_kept = False
     try:
         for key, answer in sorted(answers.items()):
             entry = current.entries.get(key)
@@ -197,6 +228,11 @@ def _settle_proposals(store: Store, tasks: Tasks, now: datetime.datetime, report
                 current = proposals.settled(current, key, proposals.DROPPED, now)
                 report.dropped.append(entry.text)
                 settled.append(key)
+            elif entry.lesson is not None:
+                if _keep_lesson(store, entry, report, machine_id):
+                    current = proposals.settled(current, key, proposals.KEPT, now)
+                    settled.append(key)
+                    lessons_kept = True
             elif key in earlier.ids or earlier.certain:
                 if key not in earlier.ids:
                     _capture_proposal(store, tasks, key, entry, now, report)
@@ -207,6 +243,93 @@ def _settle_proposals(store: Store, tasks: Tasks, now: datetime.datetime, report
             proposals.save(store, current)
     for key in settled:
         proposal_answers.remove(store, key)
+    if lessons_kept:
+        # Filed in this run too; a file the first filing could not take is named once.
+        filed = kept_lessons.file_kept(store)
+        report.lessons += filed.lessons
+        report.problems += [problem for problem in filed.problems if problem not in report.problems]
+
+
+def _pointer_to(at_source: AtSource) -> str:
+    if at_source.path is None:
+        return at_source.file
+    return f"{at_source.path} in {', '.join(at_source.repositories)}" if at_source.repositories else at_source.path
+
+
+def _keep_fix(
+    store: Store, entry: proposals.Entry, at_source: AtSource, machine_id: str | None, report: HarvestReport
+) -> bool:
+    """Keeps a lesson that is a fix of its source as a fix (``fixes``), which a session applies where
+    the file lies; one for a file under ``~/.claude/`` is this machine's, where the sessions were read."""
+    lesson = entry.lesson
+    assert lesson is not None
+    why = f'you said "{entry.quote}" and again "{lesson.quote}"'
+    try:
+        fix = fixes.new_fix(
+            at_source.path or "",
+            at_source.repositories,
+            machine_id,
+            at_source.line,
+            at_source.wording or "",
+            " ".join(why.split()),
+            entry.day.isoformat(),
+            lesson=entry.text,
+        )
+        is_new = fixes.keep(store, fix)
+    except fixes.FixRefusedError as error:
+        report.problems.append(f"the lesson you kept waits: {entry.text} ({error})")
+        return False
+    # The same fix kept before and done or dropped since stays so: a mark is never taken back.
+    state = fixes.WAITING if is_new else fixes.find(store, fix.name).state
+    if state == fixes.WAITING:
+        report.fixes.append(fix.place)
+    else:
+        report.problems.append(
+            f"the lesson you kept is a fix of {fix.place} you marked {state} before; it stays {state}"
+        )
+    return True
+
+
+def _keep_lesson(store: Store, entry: proposals.Entry, report: HarvestReport, machine_id: str | None = None) -> bool:
+    """Hands a kept lesson to the way a lesson kept by hand goes, in code (B261), never to a capture
+    the filing model would read; False, with the reason for the review, where it cannot go there yet.
+
+    Keeping is safe to repeat: the same lesson waiting or filed already is not added twice.
+    """
+    lesson = entry.lesson
+    assert lesson is not None
+    at_source = lesson.at_source
+    if at_source is not None and at_source.verdict == FIX:
+        return _keep_fix(store, entry, at_source, machine_id, report)
+    # A lesson a source states already is kept as a pointer to it: it counts, and no second text comes
+    # in. The file is named as a fix names it, the same on every machine; only one no session could
+    # fix, outside a repository and ~/.claude/, keeps the name this machine reads it by.
+    kept_at = None if at_source is None else _pointer_to(at_source)
+    given = kept_lessons.KeptLesson(
+        entry.text[:60], entry.text, lesson.kind, lesson.target, entry.day.isoformat(), lesson.words, kept_at=kept_at
+    )
+    try:
+        kept_lessons.keep(store, given)
+    except kept_lessons.LessonRefusedError as error:
+        report.problems.append(f"the lesson you kept waits: {entry.text} ({error})")
+        return False
+    # A lesson kept past what every session starts with takes the place of the one it named.
+    # Only while it is still in the block: one a source states since is out of it, and freed nothing.
+    if lesson.replaces is not None:
+        replaced = f"{lessons.FOLDER}/{lesson.replaces}"
+        standing = _lesson_in(store, replaced, lesson.replaces)
+        if standing is not None and standing.in_the_block:
+            store.delete(replaced)
+            report.replaced.append(lesson.replaces)
+    return True
+
+
+def _lesson_in(store: Store, path: str, name: str) -> lessons.Lesson | None:
+    try:
+        return lessons.parse(name, store.read_bytes(path).decode("utf-8", errors="replace"))
+    # One that cannot be read now is not deleted unseen.
+    except (FileNotFoundError, StoreError):
+        return None
 
 
 def _takes(entry: proposals.Entry, answer: str) -> bool:
@@ -223,10 +346,16 @@ def _capture_proposal(
 ) -> None:
     """Writes the capture of a kept proposal; a task that could not be confirmed is a problem, the capture stands."""
     follow_up = entry.due if entry.kind == COMMITMENT else None
+    # A project is captured as the owner's own "keep this project" is, so the filing makes it a topic;
+    # a pointer names its repository, so the filing finds the topic by its ``Repository:`` line.
+    if entry.kind == PROJECT:
+        text = project_capture.capture_text(project_proposals.addresses_in(entry), "")
+    elif entry.kind == POINTER and entry.pointer is not None:
+        text = project_capture.pointer_capture_text(entry.pointer.repositories, entry.text)
+    else:
+        text = entry.text
     try:
-        result = capture(
-            store, entry.text, PROPOSAL_SOURCE, follow_up=follow_up, tasks=tasks, now=now, from_proposal=key
-        )
+        result = capture(store, text, PROPOSAL_SOURCE, follow_up=follow_up, tasks=tasks, now=now, from_proposal=key)
     except UnconfirmedTaskError as error:
         report.problems.append(str(error))
         return

@@ -210,12 +210,32 @@ like any other. Then, in this order:
 A capture with `source: candidate` is a fact the owner already confirmed: file its text as a
 fact as it stands, without weighing it again.
 
+A capture that begins `Keep this project:` is the owner making a project known; its
+`Repository:` lines name the repository by its remotes. It becomes a topic of its own under
+`## Facts`: `### <name> (<word>, <word>)`, the name what the owner calls the project, and among its
+two to five words the repository's name (the last part of its address, `portal` for
+`github.com/acme/portal`) where it has 3 to 40 characters, and what the owner calls it. Its first line is
+`- Repository: <address> (<file>.md)` for each `Repository:` line of the capture, the address
+copied character for character; the fact file `<file>.md` holds the same lines and the evidence.
+Where a topic already has a `- Repository:` line with one of those addresses, it is that project:
+add to that topic and start no second one. Then mark it with `m2b ingest facts-filed`.
+
+A capture that begins `Keep this pointer:` is a line the owner kept for a project topic:
+`<sentence> → <path>`, a decision, an agreement, a person or a deadline and the file of the
+repository it stands in. File it in the topic whose `- Repository:` line names one of the
+capture's `Repository:` addresses, as `- <sentence> → <path> (<file>.md)`, the sentence and the
+path copied character for character, and the same line with the evidence in that fact file. Where
+no topic has such a line, file the sentence alone as a fact, without the arrow and the path. Then
+mark it with `m2b ingest facts-filed`.
+
 A capture with `kind: worklog` is the day's worklog, written by the worklog add-on from the
 owner's sessions. It holds no facts and no tasks to file: a program wrote it from a model's
 judgement of the sessions, and nothing in it is something the owner asked to keep. Use the work
 it names only for `## Current` (what the owner is working on now; replace a line about the same
 work instead of adding one, and put each line where the paragraph on Current says, work for a
-customer under that customer's topic), then note and move it like any capture.
+customer under that customer's topic). A line from the worklog is one sentence: the work and where
+it stands, without the steps that led there and without links. Then note and move it like any
+capture.
 
 **Current.** Something going on right now (a trip being planned, a job being started) becomes a
 line under `## Current`, unless the capture has `quiet: true`; a quiet capture is filed, but
@@ -235,7 +255,8 @@ need it in any session, or only when one subject comes up?
 - A line that already stands under a topic in `## Current` stays there; change it in place.
 - A line above the first `###` that is about one subject only moves under that subject's heading
   when a capture is about the same thing, so that you change the line or its day anyway. A line
-  no capture of this run is about stays where it is.
+  no capture of this run is about stays where it is: one that names a word of exactly one topic
+  is moved later in the run, in code.
 - When the last line under a heading in `## Current` goes because the work is over, remove that
   heading there too; the topic's heading under `## Facts` stays.
 

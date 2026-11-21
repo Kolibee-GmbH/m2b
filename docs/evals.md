@@ -13,15 +13,16 @@ yourself.
 
 | | |
 |---|---|
-| Day | 2026-11-20 |
-| m2b | 0.11.0 |
-| Claude Code | 2.1.329 |
+| Day | 2026-11-21 |
+| m2b | 0.12.0 |
+| Claude Code | 2.1.330 |
 | Model | `claude-opus-5-5` |
-| Runs | 96 |
+| Runs | 102, of which 4 ended in an error and count as failed |
 
 | Case | With m2b | Without m2b |
 |---|---|---|
 | `coding` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
+| `correction` | 1.00 (3 of 3 runs) | 0.58 (0 of 3 runs) |
 | `details` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
 | `no-false-lead` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `no-invention` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
@@ -60,6 +61,7 @@ sessions.
 | `no-false-lead` | what to bring up with Ben Hart, whom no note names | no note about someone else is offered as possibly about him |
 | `note` | "Remember this: ..." | the note is saved in the user's words, "my" kept |
 | `routing` | a todo for the project | it lands in the project's `TODO.md`, not in m2b |
+| `correction` | a correction of how Claude works that holds in every project | it becomes an m2b lesson (`m2b lesson add`), not a line in the project's `CLAUDE.md`, the memory Claude Code keeps for the project or a note |
 | `coding` | a one-line bug fix | the fix is made without searching, noting or proposing anything |
 | `no-leak` | a README for a public repository | no name from the notes appears in it |
 | `propose-person` | a summary of meeting notes that say who two people at a customer are | each of the two is handed in as a person, and the command takes both |

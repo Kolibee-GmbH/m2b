@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 
-from m2b import lint
+from m2b import lint, session_remotes
 from m2b.commands import Context
 from m2b.commands.backends import configured_store, configured_tasks
 from m2b.commands.output import print_json
@@ -21,7 +21,8 @@ def lint_scan(arguments: argparse.Namespace, context: Context) -> int:
     """With ``--report`` every finding goes to the curation run; ``--json`` is what the model reads first."""
     config = load_machine_config(context.machine)
     store = configured_store(config, context.machine)
-    findings = lint.scan(store, configured_tasks(config, context.machine)).findings
+    notes = context.machine.state_dir / session_remotes.NOTES_FOLDER
+    findings = lint.scan(store, configured_tasks(config, context.machine), notes).findings
     if arguments.report:
         token = context.environ.get(report.RUN_TOKEN_VARIABLE)
         if not token:

@@ -145,7 +145,7 @@
         "hook",
         "distillate"
       ],
-      "stdout": "\\Am2b distillate \\(memory/MEMORY\\.md[^\\n]*\\n\\n# Memory\\n\\n## Facts\\n\\n- Dana's birthday is on 3 March \\(dana\\.md\\)\\n- Alex prefers green tea in the morning \\(alex\\.md\\)\\n\\n## Current\\n\\n- Planning the trip to Porto\\n\\nm2b topics [^\\n]*: Acme Ltd, Riverside Choir\\.\\n\\nRouting: [^\\n]+\\n\\Z"
+      "stdout": "\\Am2b distillate \\(memory/MEMORY\\.md[^\\n]*\\n\\n# Memory\\n\\n## Facts\\n\\n- Dana's birthday is on 3 March \\(dana\\.md\\)\\n- Alex prefers green tea in the morning \\(alex\\.md\\)\\n\\n## Current\\n\\n- Planning the trip to Porto\\n\\nm2b topics [^\\n]*: Acme Ltd, Riverside Choir\\.\\n\\Z"
     },
     {
       "run": [

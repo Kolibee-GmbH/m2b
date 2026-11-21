@@ -4,6 +4,7 @@
   "review.run": "Curation run of {time}",
   "review.failure": "The step {step} failed: {error}",
   "current.prefix": "Still current?",
+  "lesson.prefix": "Still needed?",
   "proposals.title": "m2b: proposals from your sessions",
   "proposals.one": "One proposal from your sessions waits for your answer: m2b proposals shows it, and there you keep or drop it. Completing this task answers nothing.",
   "proposals.many": "{count} proposals from your sessions wait for your answer: m2b proposals lists them, and there you keep or drop each. Completing this task answers none of them."

@@ -1,4 +1,4 @@
-import type { BandHealth, CurateRefusal } from '../types'
+import type { BandHealth, CurateRefusal, LessonStanding } from '../types'
 import { timeOrDay } from './moment'
 import { plainLine } from './plain-text'
 
@@ -45,7 +45,76 @@ export function healthOf(answer: unknown, nowMs: number): BandHealth {
     // Where the store does not name its curating machine, whether this one curates is not known.
     curates: curatingMachineOf(answer) === null ? null : answer['this_machine_curates'] === true,
     isCurating: isRunning(answer['run']),
+    ...lessonsPart(answer['lessons']),
   }
+}
+
+function lessonsPart(part: unknown): { lessons?: LessonStanding[] } {
+  const each = isObject(part) ? part['each'] : undefined
+  const lessons = Array.isArray(each) ? each.map(lessonOf).filter((one): one is LessonStanding => one !== null) : []
+  return lessons.length === 0 ? {} : { lessons }
+}
+
+function lessonOf(value: unknown): LessonStanding | null {
+  if (!isObject(value)) {
+    return null
+  }
+  const { name, kind, kept, corrected_again: again, fired, calls } = value
+  if (typeof name !== 'string' || typeof kind !== 'string' || typeof kept !== 'string') {
+    return null
+  }
+  if (again !== null && !isCount(again)) {
+    return null
+  }
+  const counted = isCount(fired) && isCount(calls) ? { fired, calls } : {}
+  return { name, kind, kept, correctedAgain: again, ...counted }
+}
+
+function isCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+}
+
+/** Whether a lesson is one, as a session shares it with the others: every count a count. */
+export function isLessonStanding(value: unknown): value is LessonStanding {
+  return (
+    isObject(value) &&
+    (value['fired'] === undefined || isCount(value['fired'])) &&
+    (value['calls'] === undefined || isCount(value['calls'])) &&
+    lessonOf({ ...value, corrected_again: value['correctedAgain'] }) !== null
+  )
+}
+
+/** A share rounded as `m2b status` rounds it, in Python: a half to the even number. */
+function halfToEven(exact: number): number {
+  const floor = Math.floor(exact)
+  if (exact - floor !== 0.5) {
+    return Math.round(exact)
+  }
+  return floor % 2 === 0 ? floor : floor + 1
+}
+
+/**
+ * How one lesson does since it was kept, as `m2b status` says it: "lesson proof.md (action, kept
+ * 2026-11-20): fired 1 time in 40 Bash calls (2%), corrected again 1 time: not working".
+ */
+export function lessonLine(lesson: LessonStanding): string {
+  const parts: string[] = []
+  if (lesson.fired !== undefined && lesson.calls !== undefined) {
+    const share = lesson.calls > 0 ? ` (${halfToEven((100 * lesson.fired) / lesson.calls)}%)` : ''
+    parts.push(`fired ${times(lesson.fired)} in ${lesson.calls} Bash calls${share}`)
+  }
+  parts.push(lesson.correctedAgain === null ? 'corrections not counted' : `corrected again ${times(lesson.correctedAgain)}`)
+  const verdict = isNotWorking(lesson) ? ': not working' : ''
+  return `lesson ${plainLine(lesson.name)} (${plainLine(lesson.kind)}, kept ${plainLine(lesson.kept)}): ${parts.join(', ')}${verdict}`
+}
+
+/** A lesson the owner corrected Claude on again since it was kept. */
+export function isNotWorking(lesson: LessonStanding): boolean {
+  return (lesson.correctedAgain ?? 0) > 0
+}
+
+function times(count: number): string {
+  return count === 1 ? '1 time' : `${count} times`
 }
 
 /** The machine that curates the store, as the status part names it; null where it names none. */
@@ -162,7 +231,13 @@ function textOrNull(value: unknown): string | null {
 }
 
 function troublesOf(answer: JsonObject): Trouble[] {
-  return [...runTrouble(answer['run']), ...inboxTrouble(answer['inbox']), ...storeTrouble(answer), ...backendTroubles(answer)]
+  return [
+    ...runTrouble(answer['run']),
+    ...inboxTrouble(answer['inbox']),
+    ...lessonsTrouble(answer['lessons']),
+    ...storeTrouble(answer),
+    ...backendTroubles(answer),
+  ]
 }
 
 function runTrouble(run: unknown): Trouble[] {
@@ -184,6 +259,14 @@ function inboxTrouble(inbox: unknown): Trouble[] {
   }
   const reason = isObject(inbox) ? textOrNull(inbox['error']) : null
   return [{ status: 'could not read the inbox', sentence: 'm2b could not read the inbox', reason }]
+}
+
+/** Lessons that could not be read; an m2b whose answer has no part about lessons has none to read. */
+function lessonsTrouble(lessons: unknown): Trouble[] {
+  if (!isObject(lessons) || !('error' in lessons)) {
+    return []
+  }
+  return [{ status: 'could not read the lessons', sentence: 'm2b could not read the lessons', reason: textOrNull(lessons['error']) }]
 }
 
 function inboxCount(inbox: unknown): string[] {

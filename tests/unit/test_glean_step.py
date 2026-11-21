@@ -2,17 +2,31 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import json
-from typing import Any
+from typing import Any, ClassVar
 from unittest import mock
 
+import test_proposals
 import test_runner
 import test_sessions
-from m2b import folders_left_out, glean, proposal_answers, proposals, session_remotes
+from m2b import (
+    fixes,
+    folders_left_out,
+    glean,
+    lesson_counts,
+    lesson_sources,
+    lessons,
+    project_proposals,
+    proposal_answers,
+    proposals,
+    session_remotes,
+)
 from m2b.config.profile import save_profile
 from m2b.curate import machine_state, model
 from m2b.run_record import SUCCEEDED, load_run_record
+from m2b.store.base import StoreError
 from m2b.tasks import markers
 from m2b.tasks.base import TasksError
 from m2b.tasks.markdown import MarkdownTasks
@@ -74,11 +88,18 @@ class GleanStepTest(test_runner.RunnerTest):
             transcript.write(json.dumps(record) + "\n")
 
     def answers(
-        self, *entries: dict[str, Any], outcome: str = "success", skills: dict[str, list[dict[str, Any]]] | None = None
+        self,
+        *entries: dict[str, Any],
+        outcome: str = "success",
+        skills: dict[str, list[dict[str, Any]]] | None = None,
+        verdicts: list[dict[str, Any]] | None = None,
     ) -> None:
+        """What the reading's model answers, and where it found a lesson, what the check of its sources answers."""
         self.model(skills or {})
         script = json.loads(self.actions.read_text(encoding="utf-8"))
         script["text"] = {"answer": json.dumps({"proposals": list(entries)}), "outcome": outcome}
+        if verdicts is not None:
+            script["text"] = [script["text"], {"answer": json.dumps({"verdicts": verdicts}), "outcome": "success"}]
         self.actions.write_text(json.dumps(script), encoding="utf-8")
 
     def asked(self) -> list[dict[str, Any]]:
@@ -277,7 +298,7 @@ class ReadingTest(GleanStepTest):
         self.assertEqual(self.calls(), [])
         self.assertEqual(self.kept()["read_until"], (START + HOUR).isoformat())
 
-    def test_the_deadline_of_the_run_counts_the_reading_as_one_more_model_step(self) -> None:
+    def test_the_deadline_of_the_run_counts_the_reading_as_three_more_model_steps(self) -> None:
         self.reading()
         seen = self.addon("worklog", "before_ingest")
 
@@ -285,7 +306,7 @@ class ReadingTest(GleanStepTest):
 
         (step,) = [json.loads(line) for line in seen.read_text(encoding="utf-8").splitlines()]
         deadline = datetime.datetime.fromisoformat(step["record"]["deadline_at"])
-        supervised = 5 * (datetime.timedelta(minutes=15) + datetime.timedelta(seconds=model.DEFAULT_GRACE_SECONDS))
+        supervised = 7 * (datetime.timedelta(minutes=15) + datetime.timedelta(seconds=model.DEFAULT_GRACE_SECONDS))
         fetch = 2 * datetime.timedelta(seconds=5)
         self.assertEqual(deadline - START, fetch + supervised + test_runner.runner.CODE_STEPS_MARGIN)
 
@@ -418,6 +439,668 @@ class RemotesLeftOutTest(GleanStepTest):
 
         self.assertEqual(self.prompts_asked(), [[DANA_SAID]])
         self.assertFalse((self.machine.state_dir / session_remotes.NOTES_FOLDER).exists())
+
+
+PROJECT_LESSON = {
+    "kind": "lesson",
+    "text": "Never push to main here.",
+    "quote": "do not push to main here",
+    "session": 1,
+    "topic": None,
+    "due": None,
+    "lesson": {
+        "kind": "knowledge",
+        "target": "this project",
+        "words": [],
+        "quote": "again, never push to main",
+        "session": 2,
+    },
+}
+
+
+class ProjectLessonTest(GleanStepTest):
+    def two_sessions(self, first_remote: str, second_remote: str) -> None:
+        self.reading()
+        notes = self.machine.state_dir / session_remotes.NOTES_FOLDER
+        for folder, remote in (
+            ("/home/alex/projects/portal", first_remote),
+            ("/home/alex/trees/portal-fix", second_remote),
+        ):
+            session_remotes.note(
+                notes, folder, frozenset([remote]), START - HOUR, lambda path, text: path.write_text(text)
+            )
+        self.typed("do not push to main here", START - 3 * HOUR, "one", "/home/alex/projects/portal")
+        self.typed("again, never push to main", START - 2 * HOUR, "two", "/home/alex/trees/portal-fix")
+        self.answers(PROJECT_LESSON, verdicts=[{"lesson": 1, "verdict": "none"}])
+
+    def test_a_lesson_for_this_project_is_for_the_repository_both_sessions_worked_in(self) -> None:
+        """Covers: B270"""
+        self.two_sessions("git@github.com:Acme/portal.git", "https://github.com/acme/portal")
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        (entry,) = self.kept()["proposals"].values()
+        self.assertEqual(entry["kind"], "lesson")
+        self.assertEqual(entry["lesson"]["target"], "github.com/acme/portal")
+        self.assertEqual(entry["lesson"]["session"], "two")
+        # No file the sessions load says it, so it is a fix that adds it to the project's CLAUDE.md.
+        self.assertEqual(
+            entry["lesson"]["at_source"],
+            {
+                "verdict": "fix",
+                "file": "CLAUDE.md in github.com/acme/portal",
+                "line": None,
+                "wording": "Never push to main here.",
+                "path": "CLAUDE.md",
+                "repositories": ["github.com/acme/portal"],
+            },
+        )
+
+    def test_the_sources_of_a_lesson_are_checked_by_a_second_model_run_with_the_files_its_sessions_load(self) -> None:
+        """Covers: B274"""
+        self.two_sessions("git@github.com:acme/portal.git", "git@github.com:acme/portal.git")
+        claude_md = self.claude_settings.parent / "CLAUDE.md"
+        claude_md.write_text("# Global\n- Never push to main; open a pull request.\n", encoding="utf-8")
+        self.answers(PROJECT_LESSON, verdicts=[{"lesson": 1, "verdict": "right", "source": 1, "line": 2}])
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        _, check = self.asked()
+        self.assertEqual(check["instruction"], lesson_sources.instruction())
+        self.assertEqual(check["lessons"][0]["said"], ["do not push to main here", "again, never push to main"])
+        self.assertIn("2: - Never push to main; open a pull request.", check["sources"][0]["lines"])
+        (entry,) = self.kept()["proposals"].values()
+        self.assertEqual(entry["lesson"]["at_source"]["verdict"], "stated")
+        self.assertEqual(entry["lesson"]["at_source"]["line"], "- Never push to main; open a pull request.")
+
+    def test_a_check_of_the_sources_without_an_answer_leaves_the_lesson_out_and_says_why(self) -> None:
+        """Covers: B274"""
+        self.two_sessions("git@github.com:acme/portal.git", "git@github.com:acme/portal.git")
+
+        self.answers(PROJECT_LESSON, verdicts=[])
+        script = json.loads(self.actions.read_text(encoding="utf-8"))
+        script["text"][1] = {"answer": "no idea", "outcome": "success"}
+        self.actions.write_text(json.dumps(script), encoding="utf-8")
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        self.assertEqual(self.kept()["proposals"], {})
+        self.assertTrue(
+            any(note.startswith("1 lesson left out: their sources could not be checked") for note in self.info())
+        )
+
+    def test_a_lesson_that_could_never_be_kept_or_is_kept_already_is_not_proposed(self) -> None:
+        """Covers: B270"""
+        self.reading()
+        before = (START - 4 * HOUR).astimezone(datetime.timezone.utc)
+        self.record(test_sessions.answered("Running.", before, "scripts/check", "ruff --select=E,W"), "one")
+        self.typed("only the quick round please", START - 3 * HOUR, "one")
+        self.typed("again only the quick round", START - 2 * HOUR, "two")
+        action = {
+            **PROJECT_LESSON,
+            "text": "Run only the quick checks.",
+            "quote": "only the quick round please",
+            "lesson": {
+                "kind": "action",
+                "target": "every project",
+                "words": ["--select=E,W"],
+                "quote": "again only the quick round",
+                "session": 2,
+            },
+        }
+        known = {**action, "lesson": {**action["lesson"], "words": ["scripts/check"]}}
+        self.write(
+            "memory/lessons/quick.md",
+            "---\nkind: action\ntarget: every project\nkept: 2026-11-01\nwords: [scripts/check]\n---\n"
+            "# Quick\n\nRun only the quick checks.\n",
+        )
+        self.answers(action, known)
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        self.assertEqual(self.kept()["proposals"], {})
+        self.assertIn("1 lesson left out: not in the form a lesson is kept in", self.info())
+        self.assertIn("1 lesson left out: a lesson like it is kept already", self.info())
+
+    def test_without_a_repository_both_sessions_worked_in_the_lesson_is_left_out_and_counted(self) -> None:
+        """Covers: B270"""
+        self.two_sessions("git@github.com:acme/portal.git", "git@github.com:acme/shop.git")
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        self.assertEqual(self.kept()["proposals"], {})
+        self.assertEqual(self.kept()["counts"]["lesson"]["not_quoted"], 1)
+        self.assertIn(
+            "1 lesson for one project left out: no repository is known that both its sessions worked in", self.info()
+        )
+
+
+class InPortalTest(GleanStepTest):
+    PORTAL = "/home/alex/projects/portal"
+
+    def portal_noted(self, folder: str = PORTAL, remote: str = "git@github.com:acme/portal.git") -> None:
+        notes = self.machine.state_dir / session_remotes.NOTES_FOLDER
+        session_remotes.note(notes, folder, frozenset([remote]), START - HOUR, lambda path, text: path.write_text(text))
+
+
+class ProjectProposalTest(InPortalTest):
+    def days_file(self) -> Any:
+        return json.loads((self.machine.state_dir / project_proposals.DAYS_FILE).read_text(encoding="utf-8"))
+
+    def remembered(self, *days: str) -> None:
+        self.machine.state_dir.mkdir(parents=True, exist_ok=True)
+        (self.machine.state_dir / project_proposals.DAYS_FILE).write_text(
+            json.dumps({"days": {"github.com/acme/portal": list(days)}}), encoding="utf-8"
+        )
+
+    def project_entries(self) -> list[dict[str, Any]]:
+        return [entry for entry in self.kept()["proposals"].values() if entry["kind"] == "project"]
+
+    def test_a_repository_worked_in_on_two_days_without_a_topic_is_proposed_as_a_project(self) -> None:
+        """Covers: B275"""
+        self.reading()
+        self.portal_noted()
+        self.read_until(START - 3 * DAY)
+        self.typed("the login page needs a second button", START - 2 * DAY, "one", self.PORTAL)
+        self.typed("now the footer", START - HOUR, "two", self.PORTAL)
+        self.answers()
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        (entry,) = self.project_entries()
+        self.assertEqual(
+            (entry["quote"], entry["source"], entry["day"], entry["state"]),
+            ("github.com/acme/portal", "worked", "2026-11-07", "open"),
+        )
+        self.assertEqual(
+            entry["text"],
+            "portal (github.com/acme/portal) is a repository you worked in on 2026-11-05 and 2026-11-07, "
+            "with no topic: keep it as a project",
+        )
+        self.assertEqual(self.kept()["format"], 4)
+        self.assertIn("1 repository without a topic was worked in on two days and proposed as a project", self.info())
+        self.assertEqual(self.days_file(), {"days": {"github.com/acme/portal": ["2026-11-05", "2026-11-07"]}})
+
+    def test_a_project_that_waits_already_is_not_proposed_or_announced_again(self) -> None:
+        """Covers: B275"""
+        self.reading()
+        self.portal_noted()
+        self.remembered("2026-11-02")
+        waiting = project_proposals.proposal(("github.com/acme/portal",), [datetime.date(2026, 11, 2)])
+        added = proposals.add(proposals.Proposals({}), [proposals.Said(waiting, datetime.date(2026, 11, 2))], START)
+        proposals.save(self.store, added.proposals)
+        self.typed("now the footer", START - HOUR, "two", self.PORTAL)
+        self.answers()
+
+        self.run_curate()
+
+        (entry,) = self.project_entries()
+        self.assertIn("on 2026-11-02 and 2026-11-02", entry["text"])
+        self.assertFalse(any("proposed as a project" in note for note in self.info()))
+
+    def test_a_day_remembered_from_an_earlier_reading_is_one_of_the_two(self) -> None:
+        """Covers: B275"""
+        self.reading()
+        self.portal_noted()
+        self.remembered("2026-11-02")
+        self.typed("now the footer", START - HOUR, "two", self.PORTAL)
+        self.answers()
+
+        self.run_curate()
+
+        (entry,) = self.project_entries()
+        self.assertIn("on 2026-11-02 and 2026-11-07", entry["text"])
+
+    def test_one_day_proposes_nothing_and_is_remembered_and_a_day_older_than_30_days_is_forgotten(self) -> None:
+        """Covers: B275"""
+        self.reading()
+        self.portal_noted()
+        self.remembered("2026-10-07")
+        self.typed("now the footer", START - HOUR, "two", self.PORTAL)
+        self.answers()
+
+        self.run_curate()
+
+        self.assertEqual(self.project_entries(), [])
+        self.assertEqual(self.days_file(), {"days": {"github.com/acme/portal": ["2026-11-07"]}})
+
+    def test_a_repository_a_topic_names_or_whose_capture_waits_is_not_proposed(self) -> None:
+        """Covers: B275"""
+        for known in (
+            (
+                "memory/MEMORY.md",
+                "# Memory\n\n## Facts\n\n### Portal (portal)\n- Repository: github.com/acme/portal (portal.md)\n",
+            ),
+            (
+                "inbox/20261106-0900-cli.md",
+                "---\ncreated: 2026-11-06T09:00:00+00:00\nsource: cli\n---\n"
+                "Keep this project: portal\nRepository: github.com/acme/portal\n",
+            ),
+        ):
+            with self.subTest(known[0]):
+                self.setUp()
+                self.reading()
+                self.portal_noted()
+                self.remembered("2026-11-02")
+                self.write(*known)
+                self.typed("now the footer", START - HOUR, "two", self.PORTAL)
+                self.answers()
+
+                self.run_curate()
+
+                self.assertEqual(self.project_entries(), [])
+
+    def test_a_session_in_a_folder_left_out_or_without_a_noted_remote_counts_for_no_repository(self) -> None:
+        """Covers: B275"""
+        self.reading()
+        client = str(self.machine.home / "code" / "portal")
+        save_profile(
+            self.store,
+            {"version": 2, "owner": "Alex", "language": "en", "worklog_leave_out": {"path_under": ["~/code/portal"]}},
+        )
+        self.portal_noted(client)
+        self.remembered("2026-11-02")
+        self.typed("now the footer", START - HOUR, "two", client)
+        self.typed("the shed needs paint", START - 2 * HOUR, "shed", "/home/alex/projects/shed")
+        self.answers()
+
+        self.run_curate()
+
+        self.assertEqual(self.project_entries(), [])
+        self.assertEqual(self.days_file(), {"days": {"github.com/acme/portal": ["2026-11-02"]}})
+
+    def test_a_reading_that_fails_remembers_no_day(self) -> None:
+        """Covers: B275"""
+        self.reading()
+        self.portal_noted()
+        self.typed("now the footer", START - HOUR, "two", self.PORTAL)
+        self.answers(outcome="error")
+
+        self.run_curate()
+
+        self.assertFalse((self.machine.state_dir / project_proposals.DAYS_FILE).exists())
+
+
+POINTER = {
+    "kind": "pointer",
+    "text": "Login moves to the customer's identity provider in March.",
+    "quote": "the login moves to the customer's identity provider in March",
+    "session": 1,
+    "topic": None,
+    "due": None,
+    "file": "docs/records/014-login.md",
+}
+PORTAL_TOPIC = (
+    "# Memory\n\n## Facts\n\n### Acme portal (portal)\n- Repository: github.com/acme/portal (acme-portal.md)\n"
+)
+
+
+class PointerProposalTest(InPortalTest):
+    def decided(self, *written: str) -> None:
+        self.reading()
+        self.portal_noted()
+        self.typed(POINTER["quote"] + ", write that into the record", START - 2 * HOUR, "one", self.PORTAL)
+        when = (START - 2 * HOUR + datetime.timedelta(minutes=1)).astimezone(datetime.timezone.utc)
+        self.record(test_sessions.wrote(when, *(("Write", path) for path in written), cwd=self.PORTAL), "one")
+
+    def test_a_decision_a_session_wrote_into_a_file_of_a_project_is_proposed_as_a_pointer_to_it(self) -> None:
+        """Covers: B278"""
+        self.decided(self.PORTAL + "/docs/records/014-login.md", "/home/alex/.claude/CLAUDE.md")
+        self.write("memory/MEMORY.md", PORTAL_TOPIC)
+        self.answers(POINTER)
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        (asked,) = self.asked()
+        self.assertEqual(asked["sessions"][0]["written"], ["docs/records/014-login.md"])
+        (entry,) = self.kept()["proposals"].values()
+        self.assertEqual(
+            (entry["kind"], entry["text"], entry["topic"]),
+            (
+                "pointer",
+                "Login moves to the customer's identity provider in March → docs/records/014-login.md",
+                "Acme portal",
+            ),
+        )
+        self.assertEqual(
+            entry["pointer"], {"path": "docs/records/014-login.md", "repositories": ["github.com/acme/portal"]}
+        )
+        self.assertEqual(self.kept()["format"], 4)
+
+    def test_a_session_in_a_subfolder_whose_note_names_no_top_names_its_files_from_the_repositorys_folder(
+        self,
+    ) -> None:
+        """Covers: B278"""
+        top = self.machine.home / "code" / "portal"
+        (top / ".git").mkdir(parents=True)
+        subfolder = str(top / "plugins")
+        self.reading()
+        self.portal_noted(subfolder)
+        self.typed(POINTER["quote"] + ", write that into the record", START - 2 * HOUR, "one", subfolder)
+        when = (START - 2 * HOUR + datetime.timedelta(minutes=1)).astimezone(datetime.timezone.utc)
+        self.record(test_sessions.wrote(when, ("Write", str(top / "docs/records/014-login.md")), cwd=subfolder), "one")
+        self.write("memory/MEMORY.md", PORTAL_TOPIC)
+        self.answers(POINTER)
+
+        self.run_curate()
+
+        self.assertEqual(self.asked()[0]["sessions"][0]["written"], ["docs/records/014-login.md"])
+
+    def test_a_decision_written_into_no_file_of_the_repository_is_no_pointer(self) -> None:
+        """Covers: B278"""
+        self.decided()
+        self.write("memory/MEMORY.md", PORTAL_TOPIC)
+        self.answers(POINTER)
+
+        self.run_curate()
+
+        self.assertNotIn("written", self.asked()[0]["sessions"][0])
+        self.assertEqual(self.kept()["proposals"], {})
+        self.assertEqual(self.kept()["counts"]["pointer"]["not_quoted"], 1)
+
+    def test_without_a_project_topic_the_model_sees_no_file_and_no_pointer_is_kept(self) -> None:
+        """Covers: B278"""
+        self.decided(self.PORTAL + "/docs/records/014-login.md")
+        self.answers(POINTER)
+
+        self.run_curate()
+
+        self.assertNotIn("written", self.asked()[0]["sessions"][0])
+        self.assertEqual([entry["kind"] for entry in self.kept()["proposals"].values()], [])
+
+
+class CorrectedAgainTest(GleanStepTest):
+    def test_a_correction_of_a_kept_lesson_is_counted_under_it_and_said(self) -> None:
+        """Covers: B280"""
+        self.reading()
+        self.write(
+            "memory/lessons/quick.md",
+            "---\nkind: knowledge\ntarget: every project\nkept: 2026-11-01\n---\n"
+            "# Quick\n\nRun only the quick checks.\n",
+        )
+        self.typed("no, again only the quick round please", START - HOUR)
+        self.model({})
+        script = json.loads(self.actions.read_text(encoding="utf-8"))
+        said = {"lesson": "quick.md", "quote": "again only the quick round", "session": 1}
+        script["text"] = {"answer": json.dumps({"proposals": [], "corrected_again": [said]}), "outcome": "success"}
+        self.actions.write_text(json.dumps(script), encoding="utf-8")
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        (asked,) = self.asked()
+        self.assertEqual(
+            asked["lessons"], [{"name": "quick.md", "text": "Run only the quick checks.", "kept": "2026-11-01"}]
+        )
+        self.assertEqual(lesson_counts.corrected_again(self.store, {"quick.md": "2026-11-01"}), {"quick.md": 1})
+        self.assertIn("1 correction of a kept lesson counted: Claude was corrected on it again", self.info())
+
+    def test_a_lesson_kept_as_a_fix_is_shown_and_counted_under_the_fixs_name(self) -> None:
+        """Covers: B289"""
+        self.reading()
+        fix = fixes.new_fix(
+            "~/.claude/CLAUDE.md",
+            (),
+            "sb-test-m1",
+            "- Run the whole proof.",
+            "- Run the quick checks.",
+            "you said it twice",
+            "2026-11-01",
+            lesson="Run only the quick checks.",
+        )
+        fixes.keep(self.store, fix)
+        dropped = fixes.new_fix(
+            "~/.claude/CLAUDE.md", (), "sb-test-m1", None, "- Something else.", "why", "2026-11-01", lesson="Other."
+        )
+        fixes.keep(self.store, dropped)
+        fixes.settle(self.store, dropped.name, fixes.DROPPED)
+        self.typed("no, again only the quick round please", START - HOUR)
+        self.model({})
+        script = json.loads(self.actions.read_text(encoding="utf-8"))
+        said = {"lesson": fix.name, "quote": "again only the quick round", "session": 1}
+        script["text"] = {"answer": json.dumps({"proposals": [], "corrected_again": [said]}), "outcome": "success"}
+        self.actions.write_text(json.dumps(script), encoding="utf-8")
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        (asked,) = self.asked()
+        self.assertEqual(
+            asked["lessons"], [{"name": fix.name, "text": "Run only the quick checks.", "kept": "2026-11-01"}]
+        )
+        self.assertEqual(lesson_counts.corrected_again(self.store, {fix.name: "2026-11-01"}), {fix.name: 1})
+
+    def test_fixes_that_cannot_be_read_keep_their_counts_and_nothing_is_counted(self) -> None:
+        """Covers: B289"""
+        self.reading()
+        self.write(
+            "memory/lessons/quick.md",
+            "---\nkind: knowledge\ntarget: every project\nkept: 2026-11-01\n---\n"
+            "# Quick\n\nRun only the quick checks.\n",
+        )
+        counts = {"format": 1, "lessons": {"fix-3f9c2a71b0de": {"kept": "2026-11-01", "corrected_again": ["a1"]}}}
+        self.write(lesson_counts.COUNTS_FILE, json.dumps(counts))
+        self.typed("no, again only the quick round please", START - HOUR)
+        self.model({})
+        script = json.loads(self.actions.read_text(encoding="utf-8"))
+        said = {"lesson": "quick.md", "quote": "again only the quick round", "session": 1}
+        script["text"] = {"answer": json.dumps({"proposals": [], "corrected_again": [said]}), "outcome": "success"}
+        self.actions.write_text(json.dumps(script), encoding="utf-8")
+
+        with mock.patch("m2b.fixes.read_all", side_effect=StoreError("state/core/fixes cannot be listed")):
+            self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        self.assertEqual(json.loads(self.store.read_bytes(lesson_counts.COUNTS_FILE)), counts)
+        self.assertTrue(
+            any(note.startswith("the corrections of kept lessons were not counted") for note in self.info())
+        )
+
+    def test_a_counts_file_that_cannot_be_read_is_said_and_the_proposals_are_kept(self) -> None:
+        """Covers: B280"""
+        self.reading()
+        self.write(lesson_counts.COUNTS_FILE, "{not json")
+        self.write(
+            "memory/lessons/quick.md",
+            "---\nkind: knowledge\ntarget: every project\nkept: 2026-11-01\n---\n"
+            "# Quick\n\nRun only the quick checks.\n",
+        )
+        self.typed(DANA_SAID, START - 2 * HOUR)
+        self.typed("no, again only the quick round please", START - HOUR)
+        self.model({})
+        script = json.loads(self.actions.read_text(encoding="utf-8"))
+        said = {"lesson": "quick.md", "quote": "again only the quick round", "session": 1}
+        answer = {"proposals": [DANA], "corrected_again": [said]}
+        script["text"] = {"answer": json.dumps(answer), "outcome": "success"}
+        self.actions.write_text(json.dumps(script), encoding="utf-8")
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        self.assertEqual(list(self.kept()["proposals"]), [DANA_ID])
+        self.assertTrue(
+            any(note.startswith("the corrections of kept lessons were not counted") for note in self.info())
+        )
+
+
+class LessonRecheckTest(GleanStepTest):
+    LESSON = (
+        "---\nkind: knowledge\ntarget: every project\nkept: 2026-11-01\n---\n# Quick\n\nRun only the quick checks.\n"
+    )
+
+    def stated_in_claude_md(self) -> None:
+        self.reading()
+        self.write("memory/lessons/quick.md", self.LESSON)
+        claude_md = self.claude_settings.parent / "CLAUDE.md"
+        claude_md.write_text("# Rules\n\nRun only the quick checks.\n", encoding="utf-8")
+        self.typed("the shed roof needs new felt", START - HOUR)
+
+    def test_a_reading_checks_the_block_again_and_keeps_a_stated_lesson_at_its_source(self) -> None:
+        """Covers: B291"""
+        self.stated_in_claude_md()
+        self.model({})
+        script = json.loads(self.actions.read_text(encoding="utf-8"))
+        verdict = {"verdicts": [{"lesson": 1, "verdict": "right", "source": 1, "line": 3}]}
+        script["text"] = [
+            {"answer": json.dumps(verdict), "outcome": "success"},
+            {"answer": json.dumps({"proposals": []}), "outcome": "success"},
+        ]
+        self.actions.write_text(json.dumps(script), encoding="utf-8")
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        recheck, reading = self.asked()
+        self.assertEqual(recheck["lessons"], [{"lesson": 1, "text": "Run only the quick checks."}])
+        self.assertIn("sessions", reading)
+        (lesson,) = lessons.read_all(self.store)
+        self.assertEqual(lesson.kept_at, "~/.claude/CLAUDE.md")
+        self.assertIn(
+            "the lesson quick.md is stated in ~/.claude/CLAUDE.md now and left the block, kept at its source",
+            self.info(),
+        )
+
+    def test_a_check_without_an_answer_is_said_and_the_reading_goes_on(self) -> None:
+        """Covers: B291"""
+        self.stated_in_claude_md()
+        self.model({})
+        script = json.loads(self.actions.read_text(encoding="utf-8"))
+        script["text"] = [
+            {"answer": "", "outcome": "error_max_budget_usd"},
+            {"answer": json.dumps({"proposals": []}), "outcome": "success"},
+        ]
+        self.actions.write_text(json.dumps(script), encoding="utf-8")
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        self.assertIn(("glean", "succeeded"), self.steps())
+        (lesson,) = lessons.read_all(self.store)
+        self.assertIsNone(lesson.kept_at)
+        self.assertTrue(
+            any(note.startswith("the kept lessons were not checked again against the files") for note in self.info())
+        )
+
+
+class StartBudgetTest(GleanStepTest):
+    KNOWN = "---\nkind: knowledge\ntarget: every project\nkept: {kept}\n---\n# {name}\n\n{text}\n"
+    NEW: ClassVar[dict[str, Any]] = {
+        "kind": "lesson",
+        "text": "Name herdr an agent runtime.",
+        "quote": "herdr is an agent runtime, say so",
+        "session": 1,
+        "topic": None,
+        "due": None,
+        "lesson": {
+            "kind": "knowledge",
+            "target": "every project",
+            "words": [],
+            "quote": "again: herdr is an agent runtime",
+            "session": 2,
+        },
+    }
+
+    LONG = "# Memory\n\n## Facts\n\n" + "".join(f"- Fact number {n} about the shed (shed.md)\n" for n in range(80))
+    SHORT = "# Memory\n\n## Facts\n\n- Sam brings plywood (sam.md)\n"
+    SECOND: ClassVar[dict[str, Any]] = {
+        **NEW,
+        "text": "Call the band the band.",
+        "quote": "it is the band, not the bar",
+        "lesson": {**NEW["lesson"], "quote": "again, the band, not the bar"},
+    }
+
+    def proposed(
+        self, distillate: str, counted: bool = True, *found: dict[str, Any], full: bool = True
+    ) -> list[dict[str, Any]]:
+        self.reading()
+        self.write("memory/MEMORY.md", distillate)
+        self.write("memory/lessons/old.md", self.KNOWN.format(kept="2026-10-01", name="Old", text="Say it once."))
+        self.write("memory/lessons/weak.md", self.KNOWN.format(kept="2026-10-20", name="Weak", text="Keep it short."))
+        if full:
+            self.fill_the_block()
+        if counted:
+            self.write(
+                lesson_counts.COUNTS_FILE,
+                json.dumps(
+                    {"format": 1, "lessons": {"weak.md": {"kept": "2026-10-20", "corrected_again": ["a1", "b2"]}}}
+                ),
+            )
+        self.typed("herdr is an agent runtime, say so. it is the band, not the bar", START - 3 * HOUR, "one")
+        self.typed("again: herdr is an agent runtime. again, the band, not the bar", START - 2 * HOUR, "two")
+        entries = found or (self.NEW,)
+        self.answers(*entries, verdicts=[{"lesson": n, "verdict": "none"} for n in range(1, len(entries) + 1)])
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+        return [dict(entry["lesson"]) for entry in self.kept()["proposals"].values() if entry["state"] == "open"]
+
+    def fill_the_block(self) -> None:
+        """Kept lessons until the block is ten characters short of its limit: no new lesson fits."""
+        for number in range(10):
+            text = f"Filler lesson {number} " + "about a careful way of working " * 6
+            self.write(
+                f"memory/lessons/f{number}.md", self.KNOWN.format(kept=f"2026-11-{number + 1:02d}", name="F", text=text)
+            )
+        size = len(lessons.block(lessons.read_all(self.store)))
+        self.assertLess(size, lessons.MAX_BLOCK_CHARACTERS - 10)
+        last = "Last filler lesson " + "x" * (
+            lessons.MAX_BLOCK_CHARACTERS - 10 - size - len("- Last filler lesson ") - 1
+        )
+        self.write("memory/lessons/g.md", self.KNOWN.format(kept="2026-11-10", name="G", text=last))
+        self.assertEqual(len(lessons.block(lessons.read_all(self.store))), lessons.MAX_BLOCK_CHARACTERS - 10)
+
+    def test_a_new_lesson_that_would_pass_the_blocks_limit_names_the_weakest_it_would_replace(self) -> None:
+        """Covers: B284"""
+        (lesson,) = self.proposed(self.SHORT)
+
+        self.assertEqual(lesson["replaces"], "weak.md")
+
+    def test_without_counts_the_oldest_is_named_and_two_new_lessons_name_two(self) -> None:
+        """Covers: B284"""
+        (lesson,) = self.proposed(self.SHORT, False)
+        self.assertEqual(lesson["replaces"], "old.md")
+
+        self.setUp()
+        both = self.proposed(self.SHORT, True, self.NEW, self.SECOND)
+        self.assertEqual({each["replaces"] for each in both}, {"weak.md", "old.md"})
+
+    def test_a_lesson_a_waiting_proposal_names_already_is_not_named_again(self) -> None:
+        """Covers: B284"""
+        waiting = glean.Proposal(
+            "lesson",
+            "Write dates as days.",
+            "write the date as a day",
+            "earlier",
+            lesson=glean.LessonPart("knowledge", "every project", (), "again a day", "later", replaces="weak.md"),
+        )
+        added = proposals.add(proposals.Proposals({}), [proposals.Said(waiting, datetime.date(2026, 11, 6))], START)
+        proposals.save(self.store, added.proposals)
+
+        (lesson,) = [each for each in self.proposed(self.SHORT) if each["quote"] != "again a day"]
+
+        self.assertEqual(lesson["replaces"], "old.md")
+
+    def test_a_block_with_room_replaces_none_however_long_the_distillate(self) -> None:
+        """Covers: B284"""
+        for distillate in (self.SHORT, self.LONG):
+            with self.subTest(long=distillate is self.LONG):
+                self.setUp()
+                (lesson,) = self.proposed(distillate, full=False)
+
+                self.assertNotIn("replaces", lesson)
+
+
+class KeptFixTest(GleanStepTest):
+    def test_a_run_names_the_fix_kept_from_a_lesson_in_its_information(self) -> None:
+        """Covers: B272"""
+        self.curating()
+        fix = glean.AtSource(
+            glean.FIX, "~/.claude/CLAUDE.md", "- Run the whole proof.", "- Run the quick checks.", "~/.claude/CLAUDE.md"
+        )
+        lesson = dataclasses.replace(test_proposals.LESSON.lesson, at_source=fix)
+        found = dataclasses.replace(test_proposals.LESSON, lesson=lesson)
+        added = proposals.add(proposals.load(self.store), [proposals.Said(found, test_proposals.DAY)], START - DAY)
+        proposals.save(self.store, added.proposals)
+        proposal_answers.give(self.store, [proposals.proposal_id(found)], proposal_answers.KEEP)
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        self.assertIn(
+            "a fix you kept waits for ~/.claude/CLAUDE.md: the next session there applies it", self.info("harvest")
+        )
 
 
 class ChecksTest(GleanStepTest):
@@ -664,7 +1347,7 @@ class AnsweredTest(GleanStepTest):
         self.answers(DANA)
         self.run_curate()
         proposal_answers.give(self.store, [DANA_ID], proposal_answers.KEEP)
-        self.write(proposals.PROPOSALS_FILE, json.dumps({**self.kept(), "format": 4}))
+        self.write(proposals.PROPOSALS_FILE, json.dumps({**self.kept(), "format": proposals.FORMAT + 1}))
         real_items = MarkdownTasks.items
 
         def items(tasks: MarkdownTasks, *arguments: Any, **options: Any) -> Any:
@@ -771,7 +1454,7 @@ class WaitingTaskTest(GleanStepTest):
 
     def test_a_cause_that_does_not_clear_by_itself_is_not_left_to_the_next_run(self) -> None:
         self.curating()
-        self.write(proposals.PROPOSALS_FILE, json.dumps({"format": 4, "proposals": {}}))
+        self.write(proposals.PROPOSALS_FILE, json.dumps({"format": proposals.FORMAT + 1, "proposals": {}}))
 
         outcome = self.run_curate()
 
@@ -780,7 +1463,8 @@ class WaitingTaskTest(GleanStepTest):
         (review,) = self.review_tasks()
         self.assertIn(
             "The step proposals failed: the task for the proposals that wait was not brought up to date: "
-            "state/core/proposals.json has format 4 and this m2b knows 3: update m2b on this machine",
+            f"state/core/proposals.json has format {proposals.FORMAT + 1} and this m2b knows {proposals.FORMAT}: "
+            "update m2b on this machine",
             review.notes,
         )
         self.assertNotIn("the next run does it", review.notes)
@@ -959,7 +1643,9 @@ class FailingReadingTest(GleanStepTest):
         self.reading()
         self.typed(DANA_SAID, START - HOUR)
         self.capture()
-        from_a_newer_m2b = json.dumps({"format": 4, "proposals": {"aaaaaaaaaaaa": {"shape": "unknown here"}}})
+        from_a_newer_m2b = json.dumps(
+            {"format": proposals.FORMAT + 1, "proposals": {"aaaaaaaaaaaa": {"shape": "unknown here"}}}
+        )
         self.write(proposals.PROPOSALS_FILE, from_a_newer_m2b)
         self.answers(DANA, skills={"m2b:ingest": INGEST_FILES_THE_CAPTURE})
 
@@ -970,7 +1656,7 @@ class FailingReadingTest(GleanStepTest):
         self.assertEqual((self.store_root / proposals.PROPOSALS_FILE).read_text(encoding="utf-8"), from_a_newer_m2b)
         self.assertEqual([call for call in self.calls() if "stdin" in call], [])
         (review,) = self.review_tasks()
-        self.assertIn("has format 4 and this m2b knows 3", review.notes)
+        self.assertIn(f"has format {proposals.FORMAT + 1} and this m2b knows {proposals.FORMAT}", review.notes)
 
     def test_a_transcript_that_cannot_be_read_is_counted_and_the_others_are_read(self) -> None:
         self.reading()

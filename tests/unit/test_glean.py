@@ -5,7 +5,7 @@ import datetime
 import json
 import time
 import unittest
-from typing import Any
+from typing import Any, ClassVar
 
 from m2b import glean
 from m2b.glean import Proposal
@@ -172,6 +172,50 @@ class PastedInputTest(unittest.TestCase):
         )
 
 
+class TurnBeforeInputTest(unittest.TestCase):
+    def test_a_prompt_goes_in_with_the_end_of_the_answer_before_and_the_commands_of_that_turn(self) -> None:
+        """Covers: B269"""
+        prompts = (
+            Prompt(
+                MORNING,
+                "only the quick round",
+                answer_before="Running the whole proof now.",
+                commands=("scripts/check",),
+            ),
+            Prompt(MORNING, "thanks"),
+        )
+        turn = Session("turn", "/home/alex/projects/shed", prompts, NOTHING_LEFT_OUT)
+
+        given = json.loads(glean.step_input([turn], ""))
+
+        self.assertEqual(
+            given["sessions"][0]["prompts"],
+            [
+                {
+                    "typed": "only the quick round",
+                    "answer_before": "Running the whole proof now.",
+                    "commands": ["scripts/check"],
+                },
+                "thanks",
+            ],
+        )
+
+    def test_a_quote_from_the_answer_or_a_command_stands_on_no_words_of_the_person(self) -> None:
+        """Covers: B269"""
+        prompt = Prompt(
+            MORNING,
+            "no",
+            answer_before="Dana runs IT at Northwind, I noted.",
+            commands=("echo Dana runs IT at Northwind",),
+        )
+        turn = Session("shed", "/home/alex/projects/shed", (prompt,), NOTHING_LEFT_OUT)
+
+        checked = glean.check([proposal("Dana runs IT at Northwind")], [turn], [])
+
+        self.assertEqual(len(checked.not_quoted), 1)
+        self.assertEqual(checked.kept, ())
+
+
 class ParseAnswerTest(unittest.TestCase):
     def test_an_answer_gives_its_proposals_each_with_the_id_of_its_session(self) -> None:
         text = answer(
@@ -231,6 +275,8 @@ class ParseAnswerTest(unittest.TestCase):
         not_in_the_form: dict[str, object] = {
             "not an object": "Dana runs IT",
             "an unknown kind": entry(kind="rule"),
+            # Code proposes a project from where the sessions worked; a model never does.
+            "a project": entry(kind="project"),
             "no text": entry(text="  "),
             "a text that is no text": entry(text=7),
             "a text too long to be one fact": entry(text="word " * 100),
@@ -489,11 +535,125 @@ class WordedAnewTest(unittest.TestCase):
         self.assertEqual((len(checked.kept), len(checked.already_captured)), (1, 0))
 
 
+def turn(session_id: str, typed: str, *commands: str, folder: str = "/home/alex/projects/shed") -> Session:
+    """A session with one prompt that answers a turn in which Claude ran ``commands``."""
+    prompt = Prompt(MORNING, typed, answer_before="Running the whole proof now.", commands=commands)
+    return Session(session_id, folder, (prompt,), NOTHING_LEFT_OUT)
+
+
+FIRST = turn("first", "only the quick round, not the whole proof", "scripts/check")
+SECOND = turn("second", "no full check without a reason please", "./scripts/check --all")
+
+
+def lesson_entry(**changes: Any) -> dict[str, Any]:
+    """A lesson as the step is asked to write it, from the first session and the second."""
+    part = {
+        "kind": "action",
+        "target": "every project",
+        "words": ["scripts/check"],
+        "quote": "no full check without a reason",
+        "session": 2,
+    }
+    part.update(changes.pop("lesson", {}))
+    return entry(
+        kind="lesson",
+        text="Run only the quick checks unless the change gives a reason for the whole proof.",
+        quote="only the quick round, not the whole proof",
+        lesson=part,
+        **changes,
+    )
+
+
+class LessonTest(unittest.TestCase):
+    def check(self, *entries: dict[str, Any]) -> glean.Checked:
+        read = glean.parse_answer(answer(*entries), [FIRST, SECOND])
+        return glean.check(read.proposals, [FIRST, SECOND], [])
+
+    def test_the_same_correction_in_two_sessions_is_a_lesson_with_its_kind_target_and_words(self) -> None:
+        """Covers: B270"""
+        checked = self.check(lesson_entry())
+
+        (kept,) = checked.kept
+        self.assertEqual(kept.kind, "lesson")
+        self.assertEqual(
+            kept.lesson,
+            glean.LessonPart("action", "every project", ("scripts/check",), "no full check without a reason", "second"),
+        )
+        self.assertEqual((kept.session, kept.source), ("first", "typed"))
+
+    def test_a_knowledge_lesson_has_no_words_and_an_action_needs_them(self) -> None:
+        """Covers: B270"""
+        knowledge = lesson_entry(lesson={"kind": "knowledge", "words": []})
+        self.assertEqual(len(self.check(knowledge).kept), 1)
+
+        for broken in (
+            lesson_entry(lesson={"words": []}),
+            lesson_entry(lesson={"kind": "knowledge"}),
+            lesson_entry(lesson={"target": "the shed"}),
+            lesson_entry(lesson={"kind": "habit"}),
+            lesson_entry(due="2026-03-05"),
+        ):
+            with self.subTest(broken=broken["lesson"]):
+                self.assertEqual(glean.parse_answer(answer(broken), [FIRST, SECOND]).malformed, 1)
+
+    def test_a_correction_in_one_session_only_is_no_lesson(self) -> None:
+        """Covers: B270"""
+        same_session = lesson_entry(lesson={"session": 1, "quote": "only the quick round"})
+        self.assertEqual(glean.parse_answer(answer(same_session), [FIRST, SECOND]).malformed, 1)
+
+        not_said_there = lesson_entry(lesson={"quote": "only the quick round, not the whole proof"})
+        checked = self.check(not_said_there)
+        self.assertEqual((checked.kept, len(checked.not_quoted)), ((), 1))
+
+    def test_an_action_lesson_needs_its_words_in_a_command_of_a_turn_it_corrects(self) -> None:
+        """Covers: B270"""
+        checked = self.check(lesson_entry(lesson={"words": ["git push"]}))
+
+        self.assertEqual((checked.kept, len(checked.not_quoted)), ((), 1))
+
+    def test_a_lesson_stands_only_on_typed_words_never_on_claudes(self) -> None:
+        """Covers: B270"""
+        from_the_answer = lesson_entry(lesson={"quote": "Running the whole proof now."})
+
+        checked = self.check(from_the_answer)
+
+        self.assertEqual((checked.kept, len(checked.not_quoted)), ((), 1))
+
+    def test_a_lesson_whose_first_quote_is_only_pasted_stands_on_no_correction_of_theirs(self) -> None:
+        """Covers: B270"""
+        pasted = Prompt(
+            MORNING, "see this", ("only the quick round, not the whole proof",), commands=("scripts/check",)
+        )
+        first = Session("first", "/home/alex/projects/shed", (pasted,), NOTHING_LEFT_OUT)
+
+        read = glean.parse_answer(answer(lesson_entry()), [first, SECOND])
+        checked = glean.check(read.proposals, [first, SECOND], [])
+
+        self.assertEqual((checked.kept, len(checked.not_quoted)), ((), 1))
+
+    def test_a_session_cannot_hand_in_a_lesson(self) -> None:
+        """Covers: B270"""
+        self.assertNotIn("lesson", glean.HANDED_IN_KINDS)
+        self.assertIn("lesson", glean.KINDS)
+
+    def test_the_instruction_names_the_lesson_its_fields_and_what_is_only_about_the_task(self) -> None:
+        """Covers: B271"""
+        instruction = glean.instruction()
+
+        for word in ("lesson", "knowledge", "action", "target", "every project", "this project", "words"):
+            with self.subTest(word=word):
+                self.assertIn(f"`{word}`", instruction)
+        self.assertIn("two different sessions", instruction)
+        self.assertIn("One such correction in one session is no lesson.", instruction)
+        self.assertIn("only about the task at hand", instruction)
+        self.assertIn('"lesson": {"kind": "action"', instruction)
+
+
 class InstructionTest(unittest.TestCase):
     def test_the_instruction_is_read_from_beside_the_module_and_names_what_an_answer_holds(self) -> None:
         instruction = glean.instruction()
 
-        for word in (*glean.KINDS, "text", "quote", "session", "topic", "due"):
+        for word in (*glean.READ_KINDS, "text", "quote", "session", "topic", "due"):
             with self.subTest(word=word):
                 self.assertIn(f"`{word}`", instruction)
         self.assertIn('{"proposals": [', instruction)
@@ -511,6 +671,95 @@ class InstructionTest(unittest.TestCase):
         self.assertIn("Leave out what is like something they dropped", instruction)
         self.assertIn("An example is no session", instruction)
         self.assertIn("Never propose an example itself", instruction)
+
+
+class PointerTest(unittest.TestCase):
+    PORTAL = dataclasses.replace(
+        session("portal", "the login moves to the customer's identity provider in March, write that into the record"),
+        written=("docs/records/014-login.md",),
+    )
+    POINTER: ClassVar[dict[str, Any]] = {
+        "kind": "pointer",
+        "text": "Login moves to the customer's identity provider in March.",
+        "quote": "the login moves to the customer's identity provider in March",
+        "session": 1,
+        "topic": "Somewhere",
+        "due": None,
+        "file": "docs/records/014-login.md",
+    }
+
+    def test_a_session_shows_the_files_it_wrote_and_none_where_it_wrote_none(self) -> None:
+        """Covers: B278"""
+        given = json.loads(glean.step_input([self.PORTAL, SHED], "# Memory\n"))
+
+        self.assertEqual(given["sessions"][0]["written"], ["docs/records/014-login.md"])
+        self.assertNotIn("written", given["sessions"][1])
+
+    def test_a_pointer_names_its_file_and_no_topic_and_one_without_a_file_is_not_in_the_form(self) -> None:
+        """Covers: B278"""
+        read = glean.parse_answer(
+            answer(self.POINTER, {**self.POINTER, "file": ""}, {**self.POINTER, "file": None}), [self.PORTAL]
+        )
+
+        (pointer,) = read.proposals
+        self.assertEqual(read.malformed, 2)
+        self.assertEqual((pointer.pointer, pointer.topic), (glean.PointerPart("docs/records/014-login.md"), None))
+
+    def test_a_pointer_is_kept_only_to_a_file_its_session_wrote(self) -> None:
+        """Covers: B278"""
+        (pointer,) = glean.parse_answer(answer(self.POINTER), [self.PORTAL]).proposals
+        elsewhere = dataclasses.replace(pointer, pointer=glean.PointerPart("docs/records/015-billing.md"))
+
+        checked = glean.check([pointer, elsewhere], [self.PORTAL], [])
+
+        self.assertEqual(checked.kept, (pointer,))
+        self.assertEqual(checked.not_quoted, (elsewhere,))
+
+
+class CorrectedAgainTest(unittest.TestCase):
+    QUICK = glean.ShownLesson(
+        "quick.md", "Run only the quick checks.", (MORNING.date() - datetime.timedelta(days=1)).isoformat()
+    )
+    AGAIN = session("again", "no, again only the quick round please")
+
+    def test_the_kept_lessons_go_in_by_name_and_text_and_none_go_in_without_any(self) -> None:
+        """Covers: B280"""
+        given = json.loads(glean.step_input([self.AGAIN], "# Memory\n", shown_lessons=[self.QUICK]))
+
+        self.assertEqual(
+            given["lessons"], [{"name": "quick.md", "text": "Run only the quick checks.", "kept": self.QUICK.kept}]
+        )
+        self.assertNotIn("lessons", json.loads(glean.step_input([self.AGAIN], "# Memory\n")))
+
+    def test_a_correction_counts_only_for_a_kept_lesson_on_typed_words_since_it_was_kept(self) -> None:
+        """Covers: B280"""
+        said = {"lesson": "quick.md", "quote": "again only the quick round", "session": 1}
+        read = glean.parse_answer(
+            json.dumps(
+                {
+                    "proposals": [],
+                    "corrected_again": [
+                        said,
+                        {**said, "lesson": "nothing.md"},
+                        {**said, "quote": "quick round"},
+                        {**said, "quote": "the whole proof again"},
+                        {**said, "session": 7},
+                        "quick.md",
+                    ],
+                }
+            ),
+            [self.AGAIN],
+        )
+        # Kept on the day of the prompt: that prompt may be the correction the lesson was kept from.
+        same_day = dataclasses.replace(self.QUICK, kept=MORNING.date().isoformat())
+
+        kept = glean.checked_corrections(read.corrections, [self.AGAIN], [self.QUICK], datetime.timezone.utc)
+
+        self.assertEqual(len(read.corrections), 4)
+        self.assertEqual(kept, [glean.Correction("quick.md", "again only the quick round", "again")])
+        self.assertEqual(
+            glean.checked_corrections(read.corrections, [self.AGAIN], [same_day], datetime.timezone.utc), []
+        )
 
 
 if __name__ == "__main__":

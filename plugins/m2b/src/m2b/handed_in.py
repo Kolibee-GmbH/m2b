@@ -196,8 +196,8 @@ def parse(raw: object) -> Given:
         raise RefusedError("nothing handed in: a proposal is a JSON object with kind, text, quote and session")
     kind, session = raw.get("kind"), raw.get("session")
     text, quote = _one_line(raw.get("text")), _one_line(raw.get("quote"))
-    if kind not in glean.KINDS:
-        raise RefusedError(f"nothing handed in: kind is one of {', '.join(glean.KINDS)}")
+    if kind not in glean.HANDED_IN_KINDS:
+        raise RefusedError(f"nothing handed in: kind is one of {', '.join(glean.HANDED_IN_KINDS)}")
     if not text or len(text) > glean.TEXT_LENGTH:
         raise RefusedError(f"nothing handed in: text is one plain sentence of at most {glean.TEXT_LENGTH} characters")
     if not quote or len(quote.split()) < glean.QUOTE_WORDS or len(quote) > QUOTE_LENGTH:

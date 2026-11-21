@@ -72,8 +72,14 @@ Ask in the owner's language, one short question at a time, with the choices:
 - **May the curation runs read your sessions?** (only when this machine curates, and only when
   `machine_config` has no `curation.read_sessions`): a run then reads what the owner typed in
   Claude Code since the last reading and proposes what belongs in the memory although nobody said
-  "remember this". Before asking, say what a yes means: only what the owner typed is read, with
-  what they pasted into a prompt, and never Claude's answers; pasted text can be someone else's and
+  "remember this", corrections of Claude to keep as lessons among it. Before asking, say what a yes
+  means: only what the owner typed is read, with what they pasted into a prompt, and of Claude's
+  turns only the end of the answer before each prompt, the shell commands of that turn and, in a
+  repository with a project topic, the paths of the files Claude wrote there, to tell what a
+  correction corrects; to check a correction it would keep as a lesson, a model also reads the
+  owner's `CLAUDE.md` files, rules, output style and Claude Code's memory, and at every reading the
+  files under `~/.claude/` every session loads, and a lesson such a file states leaves the lessons
+  every session starts with; pasted text can be someone else's and
   can try to lead the model, a proposal says whether the words it quotes were said or pasted, and
   every proposal is to be read before it is kept; nothing is filed before the owner says keep to a
   proposal (`m2b proposals` lists them); and of a session in a folder the profile leaves out of

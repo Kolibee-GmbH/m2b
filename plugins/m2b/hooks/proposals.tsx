@@ -1,6 +1,6 @@
 import type { CommandSpec, EngineInterface, ResolveInput } from 'claude-code'
 
-import type { BandHealth, BandPress, BandProposal, BandProposals, BandSettle } from '../types'
+import type { BandAtSource, BandHealth, BandLesson, BandPress, BandProposal, BandProposals, BandSettle } from '../types'
 import { plainLine, writtenOut } from './plain-text'
 import { NOT_LOOKED, button, part, pressLine, said, under } from './look'
 import { CURATE_ROW, candidateRow, curateButton } from './rows'
@@ -88,7 +88,32 @@ function isProposal(value: unknown): value is BandProposal {
     (value['source'] === undefined || typeof value['source'] === 'string') &&
     // Nor does one before a session could hand in name a tool or who proposed.
     (value['tool'] === undefined || isTextOrNull(value['tool'])) &&
-    (value['by'] === undefined || isTextOrNull(value['by']))
+    (value['by'] === undefined || isTextOrNull(value['by'])) &&
+    // Nor does one before lessons name a lesson's part.
+    (value['lesson'] === undefined || value['lesson'] === null || isLesson(value['lesson']))
+  )
+}
+
+function isLesson(value: unknown): value is BandLesson {
+  return (
+    isObject(value) &&
+    typeof value['kind'] === 'string' &&
+    typeof value['target'] === 'string' &&
+    typeof value['quote'] === 'string' &&
+    Array.isArray(value['words']) &&
+    value['words'].every(word => typeof word === 'string') &&
+    (value['at_source'] === undefined || value['at_source'] === null || isAtSource(value['at_source'])) &&
+    (value['replaces'] === undefined || value['replaces'] === null || typeof value['replaces'] === 'string')
+  )
+}
+
+function isAtSource(value: unknown): value is BandAtSource {
+  return (
+    isObject(value) &&
+    typeof value['verdict'] === 'string' &&
+    typeof value['file'] === 'string' &&
+    isTextOrNull(value['line']) &&
+    isTextOrNull(value['wording'])
   )
 }
 
@@ -129,7 +154,7 @@ export function parseProposals(part: unknown): BandProposals {
   if (handedIn !== null && !isCount(handedIn)) {
     return { ...NO_PROPOSALS, error: OTHER_SHAPE }
   }
-  const waiting = part['proposals'].map(({ id, kind, text, quote, day, topic, due, source, tool, by }) => ({
+  const waiting = part['proposals'].map(({ id, kind, text, quote, day, topic, due, source, tool, by, lesson }) => ({
     id,
     kind,
     text,
@@ -140,6 +165,7 @@ export function parseProposals(part: unknown): BandProposals {
     source,
     tool,
     by,
+    lesson,
   }))
   return { waiting, answered: part['answered'], handedIn, error: null }
 }
@@ -163,6 +189,10 @@ export function errorBesideTasks(tasksError: string | null, proposals: BandPropo
 /** `commitment, due 2026-03-06, topic Northwind`: what kind of thing is proposed, as `m2b proposals` heads it. */
 function heading(proposal: BandProposal): string {
   const parts = [writtenOut(proposal.kind)]
+  if (proposal.lesson) {
+    // What is kept fires on its commands and holds where its target says: the person sees both.
+    parts.push(lessonHeading(proposal.lesson))
+  }
   if (proposal.due !== null) {
     parts.push(`due ${writtenOut(proposal.due)}`)
   }
@@ -176,6 +206,35 @@ function heading(proposal: BandProposal): string {
   return parts.join(', ')
 }
 
+/** `action for every project, on a command with scripts/check`, as `m2b proposals` says it. */
+function lessonHeading(lesson: BandLesson): string {
+  const words = lesson.words.length > 0 ? `, on a command with ${lesson.words.map(word => writtenOut(word)).join(' ')}` : ''
+  const replaces = lesson.replaces ? `, replaces ${writtenOut(lesson.replaces)}` : ''
+  return `${writtenOut(lesson.kind)} for ${writtenOut(lesson.target)}${words}${replaces}`
+}
+
+/** What becomes of the source a lesson is kept at, as `m2b proposals` says it. */
+function sourceLine(source: BandAtSource): string {
+  const file = writtenOut(source.file)
+  if (source.verdict === 'stated') {
+    return `stated already in ${file}: "${writtenOut(source.line ?? '')}"`
+  }
+  if (source.line === null) {
+    return `adds to ${file}: "${writtenOut(source.wording ?? '')}"`
+  }
+  return `fixes ${file}: "${writtenOut(source.line)}" becomes "${writtenOut(source.wording ?? '')}"`
+}
+
+/** The lines under a lesson: the same correction said again, and what becomes of its source. */
+function lessonLines(lesson: BandLesson): string[] {
+  return [againLine(lesson), ...(lesson.at_source ? [sourceLine(lesson.at_source)] : [])]
+}
+
+/** The line under a lesson with the same correction said in a second session. */
+function againLine(lesson: BandLesson): string {
+  return `and again in another session: "${writtenOut(lesson.quote)}"`
+}
+
 // Who proposed, where it was no reading of the sessions: a session, by itself.
 const HANDED_IN_BY = 'session'
 
@@ -184,6 +243,8 @@ const LEADS = new Map([
   [TYPED, 'said on'],
   ['pasted', 'pasted on'],
   ['agent', 'Claude wrote on'],
+  // A project stands on no words: on the sessions that worked in its repository.
+  ['worked', 'sessions worked in it, the last on'],
 ])
 
 /**
@@ -300,6 +361,7 @@ export function proposalLines(proposals: BandProposals | null): string[] {
       `${proposal.id}  ${heading(proposal)}`,
       `  ${writtenOut(proposal.text)}`,
       `  ${saidLine(proposal)}`,
+      ...(proposal.lesson ? lessonLines(proposal.lesson).map(line => `  ${line}`) : []),
     ]),
   ]
 }
@@ -354,6 +416,7 @@ export function proposalsPane(
           heading(proposal),
         )}
         {under(ui, saidLine(proposal))}
+        {proposal.lesson && lessonLines(proposal.lesson).map(line => under(ui, line))}
       </Box>
     )),
     error === null && waiting.length === 0 && said(ui, NONE_WAITS, 'quiet'),

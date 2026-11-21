@@ -11,7 +11,7 @@ from typing import Any
 from unittest import mock
 
 import test_commands
-from m2b import cli, lint, prompt_hook
+from m2b import cli, lint, prompt_hook, session_remotes
 from m2b.config import profile
 from m2b.curate import report
 from m2b.store.folder import FolderStore
@@ -428,6 +428,20 @@ class EvictedMemoryTest(LintFixture):
 
         self.assertEqual(self.codes(), [("evicted", "info", "memory")])
 
+    def test_a_lesson_that_is_not_downloaded_is_listed_and_the_rest_is_checked(self) -> None:
+        """Covers: B6"""
+        self.write("memory/MEMORY.md", "# Memory\n\n## Facts\n\n- [[nothing.md]]\n")
+        self.write(
+            "memory/lessons/once.md",
+            "---\nkind: knowledge\ntarget: every project\nkept: 2026-11-20\n---\n# Once\n\nSay it once.\n",
+        )
+        self.evicted.add("memory/lessons/once.md")
+
+        codes = self.codes()
+
+        self.assertIn(("evicted", "info", "memory"), codes)
+        self.assertIn(("broken-link", "action", "memory/MEMORY.md"), codes)
+
     def test_links_are_checked_when_only_the_distillate_is_evicted(self) -> None:
         self.write("memory/dana.md", DANA + "- [[nothing.md]]\n")
         self.evicted.add("memory/MEMORY.md")
@@ -790,6 +804,25 @@ class LintCommandTest(test_commands.CommandTest):
         (finding,) = report.read_findings(self.machine, token)
         self.assertEqual((finding.step, finding.kind), ("lint", "action"))
         self.assertIn("[[nothing.md]]", finding.text)
+
+    def test_scan_reads_this_machines_notes_of_the_remotes(self) -> None:
+        """Covers: B256"""
+        (self.store_root / "memory" / "MEMORY.md").write_text(
+            INDEX.replace(
+                "\n\n## Current",
+                "\n\n### Acme portal (Acme portal, portal)\n"
+                "- Repository: github.com/acme/portal (acme-portal.md)\n\n## Current",
+            ),
+            encoding="utf-8",
+        )
+        (self.store_root / "memory" / "acme-portal.md").write_text("# Acme portal\n", encoding="utf-8")
+        notes = self.machine.state_dir / session_remotes.NOTES_FOLDER
+        notes.mkdir(parents=True)
+
+        _, out, _ = self.run_command("lint", "scan", "--json")
+
+        codes = [finding["code"] for finding in test_commands.json.loads(out)["findings"]]
+        self.assertIn(lint.PROJECT_UNSEEN, codes)
 
     def test_scan_report_outside_a_run_exits_2(self) -> None:
         self.assertEqual(self.run_command("lint", "scan", "--report")[0], cli.EXIT_USAGE)

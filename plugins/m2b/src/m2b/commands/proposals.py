@@ -16,6 +16,7 @@ until one reads as the person's own.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import datetime
 import json
 import sys
@@ -66,7 +67,10 @@ def _list(store: Store, as_json: bool) -> int:
         print(f"{len(waiting.proposals)} {'proposal waits' if one else 'proposals wait'} for an answer:\n")
         for key, entry in waiting.proposals:
             said = proposals.said_line(entry, _shown(entry.quote))
-            print(f"{key}  {_heading(entry)}\n  {_shown(entry.text)}\n  {said}\n")
+            again = f"  {proposals.again_line(_shown(entry.lesson.quote))}\n" if entry.lesson else ""
+            if entry.lesson is not None and entry.lesson.at_source is not None:
+                again += f"  {proposals.source_line(entry.lesson.at_source, _shown)}\n"
+            print(f"{key}  {_heading(entry)}\n  {_shown(entry.text)}\n  {said}\n{again}")
         print(HOW_TO_ANSWER)
     else:
         print(NONE_WAITS)
@@ -176,6 +180,9 @@ def _shown(text: str) -> str:
 
 def _heading(entry: Entry) -> str:
     parts = [entry.kind]
+    if entry.lesson is not None:
+        # What is kept fires on its commands and holds where its target says: the person sees both.
+        parts.append(proposals.lesson_heading(entry.lesson, _shown))
     if entry.due is not None:
         parts.append(f"due {entry.due.isoformat()}")
     if entry.topic:
@@ -199,4 +206,14 @@ def _as_json(key: str, entry: Entry) -> dict[str, Any]:
         "source": entry.source,
         "tool": entry.tool,
         "by": entry.by,
+        "lesson": None
+        if entry.lesson is None
+        else {
+            "kind": entry.lesson.kind,
+            "target": entry.lesson.target,
+            "words": list(entry.lesson.words),
+            "quote": entry.lesson.quote,
+            "at_source": None if entry.lesson.at_source is None else dataclasses.asdict(entry.lesson.at_source),
+            "replaces": entry.lesson.replaces,
+        },
     }

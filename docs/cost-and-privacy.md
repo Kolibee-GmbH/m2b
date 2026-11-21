@@ -11,7 +11,8 @@ A curation run uses your Claude Code login, with Haiku by default. Measured on
 2026-11-08 with Claude Code 2.1.319: a run over five captures took 48 seconds and 31 turns,
 read about 365,000 input tokens (338,000 of them from Claude Code's prompt cache) and wrote 8,000;
 Claude Code put it at US$0.013 at API prices. A run with nothing to read (an empty inbox, nothing
-expiring, no memory link to repair) uses no model. A run that starts after your answers to
+expiring, no memory link to repair, and while your sessions are read no prompt and no change to your
+lessons or the files every session loads) uses no model. A run that starts after your answers to
 proposals ([When it runs](curation.md#when-it-runs)) is a whole run with every step: it files a
 capture for each proposal you kept and, where your sessions are read, reads what you typed since
 the last reading; `curation.run_after_answers` set to `false` keeps it from starting. m2b does
@@ -24,7 +25,8 @@ the runs that start by themselves ([Configuration](configuration.md)).
 **The model.** Only a curation run calls a model, and only for a step with something to read:
 ingest for new captures, refresh for a fact past its day, lint for a broken link in memory with
 exactly one candidate, the reading of your sessions once in a run while it is on and you typed
-something since the last reading, and the worklog's verdict once a day while that add-on is on,
+something since the last reading, the check of your lessons against the files every session loads
+while the reading is on and those lessons or files changed since the last check, and the worklog's verdict once a day while that add-on is on,
 unless the day had no sessions. Each step runs with `curation.model` (`haiku` by default; setup offers `sonnet`
 for more careful filing at a higher cost) and stops after `curation.max_turns` turns;
 `curation.max_budget_usd`, unset by default, caps its spending. It runs on your Claude Code login
@@ -36,11 +38,21 @@ PDF up to its 60th page; refresh reads the distillate, the fact files that are
 due and any archive file; sorting reads memory. Ingest, lint, `--refresh-all` and the worklog step
 also get `m2b search` results over inbox, archive and memory. The reading of your sessions sends
 the distillate, up to 30 proposals you kept and 30 you dropped lately and 30 that wait, each with
-the words it stood on, and, per session, its folder, its day and the prompts you typed, with what
-you pasted into them, redacted, to a model that can call nothing. With the worklog add-on, its step sees the period's prompts and last
+the words it stood on, the lessons you kept, and, per session, its folder, its day and the prompts you typed, with what
+you pasted into them, beside each the last 500 characters of Claude's answer before it and the
+shell commands of that turn, and in a project's repository the paths of the files the session wrote
+there, redacted, to a model that can call nothing. Where it found a lesson, a second call that can
+call nothing gets the lesson and the lines of the files a session in its folder starts with (your
+`CLAUDE.md` and `CLAUDE.local.md` files and the rules under `.claude/rules/`, in `~/.claude/` and in
+the folders up to your home folder, Claude Code's memory, the output style), redacted the same way.
+At every reading, when the lessons every session starts with or the files every session loads
+changed since the last check, a third call that can call nothing gets those lessons with
+`~/.claude/CLAUDE.md`, its rules without `paths` and the output style chosen there; it may start in
+a run in which you typed nothing. With the worklog add-on, its step sees the period's prompts and last
 answers, commits and session folders, the inbox and memory (below). In every session:
-the distillate, the routing rule and the notices at session start; before a prompt that names a
-topic, that topic's facts; and what you ask it to look up, search hits or a fact's file or a note
+the distillate, the lessons you kept, the routing rule and the notices at session start; before a
+prompt that names a topic, that topic's facts; before a Bash call whose command holds a lesson's
+words, that lesson; and what you ask it to look up, search hits or a fact's file or a note
 read whole. Of a document in the archive, m2b's search tool and skill hand a session the note and
 the outline in it, never the document.
 

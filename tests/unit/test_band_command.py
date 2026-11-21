@@ -48,6 +48,21 @@ class BandCommandTest(test_runner.RunnerTest):
         self.assertEqual(answer["status"]["inbox"], {"count": 1, "evicted": 0})
         self.assertEqual(answer["status"]["backends"]["tasks"]["state"], "reachable")
 
+    def test_a_question_whether_a_lesson_is_still_needed_comes_with_the_questions(self) -> None:
+        """Covers: B283"""
+        self.curating()
+        self.tasks().add(
+            "Still needed? Run the whole proof only with a reason.",
+            notes=markers.marker_line(markers.LESSON, "1a2b3c4d5e6f"),
+        )
+
+        answer = self.band()
+
+        self.assertEqual(
+            [t["title"] for t in answer["tasks"]["questions"]],
+            ["Still needed? Run the whole proof only with a reason."],
+        )
+
     def test_on_apple_reminders_one_answer_asks_reminders_twice_also_when_the_status_probes(self) -> None:
         """Covers: B93"""
         self.curating(tasks={"backend": "apple-reminders", "list": "sb-test-inbox"})
@@ -428,7 +443,7 @@ class BandProposalsTest(test_proposals_command.ProposalsCommandTest):
         """Covers: B126"""
         target = self.store_root / proposals.PROPOSALS_FILE
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps({"format": 4, "proposals": {}}), encoding="utf-8")
+        target.write_text(json.dumps({"format": proposals.FORMAT + 1, "proposals": {}}), encoding="utf-8")
 
         answer = self.band()
 

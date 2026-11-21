@@ -4,7 +4,8 @@ hanging or failed run at once.
 Inbox count, the run record, whether a run is due (only on the curating machine, the only one
 where that question has an answer), whether the backends can be reached, where sessions are
 read for proposals or were, how many of the proposals the person kept lately, and how many
-proposals sessions handed in wait for the next run to take them in. The backend probes
+proposals sessions handed in wait for the next run to take them in, and how large everything is
+that a session in this folder starts with (``start_size``). The backend probes
 start other programs, so their answer is kept for 5 minutes in the machine state; the rest is read
 fresh. Each part that cannot be looked at says why instead of disappearing.
 
@@ -21,7 +22,7 @@ import datetime
 import json
 from typing import Any
 
-from m2b import handed_in, proposal_answers, proposals
+from m2b import action_lessons, fixes, handed_in, lesson_counts, lessons, proposal_answers, proposals, start_size
 from m2b.addons import ADDONS, is_on
 from m2b.atomic_file import replace_atomically
 from m2b.commands import Context
@@ -34,7 +35,9 @@ from m2b.config.machine import MachineConfig, load_machine_config
 from m2b.config.store_settings import describe_format, format_state, load_store_settings
 from m2b.curate import machine_state
 from m2b.curate.due import PAUSED_NOTE, check_due
-from m2b.glean import AGENT, KINDS, PASTED, TOOL, TYPED
+from m2b.glean import AGENT, KINDS, PASTED, TOOL, TYPED, WORKED
+from m2b.hook_input import project_folder
+from m2b.notes.characters import with_hidden_written_out
 from m2b.notes.layout import INBOX
 from m2b.paths import MachinePaths
 from m2b.run_record import RUNNING, RunRecordError, is_interrupted, load_run_record
@@ -46,11 +49,19 @@ INTERRUPTED = "interrupted"
 
 
 def status_command(arguments: argparse.Namespace, context: Context) -> int:
-    answer = status_answer(load_machine_config(context.machine), context)
+    config = load_machine_config(context.machine)
+    answer = status_answer(config, context)
+    # Only here, not in the band's answer: it reads files outside the store and changes only when
+    # the owner edits them. The worklog's session start runs ``status --json`` too; the part costs
+    # it about a millisecond for Claude Code's files and one read of the distillate.
+    folder = project_folder(context.environ)
+    answer["session_start"] = start_size.measure(config, context.machine, context.environ, folder)
     if arguments.json:
         print_json(answer)
     else:
         _print_text(answer)
+        for line in start_size.text_lines(answer["session_start"]):
+            print(line)
     return 0
 
 
@@ -91,7 +102,78 @@ def status_answer(config: MachineConfig, context: Context, tasks_check: Check | 
     if answers is not None:
         answer["proposal_answers"] = answers
     answer["handed_in"] = _handed_in(store)
+    answer["lessons"] = _lessons(store, context.machine)
     return answer
+
+
+# The kind a lesson kept as a fix is listed with, beside ``knowledge`` and ``action``.
+FIX_KIND = "fix"
+
+
+def _lessons(store: Store, machine: MachinePaths) -> dict[str, Any]:
+    """How many lessons every session starts with, those left out because their source states them
+    now, by name and source (B258), and how each lesson does since it was kept: how often it fired
+    on this machine and in how many of the Bash calls seen here, and how often the owner corrected
+    Claude on it again. Lessons that cannot be read are said as such, never as none."""
+    try:
+        found = lessons.read_all(store)
+    except (StoreError, OSError) as error:
+        return {"error": with_hidden_written_out(str(error))}
+    try:
+        as_fixes = fixes.kept_from_lessons(store)
+    except (StoreError, OSError):
+        as_fixes = []
+    try:
+        again: dict[str, int] | None = lesson_counts.corrected_again(
+            store, {**{lesson.name: lesson.kept for lesson in found}, **{fix.name: fix.kept for fix in as_fixes}}
+        )
+    except (lesson_counts.LessonCountsError, ConfigError, StoreError):
+        again = None
+    return {
+        "in_every_session": len(lessons.fitting(found)[0]),
+        "kept_at_source": [
+            {"name": with_hidden_written_out(lesson.name), "source": with_hidden_written_out(lesson.kept_at or "")}
+            for lesson in lessons.kept_at_source(found)
+        ],
+        "each": [
+            *(_how_it_does(lesson, machine, again) for lesson in found),
+            *(_how_the_fix_does(fix, again) for fix in as_fixes),
+        ],
+    }
+
+
+def _how_the_fix_does(fix: fixes.Fix, again: dict[str, int] | None) -> dict[str, Any]:
+    """A lesson kept as a fix of its source (B289), by the fix's name: how often the owner corrected
+    Claude on it again since, which shows whether the fix works."""
+    return {
+        "name": fix.name,
+        "kind": FIX_KIND,
+        "kept": with_hidden_written_out(fix.kept),
+        "corrected_again": None if again is None else again.get(fix.name, 0),
+    }
+
+
+def _how_it_does(lesson: lessons.Lesson, machine: MachinePaths, again: dict[str, int] | None) -> dict[str, Any]:
+    """A lesson's counts since it was kept; ``corrected_again`` is None where the counts could not be read."""
+    counted: dict[str, Any] = {
+        "name": with_hidden_written_out(lesson.name),
+        "kind": lesson.kind,
+        "kept": with_hidden_written_out(lesson.kept),
+        "corrected_again": None if again is None else again.get(lesson.name, 0),
+    }
+    if lesson.kind == lessons.ACTION:
+        since = _day_of(lesson.kept)
+        # Without a day it was kept, nothing can be counted since then: both stay 0.
+        counted["fired"] = action_lessons.fired(machine, since).get(lesson.name, 0) if since else 0
+        counted["calls"] = action_lessons.calls(machine, since) if since else 0
+    return counted
+
+
+def _day_of(text: str) -> datetime.date | None:
+    try:
+        return datetime.date.fromisoformat(text)
+    except ValueError:
+        return None
 
 
 def probe_backends(
@@ -262,8 +344,35 @@ def _print_text(answer: dict[str, Any]) -> None:
     elif handed["count"]:
         not_downloaded = f" ({handed['evicted']} not downloaded)" if handed["evicted"] else ""
         print(f"handed in: {handed['count']} waiting for the next curation run{not_downloaded}")
+    kept = answer["lessons"]
+    if "error" in kept:
+        print(f"lessons: could not look: {kept['error']}")
+    elif kept["in_every_session"] or kept["kept_at_source"]:
+        at_source = "".join(
+            f"; {item['name']} is kept at its source, {item['source']}" for item in kept["kept_at_source"]
+        )
+        print(f"lessons: {kept['in_every_session']} in every session{at_source}")
+    for each in kept.get("each", []):
+        print(_lesson_line(each))
     on = [name for name, is_addon_on in answer["addons"].items() if is_addon_on]
     print(f"add-ons on: {', '.join(on) if on else 'none'}")
+
+
+def _lesson_line(each: dict[str, Any]) -> str:
+    """How one lesson does since it was kept: ``lesson quick-checks (action, kept 2026-11-20): fired 3
+    times in 120 Bash calls (3%), corrected again 1 time: not working``."""
+    parts = []
+    if "fired" in each:
+        share = f" ({round(100 * each['fired'] / each['calls'])}%)" if each["calls"] else ""
+        parts.append(f"fired {_times(each['fired'])} in {each['calls']} Bash calls{share}")
+    again = each["corrected_again"]
+    parts.append("corrections not counted" if again is None else f"corrected again {_times(again)}")
+    verdict = ": not working" if again else ""
+    return f"lesson {each['name']} ({each['kind']}, kept {each['kept']}): {', '.join(parts)}{verdict}"
+
+
+def _times(number: int) -> str:
+    return "1 time" if number == 1 else f"{number} times"
 
 
 def _proposal_answers_text(answers: dict[str, Any]) -> str:
@@ -282,7 +391,13 @@ def _proposal_answers_text(answers: dict[str, Any]) -> str:
 
 # How a line names the way a proposal came and where its words stand; another word is shown as it is.
 _WAYS = {proposals.READING: "a reading found in", proposals.SESSION: "sessions handed in from"}
-_SOURCES = {TYPED: "typed words", PASTED: "pasted text", TOOL: "a tool's result", AGENT: "an answer of Claude"}
+_SOURCES = {
+    TYPED: "typed words",
+    PASTED: "pasted text",
+    TOOL: "a tool's result",
+    AGENT: "an answer of Claude",
+    WORKED: "repositories worked in on two days",
+}
 
 
 def _proposal_ways_lines(answers: dict[str, Any]) -> list[str]:

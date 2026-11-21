@@ -6,7 +6,8 @@ session (the session start notes what it showed), at most 4 KB of whole topics p
 held back by the cap is not noted and comes with the next prompt that names it. A topic that is
 larger than the cap by itself comes with no prompt; lint reports it as an action (B48). Topic facts come
 from captures that may hold someone else's text, so they come under the same framing as the
-distillate, and without the characters that draw nothing (B143).
+distillate, and without the characters that draw nothing (B143). A project topic's repository line
+comes with the folder that repository lies in on this machine (B247).
 
 It never fails or slows a prompt: no model, no network, nothing printed on any error, since a
 line on every prompt would cost more than a missing topic. It does nothing inside a curation run
@@ -25,7 +26,7 @@ import sys
 from collections.abc import Mapping, Sequence
 from typing import TextIO
 
-from m2b import topic_state
+from m2b import repository_places, session_remotes, topic_state
 from m2b.config.machine import MachineConfig, load_machine_config
 from m2b.hook_input import HookInput, project_folder, read_hook_input
 from m2b.notes.characters import without_hidden
@@ -84,8 +85,9 @@ def due_topics(
     text = _distillate(open_store(config.store, machine.temp_dir))
     shown = topic_state.shown_topics(machine, hook_input.session_id)
     place = project_place(folder, environ.get("HOME"))
+    notes = machine.state_dir / session_remotes.NOTES_FOLDER
     due = [
-        block
+        TopicBlock(block.topic, repository_places.with_places(block.text, notes))
         for block in split_topics(text).blocks
         if block.topic.name not in shown
         and (names_topic(block.topic, hook_input.prompt or "") or names_topic_in_path(block.topic, place))

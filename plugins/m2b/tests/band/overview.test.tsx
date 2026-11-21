@@ -515,6 +515,36 @@ test('the part about m2b says each thing that is wrong as a sentence with its re
   await ui.unmount()
 })
 
+test('the part about m2b lists each lesson with its counts, one corrected again as not working in the color of what asks', async ($, on) => {
+  // Covers: B282
+  const fake = new FakeM2b()
+  fake.status = {
+    inbox: { count: 0, evicted: 0 },
+    run: { state: 'succeeded' },
+    backends: {},
+    lessons: {
+      in_every_session: 1,
+      kept_at_source: [],
+      each: [
+        { name: 'proof.md', kind: 'action', kept: '2026-11-20', corrected_again: 1, fired: 3, calls: 40 },
+        { name: 'once.md', kind: 'knowledge', kept: '2026-11-20', corrected_again: 0 },
+        { name: 'quiet.md', kind: 'action', kept: '2026-11-21', corrected_again: null, fired: 0, calls: 0 },
+      ],
+    },
+  }
+  await start($, on, fake)
+
+  const ui = await startView($)
+
+  const notWorking = 'lesson proof.md (action, kept 2026-11-20): fired 3 times in 40 Bash calls (8%), corrected again 1 time: not working'
+  const once = 'lesson once.md (knowledge, kept 2026-11-20): corrected again 0 times'
+  const quiet = 'lesson quiet.md (action, kept 2026-11-21): fired 0 times in 0 Bash calls, corrections not counted'
+  expect(await partLines(ui, 'm2b')).toEqual([notWorking, once, quiet])
+  expect(await lookOf(ui, notWorking)).toEqual(ASKS)
+  expect(await lookOf(ui, once)).toEqual(DIM)
+  await ui.unmount()
+})
+
 test('a trouble the answer gives no reason for is a sentence that ends with a full stop', async ($, on) => {
   // Covers: B206
   const fake = new FakeM2b()

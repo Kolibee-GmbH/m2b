@@ -232,6 +232,25 @@ test('a proposal that stands on pasted text says pasted, one from a source the b
   await ui.unmount()
 })
 
+test('a project stands on the sessions that worked in its repository, not on words said', async ($, on) => {
+  // Covers: B275
+  const fake = new FakeM2b().proposal(
+    DANA,
+    'portal is a repository you worked in on 2026-03-02 and 2026-03-04, with no topic: keep it as a project',
+    'github.com/acme/portal',
+    { kind: 'project', day: '2026-03-04', source: 'worked', tool: null, by: null },
+  )
+  await start($, on, fake)
+  await typed($, 'm2b-proposals')
+
+  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  const drawn = await texts(ui)
+  expect(drawn.filter(line => line.endsWith('"github.com/acme/portal"'))).toEqual([
+    'sessions worked in it, the last on 2026-03-04: "github.com/acme/portal"',
+  ])
+  expect(drawn.filter(line => line === 'project')).toEqual(['project'])
+})
+
 test('a proposal a session handed in says so, and its line names the tool of a result or Claude for an answer', async ($, on) => {
   // Covers: B179
   const handedIn = { day: '2026-03-04', by: 'session' }
@@ -260,6 +279,63 @@ test('a proposal a session handed in says so, and its line names the tool of a r
   // Each handed-in proposal says so in its heading, typed words too; the one a reading found does not.
   expect(drawn.filter(line => line.endsWith('handed in by a session'))).toEqual(Array(4).fill('person, handed in by a session'))
   expect(drawn.filter(line => line === 'person')).toEqual(['person'])
+  await ui.unmount()
+})
+
+test('a proposed lesson shows its kind, whom it is for, the words it fires on and the correction said again', async ($, on) => {
+  // Covers: B273
+  const lesson = { kind: 'action', target: 'every project', words: ['scripts/check'], quote: 'no full check without a reason' }
+  const fake = new FakeM2b().proposal(DANA, 'Run only the quick checks.', 'only the quick round', { kind: 'lesson', lesson })
+  await start($, on, fake)
+  await typed($, 'm2b-proposals')
+
+  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  const drawn = await texts(ui)
+  expect(drawn).toContain('lesson, action for every project, on a command with scripts/check')
+  expect(drawn).toContain('and again in another session: "no full check without a reason"')
+  await ui.unmount()
+})
+
+test('a lesson that would take the place of a kept one names it in its heading', async ($, on) => {
+  // Covers: B284
+  const lesson = { kind: 'knowledge', target: 'every project', words: [], quote: 'again: herdr is an agent runtime', replaces: 'weak.md' }
+  const fake = new FakeM2b().proposal(DANA, 'Name herdr an agent runtime.', 'herdr is an agent runtime', { kind: 'lesson', lesson })
+  await start($, on, fake)
+  await typed($, 'm2b-proposals')
+
+  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  expect(await texts(ui)).toContain('lesson, knowledge for every project, replaces weak.md')
+  await ui.unmount()
+})
+
+test('a lesson kept at its source says what becomes of the source', async ($, on) => {
+  // Covers: B273
+  const at_source = { verdict: 'fix', file: '~/.claude/CLAUDE.md', line: '- Run the whole proof.', wording: '- Run the quick checks.' }
+  const lesson = { kind: 'action', target: 'every project', words: ['scripts/check'], quote: 'no full check without a reason', at_source }
+  const fake = new FakeM2b().proposal(DANA, 'Run only the quick checks.', 'only the quick round', { kind: 'lesson', lesson })
+  await start($, on, fake)
+  await typed($, 'm2b-proposals')
+
+  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  expect(await texts(ui)).toContain('fixes ~/.claude/CLAUDE.md: "- Run the whole proof." becomes "- Run the quick checks."')
+  await ui.unmount()
+})
+
+test('a lesson stated at its source or added to a project names that line or what is added', async ($, on) => {
+  // Covers: B273
+  const stated = { verdict: 'stated', file: '~/.claude/CLAUDE.md', line: '- Run only the quick checks.', wording: null }
+  const adds = { verdict: 'fix', file: 'CLAUDE.md in github.com/acme/portal', line: null, wording: 'Name releases after the version.' }
+  const lesson = { kind: 'knowledge', target: 'github.com/acme/portal', words: [], quote: 'the version, not the date' }
+  const fake = new FakeM2b()
+    .proposal(DANA, 'Run only the quick checks.', 'only the quick round', { kind: 'lesson', lesson: { ...lesson, at_source: stated } })
+    .proposal(LADDER, 'Name releases after the version.', 'after the version please', { kind: 'lesson', lesson: { ...lesson, at_source: adds } })
+  await start($, on, fake)
+  await typed($, 'm2b-proposals')
+
+  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  const drawn = await texts(ui)
+  expect(drawn).toContain('stated already in ~/.claude/CLAUDE.md: "- Run only the quick checks."')
+  expect(drawn).toContain('adds to CLAUDE.md in github.com/acme/portal: "Name releases after the version."')
   await ui.unmount()
 })
 

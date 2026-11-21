@@ -91,6 +91,7 @@ import {
   NOT_KNOWN,
   curatingMachineOf,
   healthOf,
+  isLessonStanding,
   noRunStarted,
   parseRunAfterAnswers,
   parseRunStart,
@@ -452,7 +453,8 @@ function isHealth(value: unknown): value is BandHealth {
     value['troubles'].every(trouble => typeof trouble === 'string') &&
     // A band from before the button shared its answer without these: it is not taken, and m2b is asked.
     (value['curates'] === null || typeof value['curates'] === 'boolean') &&
-    typeof value['isCurating'] === 'boolean'
+    typeof value['isCurating'] === 'boolean' &&
+    (value['lessons'] === undefined || (Array.isArray(value['lessons']) && value['lessons'].every(isLessonStanding)))
   )
 }
 

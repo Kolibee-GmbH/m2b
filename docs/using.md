@@ -49,7 +49,7 @@ up to its 60th page, and a picture as a picture ([A document in the inbox](curat
 A session-start hook prints the distillate, at most 8 KB: lasting facts, each pointing to its
 fact file, and what is going on right now. Facts that matter only for one subject sit under a
 topic; a session sees the topic's name, and its facts come in when a prompt or the project
-folder's path names it. The hook also prints one line when something needs you: the last
+folder's path names it. In a second output beside it, m2b prints one line when something needs you: the last
 curation run failed, the curating machine has not run for three days, or the store cannot be
 found. The distillate is marked as data from your notes, not instructions. In a project where it
 should not appear, such as a screen share or a customer's repository, `m2b distillate off` in
@@ -62,6 +62,75 @@ which role, what was agreed. What else goes in is yours to decide, a customer's 
 session only when it is about that customer. What you are working on for that customer lands under
 the same topic in Current; what goes on in your own life stays above the topics there and reaches
 every session.
+
+## Lessons
+
+A correction you kept, such as "run only the checks the change touches", is a lesson. Every session
+starts with the lessons for every project in a block of their own, in m2b's second output beside the
+distillate, written as corrections you made and kept, not as notes. A lesson that
+`~/.claude/CLAUDE.md` or another source states now is left out, and `m2b status` says where it is
+kept: where the reading of your sessions is on, each run checks the block again against the files
+every session loads, so a rule you write into `~/.claude/CLAUDE.md` takes the lesson's place. When
+distillate and lessons together pass the 2 KB target, lint says so with both sizes. Where the block
+is full, a new lesson the reading of your sessions proposes for every session names the kept
+lesson it would replace: the one you corrected Claude on again most often, then the oldest. Keep
+it, and that lesson goes, unless a file every session loads states it by then: it has left the
+block already and stays, kept at that file.
+
+A lesson about a command, such as "run the whole proof only when the change gives a reason, when you
+start scripts/check", comes before Claude runs that command: the first Bash call of a session whose
+command holds its words does not run, and Claude gets the lesson as the reason; it changes the
+command or says why it holds, and the next call runs with the lesson beside it. The hook stays
+silent where the command holds a word you named to keep it quiet (`--quick`). Say "keep this as a
+lesson" in a session and Claude Code asks you before it is kept; the next curation run files it. A lesson can ask you before every call
+instead.
+
+`m2b status` and the overview's part "m2b" say how each lesson does since you kept it: how often you corrected Claude on it
+again, which the curation run counts where it reads your sessions, and for a lesson about a command
+how often it fired on this machine and in how many Bash calls. A lesson you corrected again is
+named `not working`; whether you word it anew, have it ask instead of remind, or drop it is yours.
+
+A lesson about a command that did not fire for 30 days becomes a question in your task list, as a
+current item that went quiet does: `Still needed? <the lesson>`. Tick it, and the lesson stays and
+its 30 days start again; drop or delete it, and the next run removes the lesson. A lesson of the
+block that you did not correct Claude on again for 60 days is asked about the same way, since every
+session starts with it, while the reading of your sessions counts your corrections; ticked, it stays
+for 60 days more. No lesson ends without your answer.
+
+## A project
+
+Say "remember this project" in a session in a clone, and the session captures it with
+`m2b capture --project`: your words and the address of the repository's git remote, which is the
+same on every machine. The next curation run makes it a topic with a line
+`- Repository: github.com/acme/portal (acme-portal.md)`. When a prompt or the project folder's path
+names the topic, it comes into the session with the folder that repository lies in on that
+machine, or `not cloned on this machine`. A folder without a remote is not kept, and a project
+that already has a topic is not kept twice.
+
+Where the curation run reads your sessions, you need not say it: a repository you typed in on two
+days, within 30 days, that no topic names is proposed as a `project`. Keep it, and it becomes the
+same topic as if you had said it. Which days a repository was worked in is remembered on this
+machine only, in `~/.local/state/m2b/project-days.json`, with the repository's address and the
+days and nothing else.
+
+A project's topic also gets pointers from the reading: when you state a decision in a session in
+that repository and Claude writes it into a file there, the run proposes the line
+`- <the decision> → <the file>`. Kept, it comes into a session with the topic, and the session reads
+the file in the folder the place line names.
+
+## Fixes for the files Claude reads
+
+When a `CLAUDE.md` or a rule file says something wrongly, say so in a session: "keep this as a
+fix: CLAUDE.md, the line about the whole proof is out of date, it should say: run the checks the
+change touches". The session keeps it with `m2b fix add`. m2b never writes that file, which is
+yours and often committed. The next session that starts in a clone of that repository, on any of
+your machines, gets one line at its start, beside the distillate: a fix waits for this file, with
+its name; past five, one line says how many more wait. A fix for a file under `~/.claude/` waits
+in every session on the machine it was kept on. The
+session reads the fix with `m2b fix show`, applies it with you, and marks it done once you confirm
+it. Where the file in that checkout holds neither the line the fix replaces nor its new wording,
+the session tells you: the checkout may be on another branch, so the fix waits on until you give it
+up with `m2b fix drop`. `m2b fix list` shows every fix you kept.
 
 ## Search, todos, rediscover
 
@@ -111,8 +180,12 @@ and `m2b proposals drop <id>`. Once you have answered every proposal in the pane
 one, a curation run starts in the background on the machine that curates and files what you kept,
 so the next session knows it; on another machine, or with `curation.run_after_answers` off, your
 answers wait for the next run. Only the prompts you typed are read, with what you pasted into them
-and with credentials redacted: no answer of Claude, no tool result, nothing a plugin or another
-agent sent, and no session you left out by its folder or its git remote ([Reading your sessions](curation.md#reading-your-sessions)).
+and with credentials redacted, and beside each one the end of Claude's answer before it and the
+shell commands of that turn, and in a repository with a project topic the paths of the files Claude
+wrote there; nothing else of Claude's answers, no tool's output, nothing a plugin or another agent
+sent, and no session you left out by its folder or its git remote. To check a lesson, a model also
+reads your `CLAUDE.md` files, rules, output style and Claude Code's memory
+([Reading your sessions](curation.md#reading-your-sessions)).
 
 A session can also hand in a proposal by itself, with words from what its agent read for you, a
 mail or a document. That is off until you turn `sessions.propose` on, and such a proposal says in
@@ -149,9 +222,14 @@ belong in its repository and its `CLAUDE.md`; m2b is for what has no repository.
 
 Claude Code keeps its own memory: short notes it writes for itself during a session, in files
 under `~/.claude` for each project. It stays on beside m2b, and a first "remember this" may land
-in either. The rule every session gets with the distillate keeps them apart: how Claude should
-work stays with Claude Code, in its memory or in a `CLAUDE.md`; what concerns your life and world
-across projects goes to m2b.
+in either. The rule every session gets at its start, in m2b's second output beside the
+distillate, keeps them apart: how Claude should work in one project stays with Claude Code, in its
+memory or the repository's `CLAUDE.md`; what concerns your life and world across projects goes to
+m2b. A correction that holds in every project becomes an m2b [lesson](#lessons), and goes to
+`~/.claude/CLAUDE.md` only where you ask for that file, never into the memory of the project you
+made it in, where no other project would see it; and where a `CLAUDE.md` already says the matter
+wrongly, the session keeps a fix for it
+([Fixes](#fixes-for-the-files-claude-reads)) instead of a second rule beside it.
 
 What m2b has that Claude Code's memory does not:
 

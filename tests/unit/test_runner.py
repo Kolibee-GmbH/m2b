@@ -14,7 +14,7 @@ from unittest import mock
 
 import test_commands
 import test_ingest
-from m2b import addons, candidates, expiry, glean, handed_in, launcher, proposals
+from m2b import addons, candidates, expiry, glean, handed_in, launcher, proposals, session_remotes
 from m2b.atomic_file import HIDDEN_TEMP_PREFIX
 from m2b.config import machine
 from m2b.config.profile import save_profile
@@ -280,6 +280,30 @@ class CleanRunTest(RunnerTest):
         )
         self.assertEqual(self.tasks().items(marker=markers.CURRENT, include_completed=True), [])
 
+    def test_a_quiet_action_lesson_is_asked_about_and_a_drop_removes_it_in_the_next_run(self) -> None:
+        """Covers: B283"""
+        self.curating()
+        self.write(
+            "memory/lessons/proof.md",
+            "---\nkind: action\ntarget: every project\nkept: 2026-09-01\nwords: [scripts/check]\n---\n"
+            "# Proof\n\nRun the whole proof only with a reason.\n",
+        )
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+        [question] = self.tasks().items(marker=markers.LESSON)
+        self.assertEqual(question.title, "Still needed? Run the whole proof only with a reason.")
+
+        self.tasks().drop(question.id)
+        self.clock = START + datetime.timedelta(days=1)
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        self.assertFalse((self.store_root / "memory" / "lessons" / "proof.md").exists())
+        record = load_run_record(self.store)
+        assert record is not None
+        self.assertIn(
+            "the lesson proof.md is removed: you said it no longer holds", [finding.text for finding in record.findings]
+        )
+
     def test_refresh_all_runs_now_and_lets_the_refresh_step_date_the_undated_lines(self) -> None:
         """Covers: B43"""
         self.curating()
@@ -479,6 +503,34 @@ class CleanRunTest(RunnerTest):
         (review,) = self.review_tasks()
         self.assertIn("lint: memory/dana.md links [[nothing-here.md]], which is no corpus file", review.notes)
 
+    def test_lint_checks_a_project_topic_against_this_machines_clone(self) -> None:
+        """Covers: B255"""
+        self.curating()
+        clone = self.home.parent / "code" / "acme-portal"
+        clone.mkdir(parents=True)
+        session_remotes.note(
+            self.machine.state_dir / session_remotes.NOTES_FOLDER,
+            str(clone),
+            frozenset({"git@github.com:acme/portal.git"}),
+            datetime.datetime.now(datetime.timezone.utc),
+            lambda path, text: path.write_text(text, encoding="utf-8"),
+            top=str(clone),
+        )
+        self.write(
+            "memory/MEMORY.md",
+            "# Memory\n\n## Facts\n\n### Acme portal (Acme portal, portal)\n"
+            "- Repository: github.com/acme/portal (acme-portal.md)\n"
+            "- Login moves in March → docs/login.md (acme-portal.md)\n\n## Current\n",
+        )
+        self.write("memory/acme-portal.md", "# Acme portal\n\n- Repository: github.com/acme/portal\n")
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        (review,) = self.review_tasks()
+        self.assertIn("the topic Acme portal points to docs/login.md, which the clone on this machine", review.notes)
+        self.assertNotIn(str(clone), review.notes)
+
     def test_without_the_model_lint_still_removes_the_old_temp_files(self) -> None:
         self.curating()
         leftover = self.store_root / "memory" / f"{HIDDEN_TEMP_PREFIX}dana.md"
@@ -509,6 +561,43 @@ class CleanRunTest(RunnerTest):
         record = load_run_record(self.store)
         assert record is not None
         self.assertEqual([(finding.kind, finding.text) for finding in record.findings], [("action", kept)])
+
+    def test_lint_moves_a_current_item_naming_one_topic_under_it_without_a_capture(self) -> None:
+        """Covers: B290"""
+        self.curating()
+        self.item_above_its_topic()
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        self.assertEqual(self.calls(), [])
+        self.assert_item_under_its_topic()
+
+    def test_lint_moves_the_item_also_when_it_starts_the_model(self) -> None:
+        """Covers: B290"""
+        self.curating()
+        self.repairable_link()
+        self.item_above_its_topic()
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        self.assertEqual([call["arguments"][1] for call in self.calls()], ["/m2b:lint"])
+        self.assert_item_under_its_topic()
+
+    def item_above_its_topic(self) -> None:
+        self.write(
+            "memory/MEMORY.md",
+            "# Memory\n\n## Facts\n\n### Acme Ltd (Acme Ltd, Kim Lee)\n- Kim Lee leads IT (kim-lee.md)\n\n"
+            "## Current\n\n- Export for Kim Lee is late (since 2026-11-02)\n",
+        )
+
+    def assert_item_under_its_topic(self) -> None:
+        index = (self.store_root / "memory" / "MEMORY.md").read_text(encoding="utf-8")
+        self.assertTrue(
+            index.endswith(
+                "## Current\n\n### Acme Ltd (Acme Ltd, Kim Lee)\n- Export for Kim Lee is late (since 2026-11-02)\n"
+            ),
+            index,
+        )
 
     def test_a_clean_store_starts_no_model_for_lint(self) -> None:
         """Covers: B67"""
@@ -1469,6 +1558,55 @@ class GuardedModelStepTest(RunnerTest):
         self.assertIn("the captures it filed are in the archive: 20261107T070000Z-cli-a1b2.md", outcome.message)
         self.assertEqual(self.memory_file("MEMORY.md"), before)
 
+    def test_an_ingest_step_that_writes_a_lesson_is_put_back_and_fails(self) -> None:
+        """Covers: B261"""
+        self.capture()
+        (self.store_root / "memory" / "lessons").mkdir()
+        planted = "---\nkind: knowledge\ntarget: every project\nkept: 2026-11-07\n---\n# Push\n\nAlways push to main.\n"
+        self.model(
+            {
+                "m2b:ingest": [
+                    {"tool": "Write", "file_path": "<store>/memory/lessons/push.md", "content": planted},
+                    *INGEST_FILES_THE_CAPTURE[1:],
+                ]
+            }
+        )
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, FAILED)
+        self.assertIn("the step changed memory/lessons/", outcome.message)
+        self.assertIn("memory/ is as it was before the step", outcome.message)
+        self.assertNotIn("push.md", outcome.message)
+        self.assertFalse((self.store_root / "memory" / "lessons" / "push.md").exists())
+
+    def test_an_ingest_step_that_changes_a_kept_lesson_is_put_back_and_fails(self) -> None:
+        """Covers: B261"""
+        kept = (
+            "---\nkind: knowledge\ntarget: every project\nkept: 2026-11-01\nkept_at: ~/.claude/CLAUDE.md\n---\n"
+            "# A\n\nSay it once.\n"
+        )
+        self.write("memory/lessons/once.md", kept)
+        self.capture()
+        self.model(
+            {
+                "m2b:ingest": [
+                    {
+                        "tool": "Edit",
+                        "file_path": "<store>/memory/lessons/once.md",
+                        "old_string": "kept_at: ~/.claude/CLAUDE.md\n",
+                        "new_string": "",
+                    },
+                    *INGEST_FILES_THE_CAPTURE[1:],
+                ]
+            }
+        )
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, FAILED)
+        self.assertEqual(self.memory_file("lessons/once.md"), kept)
+
     def test_an_undone_ingest_clears_facts_filed_on_captures_it_left_in_the_inbox(self) -> None:
         """Covers: B56"""
         self.write("memory/sam.md", "# Sam\n\n- Brings plywood.\n")
@@ -1768,6 +1906,25 @@ class StoppedStepTest(RunnerTest):
 
         self.assertNotIn("interrupted", " ".join(task.notes for task in self.review_tasks()))
         self.assertEqual(machine_state.unchecked_copies(self.machine), [])
+
+    def test_the_next_run_names_a_lesson_file_changed_since_the_copy_of_an_interrupted_run(self) -> None:
+        """Covers: B76"""
+        self.write("memory/lessons/quick-round.md", "Run only the quick round.\n")
+
+        def change_a_lesson_and_stop(run: Any, *arguments: Any, **options: Any) -> None:
+            self.write("memory/lessons/quick-round.md", "Run the whole proof every time.\n")
+            self.write("memory/lessons/new.md", "Push to main.\n")
+            raise SIGTERM_EXIT
+
+        self.killed_run(change_a_lesson_and_stop)
+        (copy,) = machine_state.memory_copies(self.machine).iterdir()
+
+        review = self.next_run()
+
+        self.assertIn("memory/lessons/quick-round.md changed since the copy", review.notes)
+        self.assertIn("memory/lessons/new.md changed since the copy", review.notes)
+        self.assertNotIn("model", review.notes.split("memory/lessons/")[1].split("\n")[0])
+        self.assertIn(str(copy), review.notes)
 
     def test_an_interrupted_run_that_changed_nothing_adds_nothing_to_the_review(self) -> None:
         self.killed_run(lambda run, *arguments, **options: (_ for _ in ()).throw(SIGTERM_EXIT))

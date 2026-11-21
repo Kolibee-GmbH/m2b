@@ -26,6 +26,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
+from m2b import lessons
 from m2b.atomic_file import HIDDEN_TEMP_PREFIX
 from m2b.curate.report import ACTION, INFO
 from m2b.notes import frontmatter as keys
@@ -35,7 +36,9 @@ from m2b.notes.layout import CORPUS, INBOX, MEMORY, MEMORY_INDEX, TASKS, is_jour
 from m2b.notes.memory_index import MAX_TOPIC_NAME, MemoryIndex, Topic, is_day, split_topics
 from m2b.notes.names import NoteName
 from m2b.prompt_hook import MAX_ADDED_BYTES
-from m2b.store.base import ConflictCopy, Scan, Store, StoreError, SymlinkError, fetch_command
+from m2b.repository_places import POINTER_LINE, REPOSITORY_LINE, clone_here, with_places
+from m2b.session_remotes import KEEP_FOR, NotedFolder, address_of, noted_folders
+from m2b.store.base import ConflictCopy, EvictedFileError, Scan, Store, StoreError, SymlinkError, fetch_command
 from m2b.tasks import markers
 from m2b.tasks.base import Tasks, TasksError
 from m2b.topic_match import MIN_WORD_CHARACTERS
@@ -54,6 +57,9 @@ TEXT_EXTENSIONS = frozenset({".md", ".markdown", ".txt"})
 EVICTED_EXAMPLES = 3
 
 BROKEN_LINK = "broken-link"
+POINTER_MISSING = "pointer-missing"
+POINTER_PATH = "pointer-path"
+PROJECT_UNSEEN = "project-unseen"
 _LINK = re.compile(r"\[\[([^\[\]\n]+)\]\]")
 EARLIER_HEADING = "## Earlier"
 # A value a fact had before a capture changed it: the old statement and the last day it held.
@@ -80,6 +86,15 @@ class LintReport:
         self.findings.append(Finding(code, kind, path, text, link, candidates))
 
 
+@dataclass(frozen=True)
+class _Machine:
+    """What this machine knows of the clones of a project: the notes the session start writes."""
+
+    folders: list[NotedFolder]
+    notes: Path
+    now: datetime.datetime
+
+
 @dataclass
 class _Corpus:
     files: list[str]
@@ -96,8 +111,16 @@ class _Corpus:
         return any(expected == entry or expected.startswith(entry + "/") for entry in self.evicted)
 
 
-def scan(store: Store, tasks: Tasks | None = None) -> LintReport:
+def scan(
+    store: Store, tasks: Tasks | None = None, notes: Path | None = None, now: datetime.datetime | None = None
+) -> LintReport:
+    """``notes`` are this machine's notes of the remotes of the folders sessions started in; with
+    them the project topics are checked against the clones on this machine (B254 to B256), and
+    without them they are not."""
     report = LintReport()
+    machine = None
+    if notes is not None:
+        machine = _Machine(noted_folders(notes), notes, now or datetime.datetime.now(datetime.timezone.utc))
     corpus_scan = store.scan(CORPUS)
     memory_scan = store.scan(MEMORY)
     corpus = _Corpus(corpus_scan.files, corpus_scan.evicted, {PurePosixPath(path).name for path in corpus_scan.files})
@@ -105,7 +128,7 @@ def scan(store: Store, tasks: Tasks | None = None) -> LintReport:
         _evicted(report, folder, evicted)
     _symlinks(store, report)
     _corpus(store, report, corpus)
-    _memory(store, report, memory_scan, corpus)
+    _memory(store, report, memory_scan, corpus, machine)
     if tasks is not None:
         _tasks(store, report, tasks, corpus)
     return report
@@ -249,7 +272,7 @@ def _bundle(
         report.add("orphaned-member", ACTION, relative, f"{relative} has no sidecar note next to it")
 
 
-def _memory(store: Store, report: LintReport, memory: Scan, corpus: _Corpus) -> None:
+def _memory(store: Store, report: LintReport, memory: Scan, corpus: _Corpus, machine: _Machine | None) -> None:
     files, evicted = memory.files, memory.evicted
     index_path = f"{MEMORY}/{MEMORY_INDEX}"
     fact_files = [
@@ -262,7 +285,8 @@ def _memory(store: Store, report: LintReport, memory: Scan, corpus: _Corpus) -> 
     # An evicted entry and a symlink each have a finding of their own; the name is neither missing nor checked.
     not_read = [*evicted, *memory.symlinks]
     if not any(index_path == entry or index_path.startswith(entry + "/") for entry in not_read):
-        _index(store, report, index_path, files, fact_files, {PurePosixPath(link).name for link in memory.symlinks})
+        symlink_names = {PurePosixPath(link).name for link in memory.symlinks}
+        _index(store, report, index_path, files, fact_files, symlink_names, machine)
     for relative in files:
         if relative.endswith(NOTE_EXTENSION):
             text = _links(store, report, relative, corpus)
@@ -272,13 +296,27 @@ def _memory(store: Store, report: LintReport, memory: Scan, corpus: _Corpus) -> 
 
 
 def _index(
-    store: Store, report: LintReport, index_path: str, files: list[str], fact_files: list[str], symlink_names: set[str]
+    store: Store,
+    report: LintReport,
+    index_path: str,
+    files: list[str],
+    fact_files: list[str],
+    symlink_names: set[str],
+    machine: _Machine | None,
 ) -> None:
     if index_path not in files:
         report.add("no-distillate", ACTION, index_path, f"{index_path} is missing; every session starts without it")
     else:
         text = store.read_bytes(index_path).decode("utf-8", errors="replace")
-        _sizes(report, index_path, text)
+        try:
+            lessons_bytes = len(lessons.block(lessons.read_all(store)).encode("utf-8"))
+        except EvictedFileError:
+            # The lesson is listed among the evicted files with the command that fetches it; the
+            # distillate's own size is checked without the block.
+            lessons_bytes = 0
+        _sizes(report, index_path, text, machine, lessons_bytes)
+        if machine is not None:
+            _projects(report, index_path, text, machine)
         index = MemoryIndex.parse(text)
         for heading in index.unparsed_topic_headings:
             report.add(
@@ -304,19 +342,38 @@ def _index(
                 report.add("unindexed-fact", ACTION, relative, f"{relative} has no facts line in {index_path}")
 
 
-def _sizes(report: LintReport, index_path: str, text: str) -> None:
+def _start_bytes(distillate: str) -> int:
+    """The distillate's part every session starts with, as lint measures it against
+    ``DISTILLATE_TARGET_BYTES``: its general part with the names of its topics."""
+    split = split_topics(distillate)
+    return len((split.general + ", ".join(block.topic.name for block in split.blocks)).encode("utf-8"))
+
+
+def _sizes(report: LintReport, index_path: str, text: str, machine: _Machine | None, lessons_bytes: int = 0) -> None:
     """Each view against the target: what every session starts with, and each topic on its own.
 
     A topic larger than a prompt brings is an action, not a size to aim below: the prompt hook adds
     whole topics only, so no prompt that names such a topic adds its facts, and no session says so.
+    A project topic is measured with the line that says where its repository lies on this machine.
+    The lessons every session starts with count into that part, and a finding names both sizes (B260).
     """
     split = split_topics(text)
-    start = len((split.general + ", ".join(block.topic.name for block in split.blocks)).encode("utf-8"))
-    views = [("the part every session starts with", start)]
+    start = _start_bytes(text)
+    if lessons_bytes and start + lessons_bytes > DISTILLATE_TARGET_BYTES:
+        report.add(
+            "distillate-size",
+            INFO,
+            index_path,
+            f"in {index_path}, the part every session starts with is {start + lessons_bytes} bytes, {start} of the "
+            f"distillate and {lessons_bytes} of the lessons in {lessons.FOLDER}/, over its 2 KB target",
+        )
+    views = [] if lessons_bytes else [("the part every session starts with", start)]
     for block in split.blocks:
         size = len(block.text.encode("utf-8"))
         # The prompt hook measures a topic as it goes to the model, without the characters that draw nothing.
-        brought = len(without_hidden(block.text).encode("utf-8"))
+        # Cleaned first, as the prompt hook cleans the distillate before it places a topic.
+        shown = block.text if machine is None else with_places(without_hidden(block.text), machine.notes)
+        brought = len(without_hidden(shown).encode("utf-8"))
         if brought > MAX_ADDED_BYTES:
             report.add(
                 "topic-size",
@@ -333,6 +390,57 @@ def _sizes(report: LintReport, index_path: str, text: str) -> None:
             report.add(
                 "distillate-size", INFO, index_path, f"in {index_path}, {view} is {size} bytes, over its 2 KB target"
             )
+
+
+def _projects(report: LintReport, index_path: str, text: str, machine: _Machine) -> None:
+    """A project topic against this machine (B255, B256): a repository no folder here has had for
+    ``KEEP_FOR``, and, where the clone is here, each pointer whose file it does not hold. A finding
+    names the topic and the path in the repository, never a folder of this machine: it goes into the
+    run's review, which is in the store."""
+    seen_since = machine.now - KEEP_FOR
+    for block in split_topics(without_hidden(text)).blocks:
+        lines = block.text.split("\n")
+        addresses = [address_of(found.group("address")) for found in map(REPOSITORY_LINE.match, lines) if found]
+        if not addresses:
+            continue
+        name = block.topic.name
+        for address in addresses:
+            noted = [folder for folder in machine.folders if address in {address_of(r) for r in folder.remotes}]
+            if not any(folder.noted >= seen_since for folder in noted):
+                report.add(
+                    PROJECT_UNSEEN,
+                    INFO,
+                    index_path,
+                    f"in {index_path}, the topic {name} names the repository {address}, which no folder on this "
+                    f"machine has had for {KEEP_FOR.days} days",
+                )
+        clone = next((top for top in (clone_here(a, machine.folders) for a in addresses) if top is not None), None)
+        for found in filter(None, map(POINTER_LINE.match, lines)):
+            path = found.group("path").strip()
+            parts = PurePosixPath(path).parts
+            if path.startswith("/") or ".." in parts or not parts:
+                report.add(
+                    POINTER_PATH,
+                    ACTION,
+                    index_path,
+                    f"in {index_path}, the topic {name} points to {path}, which is no path in its repository",
+                )
+            elif clone is not None and not _exists(Path(clone) / path):
+                report.add(
+                    POINTER_MISSING,
+                    ACTION,
+                    index_path,
+                    f"in {index_path}, the topic {name} points to {path}, which the clone on this machine does not "
+                    "hold; change the line or remove it",
+                )
+
+
+def _exists(path: Path) -> bool:
+    """A file that cannot be looked at counts as there: lint reports only what it can show."""
+    try:
+        return path.exists()
+    except (OSError, ValueError):
+        return True
 
 
 def _topic_problem(topic: Topic) -> str | None:

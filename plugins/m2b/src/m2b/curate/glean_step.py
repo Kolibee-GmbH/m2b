@@ -26,6 +26,17 @@ per kind, what was added and what stood on no words of the person. The counts go
 information, never into the review: nothing here asks the person to act. What the reader left out of
 the sessions it read is among them, so a day's reading shows what it did not take.
 
+Before the reading, ``recheck_lessons`` asks whether a file every session loads now states a lesson
+of the block (``lesson_recheck``); a model is asked only when the lessons or those files changed.
+
+The model is also shown the lessons the person kept and asked which prompts correct Claude on one
+of them again; code keeps such a correction only where its words stand in what was typed on the
+day after the lesson was kept, and counts it under the lesson (``lesson_counts``).
+
+A repository the person typed in on two days, in this reading or remembered from one before, and
+that no topic names, is proposed as a project by code (``project_proposals``), with no model and
+no words of the person; the days are remembered in machine state once the reading is saved.
+
 When anything fails, the transcripts that cannot be looked at, a model without an answer, an
 answer that cannot be read, nothing is saved and ``read_until`` stays, so the next run reads the
 period again. A period in which nothing carries Claude Code's mark of who sent it fails the same
@@ -44,13 +55,32 @@ import re
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
-from m2b import claude_code, folders_left_out, glean, proposals, sessions
+from m2b import (
+    claude_code,
+    fixes,
+    folders_left_out,
+    glean,
+    kept_lessons,
+    lesson_counts,
+    lesson_recheck,
+    lesson_sources,
+    lessons,
+    project_capture,
+    project_files,
+    project_proposals,
+    proposals,
+    session_remotes,
+    sessions,
+)
+from m2b.candidates import same_text
+from m2b.config.errors import ConfigError
 from m2b.config.machine import MachineConfig
 from m2b.curate import model, period_captures
 from m2b.notes.layout import MEMORY, MEMORY_INDEX
 from m2b.paths import MachinePaths
-from m2b.store.base import Store
+from m2b.store.base import Store, StoreError
 
 FIRST_PERIOD = datetime.timedelta(hours=24)
 LONGEST_PERIOD = datetime.timedelta(days=7)
@@ -70,6 +100,34 @@ class Reading:
 
     skipped: str | None
     notes: tuple[str, ...]
+
+
+def recheck_lessons(
+    store: Store,
+    config: MachineConfig,
+    machine: MachinePaths,
+    environ: Mapping[str, str],
+    pass_fds: Sequence[int] = (),
+) -> list[str]:
+    """Whether a file every session loads now states a lesson of the block (``lesson_recheck``), as
+    the run's information. Whatever keeps it from an answer is said, and the reading goes on: the
+    lessons then stay in the block, as before."""
+
+    def ask(instruction: str, text: str) -> str:
+        run = model.text_step(config, machine, environ, instruction, text, pass_fds)
+        if run.answer is None:
+            raise lesson_recheck.RecheckError(run.failure())
+        return run.answer
+
+    try:
+        result = lesson_recheck.recheck(store, environ, machine.state_dir, ask)
+    # ``ValueError`` too: a lesson's frontmatter that cannot take the field must not cost the reading.
+    except (lesson_recheck.RecheckError, StoreError, OSError, ValueError) as error:
+        return [f"the kept lessons were not checked again against the files every session loads: {error}"]
+    return [
+        f"the lesson {name} is stated in {stated_in} now and left the block, kept at its source"
+        for name, stated_in in result.kept_at_source
+    ]
 
 
 def propose(
@@ -113,6 +171,9 @@ def propose(
     if not read:
         proposals.save(store, dataclasses.replace(kept, read_until=started))
         return Reading(f"no session since {start.strftime(_MOMENT)} has a prompt of yours", tuple(notes))
+    notes_folder = machine.state_dir / session_remotes.NOTES_FOLDER
+    projects = _projects_of(read, store, notes_folder, started)
+    read = project_files.shown(read, projects)
     captures = period_captures.captures_since(store, start, started)
     examples = proposals.examples(kept, started)
     if examples != glean.NO_EXAMPLES:
@@ -126,21 +187,78 @@ def propose(
     pasted = sum(len(prompt.pasted) for session in read for prompt in session.prompts)
     if pasted:
         notes.append(f"{_count(pasted, 'pasted text')} {_were(pasted)} read with the prompts they stand in")
-    given = glean.step_input(read, _distillate(store), zone, examples, waiting)
+    standing = lessons.read_all(store)
+    as_fixes = _kept_as_fixes(store)
+    shown_lessons = [
+        *(glean.ShownLesson(lesson.name, lesson.text, lesson.kept) for lesson in standing),
+        *(as_fixes or ()),
+    ]
+    given = glean.step_input(read, _distillate(store), zone, examples, waiting, shown_lessons)
     run = model.text_step(config, machine, environ, glean.instruction(), given, pass_fds)
     if run.answer is None:
         raise GleanStepError(run.failure())
     answer = glean.parse_answer(run.answer, read)
     checked = glean.check(answer.proposals, read, captures.texts)
-    said = [
-        proposals.Said(proposal, typed_at.astimezone(zone).date())
-        for proposal, typed_at in zip(checked.kept, checked.kept_at)
-    ]
+    placed, without_repository = _for_their_project(checked, read, notes_folder, started)
+    placed = project_files.pointed(placed, read, projects)
+    placed, not_keepable, known = _new_lessons(placed, standing, zone)
+    placed, unchecked = _at_their_sources(
+        placed, read, config, machine, environ, notes_folder, started, pass_fds, kept.entries
+    )
+    # Before the weakest lesson is chosen, so this reading's corrections count in that choice.
+    corrections = glean.checked_corrections(answer.corrections, read, shown_lessons, zone)
+    try:
+        if as_fixes is None:
+            # The counts are written with the lessons that stand, so a fix not known now would lose its own.
+            raise StoreError("the fixes kept from lessons could not be read")
+        again = lesson_counts.add(
+            store, corrections, {lesson.name: lesson.kept for lesson in shown_lessons}, started.astimezone(zone).date()
+        )
+    # A counter must not cost the reading its proposals: whatever keeps the file from being read or
+    # written is said, and the reading goes on.
+    except (lesson_counts.LessonCountsError, ConfigError, StoreError) as error:
+        notes.append(f"the corrections of kept lessons were not counted: {error}")
+    else:
+        if again:
+            notes.append(f"{_count(again, 'correction')} of a kept lesson counted: Claude was corrected on it again")
+    placed = _within_the_start(placed, standing, store, kept.entries)
+    said = [proposals.Said(proposal, typed_at.astimezone(zone).date()) for proposal, typed_at in placed]
+    repositories = {
+        session.folder: tuple(sorted(_addresses(notes_folder, session.folder, started))) for session in read
+    }
+    worked = project_proposals.joined(
+        project_proposals.remembered(machine.state_dir, started.astimezone(zone).date()),
+        project_proposals.days_worked(read, repositories, zone),
+    )
+    said += project_proposals.proposed(store, worked)
     added = proposals.add(kept, said, started)
     counted = added.proposals
+    # Only what this reading added: a project that waits or was answered stays a candidate while
+    # its days are remembered, and ``add`` refuses it again.
+    new_projects = sum(entry.kind == glean.PROJECT for key, entry in counted.entries.items() if key not in kept.entries)
+    if new_projects:
+        notes.append(
+            f"{new_projects} {'repository' if new_projects == 1 else 'repositories'} without a topic "
+            f"{_were(new_projects)} worked in on two days and proposed as a project"
+        )
     for refused in checked.not_quoted:
         counted = proposals.counted(counted, refused.kind, "not_quoted")
+    if not_keepable:
+        counted = proposals.counted(counted, glean.LESSON, "not_quoted", not_keepable)
+        notes.append(f"{_count(not_keepable, 'lesson')} left out: not in the form a lesson is kept in")
+    if known:
+        notes.append(f"{_count(known, 'lesson')} left out: a lesson like it is kept already")
+    if unchecked.count:
+        counted = proposals.counted(counted, glean.LESSON, "not_quoted", unchecked.count)
+        notes.append(f"{_count(unchecked.count, 'lesson')} left out: {unchecked.why}")
+    if without_repository:
+        counted = proposals.counted(counted, glean.LESSON, "not_quoted", without_repository)
+        notes.append(
+            f"{_count(without_repository, 'lesson')} for one project left out: "
+            "no repository is known that both its sessions worked in"
+        )
     proposals.save(store, dataclasses.replace(counted, read_until=started))
+    project_proposals.remember(machine.state_dir, worked, machine.temp_dir)
     sent = sum(len(session.prompts) for session in read)
     summary = (
         f"read {_count(len(read), 'session')} with {_count(sent, 'prompt')} since {start.strftime(_MOMENT)}: "
@@ -150,6 +268,257 @@ def propose(
         f"{len(checked.already_captured)} captured already, {answer.malformed} not in the form"
     )
     return Reading(None, (summary, *notes, *period_captures.capture_notes(captures)))
+
+
+def _for_their_project(
+    checked: glean.Checked, read: Sequence[sessions.Session], notes: Path, now: datetime.datetime
+) -> tuple[list[tuple[glean.Proposal, datetime.datetime]], int]:
+    """The kept proposals with when their words were typed, each lesson for one project named by the
+    address of the repository both its sessions worked in, and how many such lessons have none.
+
+    The address comes from the remotes the session start noted for each session's folder; a lesson
+    for one project is kept only where both folders name the same repository, so it reaches the
+    sessions of that repository on every machine.
+    """
+    folders = {session.session_id: session.folder for session in read}
+    placed: list[tuple[glean.Proposal, datetime.datetime]] = []
+    without = 0
+    for proposal, typed_at in zip(checked.kept, checked.kept_at):
+        lesson = proposal.lesson
+        if lesson is None or lesson.target != lessons.THIS_PROJECT:
+            placed.append((proposal, typed_at))
+            continue
+        first, second = (_addresses(notes, folders.get(key, ""), now) for key in (proposal.session, lesson.session))
+        common = sorted(first & second)
+        if not common:
+            without += 1
+            continue
+        placed.append((dataclasses.replace(proposal, lesson=dataclasses.replace(lesson, target=common[0])), typed_at))
+    return placed, without
+
+
+def _projects_of(
+    read: Sequence[sessions.Session], store: Store, notes: Path, now: datetime.datetime
+) -> dict[str, project_files.Project]:
+    """The project of each session's folder that wrote a file: the topic whose ``Repository:`` line
+    names one of the addresses the session start noted for the folder, with the repository's folder,
+    the one the session start noted, else the one the file system shows."""
+    # A note without the repository's folder gives the folder itself as its top: that is no answer.
+    tops = {noted.folder: noted.top for noted in session_remotes.noted_folders(notes) if noted.top != noted.folder}
+    projects: dict[str, project_files.Project] = {}
+    for session in read:
+        if not session.written or session.folder in projects:
+            continue
+        addresses = tuple(sorted(_addresses(notes, session.folder, now)))
+        topic = project_capture.known_as(store, addresses) if addresses else None
+        if topic is None:
+            continue
+        top = tops.get(session.folder) or str(session_remotes.repository_top(Path(session.folder)) or session.folder)
+        projects[session.folder] = project_files.Project(topic, top, addresses)
+    return projects
+
+
+@dataclass(frozen=True)
+class _Unchecked:
+    count: int = 0
+    why: str = ""
+
+
+def _at_their_sources(
+    placed: Sequence[tuple[glean.Proposal, datetime.datetime]],
+    read: Sequence[sessions.Session],
+    config: MachineConfig,
+    machine: MachinePaths,
+    environ: Mapping[str, str],
+    notes: Path,
+    now: datetime.datetime,
+    pass_fds: Sequence[int],
+    known: Mapping[str, proposals.Entry],
+) -> tuple[list[tuple[glean.Proposal, datetime.datetime]], _Unchecked]:
+    """The proposals, each lesson with what the files its sessions load say of it (``lesson_sources``).
+
+    Asked only when there is a lesson. Where the model gives no answer that can be read, the lessons
+    are left out with the reason: proposed unchecked, one might stand beside a source that says it.
+    """
+    # A lesson that waits under its id or its text already is refused when it is added: no model
+    # run is spent on its sources.
+    found = [
+        proposal
+        for proposal, _ in placed
+        if proposal.lesson is not None
+        and proposals.proposal_id(proposal) not in known
+        and not any(same_text(entry.text, proposal.text) for entry in known.values())
+    ]
+    if not found:
+        return list(placed), _Unchecked()
+    folders = {session.session_id: session.folder for session in read}
+    wanted: list[lesson_sources.Folder] = []
+    for proposal in found:
+        assert proposal.lesson is not None
+        for key in (proposal.session, proposal.lesson.session):
+            folder = folders.get(key, "")
+            if folder and all(each.path != folder for each in wanted):
+                wanted.append(lesson_sources.Folder(folder, tuple(sorted(_addresses(notes, folder, now)))))
+    sources = lesson_sources.sources_for(wanted, environ)
+    their_folders = [[folders.get(proposal.session, ""), folders.get(_second(proposal), "")] for proposal in found]
+    loaded = [sources.of(each) for each in their_folders]
+    complete = [not any(folder in sources.incomplete for folder in each) for each in their_folders]
+    given = lesson_sources.step_input(found, sources.sources, loaded)
+    run = model.text_step(config, machine, environ, lesson_sources.instruction(), given, pass_fds)
+    if run.answer is None:
+        return _without_lessons(placed), _Unchecked(len(found), f"their sources could not be checked ({run.failure()})")
+    try:
+        verdicts = lesson_sources.apply(run.answer, found, sources.sources, loaded, complete)
+    except lesson_sources.LessonSourcesError as error:
+        return _without_lessons(placed), _Unchecked(len(found), f"their sources could not be checked ({error})")
+    checked = {(proposal.session, proposal.quote): proposal for proposal in verdicts.kept}
+    kept = [
+        (checked.get((proposal.session, proposal.quote), proposal), typed_at)
+        for proposal, typed_at in placed
+        if proposal.lesson is None or (proposal.session, proposal.quote) in checked
+    ]
+    why = "what their sources say could not be used"
+    if sources.not_shown:
+        why += f" (not shown to the model: {', '.join(sources.not_shown)})"
+    return kept, _Unchecked(verdicts.left_out, why)
+
+
+def _second(proposal: glean.Proposal) -> str:
+    return proposal.lesson.session if proposal.lesson else ""
+
+
+def _without_lessons(
+    placed: Sequence[tuple[glean.Proposal, datetime.datetime]],
+) -> list[tuple[glean.Proposal, datetime.datetime]]:
+    return [(proposal, typed_at) for proposal, typed_at in placed if proposal.lesson is None]
+
+
+def _new_lessons(
+    placed: Sequence[tuple[glean.Proposal, datetime.datetime]],
+    standing: Sequence[lessons.Lesson],
+    zone: datetime.tzinfo,
+) -> tuple[list[tuple[glean.Proposal, datetime.datetime]], int, int]:
+    """The proposals without the lessons that could never be kept and those kept already, and the
+    number of each left out.
+
+    A lesson is kept the way one kept by hand is (``kept_lessons.checked``); one it refuses would
+    wait with its answer on every run, so it is not proposed. A knowledge lesson for one project is
+    the one refusal that stays: it is kept as a fix of that project's CLAUDE.md. A lesson is known
+    when one of the same kind and target stands with the same words, or, for knowledge, the same text.
+    """
+    kept: list[tuple[glean.Proposal, datetime.datetime]] = []
+    not_keepable = known = 0
+    for proposal, typed_at in placed:
+        lesson = proposal.lesson
+        if lesson is None:
+            kept.append((proposal, typed_at))
+            continue
+        day = typed_at.astimezone(zone).date().isoformat()
+        given = kept_lessons.KeptLesson(
+            proposal.text[:60], proposal.text, lesson.kind, lesson.target, day, lesson.words
+        )
+        try:
+            kept_lessons.checked(given)
+        except kept_lessons.LessonRefusedError:
+            if lesson.kind != lessons.KNOWLEDGE or lesson.target == lessons.EVERY_PROJECT:
+                not_keepable += 1
+                continue
+        if any(_same_lesson(proposal, lesson, other) for other in standing):
+            known += 1
+            continue
+        kept.append((proposal, typed_at))
+    return kept, not_keepable, known
+
+
+def _kept_as_fixes(store: Store) -> list[glean.ShownLesson] | None:
+    """The lessons kept as fixes of their source, by the fix's name, so their corrections go on being
+    counted (B289); None where the fixes cannot be read: the reading goes on and counts nothing."""
+    try:
+        found = fixes.kept_from_lessons(store)
+    except (StoreError, OSError):
+        return None
+    return [glean.ShownLesson(fix.name, fix.lesson, fix.kept) for fix in found if fix.lesson is not None]
+
+
+def _within_the_start(
+    placed: Sequence[tuple[glean.Proposal, datetime.datetime]],
+    standing: Sequence[lessons.Lesson],
+    store: Store,
+    known: Mapping[str, proposals.Entry],
+) -> list[tuple[glean.Proposal, datetime.datetime]]:
+    """The proposals, each new lesson for every session's start with the kept lesson it would
+    replace where the block of lessons, with the new ones, would pass its own limit
+    (``lessons.MAX_BLOCK_CHARACTERS``) and leave a lesson out. The block is an output of its own
+    beside the distillate, so how long the distillate is has no say in it.
+
+    The lesson replaced is the weakest of those every session starts with: the one corrected again
+    most often since it was kept, then the oldest; each is named for one new lesson at most, also
+    across readings: one a waiting proposal names already is not named again. Where no kept lesson
+    is left to name, the new one is proposed alone. A proposal like one that waits, is answered or
+    expired is no new lesson: it would not be added.
+    """
+    named = {entry.lesson.replaces for entry in known.values() if entry.state == proposals.OPEN and entry.lesson}
+    new = [proposal for proposal, _ in placed if _goes_into_the_start(proposal) and not _is_known(proposal, known)]
+    if not new:
+        return list(placed)
+    # A new lesson is kept after every standing one, so it comes last in the block.
+    with_new = [
+        *standing,
+        *(lessons.Lesson("", proposal.text, lessons.KNOWLEDGE, lessons.EVERY_PROJECT, "") for proposal in new),
+    ]
+    _, left_out = lessons.fitting(with_new)
+    if not left_out:
+        return list(placed)
+    try:
+        again = lesson_counts.corrected_again(store, {lesson.name: lesson.kept for lesson in standing})
+    except (lesson_counts.LessonCountsError, ConfigError, StoreError):
+        again = {}
+    weakest = iter(
+        sorted(
+            (lesson for lesson in standing if lesson.in_the_block and lesson.name not in named),
+            key=lambda lesson: (-again.get(lesson.name, 0), lesson.kept, lesson.name),
+        )
+    )
+    result: list[tuple[glean.Proposal, datetime.datetime]] = []
+    for proposal, typed_at in placed:
+        replaced = next(weakest, None) if any(proposal is each for each in new) else None
+        if replaced is not None and proposal.lesson is not None:
+            proposal = dataclasses.replace(
+                proposal, lesson=dataclasses.replace(proposal.lesson, replaces=replaced.name)
+            )
+        result.append((proposal, typed_at))
+    return result
+
+
+def _is_known(proposal: glean.Proposal, known: Mapping[str, proposals.Entry]) -> bool:
+    return proposals.proposal_id(proposal) in known or any(
+        same_text(entry.text, proposal.text) for entry in known.values()
+    )
+
+
+def _goes_into_the_start(proposal: glean.Proposal) -> bool:
+    """A lesson kept as its own text for every session: no fix of a source, no pointer to one."""
+    lesson = proposal.lesson
+    return (
+        lesson is not None
+        and lesson.kind == lessons.KNOWLEDGE
+        and lesson.target == lessons.EVERY_PROJECT
+        and lesson.at_source is None
+    )
+
+
+def _same_lesson(proposal: glean.Proposal, lesson: glean.LessonPart, other: lessons.Lesson) -> bool:
+    if (other.kind, other.target) != (lesson.kind, lesson.target):
+        return False
+    if lesson.kind == lessons.ACTION:
+        return set(other.words) == set(lesson.words)
+    return same_text(other.text, proposal.text)
+
+
+def _addresses(notes: Path, folder: str, now: datetime.datetime) -> frozenset[str]:
+    remotes = session_remotes.noted(notes, folder, now) if folder else None
+    # Only addresses with a host: a local path would name a folder of this machine in a proposal.
+    return frozenset(session_remotes.hosted_addresses(remotes or ()))
 
 
 def _nothing_marked(found: Sequence[sessions.Session]) -> int:
