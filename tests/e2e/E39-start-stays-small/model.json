@@ -1,0 +1,55 @@
+{
+  "description": "E39 at the model level, the start stays small: the distillate is over 8 KB and the owner kept a lesson for every project. A real Claude Code session starts and is asked about a fact near the distillate's top; it answers from its start. Its transcript shows what the session-start hooks handed the model: the distillate's output passed whole, its part of the distillate at most 8 KB with the line that the rest is in memory/MEMORY.md, and no lesson in it; the lesson in the second output. Not compared: Claude Code's own memory has no distillate to keep small. Three wordings of the question, one in German; the start is the same for all three.",
+  "wordings": [
+    {
+      "ask": "In which box are the spare tools for the shed?"
+    },
+    {
+      "ask": "In welcher Kiste sind die Ersatzwerkzeuge für den Schuppen?",
+      "language": "de"
+    },
+    {
+      "ask": "Where do I keep the spare tools for the shed?"
+    }
+  ],
+  "steps": [
+    {
+      "run": [
+        "claude",
+        "-p",
+        "{ask}",
+        "--setting-sources",
+        "project",
+        "--plugin-dir",
+        "{core_plugin}",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Skill,mcp__m2b__search",
+        "--max-turns",
+        "3",
+        "--max-budget-usd",
+        "1",
+        "--model",
+        "haiku",
+        "--output-format",
+        "json"
+      ],
+      "cwd": "garden-site",
+      "stdout": "\"result\":\"(?:[^\"\\\\]|\\\\.)*(?:box|Box|Kiste) 1\\b"
+    }
+  ],
+  "invariants": [
+    {
+      "session_start": "/bin/m2b hook distillate$",
+      "matches": "\\n\\[m2b: the distillate was cut to fit the session start; the rest is in memory/MEMORY\\.md\\]$",
+      "lacks": "m2b lessons|A plan is a record",
+      "measure": "\\A[^\\n]*\\n\\n([\\s\\S]*?)\\n\\[m2b: the distillate was cut",
+      "at_most_bytes": 8192
+    },
+    {
+      "session_start": "/bin/m2b hook start-notes$",
+      "matches": "m2b lessons: [^\\n]*\\n- When Alex says plan, Alex means a record under docs/records/"
+    }
+  ]
+}

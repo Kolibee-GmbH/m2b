@@ -1,5 +1,5 @@
 {
-  "description": "E2 restart: every ingest step runs twice, as after a crash right after it; the rerun creates no second task, no second note line and no second corpus file. Then a curation run whose ingest model step crashes halfway (task, ref and note done, the capture not moved) fails and opens the review task; the next run repeats the whole ingest and leaves one task, one ref, one note line and one corpus file, and completes the review.",
+  "description": "E2 restart: every ingest step runs twice, as after a crash right after it; the rerun creates no second task, and a task asked for a capture with a follow-up is that follow-up's task, no second note line and no second corpus file. Then a curation run whose ingest model step crashes halfway (task, ref and note done, the capture not moved) fails and opens the review task; the next run repeats the whole ingest and leaves one task, one ref, one note line and one corpus file, and completes the review.",
   "steps": [
     {
       "run": [

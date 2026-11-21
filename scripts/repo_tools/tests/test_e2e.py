@@ -491,11 +491,99 @@ class InvariantTest(unittest.TestCase):
             self.assertEqual(len(problems), 1)
             self.assertIn("kim.md", problems[0])
 
+    def test_a_saved_value_is_put_in_for_its_name_in_an_invariant(self) -> None:
+        invariant = {"count": 1, "glob": "tasks/*.md", "content": "Call {who}"}
+        self.assertEqual(e2e.check_invariants([invariant], self.FILES, {"who": "Dana"}), [])
+        self.assertEqual(len(e2e.check_invariants([invariant], self.FILES, {"who": "Sam"})), 1)
+
     def test_an_empty_folder_without_its_saved_value_is_a_problem(self) -> None:
         self.assertEqual(len(self.check({"empty_folder": "{auto_memory}"})), 1)
 
     def test_an_unknown_invariant_is_a_problem_not_a_pass(self) -> None:
         self.assertEqual(len(self.check({"whatever": 1})), 1)
+
+
+class FailedStepTest(unittest.TestCase):
+    def test_a_session_whose_answer_does_not_match_is_shown_by_its_answer(self) -> None:
+        output = json.dumps(
+            {"duration_api_ms": 5245, "usage": {"input_tokens": 6}, "result": "It is in ~/code/portal."}
+        )
+        self.assertEqual(e2e._answer_or_start(output), "answer: It is in ~/code/portal.")
+        self.assertEqual(e2e._answer_or_start("plain text"), "plain text")
+        self.assertEqual(e2e._answer_or_start("[1, 2]"), "[1, 2]")
+
+
+class SessionStartInvariantTest(unittest.TestCase):
+    """What a real session start handed the model, read from the outputs its transcript records."""
+
+    DISTILLATE = "m2b distillate header.\n\n# Memory\n- Alex keeps the tools in box 1\n[m2b: cut]"
+    NOTES = "m2b at session start.\n\nm2b lessons: kept\n- A plan is a record."
+
+    def start(self, temp: str, outputs: list[tuple[str, str, str]]) -> dict[str, str]:
+        """A transcript with one SessionStart output per (command, stdout, content); the saved values."""
+        claude_config = Path(temp) / "claude"
+        transcript = claude_config / "projects" / "-work-garden-site" / "0a1b2c3d.jsonl"
+        transcript.parent.mkdir(parents=True)
+        lines = [json.dumps({"type": "queue-operation"})]
+        for command, stdout, content in outputs:
+            attachment = {
+                "type": "hook_success",
+                "hookEvent": "SessionStart",
+                "command": f'"${{CLAUDE_PLUGIN_ROOT}}"/bin/{command}',
+                "stdout": stdout,
+                "content": content,
+            }
+            lines.append(json.dumps({"type": "attachment", "attachment": attachment}))
+        lines.append(json.dumps({"type": "attachment", "attachment": {"type": "date", "content": "x"}}))
+        transcript.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return {"claude_config": str(claude_config)}
+
+    def whole(self, temp: str) -> dict[str, str]:
+        return self.start(
+            temp,
+            [
+                ("m2b hook start-notes", self.NOTES + "\n", self.NOTES),
+                ("m2b hook distillate", self.DISTILLATE + "\n", self.DISTILLATE),
+            ],
+        )
+
+    def test_an_output_that_matches_lacks_and_measures_within_its_bytes_passes(self) -> None:
+        invariant = {
+            "session_start": "hook distillate$",
+            "matches": "box 1",
+            "lacks": "m2b lessons",
+            "measure": "\\n\\n([\\s\\S]*)\\n\\[m2b: cut",
+            "at_most_bytes": 40,
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            self.assertEqual(e2e.check_invariants([invariant], {}, self.whole(temp)), [])
+
+    def test_a_measured_part_over_its_bytes_fails_with_its_size(self) -> None:
+        invariant = {"session_start": "hook distillate$", "measure": "\\n\\n([\\s\\S]*)\\n\\[", "at_most_bytes": 20}
+        with tempfile.TemporaryDirectory() as temp:
+            problems = e2e.check_invariants([invariant], {}, self.whole(temp))
+        self.assertEqual(len(problems), 1)
+        self.assertIn("40 bytes", problems[0])
+
+    def test_text_it_must_lack_or_match_fails_it(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            saved = self.whole(temp)
+            lacking = e2e.check_invariants([{"session_start": "start-notes$", "lacks": "lessons"}], {}, saved)
+            matching = e2e.check_invariants([{"session_start": "start-notes$", "matches": "box 1"}], {}, saved)
+        self.assertEqual((len(lacking), len(matching)), (1, 1))
+
+    def test_an_output_claude_code_did_not_pass_whole_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            saved = self.start(temp, [("m2b hook distillate", self.DISTILLATE + "\n", self.DISTILLATE[:20])])
+            problems = e2e.check_invariants([{"session_start": "hook distillate$"}], {}, saved)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("not whole", problems[0])
+
+    def test_no_such_output_or_no_claude_code_folder_is_a_problem(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            saved = self.whole(temp)
+            self.assertEqual(len(e2e.check_invariants([{"session_start": "hook nudge$"}], {}, saved)), 1)
+        self.assertEqual(len(e2e.check_invariants([{"session_start": "hook distillate$"}], {}, {})), 1)
 
 
 class ModelLevelTest(unittest.TestCase):

@@ -607,15 +607,25 @@ def _run_steps(
             break
         pattern = step.get("stdout")
         if pattern is not None and re.search(pattern, result.stdout) is None:
-            problems.append(
-                f"step {number} {argv[0]}: standard output does not match {pattern!r}; got {shown_out[:400]!r}"
-            )
+            got = _answer_or_start(shown_out)
+            problems.append(f"step {number} {argv[0]}: standard output does not match {pattern!r}; got {got!r}")
             break
         unsaved = _save(step.get("save", {}), result.stdout, saved)
         if unsaved:
             problems.append(f"step {number} {argv[0]}: cannot save {unsaved}; got {shown_out[:400]!r}")
             break
     return problems
+
+
+def _answer_or_start(output: str) -> str:
+    """What a failed step is shown by: the answer of a Claude Code session's JSON output, whose first
+    characters are its usage and cost, or else the start of the output."""
+    try:
+        parsed = json.loads(output)
+    except ValueError:
+        return output[:400]
+    answer = parsed.get("result") if isinstance(parsed, dict) else None
+    return f"answer: {answer[:600]}" if isinstance(answer, str) else output[:400]
 
 
 def _step_folder(step: Mapping[str, Any], work: Path) -> Path | None:
@@ -766,6 +776,8 @@ def check_invariants(
     invariants: Sequence[Mapping[str, Any]], files: Mapping[str, str], saved: Mapping[str, str] | None = None
 ) -> list[str]:
     """What must hold after a model run, whatever the model wrote; one problem per invariant that fails.
+    A value a step saved is put in for its ``{name}`` in every text of an invariant, as in a step's
+    arguments, so an invariant can expect a day a step worked out.
 
     - ``{"count": n, "glob": "...", "content": "<regex>"}``: n visible files match the glob (and the
       regular expression, searched, when given);
@@ -780,13 +792,18 @@ def check_invariants(
     - ``{"sessions_read": [{"prompt": "<regex>", "commands": "<regex>"}, ...]}``: the reading of
       sessions (``m2b.sessions``) finds, in the scenario's Claude Code folder and in this order,
       prompts whose typed text matches each ``prompt``, each with a Bash command of the turn before
-      it that matches ``commands`` when one is given.
+      it that matches ``commands`` when one is given;
+    - ``{"session_start": "<regex>", "matches": ..., "lacks": ..., "measure": "<regex with one
+      group>", "at_most_bytes": n}``: every output of a session-start hook whose command matches, as
+      a session's transcript in the scenario's Claude Code folder records it, reached the model whole,
+      holds ``matches``, not ``lacks``, and the part ``measure`` picks out has at most n bytes.
     """
     problems = []
     for invariant in invariants:
-        problem = _invariant_problem(invariant, files, saved or {})
+        filled = _filled(invariant, saved or {})
+        problem = _invariant_problem(filled, files, saved or {})
         if problem:
-            problems.append(f"invariant {json.dumps(invariant)}: {problem}")
+            problems.append(f"invariant {json.dumps(filled)}: {problem}")
     return problems
 
 
@@ -794,6 +811,8 @@ def _invariant_problem(invariant: Mapping[str, Any], files: Mapping[str, str], s
     def matching(glob: str) -> list[str]:
         return [name for name in sorted(files) if fnmatch.fnmatchcase(name, glob)]
 
+    if "session_start" in invariant:
+        return _session_start_problem(invariant, saved)
     if "count" in invariant or "at_least" in invariant:
         names = matching(invariant["glob"])
         if "content" in invariant:
@@ -847,6 +866,54 @@ def _sessions_read_problem(expected: Sequence[Mapping[str, str]], saved: Mapping
             return f"no prompt like {wanted} after the ones before; read: {read}"
         position += 1
     return None
+
+
+def _session_start_problem(invariant: Mapping[str, Any], saved: Mapping[str, str]) -> str | None:
+    """Each output of a hook command matching ``session_start`` that a session in the scenario's
+    Claude Code folder started with, as its transcript records it: passed to the model whole (Claude
+    Code cuts an output it finds too long), with ``matches`` and without ``lacks``, and the group of
+    ``measure`` at most ``at_most_bytes`` in UTF-8."""
+    claude_config = saved.get("claude_config")
+    if claude_config is None:
+        return "no Claude Code folder of the scenario's own at this level"
+    outputs = [
+        attachment
+        for attachment in _start_outputs(Path(claude_config) / "projects")
+        if re.search(invariant["session_start"], str(attachment.get("command", "")))
+    ]
+    if not outputs:
+        return "no session started with an output of such a hook"
+    for attachment in outputs:
+        content, stdout = str(attachment.get("content", "")), str(attachment.get("stdout", ""))
+        if content != stdout.rstrip("\n"):
+            return f"Claude Code passed the output not whole: {len(content)} of {len(stdout)} characters"
+        if "matches" in invariant and re.search(invariant["matches"], content) is None:
+            return f"{invariant['matches']!r} not found in {content[:300]!r}"
+        if "lacks" in invariant and re.search(invariant["lacks"], content):
+            return f"{invariant['lacks']!r} found in {content[:300]!r}"
+        if "measure" in invariant:
+            part = re.search(invariant["measure"], content)
+            if part is None:
+                return f"{invariant['measure']!r} not found in {content[:300]!r}"
+            size = len(part.group(1).encode("utf-8"))
+            if size > invariant["at_most_bytes"]:
+                return f"the measured part has {size} bytes, more than {invariant['at_most_bytes']}"
+    return None
+
+
+def _start_outputs(projects: Path) -> list[dict[str, Any]]:
+    """The SessionStart hook outputs the transcripts under ``projects`` record, in file order."""
+    outputs = []
+    for transcript in sorted(projects.rglob("*.jsonl")):
+        for line in transcript.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue
+            attachment = entry.get("attachment") if isinstance(entry, dict) else None
+            if isinstance(attachment, dict) and attachment.get("hookEvent") == "SessionStart":
+                outputs.append(attachment)
+    return outputs
 
 
 def _prompt_matches(prompt: Prompt, wanted: Mapping[str, str]) -> bool:

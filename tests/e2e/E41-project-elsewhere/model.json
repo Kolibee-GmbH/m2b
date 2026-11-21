@@ -1,0 +1,146 @@
+{
+  "description": "E41 at the model level, a project knows where it lies: in a clone of github.com/acme/portal the owner says to remember this project, a curation run files it, and a session in another repository on the same machine that names the project is asked where it lies: it answers with the clone's folder, from its start, without looking. scripts/promises also runs it against Claude Code alone, its own memory on: the control shows that Claude Code kept the project in its memory of the clone, and the session in the other repository does not know the folder. Both sessions may use the same tools, none of which lists folders. Three wordings, one in German.",
+  "wordings": [
+    {
+      "remember": "Remember this project: the customer portal we build for Acme.",
+      "ask": "I need to fix something in the Acme portal. In which folder is it on this machine?"
+    },
+    {
+      "remember": "Merk dir dieses Projekt: das Kundenportal, das wir für Acme bauen.",
+      "ask": "Ich muss am Acme-Portal etwas ändern. In welchem Ordner liegt es auf diesem Rechner?",
+      "language": "de"
+    },
+    {
+      "remember": "Keep this project in mind, it is the Acme customer portal.",
+      "ask": "Where is my clone of the Acme portal?"
+    }
+  ],
+  "steps": [
+    {
+      "run": [
+        "git",
+        "init",
+        "-q"
+      ],
+      "cwd": "portal",
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      }
+    },
+    {
+      "run": [
+        "git",
+        "remote",
+        "add",
+        "origin",
+        "git@github.com:acme/portal.git"
+      ],
+      "cwd": "portal",
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      }
+    },
+    {
+      "run": [
+        "git",
+        "init",
+        "-q"
+      ],
+      "cwd": "garden-site",
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      }
+    },
+    {
+      "run": [
+        "claude",
+        "-p",
+        "{remember}",
+        "--setting-sources",
+        "project",
+        "--plugin-dir",
+        "{core_plugin}",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Skill,Read,Write,Edit,mcp__m2b__note,mcp__m2b__search",
+        "--max-turns",
+        "10",
+        "--max-budget-usd",
+        "1",
+        "--model",
+        "sonnet",
+        "--output-format",
+        "json"
+      ],
+      "cwd": "portal",
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      }
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "arm": "with"
+    },
+    {
+      "run": [
+        "sh",
+        "-c",
+        "grep -qiE 'acme|portal' \"$CLAUDE_CONFIG_DIR\"/projects/*-portal/memory/*.md 2>/dev/null || { echo \"Claude Code alone kept no memory of the project in its clone\" >&2; exit 1; }"
+      ],
+      "arm": "without",
+      "control": true
+    },
+    {
+      "run": [
+        "claude",
+        "-p",
+        "{ask}",
+        "--setting-sources",
+        "project",
+        "--plugin-dir",
+        "{core_plugin}",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Skill,mcp__m2b__note,mcp__m2b__search",
+        "--max-turns",
+        "10",
+        "--max-budget-usd",
+        "1",
+        "--model",
+        "sonnet",
+        "--output-format",
+        "json"
+      ],
+      "cwd": "garden-site",
+      "env": {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null"
+      },
+      "stdout": "\"result\":\"(?:[^\"\\\\]|\\\\.)*sb-test-e2e-E41-project-elsewhere-[^\"\\s]*/portal(?![\\w-])"
+    }
+  ],
+  "invariants": [
+    {
+      "run_state": "succeeded",
+      "arm": "with"
+    },
+    {
+      "no_denials": true,
+      "arm": "with"
+    }
+  ]
+}

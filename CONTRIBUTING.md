@@ -131,6 +131,9 @@ scripts/e2e --level model E34-session-read                  # after each Claude 
 scripts/e2e --level model E35-correction-kept               # the same, and after a change to lessons
 scripts/e2e --level model E36-correction-read               # the same, and after a change to the reading
 scripts/e2e --level model E37-fact-after-its-day            # after a change to ingest or refresh
+scripts/e2e --level model E39-start-stays-small             # after a change to the session start
+scripts/e2e --level model E40-task-on-friday                # after a change to ingest or the note tool
+scripts/e2e --level model E41-project-elsewhere             # after a change to ingest or the topics
 ```
 
 Every session at this level runs in a Claude Code folder of the scenario's own, set as
@@ -182,6 +185,21 @@ on Sonnet, one or two curation runs, under a minute each.
 session is told that Sam brings the plywood next Friday, a run files it with that Friday as its end,
 and a run 30 days later on the test clock (`m2b curate --today`) rewrites it, so the distillate says
 the plywood was brought. One session on Sonnet and two curation runs, under a minute.
+
+`E40-task-on-friday` is the case of the promise that a sentence becomes a task: a session is told to
+remind the owner to call the plumber on Friday, and after a run the task list holds one task about
+it, due that Friday, and nothing for the owner to check. `E41-project-elsewhere` is the case of the
+promise that a project knows where it lies: in a clone the owner says to remember the project, a run
+files it, and a session in another repository, asked where the project lies, answers with the
+clone's folder; against Claude Code alone it does not, and the control is that Claude Code kept the
+project in its own memory of the clone. Neither session may use a tool that lists folders. Each is
+one or two sessions on Sonnet and one curation run, under a minute.
+
+`E39-start-stays-small` is the case of the promise that the start stays small. The store holds a
+distillate over 8 KB and a lesson; a session starts on Haiku and answers from a fact near the
+distillate's top. The invariant `session_start` reads what the session-start hooks handed the
+model, as the session's transcript records it: each output whole, the distillate's part at most
+8 KB with the line saying where the rest is, the lesson only in the second output. Under a minute.
 
 `E34-session-read` types two turns into a session in an invented repository: "run scripts/check",
 then a correction to run only the quick round. It passes when the reading finds both prompts in

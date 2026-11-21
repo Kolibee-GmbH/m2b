@@ -213,12 +213,21 @@ def normalize(store: Store, convert: Converter | None) -> NormalizeReport:
 
 
 def add_task(store: Store, tasks: Tasks, file: str, key: str, title: str, due: Due | None) -> str:
-    """The capture's task for ``key``: found by its marker, or created; recorded in ``tasks:``."""
+    """The capture's task for ``key``: found by its marker, or created; recorded in ``tasks:``.
+
+    A capture with a follow-up has that one task, for any key (B294): the owner named its day when
+    the capture was made, and a task the filer reads from the same sentence would stand beside it."""
     relative, note = _inbox_note(store, file)
     name = PurePosixPath(relative).name
     if not key or any(character.isspace() for character in key):
         raise IngestError(f"the task key must be one word, not {key!r}")
-    task_id = _find_task(tasks, name, key)
+    task_id = _find_task(tasks, name, FOLLOW_UP_KEY) if key != FOLLOW_UP_KEY else None
+    if task_id is None and key != FOLLOW_UP_KEY and _frontmatter(note).get(keys.FOLLOW_UP):
+        waiting = add_follow_up_task(store, tasks, file)
+        if waiting is not None:
+            return waiting
+    if task_id is None:
+        task_id = _find_task(tasks, name, key)
     if task_id is None:
         task_id = tasks.add(title, notes=markers.marker_line(markers.CAPTURE, name, key), due=due)
     fields = _frontmatter(note)

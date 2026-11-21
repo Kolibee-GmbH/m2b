@@ -1,0 +1,82 @@
+{
+  "description": "E40 at the model level, a sentence becomes a task: a session is told to remind the owner to call the plumber on Friday, and after a curation run the task list holds one open task about the plumber, due that Friday, and no review task asking the owner to check it. On a Friday, \"on Friday\" may mean that day or the next one, and both count. Not compared: Claude Code's own memory keeps no task list with a day. Three wordings, one in German.",
+  "wordings": [
+    {
+      "remind": "Remind me to call the plumber on Friday."
+    },
+    {
+      "remind": "Erinnere mich daran, am Freitag den Klempner anzurufen.",
+      "language": "de"
+    },
+    {
+      "remind": "Don't let me forget the call to the plumber, on Friday."
+    }
+  ],
+  "steps": [
+    {
+      "run": [
+        "python3",
+        "-c",
+        "import datetime; t = datetime.date.today(); n = t + datetime.timedelta(days=(4 - t.weekday()) % 7 or 7); print(n.isoformat(), (t if t.weekday() == 4 else n).isoformat())"
+      ],
+      "save": {
+        "friday": "^(\\d{4}-\\d{2}-\\d{2}) ",
+        "or_today": " (\\d{4}-\\d{2}-\\d{2})$"
+      }
+    },
+    {
+      "run": [
+        "claude",
+        "-p",
+        "{remind}",
+        "--setting-sources",
+        "project",
+        "--plugin-dir",
+        "{core_plugin}",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Skill,mcp__m2b__note,mcp__m2b__search",
+        "--max-turns",
+        "6",
+        "--max-budget-usd",
+        "1",
+        "--model",
+        "sonnet",
+        "--output-format",
+        "json"
+      ],
+      "cwd": "garden-site"
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ]
+    }
+  ],
+  "invariants": [
+    {
+      "run_state": "succeeded"
+    },
+    {
+      "no_denials": true
+    },
+    {
+      "count": 1,
+      "glob": "tasks/*.md",
+      "content": "(?i)plumber|Klempner"
+    },
+    {
+      "count": 1,
+      "glob": "tasks/*.md",
+      "content": "(?s)\\A---\\n(?=(?:[a-z_]+: [^\\n]*\\n)*status: open\\n)(?=(?:[a-z_]+: [^\\n]*\\n)*due: (?:{friday}|{or_today})\\n)(?:[a-z_]+: [^\\n]*\\n)*---\\n[^\\n]*(?i:plumber|Klempner)"
+    },
+    {
+      "count": 0,
+      "glob": "tasks/*.md",
+      "content": "m2b:review"
+    }
+  ]
+}

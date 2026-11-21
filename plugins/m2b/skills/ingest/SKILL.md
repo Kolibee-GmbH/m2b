@@ -273,7 +273,9 @@ not from today: a weekday is the next such day after it, "tomorrow" the day afte
 weeks" fourteen days after it, and a day without its year ("on 3 March") the next such day from it
 on. Give the day also when it has passed by now: the task is then overdue, which is what the owner
 has to see. A capture with `follow_up` gets its task with `m2b ingest task <file> --follow-up` and
-no other options.
+no other options. A capture with `follow_up`, or whose `tasks` already hold its follow-up task,
+gets no other task: that task was made with the day the owner gave, so there is nothing to check
+or to report about it.
 
 **Refs.** Each URL in the text:
 

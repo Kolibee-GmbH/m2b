@@ -20,6 +20,11 @@ All notable changes to this project are documented here. The format follows
 - The refresh step counts from the day its run counts as today, which each model step of a run is
   given, also where the date of the model's session is another.
 
+### Fixed
+
+- "Remind me to call the plumber on Friday" gives one task. The note tool makes it, and the
+  curation run no longer adds a second one for the same sentence.
+
 ## [0.12.0] - 2026-11-21
 
 Sessions learn your projects and the corrections you keep: a project becomes a topic that knows
