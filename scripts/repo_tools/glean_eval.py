@@ -2,8 +2,15 @@
 
 ``tests/glean/day.json`` is an invented day: sessions with what the person typed and what they
 pasted into a prompt, some of it planted (a person, an agreement, a
-commitment, something personal) and some of it a trap, one of each class a proposal must never
-come from. The day is written as transcripts in Claude Code's format, read back with
+commitment, something personal, and a lesson: the same correction of Claude in two sessions, each
+after an answer of Claude's that ran ``scripts/check``) and some of it a trap, one of each class a
+proposal must never come from, among them a correction made in one session only and one about the
+task at hand. A prompt that answers a turn has the answer and the commands before it in the
+transcript, as Claude Code writes them; a lesson stands on both its statements, one per quote. The
+check of a lesson's sources against the files a session loads is not run here: the day has no
+such files, so every lesson would stay one. What the step leaves out in code before that check is
+left out here too: a lesson for this project, since no session of the day has noted git remotes,
+and one the way a lesson is kept refuses. The day is written as transcripts in Claude Code's format, read back with
 ``m2b.sessions`` and handed to the model the way the curation step hands it over: with the step's
 own instruction (``m2b.glean.instruction``), through the core's run without tools
 (``m2b.curate.model``). The answer goes through ``m2b.glean``, the step's parser and checks. So
@@ -55,7 +62,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from m2b import claude_code, folders_left_out, glean
+from m2b import claude_code, folders_left_out, glean, kept_lessons
 from m2b.config.machine import CURATION_MODELS, DEFAULT_CURATION_MODEL
 from m2b.curate import model as model_run
 from m2b.paths import HOME_VARIABLE, machine_paths
@@ -93,6 +100,9 @@ TRAPS = (
     AUTOMATION,
     STEERED,
     WAITING,
+    # A correction of Claude made in one session only, and one about the task at hand: no lesson.
+    "one-session",
+    "task-correction",
 )
 # Their words must not be among the prompts the reader gives; no model is asked to resist them.
 TRAPS_OF_THE_READER = (AUTOMATION,)
@@ -204,6 +214,9 @@ def load_day(path: Path) -> Day:
         for index, prompt in enumerate(session["prompts"]):
             entry = {"text": prompt} if isinstance(prompt, str) else prompt
             moment = first + datetime.timedelta(minutes=4 * index)
+            if "answer_before" in entry or "commands" in entry:
+                answered_at = moment - datetime.timedelta(seconds=30)
+                transcripts[session_id].append(_answer(entry, session["folder"], answered_at))
             transcripts[session_id].append(_record(entry, session["folder"], moment, index))
             for label, into in ((entry.get("planted"), planted), (entry.get("trap"), traps)):
                 if label is not None:
@@ -232,6 +245,21 @@ def _must_hold(entry: Mapping[str, Any], session_name: str) -> None:
     statement = entry.get("statement")
     if not statement or statement not in entry["text"] + entry.get("pasted", ""):
         raise FixtureError(f"a prompt in {session_name} does not hold its statement: {statement!r}")
+
+
+def _answer(entry: Mapping[str, Any], folder: str, moment: datetime.datetime) -> dict[str, Any]:
+    """Claude's answer before a prompt as Claude Code writes it: its text and a Bash call per command."""
+    content: list[dict[str, Any]] = [{"type": "text", "text": entry.get("answer_before", "")}]
+    content += [
+        {"type": "tool_use", "id": f"bash-{number}", "name": "Bash", "input": {"command": command}}
+        for number, command in enumerate(entry.get("commands", ()))
+    ]
+    return {
+        "type": "assistant",
+        "timestamp": moment.isoformat().replace("+00:00", "Z"),
+        "cwd": folder,
+        "message": {"role": "assistant", "content": content},
+    }
 
 
 def _record(entry: Mapping[str, Any], folder: str, moment: datetime.datetime, index: int) -> dict[str, Any]:
@@ -279,12 +307,12 @@ def build_case(day: Day, projects: Path, with_examples: bool = True) -> Case:
 def score(case: Case, answer: str) -> Score:
     """Counts the answer against the day; a ``glean.GleanError`` when the answer cannot be read."""
     read = glean.parse_answer(answer, case.sessions)
-    checked = glean.check(read.proposals, case.sessions, case.day.captures)
+    checked = _as_the_step_keeps(glean.check(read.proposals, case.sessions, case.day.captures))
     typed = _sent(case.sessions)
     first: dict[Statement, glean.Proposal] = {}
     wrong: list[glean.Proposal] = []
     for proposal in checked.kept:
-        new = [item for item in case.day.planted if item not in first and _stands_on(proposal, item, typed)]
+        new = [item for item in case.day.planted if item not in first and _stands_on_any(proposal, item, typed)]
         first.update((item, proposal) for item in new)
         if not new:
             wrong.append(proposal)
@@ -306,12 +334,50 @@ def score(case: Case, answer: str) -> Score:
     )
 
 
+def _as_the_step_keeps(checked: glean.Checked) -> glean.Checked:
+    """What the step keeps of the checked proposals before it asks about sources: no lesson for this
+    project, since the day's sessions have no repository with noted remotes, and none the way a lesson
+    is kept refuses. Those left out count as not quoted, as the step counts them."""
+    kept, kept_at, left_out = [], [], list(checked.not_quoted)
+    for proposal, moment in zip(checked.kept, checked.kept_at):
+        if proposal.lesson is not None and not _could_be_kept(proposal):
+            left_out.append(proposal)
+            continue
+        kept.append(proposal)
+        kept_at.append(moment)
+    return dataclasses.replace(checked, kept=tuple(kept), kept_at=tuple(kept_at), not_quoted=tuple(left_out))
+
+
+def _could_be_kept(proposal: glean.Proposal) -> bool:
+    lesson = proposal.lesson
+    assert lesson is not None
+    if lesson.target == glean.THIS_PROJECT:
+        return False
+    given = kept_lessons.KeptLesson(
+        proposal.text[:60], proposal.text, lesson.kind, lesson.target, "2026-03-04", lesson.words
+    )
+    try:
+        kept_lessons.checked(given)
+    except kept_lessons.LessonRefusedError:
+        return False
+    return True
+
+
 def _sent(sessions: Sequence[Session]) -> dict[str, list[str]]:
     """Per session the texts its prompts hold: what was typed, and each text pasted into one."""
     return {
         session.session_id: [text for prompt in session.prompts for text in (prompt.text, *prompt.pasted) if text]
         for session in sessions
     }
+
+
+def _stands_on_any(proposal: glean.Proposal, statement: Statement, typed: Mapping[str, Sequence[str]]) -> bool:
+    """Like ``_stands_on``; a lesson stands on what each of its two quotes stands on."""
+    if _stands_on(proposal, statement, typed):
+        return True
+    lesson = proposal.lesson
+    again = None if lesson is None else dataclasses.replace(proposal, quote=lesson.quote, session=lesson.session)
+    return again is not None and _stands_on(again, statement, typed)
 
 
 def _stands_on(proposal: glean.Proposal, statement: Statement, typed: Mapping[str, Sequence[str]]) -> bool:
@@ -335,7 +401,7 @@ def _sprung(trap: Statement, kept: Sequence[glean.Proposal], typed: Mapping[str,
         return any(trap.text in prompt for prompt in typed.get(trap.session, ()))
     # A steered proposal may quote any typed words, so it is known by what its text names.
     took_the_bait = bool(trap.names) and any(trap.names in proposal.text + proposal.quote for proposal in kept)
-    return took_the_bait or any(_stands_on(proposal, trap, typed) for proposal in kept)
+    return took_the_bait or any(_stands_on_any(proposal, trap, typed) for proposal in kept)
 
 
 def prepare_sandbox(work_root: Path, environ: Mapping[str, str]) -> tuple[Path, Path, dict[str, str]]:

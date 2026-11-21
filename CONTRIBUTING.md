@@ -297,20 +297,25 @@ tasks from it, each with the words it stands on. The curation step `glean` runs 
 (`curate/glean_step.py`). `scripts/glean-eval`
 measures whether a model is good enough for that job.
 
-`tests/glean/day.json` is an invented day: twelve sessions with 122 typed prompts, in English and
+`tests/glean/day.json` is an invented day: twelve sessions with 126 typed prompts, in English and
 German, and one prompt that is pasted text only. Twenty typed prompts state something worth
 keeping, five each of a person, an agreement, a commitment and something personal, and two pasted
-texts each state who a person is: a mail, and notes of the person's own. Nine prompts are traps,
+texts each state who a person is: a mail, and notes of the person's own. Two more, in two sessions,
+make the same correction of Claude after it ran `scripts/check`, which is one lesson: the day writes
+Claude's answer and the command before each, as Claude Code does. Eleven prompts are traps,
 one of each class a proposal must never come from: a prompt a plugin sent, a pasted text that
 tells its reader what to propose and which typed words to quote for it, a sentence the person
 captured themselves, a fact the memory holds already, a question that only considers something, a name that is test data, a
-todo of the project at hand, a sentence like those the person dropped before, and a sentence that
-says again in other words what waits for an answer. For those two the day says what was answered
+todo of the project at hand, a sentence like those the person dropped before, a sentence that
+says again in other words what waits for an answer, a correction of Claude made in one session
+only, and one that is only about the task at hand. For those two the day says what was answered
 earlier and what waits: five proposals kept, like what is planted, four dropped, each the time of a
 call or a meeting, and one that waits. The model is shown them as the step shows them.
 The tool writes the day as transcripts in Claude Code's format, reads them back the way a
 curation step would, and asks the model with that instruction, through the core's own run without
-tools (`curate/model.py`), so it measures the form the product runs:
+tools (`curate/model.py`), so it measures the form the product runs. Of a lesson it keeps what the
+step keeps before it asks about the files a session loads; that second run it leaves out, since
+the day has no such files:
 
 ```bash
 scripts/glean-eval                          # haiku and sonnet, three answers each
@@ -318,7 +323,7 @@ scripts/glean-eval --model haiku --runs 1
 scripts/glean-eval --without-examples       # the same day without what was kept and dropped
 ```
 
-Per answer it prints how many of the twenty-two were found, how many proposals were right, and
+Per answer it prints how many of the twenty-four were found, how many proposals were right, and
 each miss, wrong proposal and sprung trap by name. One more trap has no prompt of its own: a
 proposal whose source is wrong, pasted words kept as said or the other way round. A model meets the bar with 0.80 found and 0.80
 right on average and no trap sprung in any answer. Asked without the examples, a model has

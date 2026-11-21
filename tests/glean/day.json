@@ -110,7 +110,16 @@
           "planted": "agreement",
           "statement": "Northwind accepted the offer for phase two on 2 March, work starts on 16 March"
         },
-        "commit that"
+        "commit that",
+        {
+          "text": "stop, just the fast checks, the full suite is not needed for this",
+          "answer_before": "Running the whole proof now so that nothing slips through.",
+          "commands": [
+            "scripts/check"
+          ],
+          "planted": "lesson",
+          "statement": "just the fast checks, the full suite is not needed"
+        }
       ]
     },
     {
@@ -247,7 +256,16 @@
           "planted": "commitment",
           "statement": "I need to call Kim Lee about the tax prepayment before 15 March"
         },
-        "deploy to preview"
+        "deploy to preview",
+        {
+          "text": "please no emojis in the commit messages",
+          "answer_before": "Committed as \":sparkles: Add the contact form\".",
+          "trap": "one-session",
+          "statement": "no emojis in the commit messages",
+          "commands": [
+            "git commit -m \":sparkles: Add the contact form\""
+          ]
+        }
       ]
     },
     {
@@ -362,7 +380,16 @@
         "run the suite",
         "two failures, look at them",
         "ok",
-        "commit and write the changelog entry"
+        "commit and write the changelog entry",
+        {
+          "text": "again: skip the complete check run unless there is a reason for it",
+          "answer_before": "I will run the complete check suite first.",
+          "commands": [
+            "./scripts/check --all"
+          ],
+          "planted": "lesson",
+          "statement": "skip the complete check run unless there is a reason"
+        }
       ]
     },
     {
@@ -421,6 +448,15 @@
           "pasted": "my notes from the call this morning: Ines Roth leads the warehouse at Globex and decides on the scanner order. the hero image stays as it is",
           "planted": "person",
           "statement": "Ines Roth leads the warehouse at Globex"
+        },
+        {
+          "text": "wrong file, I meant hero.css",
+          "answer_before": "I will change the colours in main.css now.",
+          "commands": [
+            "sed -i '' 's/#333/#222/' main.css"
+          ],
+          "trap": "task-correction",
+          "statement": "wrong file, I meant hero.css"
         }
       ]
     }
