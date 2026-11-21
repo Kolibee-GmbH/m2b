@@ -59,6 +59,22 @@ export type BandHealth = {
   troubles: string[]
   curates: boolean | null
   isCurating: boolean
+  // The lessons the owner kept, where there are any; a band before them shared its answer without.
+  lessons?: LessonStanding[]
+}
+
+/**
+ * How a lesson the owner kept does since it was kept, as `m2b status` counts it: `correctedAgain`
+ * is null where the counts could not be read; `fired` and `calls` are there for a lesson about a
+ * command only, and count on this machine.
+ */
+export type LessonStanding = {
+  name: string
+  kind: string
+  kept: string
+  correctedAgain: number | null
+  fired?: number
+  calls?: number
 }
 
 /** What a press on keep or drop asks the task list for. */

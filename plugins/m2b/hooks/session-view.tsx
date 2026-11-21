@@ -31,6 +31,7 @@ import { plainLine, wholePath } from './plain-text'
 import { HANDED_IN_NOT_COUNTED, couldNotLookLine, countLine, errorBesideTasks, waitingForRunLine } from './proposals'
 import { CURATE_PRESS, CURATE_ROW, REVIEW, candidateRow, changesSummary, curateButton, reviewRow } from './rows'
 import type { CurateActions, RowActions } from './rows'
+import { isNotWorking, lessonLine } from './status-line'
 
 export { CURATE_NOW, CURATE_PRESS, UNDO_CURATE } from './rows'
 
@@ -257,14 +258,23 @@ function curatesElsewhere(model: SessionModel): Line[] {
     : []
 }
 
-/** How m2b itself stands, as lines: what is wrong first, then the line about curation, which steps back, and where curation runs. */
+/**
+ * How m2b itself stands, as lines: what is wrong first, then the line about curation, which steps
+ * back, where curation runs, and how each lesson does.
+ */
 function healthLines(model: SessionModel): Line[] {
   const { health } = model
   return [
     ...troubleLines(model),
     ...(health?.curation ? [line(plainLine(health.curation), 'quiet')] : []),
     ...curatesElsewhere(model),
+    ...lessonLines(model),
   ]
+}
+
+/** Each lesson the owner kept with its counts: one corrected again waits for them, the others step back. */
+function lessonLines(model: SessionModel): Line[] {
+  return (model.health?.lessons ?? []).map(lesson => line(lessonLine(lesson), isNotWorking(lesson) ? 'waits' : 'quiet'))
 }
 
 function present<T>(value: T | null | false): value is T {
@@ -512,9 +522,10 @@ function curationLines($: EngineInterface, e: ResolveInput, model: SessionModel,
 }
 
 /**
- * "m2b": what is wrong with m2b, each with its reason, why the last press started no run, and how
- * curation stands, with the button that starts a run on the machine that curates. Left out where
- * there is nothing to say.
+ * "m2b": what is wrong with m2b, each with its reason, why the last press started no run, how
+ * curation stands, with the button that starts a run on the machine that curates, and how each
+ * lesson the owner kept does, one they corrected Claude on again marked as not working. Left out
+ * where there is nothing to say.
  */
 function healthPart($: EngineInterface, e: ResolveInput, model: SessionModel, actions: SessionActions, columns: number) {
   const { health, curateNotice } = model
@@ -524,6 +535,7 @@ function healthPart($: EngineInterface, e: ResolveInput, model: SessionModel, ac
     curateNotice !== null && said(ui, plainLine(curateNotice), 'trouble'),
     ...(health === null ? [] : curationLines($, e, model, health, actions)),
     ...curatesElsewhere(model).map(one => said(ui, one.text, one.tone)),
+    ...lessonLines(model).map(one => said(ui, one.text, one.tone)),
   ].filter(present)
   return body.length === 0 ? null : part(ui, { key: 'm2b', title: M2B_ITSELF, waits: false, columns }, body)
 }

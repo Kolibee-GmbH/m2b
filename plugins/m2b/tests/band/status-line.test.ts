@@ -6,6 +6,8 @@ import {
   curatingMachineOf,
   curationLine,
   healthOf,
+  isLessonStanding,
+  lessonLine,
   noRunStarted,
   parseRunStart,
   statusLine,
@@ -326,6 +328,31 @@ describe('what m2b knows of curation on this machine, for the button that starts
       curates: null,
       isCurating: true,
     })
+  })
+
+  test('the lessons are read with their counts, a lesson not in the form left out, and none where there are none', () => {
+    // Covers: B282
+    const each = [
+      { name: 'proof.md', kind: 'action', kept: '2026-11-20', corrected_again: 2, fired: 3, calls: 40 },
+      { name: 'once.md', kind: 'knowledge', kept: '2026-11-20', corrected_again: null },
+      { name: 'odd.md', kind: 'action', kept: '2026-11-20', corrected_again: -1 },
+      { name: 7, kind: 'action', kept: '2026-11-20', corrected_again: 0 },
+    ]
+
+    expect(healthOf(answer({ lessons: { each } }), NOW).lessons).toEqual([
+      { name: 'proof.md', kind: 'action', kept: '2026-11-20', correctedAgain: 2, fired: 3, calls: 40 },
+      { name: 'once.md', kind: 'knowledge', kept: '2026-11-20', correctedAgain: null },
+    ])
+    expect('lessons' in healthOf(answer({ lessons: { each: [] } }), NOW)).toBe(false)
+    // A share that ends in a half is rounded to the even number, as `m2b status` rounds it.
+    const action = { name: 'proof.md', kind: 'action', kept: '2026-11-20', correctedAgain: 0 }
+    expect(lessonLine({ ...action, fired: 1, calls: 40 })).toContain('in 40 Bash calls (2%)')
+    expect(lessonLine({ ...action, fired: 3, calls: 40 })).toContain('in 40 Bash calls (8%)')
+    expect(isLessonStanding({ ...action, fired: 'x', calls: 'y' })).toBe(false)
+    expect(isLessonStanding({ ...action, fired: 1, calls: 40 })).toBe(true)
+    expect(lessonLine({ name: 'a\u001b[2Jb.md', kind: 'knowledge', kept: '2026-11-20', correctedAgain: 0 })).toBe(
+      'lesson ab.md (knowledge, kept 2026-11-20): corrected again 0 times',
+    )
   })
 
   test('where m2b gave no answer about itself nothing is known of curation and nothing is said', () => {
