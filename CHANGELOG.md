@@ -7,74 +7,98 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-21
+
+Sessions learn your projects and the corrections you keep: a project becomes a topic that knows
+where its repository lies on each machine, and a correction you kept comes into every session, or
+right before the command it is about.
+
 ### Added
 
 - A curation run that reads your sessions proposes a lesson when you made the same correction of
   Claude in two sessions, with its kind, whom it is for and, for a command, its words
-  ([Curation](docs/curation.md#reading-your-sessions)).
+  ([Curation](docs/curation.md#reading-your-sessions))
+  ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - Before a lesson is proposed, a model checks it against the files a session in its folders
   loads: a line that says it wrongly makes it a fix of that line, a line that says it rightly a
   pointer to that line, and a lesson for one project no file states a fix for that project's
-  `CLAUDE.md` ([Curation](docs/curation.md#reading-your-sessions)).
+  `CLAUDE.md` ([Curation](docs/curation.md#reading-your-sessions))
+  ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - `m2b status` says how large everything is that a session in this folder starts with: your
   `CLAUDE.md` files and rules, the output style, Claude Code's auto memory and m2b's part, each in
-  KB and list points, with the sum, so you see where to cut. A file it cannot read is named as such.
+  KB and list points, with the sum, so you see where to cut. A file it cannot read is named as such
+  ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - A topic about a project can name its repository (`- Repository: github.com/acme/portal (...)`);
   where the topic comes into a session, it says which folder that repository lies in on this
   machine, or that it is not cloned here, so a session reads the project's files itself
-  ([Store format](docs/store-format.md)).
+  ([Store format](docs/store-format.md))
+  ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - A lesson about a command comes right before Claude runs it: a hook before each Bash call adds the
   lesson whose words the command holds, or has Claude Code ask you first; "keep this as a lesson"
-  in a session keeps one with `m2b lesson add` ([Using m2b](docs/using.md#lessons)).
+  in a session keeps one with `m2b lesson add` ([Using m2b](docs/using.md#lessons))
+  ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - Every session starts with the lessons you kept for every project (`memory/lessons/`), as
   corrections after the distillate; `m2b status` counts them and names those kept at their source
-  ([Using m2b](docs/using.md#lessons)).
+  ([Using m2b](docs/using.md#lessons))
+  ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - "Remember this project" in a session keeps the project of its folder with the address of its git
   remote, and the next run makes it a topic with its `Repository:` line
-  ([Using m2b](docs/using.md#a-project)).
+  ([Using m2b](docs/using.md#a-project))
+  ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - A curation run that reads your sessions proposes a repository you worked in on two days, and
   that no topic names, as a project; kept, it becomes the same topic as "remember this project"
-  ([Using m2b](docs/using.md#a-project)).
+  ([Using m2b](docs/using.md#a-project))
+  ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - `m2b status` and the overview's part "m2b" name each lesson with how often you corrected Claude on it again since you kept it,
   counted by a curation run that reads your sessions, and for a lesson about a command how often it
   fired in how many Bash calls; one corrected again is named `not working`
-  ([Using m2b](docs/using.md#lessons)).
+  ([Using m2b](docs/using.md#lessons))
+  ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - Past the 2 KB target of what every session starts with, a proposed lesson for every session names
   the kept lesson it would replace, the one corrected again most often; keeping it removes that one
-  ([Using m2b](docs/using.md#lessons)).
+  ([Using m2b](docs/using.md#lessons))
+  ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - A lesson about a command that did not fire for 30 days is asked about in your task list,
   `Still needed?`; a drop removes it, a tick keeps it for another 30 days
-  ([Using m2b](docs/using.md#lessons)).
+  ([Using m2b](docs/using.md#lessons))
+  ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - A curation run that reads your sessions proposes a pointer when you stated a decision, an
   agreement, a person or a deadline in a project's repository and Claude wrote it into a file there;
-  kept, it becomes the topic's line `- <sentence> → <path>` ([Curation](docs/curation.md#reading-your-sessions)).
+  kept, it becomes the topic's line `- <sentence> → <path>` ([Curation](docs/curation.md#reading-your-sessions))
+  ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - A project topic's line can point into its repository (`- <sentence> → <path> (<file>.md)`); its
   place line then says the paths lie in the folder shown, and lint reports a pointer whose file the
-  clone no longer holds and a repository nobody opened for 30 days ([Store format](docs/store-format.md)).
+  clone no longer holds and a repository nobody opened for 30 days ([Store format](docs/store-format.md))
+  ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - A fix for a file Claude reads: say "keep this as a fix" with the file, what is wrong and the new
   wording, and `m2b fix add` keeps it. m2b never writes that file; the next session in a clone of
   that repository, or on this machine for a file under `~/.claude/`, names the fix, applies it with
   you and marks it done on your word. Where the file no longer holds the line, the session tells you
-  ([Using m2b](docs/using.md#fixes-for-the-files-claude-reads)).
+  ([Using m2b](docs/using.md#fixes-for-the-files-claude-reads))
+  ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 
 ### Changed
 
 - Reading your sessions now sees, beside each prompt and never as your words, the last 500
   characters of Claude's answer before it and the shell commands Claude ran in that turn, so a
-  correction can be told by what it corrects ([Curation](docs/curation.md#reading-your-sessions)).
+  correction can be told by what it corrects ([Curation](docs/curation.md#reading-your-sessions))
+  ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - The rule every session starts with sends a correction that holds in every project to
   `~/.claude/CLAUDE.md`, not into the memory of the project it was made in, and one that a
   `CLAUDE.md` says wrongly to a fix of that file. What touches both a project and you goes into the
-  repository, and into the second brain as a sentence naming the file it stands in.
+  repository, and into the second brain as a sentence naming the file it stands in
+  ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - The session start notes the git remotes of its folder in every session, not only where sessions
   are read, and keeps a note while its folder is there; for leaving work out a note still counts
-  for 30 days.
+  for 30 days
+  ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 
 ### Fixed
 
 - A "Still current?" question asked in a later curation run than the first one is remembered, so
   deleting it takes its line out of `## Current` as deleting the first one does. Before, only the
-  questions of the first run were kept, and a later one you deleted left its line standing.
+  questions of the first run were kept, and a later one you deleted left its line standing
+  ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 
 ## [0.11.0] - 2026-11-20
 
