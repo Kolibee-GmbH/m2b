@@ -48,7 +48,8 @@ right before the command it is about.
   ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - `m2b status` and the overview's part "m2b" name each lesson with how often you corrected Claude
   on it again since you kept it, and for a lesson about a command how often it fired and in how
-  many Bash calls; a lesson corrected again is named `not working`
+  many Bash calls; a lesson kept as a fix of its source is still counted, with kind `fix`, so the
+  counts show whether the fix works; a lesson corrected again is named `not working`
   ([Using m2b](docs/using.md#lessons))
   ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - A lesson about a command that did not fire for 30 days is asked about in your task list,

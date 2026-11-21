@@ -56,6 +56,7 @@ from pathlib import Path
 
 from m2b import (
     claude_code,
+    fixes,
     folders_left_out,
     glean,
     kept_lessons,
@@ -155,7 +156,11 @@ def propose(
     if pasted:
         notes.append(f"{_count(pasted, 'pasted text')} {_were(pasted)} read with the prompts they stand in")
     standing = lessons.read_all(store)
-    shown_lessons = [glean.ShownLesson(lesson.name, lesson.text, lesson.kept) for lesson in standing]
+    as_fixes = _kept_as_fixes(store)
+    shown_lessons = [
+        *(glean.ShownLesson(lesson.name, lesson.text, lesson.kept) for lesson in standing),
+        *(as_fixes or ()),
+    ]
     given = glean.step_input(read, _distillate(store), zone, examples, waiting, shown_lessons)
     run = model.text_step(config, machine, environ, glean.instruction(), given, pass_fds)
     if run.answer is None:
@@ -171,7 +176,10 @@ def propose(
     # Before the weakest lesson is chosen, so this reading's corrections count in that choice.
     corrections = glean.checked_corrections(answer.corrections, read, shown_lessons, zone)
     try:
-        again = lesson_counts.add(store, corrections, {lesson.name: lesson.kept for lesson in standing})
+        if as_fixes is None:
+            # The counts are written with the lessons that stand, so a fix not known now would lose its own.
+            raise StoreError("the fixes kept from lessons could not be read")
+        again = lesson_counts.add(store, corrections, {lesson.name: lesson.kept for lesson in shown_lessons})
     # A counter must not cost the reading its proposals: whatever keeps the file from being read or
     # written is said, and the reading goes on.
     except (lesson_counts.LessonCountsError, ConfigError, StoreError) as error:
@@ -386,6 +394,16 @@ def _new_lessons(
             continue
         kept.append((proposal, typed_at))
     return kept, not_keepable, known
+
+
+def _kept_as_fixes(store: Store) -> list[glean.ShownLesson] | None:
+    """The lessons kept as fixes of their source, by the fix's name, so their corrections go on being
+    counted (B289); None where the fixes cannot be read: the reading goes on and counts nothing."""
+    try:
+        found = fixes.kept_from_lessons(store)
+    except (StoreError, OSError):
+        return None
+    return [glean.ShownLesson(fix.name, fix.lesson, fix.kept) for fix in found if fix.lesson is not None]
 
 
 def _within_the_start(

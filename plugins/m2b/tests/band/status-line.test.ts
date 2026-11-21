@@ -366,6 +366,16 @@ describe('what m2b knows of curation on this machine, for the button that starts
     )
   })
 
+  test('a lesson kept as a fix is read and said with its counts like any other', () => {
+    // Covers: B289
+    const each = [{ name: 'fix-3f9c2a71b0de', kind: 'fix', kept: '2026-11-20', corrected_again: 1 }]
+
+    const [lesson] = healthOf(answer({ lessons: { each } }), NOW).lessons ?? []
+
+    expect(lesson).toEqual({ name: 'fix-3f9c2a71b0de', kind: 'fix', kept: '2026-11-20', correctedAgain: 1 })
+    expect(lessonLine(lesson!)).toBe('lesson fix-3f9c2a71b0de (fix, kept 2026-11-20): corrected again 1 time: not working')
+  })
+
   test('where m2b gave no answer about itself nothing is known of curation and nothing is said', () => {
     // Covers: B216
     expect(NOT_KNOWN).toEqual({ curation: null, troubles: [], curates: null, isCurating: false })

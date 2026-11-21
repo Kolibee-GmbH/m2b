@@ -338,7 +338,9 @@ A fix you keep is one file a client adds, `state/core/fixes/<name>.json`:
 A repository is named by the addresses of its remotes, host and path in lower case, and the file
 by its path in the repository; a file under `~/.claude/` by `{"home": "~/.claude/CLAUDE.md",
 "machine": "<machine id>"}`. `line` is null for a fix that only adds. The name is `fix-` and twelve
-letters and digits drawn from the file, the line and the wording. What became of a fix is an empty
+letters and digits drawn from the file, the line and the wording. A fix a curation run kept from a
+lesson also holds the lesson's sentence, `"lesson": "..."`, under which the reading of your sessions
+goes on counting corrections. What became of a fix is an empty
 file a client adds beside it, `<name>.done` or `<name>.dropped`; where both are there, done stands.
 The session start only reads the fixes.
 

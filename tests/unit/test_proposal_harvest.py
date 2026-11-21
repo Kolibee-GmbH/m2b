@@ -170,6 +170,7 @@ class KeptLessonTest(ProposalHarvestFixture):
                     (at_source.path, machine, line, at_source.wording, fixes.WAITING),
                 )
                 self.assertIn(LESSON.quote, kept.fix.why)
+                self.assertEqual(kept.fix.lesson, LESSON.text)
                 self.assertEqual((lessons.read_all(self.store), self.captures(), report.problems), ([], [], []))
                 self.assertEqual(report.fixes, [kept.fix.place])
                 self.assertEqual(self.state(LESSON_ID)[0], "kept")

@@ -22,7 +22,7 @@ import datetime
 import json
 from typing import Any
 
-from m2b import action_lessons, handed_in, lesson_counts, lessons, proposal_answers, proposals, start_size
+from m2b import action_lessons, fixes, handed_in, lesson_counts, lessons, proposal_answers, proposals, start_size
 from m2b.addons import ADDONS, is_on
 from m2b.atomic_file import replace_atomically
 from m2b.commands import Context
@@ -106,6 +106,10 @@ def status_answer(config: MachineConfig, context: Context, tasks_check: Check | 
     return answer
 
 
+# The kind a lesson kept as a fix is listed with, beside ``knowledge`` and ``action``.
+FIX_KIND = "fix"
+
+
 def _lessons(store: Store, machine: MachinePaths) -> dict[str, Any]:
     """How many lessons every session starts with, those left out because their source states them
     now, by name and source (B258), and how each lesson does since it was kept: how often it fired
@@ -116,8 +120,12 @@ def _lessons(store: Store, machine: MachinePaths) -> dict[str, Any]:
     except (StoreError, OSError) as error:
         return {"error": with_hidden_written_out(str(error))}
     try:
+        as_fixes = fixes.kept_from_lessons(store)
+    except (StoreError, OSError):
+        as_fixes = []
+    try:
         again: dict[str, int] | None = lesson_counts.corrected_again(
-            store, {lesson.name: lesson.kept for lesson in found}
+            store, {**{lesson.name: lesson.kept for lesson in found}, **{fix.name: fix.kept for fix in as_fixes}}
         )
     except (lesson_counts.LessonCountsError, ConfigError, StoreError):
         again = None
@@ -127,7 +135,21 @@ def _lessons(store: Store, machine: MachinePaths) -> dict[str, Any]:
             {"name": with_hidden_written_out(lesson.name), "source": with_hidden_written_out(lesson.kept_at or "")}
             for lesson in lessons.kept_at_source(found)
         ],
-        "each": [_how_it_does(lesson, machine, again) for lesson in found],
+        "each": [
+            *(_how_it_does(lesson, machine, again) for lesson in found),
+            *(_how_the_fix_does(fix, again) for fix in as_fixes),
+        ],
+    }
+
+
+def _how_the_fix_does(fix: fixes.Fix, again: dict[str, int] | None) -> dict[str, Any]:
+    """A lesson kept as a fix of its source (B289), by the fix's name: how often the owner corrected
+    Claude on it again since, which shows whether the fix works."""
+    return {
+        "name": fix.name,
+        "kind": FIX_KIND,
+        "kept": with_hidden_written_out(fix.kept),
+        "corrected_again": None if again is None else again.get(fix.name, 0),
     }
 
 

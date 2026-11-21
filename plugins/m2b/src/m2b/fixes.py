@@ -73,6 +73,8 @@ class Fix:
 
     ``repositories`` are the addresses of the repository's remotes, empty for a home file, which
     is ``machine``'s. ``line`` is the line the fix replaces, None for a fix that only adds.
+    ``lesson`` is the lesson's sentence where a curation run kept a lesson as this fix: the reading
+    of sessions goes on counting corrections of it under the fix's name (B289).
     """
 
     name: str
@@ -83,6 +85,7 @@ class Fix:
     wording: str
     why: str
     kept: str
+    lesson: str | None = None
 
     @property
     def for_home(self) -> bool:
@@ -108,6 +111,7 @@ def new_fix(
     wording: str,
     why: str,
     kept: str,
+    lesson: str | None = None,
 ) -> Fix:
     """A fix with its name, or ``FixRefusedError`` for one that cannot be applied as given."""
     path = _checked_path(path, home=not repositories)
@@ -129,7 +133,9 @@ def new_fix(
     machine = None if addresses else machine
     drawn = json.dumps([path, addresses, machine, line, wording], ensure_ascii=False)
     name = "fix-" + hashlib.sha256(drawn.encode("utf-8")).hexdigest()[:12]
-    return Fix(name, path, addresses, machine, line, wording, why, kept)
+    if lesson is not None:
+        lesson = " ".join(lesson.split()) or None
+    return Fix(name, path, addresses, machine, line, wording, why, kept, lesson)
 
 
 def _checked_path(path: str, home: bool) -> str:
@@ -194,6 +200,8 @@ def _as_json(fix: Fix) -> bytes:
         "why": fix.why,
         "kept": fix.kept,
     }
+    if fix.lesson is not None:
+        raw["lesson"] = fix.lesson
     return (json.dumps(raw, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
 
 
@@ -238,6 +246,7 @@ def _parsed(store: Store, name: str) -> Fix | None:
             str(raw["wording"]),
             str(raw["why"]),
             str(raw.get("kept", "")),
+            raw["lesson"] if isinstance(raw.get("lesson"), str) else None,
         )
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         return None
@@ -265,6 +274,23 @@ def settle(store: Store, name: str, state: str) -> bool:
     except FileExistsError:
         return False
     return True
+
+
+def kept_from_lessons(store: Store) -> list[Fix]:
+    """The fixes whose lessons are counted (``counted``). A folder or a fix that is not downloaded
+    raises ``EvictedFileError``, as a folder that cannot be read raises: without it the counts of a
+    fix would be written as those of a fix given up, and lost."""
+    scan = store.scan(FOLDER)
+    for path in scan.evicted:
+        if path == FOLDER or path.endswith(".json"):
+            raise EvictedFileError(path)
+    return counted(read_all(store))
+
+
+def counted(found: Iterable[Kept]) -> list[Fix]:
+    """The fixes a curation run kept from a lesson and the owner did not give up: their lessons are
+    counted on (B289), so the counts show whether the fix works."""
+    return [kept.fix for kept in found if kept.fix.lesson is not None and kept.state != DROPPED]
 
 
 def waiting_for(kept: Iterable[Kept], addresses: Collection[str], machine_id: str) -> list[Fix]:

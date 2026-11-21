@@ -15,6 +15,7 @@ from unittest import mock
 from m2b import cli, fixes, paths
 from m2b.config import machine
 from m2b.fixes import APPLIED, DONE, DROPPED, GONE, WAITING, WAITS, Fix, FixRefusedError
+from m2b.store.base import EvictedFileError
 from m2b.store.folder import FolderStore
 from m2b.store.guard import DatalessGuard
 
@@ -130,6 +131,26 @@ class KeepTest(StoreFixture):
         (self.root / fixes.FOLDER / "fix-0123456789ab.json").write_text("{not json", encoding="utf-8")
 
         self.assertEqual([kept.fix.name for kept in fixes.read_all(self.store)], [portal_fix().name])
+
+
+class KeptFromLessonsTest(StoreFixture):
+    def test_the_fixes_kept_from_a_lesson_are_those_not_given_up_and_one_not_downloaded_raises(self) -> None:
+        """Covers: B289"""
+        from_lesson = portal_fix(lesson="Run only the quick checks.")
+        given_up = portal_fix(wording="- Something else.", lesson="Other.")
+        by_hand = portal_fix(wording="- By hand.")
+        for each in (from_lesson, given_up, by_hand):
+            fixes.keep(self.store, each)
+        fixes.settle(self.store, given_up.name, DROPPED)
+
+        self.assertEqual(fixes.kept_from_lessons(self.store), [from_lesson])
+
+        not_downloaded = f"{by_hand.name}.json"
+        with (
+            mock.patch.object(DatalessGuard, "is_evicted", side_effect=lambda path: Path(path).name == not_downloaded),
+            self.assertRaises(EvictedFileError),
+        ):
+            fixes.kept_from_lessons(self.store)
 
 
 class SettleTest(StoreFixture):

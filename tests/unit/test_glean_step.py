@@ -12,6 +12,7 @@ import test_proposals
 import test_runner
 import test_sessions
 from m2b import (
+    fixes,
     folders_left_out,
     glean,
     lesson_counts,
@@ -25,6 +26,7 @@ from m2b import (
 from m2b.config.profile import save_profile
 from m2b.curate import machine_state, model
 from m2b.run_record import SUCCEEDED, load_run_record
+from m2b.store.base import StoreError
 from m2b.tasks import markers
 from m2b.tasks.base import TasksError
 from m2b.tasks.markdown import MarkdownTasks
@@ -831,6 +833,65 @@ class CorrectedAgainTest(GleanStepTest):
         )
         self.assertEqual(lesson_counts.corrected_again(self.store, {"quick.md": "2026-11-01"}), {"quick.md": 1})
         self.assertIn("1 correction of a kept lesson counted: Claude was corrected on it again", self.info())
+
+    def test_a_lesson_kept_as_a_fix_is_shown_and_counted_under_the_fixs_name(self) -> None:
+        """Covers: B289"""
+        self.reading()
+        fix = fixes.new_fix(
+            "~/.claude/CLAUDE.md",
+            (),
+            "sb-test-m1",
+            "- Run the whole proof.",
+            "- Run the quick checks.",
+            "you said it twice",
+            "2026-11-01",
+            lesson="Run only the quick checks.",
+        )
+        fixes.keep(self.store, fix)
+        dropped = fixes.new_fix(
+            "~/.claude/CLAUDE.md", (), "sb-test-m1", None, "- Something else.", "why", "2026-11-01", lesson="Other."
+        )
+        fixes.keep(self.store, dropped)
+        fixes.settle(self.store, dropped.name, fixes.DROPPED)
+        self.typed("no, again only the quick round please", START - HOUR)
+        self.model({})
+        script = json.loads(self.actions.read_text(encoding="utf-8"))
+        said = {"lesson": fix.name, "quote": "again only the quick round", "session": 1}
+        script["text"] = {"answer": json.dumps({"proposals": [], "corrected_again": [said]}), "outcome": "success"}
+        self.actions.write_text(json.dumps(script), encoding="utf-8")
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        (asked,) = self.asked()
+        self.assertEqual(
+            asked["lessons"], [{"name": fix.name, "text": "Run only the quick checks.", "kept": "2026-11-01"}]
+        )
+        self.assertEqual(lesson_counts.corrected_again(self.store, {fix.name: "2026-11-01"}), {fix.name: 1})
+
+    def test_fixes_that_cannot_be_read_keep_their_counts_and_nothing_is_counted(self) -> None:
+        """Covers: B289"""
+        self.reading()
+        self.write(
+            "memory/lessons/quick.md",
+            "---\nkind: knowledge\ntarget: every project\nkept: 2026-11-01\n---\n"
+            "# Quick\n\nRun only the quick checks.\n",
+        )
+        counts = {"format": 1, "lessons": {"fix-3f9c2a71b0de": {"kept": "2026-11-01", "corrected_again": ["a1"]}}}
+        self.write(lesson_counts.COUNTS_FILE, json.dumps(counts))
+        self.typed("no, again only the quick round please", START - HOUR)
+        self.model({})
+        script = json.loads(self.actions.read_text(encoding="utf-8"))
+        said = {"lesson": "quick.md", "quote": "again only the quick round", "session": 1}
+        script["text"] = {"answer": json.dumps({"proposals": [], "corrected_again": [said]}), "outcome": "success"}
+        self.actions.write_text(json.dumps(script), encoding="utf-8")
+
+        with mock.patch("m2b.fixes.read_all", side_effect=StoreError("state/core/fixes cannot be listed")):
+            self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        self.assertEqual(json.loads(self.store.read_bytes(lesson_counts.COUNTS_FILE)), counts)
+        self.assertTrue(
+            any(note.startswith("the corrections of kept lessons were not counted") for note in self.info())
+        )
 
     def test_a_counts_file_that_cannot_be_read_is_said_and_the_proposals_are_kept(self) -> None:
         """Covers: B280"""

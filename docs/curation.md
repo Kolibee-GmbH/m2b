@@ -337,8 +337,9 @@ the new wording; where a line says it rightly, a pointer to that line, without t
 lesson for one project that no file states becomes a fix that adds it to that project's
 `CLAUDE.md`. Code keeps a verdict only for a line that stands in a file it showed, and a fix only
 for a file under `~/.claude/` or in a repository. A fix you keep waits in the store until the next
-session where the file lies applies it with you ([Fixes](using.md#fixes-for-the-files-claude-reads));
-a pointer is kept as a lesson that names its file and stays out of the block every session gets. Code keeps a
+session where the file lies applies it with you ([Fixes](using.md#fixes-for-the-files-claude-reads)),
+and the reading goes on counting corrections of its lesson under the fix's name until you give the
+fix up; a pointer is kept as a lesson that names its file and stays out of the block every session gets. Code keeps a
 proposal only when those words stand in one prompt of the session it names, typed or pasted, with
 at least three words, and when you did not capture the same thing in that time. A proposal like one that
 waits, or like one you kept or dropped or that expired within 90 days, is not kept a second time,

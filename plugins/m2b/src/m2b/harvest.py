@@ -273,6 +273,7 @@ def _keep_fix(
             at_source.wording or "",
             " ".join(why.split()),
             entry.day.isoformat(),
+            lesson=entry.text,
         )
         is_new = fixes.keep(store, fix)
     except fixes.FixRefusedError as error:

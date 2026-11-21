@@ -9,7 +9,7 @@ from typing import Any
 from unittest import mock
 
 import test_runner
-from m2b import action_lessons, cli, handed_in, lesson_counts, proposal_answers, proposals
+from m2b import action_lessons, cli, fixes, handed_in, lesson_counts, proposal_answers, proposals
 from m2b.curate import machine_state
 from m2b.run_record import RUN_RECORD
 from m2b.store.base import StoreError
@@ -60,6 +60,37 @@ class StatusTest(test_runner.RunnerTest):
             "lessons: 1 in every session; checks.md is kept at its source, ~/.claude/CLAUDE.md\n",
             self.run_command("status")[1],
         )
+
+    def test_a_lesson_kept_as_a_fix_says_how_often_claude_was_corrected_on_it_again_since(self) -> None:
+        """Covers: B289"""
+        self.curating()
+        fix = fixes.new_fix(
+            "CLAUDE.md",
+            ("github.com/acme/portal",),
+            None,
+            None,
+            "Run only the quick checks.",
+            "you said it twice",
+            "2026-11-20",
+            lesson="Run only the quick checks.",
+        )
+        by_hand = fixes.new_fix(
+            "CLAUDE.md", ("github.com/acme/portal",), None, None, "Name releases.", "why", "2026-11-20"
+        )
+        for each in (fix, by_hand):
+            fixes.keep(self.store, each)
+        self.write(
+            lesson_counts.COUNTS_FILE,
+            json.dumps(
+                {"format": 1, "lessons": {fix.name: {"kept": "2026-11-20", "corrected_again": ["a1b2c3d4e5f6"]}}}
+            ),
+        )
+
+        each = self.run_json("status")["lessons"]["each"]
+        out = self.run_command("status")[1]
+
+        self.assertEqual(each, [{"name": fix.name, "kind": "fix", "kept": "2026-11-20", "corrected_again": 1}])
+        self.assertIn(f"lesson {fix.name} (fix, kept 2026-11-20): corrected again 1 time: not working\n", out)
 
     def test_lessons_that_are_not_downloaded_are_said_and_never_counted_as_none(self) -> None:
         """Covers: B258"""
