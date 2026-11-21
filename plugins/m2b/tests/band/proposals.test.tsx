@@ -232,6 +232,25 @@ test('a proposal that stands on pasted text says pasted, one from a source the b
   await ui.unmount()
 })
 
+test('a project stands on the sessions that worked in its repository, not on words said', async ($, on) => {
+  // Covers: B275
+  const fake = new FakeM2b().proposal(
+    DANA,
+    'portal is a repository you worked in on 2026-03-02 and 2026-03-04, with no topic: keep it as a project',
+    'github.com/acme/portal',
+    { kind: 'project', day: '2026-03-04', source: 'worked', tool: null, by: null },
+  )
+  await start($, on, fake)
+  await typed($, 'm2b-proposals')
+
+  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  const drawn = await texts(ui)
+  expect(drawn.filter(line => line.endsWith('"github.com/acme/portal"'))).toEqual([
+    'sessions worked in it, the last on 2026-03-04: "github.com/acme/portal"',
+  ])
+  expect(drawn.filter(line => line === 'project')).toEqual(['project'])
+})
+
 test('a proposal a session handed in says so, and its line names the tool of a result or Claude for an answer', async ($, on) => {
   // Covers: B179
   const handedIn = { day: '2026-03-04', by: 'session' }

@@ -275,6 +275,8 @@ class ParseAnswerTest(unittest.TestCase):
         not_in_the_form: dict[str, object] = {
             "not an object": "Dana runs IT",
             "an unknown kind": entry(kind="rule"),
+            # Code proposes a project from where the sessions worked; a model never does.
+            "a project": entry(kind="project"),
             "no text": entry(text="  "),
             "a text that is no text": entry(text=7),
             "a text too long to be one fact": entry(text="word " * 100),
@@ -651,7 +653,7 @@ class InstructionTest(unittest.TestCase):
     def test_the_instruction_is_read_from_beside_the_module_and_names_what_an_answer_holds(self) -> None:
         instruction = glean.instruction()
 
-        for word in (*glean.KINDS, "text", "quote", "session", "topic", "due"):
+        for word in (*glean.READ_KINDS, "text", "quote", "session", "topic", "due"):
             with self.subTest(word=word):
                 self.assertIn(f"`{word}`", instruction)
         self.assertIn('{"proposals": [', instruction)

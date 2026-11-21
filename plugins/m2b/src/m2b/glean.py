@@ -68,7 +68,12 @@ COMMITMENT = "commitment"
 PERSONAL = "personal"
 # A correction of Claude the person made in two sessions: kept, it becomes a lesson (``lessons``).
 LESSON = "lesson"
-KINDS = (PERSON, AGREEMENT, COMMITMENT, PERSONAL, LESSON)
+# What a model may propose from the words of a session.
+READ_KINDS = (PERSON, AGREEMENT, COMMITMENT, PERSONAL, LESSON)
+# A repository the person worked in on two days and that has no topic: code proposes it from where
+# the sessions worked (``project_proposals``), on no words, so no model is asked and none is shown it.
+PROJECT = "project"
+KINDS = (*READ_KINDS, PROJECT)
 # The kinds that become a fact or a task, and what a session may hand in by itself: a lesson stands
 # on a correction made in two sessions, which one session cannot show.
 FACT_KINDS = (PERSON, AGREEMENT, COMMITMENT, PERSONAL)
@@ -86,6 +91,9 @@ TYPED = "typed"
 PASTED = "pasted"
 TOOL = "tool"
 AGENT = "agent"
+# Where a project's proposal stands: the sessions that worked in its repository, its quote the
+# repository's addresses.
+WORKED = "worked"
 # A proposal is one fact or one task; a longer text is a summary, which nobody asked for.
 TEXT_LENGTH = 300
 QUOTE_WORDS = 3
@@ -367,7 +375,7 @@ def _proposal(entry: object, sessions: Sequence[Session]) -> Proposal | None:
         due = _due(entry.get("due"))
     except ValueError:
         return None
-    if kind not in KINDS or not isinstance(quote, str) or not quote.strip():
+    if kind not in READ_KINDS or not isinstance(quote, str) or not quote.strip():
         return None
     if not text or len(text) > TEXT_LENGTH:
         return None

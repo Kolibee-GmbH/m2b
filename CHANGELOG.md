@@ -32,6 +32,9 @@ All notable changes to this project are documented here. The format follows
 - "Remember this project" in a session keeps the project of its folder with the address of its git
   remote, and the next run makes it a topic with its `Repository:` line
   ([Using m2b](docs/using.md#a-project)).
+- A curation run that reads your sessions proposes a repository you worked in on two days, and
+  that no topic names, as a project; kept, it becomes the same topic as "remember this project"
+  ([Using m2b](docs/using.md#a-project)).
 - A project topic's line can point into its repository (`- <sentence> → <path> (<file>.md)`); its
   place line then says the paths lie in the folder shown, and lint reports a pointer whose file the
   clone no longer holds and a repository nobody opened for 30 days ([Store format](docs/store-format.md)).

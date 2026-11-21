@@ -232,7 +232,7 @@ class InventedDayTest(Sandbox):
     def test_the_instruction_names_every_kind_and_every_field_of_a_proposal(self) -> None:
         instruction = glean.instruction()
 
-        for word in (*glean.KINDS, "text", "quote", "session", "topic", "due", "proposals"):
+        for word in (*glean.READ_KINDS, "text", "quote", "session", "topic", "due", "proposals"):
             with self.subTest(word):
                 self.assertIn(f"`{word}`" if word != "proposals" else '"proposals"', instruction)
 

@@ -65,7 +65,7 @@ def capture_command(arguments: argparse.Namespace, context: Context) -> int:
                     "nothing was captured."
                 )
             return 0
-        text = project_capture.capture_text(repository, text)
+        text = project_capture.capture_text(repository.addresses, text)
     tasks = open_tasks(load_store_settings(store).tasks, store, config.executables) if follow_up else None
     try:
         result = capture(store, text, arguments.source, quiet=arguments.quiet, follow_up=follow_up, tasks=tasks)
@@ -106,10 +106,10 @@ def _repository_here(context: Context) -> session_remotes.Repository:
 def _already_there(store: Store, repository: session_remotes.Repository) -> tuple[str | None, str | None]:
     """The topic the project is known as, else the name of its capture that waits in the inbox; both
     come from the store, so a character that draws nothing is written out."""
-    topic = project_capture.known_as(store, repository)
+    topic = project_capture.known_as(store, repository.addresses)
     if topic is not None:
         return with_hidden_written_out(topic), None
-    waiting = project_capture.waiting_capture(store, repository)
+    waiting = project_capture.waiting_capture(store, repository.addresses)
     return None, None if waiting is None else with_hidden_written_out(waiting)
 
 

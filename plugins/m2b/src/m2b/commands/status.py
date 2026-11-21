@@ -35,7 +35,7 @@ from m2b.config.machine import MachineConfig, load_machine_config
 from m2b.config.store_settings import describe_format, format_state, load_store_settings
 from m2b.curate import machine_state
 from m2b.curate.due import PAUSED_NOTE, check_due
-from m2b.glean import AGENT, KINDS, PASTED, TOOL, TYPED
+from m2b.glean import AGENT, KINDS, PASTED, TOOL, TYPED, WORKED
 from m2b.hook_input import project_folder
 from m2b.notes.characters import with_hidden_written_out
 from m2b.notes.layout import INBOX
@@ -313,7 +313,13 @@ def _proposal_answers_text(answers: dict[str, Any]) -> str:
 
 # How a line names the way a proposal came and where its words stand; another word is shown as it is.
 _WAYS = {proposals.READING: "a reading found in", proposals.SESSION: "sessions handed in from"}
-_SOURCES = {TYPED: "typed words", PASTED: "pasted text", TOOL: "a tool's result", AGENT: "an answer of Claude"}
+_SOURCES = {
+    TYPED: "typed words",
+    PASTED: "pasted text",
+    TOOL: "a tool's result",
+    AGENT: "an answer of Claude",
+    WORKED: "repositories worked in on two days",
+}
 
 
 def _proposal_ways_lines(answers: dict[str, Any]) -> list[str]:

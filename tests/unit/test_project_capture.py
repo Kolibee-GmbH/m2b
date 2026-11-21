@@ -31,7 +31,7 @@ class TextTest(unittest.TestCase):
         """Covers: B252"""
         two = Repository(Path("/code/acme-portal"), ("github.com/acme/portal", "gitlab.com/acme/portal"))
 
-        text = project_capture.capture_text(two, "the customer portal we build for Acme")
+        text = project_capture.capture_text(two.addresses, "the customer portal we build for Acme")
 
         self.assertEqual(
             text,
@@ -43,7 +43,7 @@ class TextTest(unittest.TestCase):
     def test_without_words_the_capture_names_the_repository(self) -> None:
         """Covers: B252"""
         self.assertEqual(
-            project_capture.capture_text(PORTAL, "  "),
+            project_capture.capture_text(PORTAL.addresses, "  "),
             "Keep this project: portal\nRepository: github.com/acme/portal\n",
         )
 
@@ -67,32 +67,32 @@ class KnownTest(StoreFixture):
         """Covers: B253"""
         (self.root / "memory" / "MEMORY.md").write_text(MEMORY_WITH_PORTAL, encoding="utf-8")
 
-        self.assertEqual(project_capture.known_as(self.store, PORTAL), "Acme portal")
+        self.assertEqual(project_capture.known_as(self.store, PORTAL.addresses), "Acme portal")
         other = Repository(Path("/code/shop"), ("github.com/acme/shop",))
-        self.assertIsNone(project_capture.known_as(self.store, other))
+        self.assertIsNone(project_capture.known_as(self.store, other.addresses))
 
     def test_a_project_capture_that_waits_in_the_inbox_is_the_project_too(self) -> None:
         """Covers: B253"""
         (self.root / "inbox" / "20261120-0900-claude.md").write_text(
             "---\ncreated: 2026-11-20T09:00:00+01:00\nsource: claude\n---\n"
-            + project_capture.capture_text(PORTAL, "the portal"),
+            + project_capture.capture_text(PORTAL.addresses, "the portal"),
             encoding="utf-8",
         )
 
-        self.assertEqual(project_capture.waiting_capture(self.store, PORTAL), "20261120-0900-claude.md")
+        self.assertEqual(project_capture.waiting_capture(self.store, PORTAL.addresses), "20261120-0900-claude.md")
 
     def test_a_file_that_cannot_be_read_is_passed_over(self) -> None:
         """Covers: B253"""
         unreadable = self.root / "inbox" / "20261120-0800-claude.md"
-        unreadable.write_text(project_capture.capture_text(PORTAL, "the portal"), encoding="utf-8")
+        unreadable.write_text(project_capture.capture_text(PORTAL.addresses, "the portal"), encoding="utf-8")
         unreadable.chmod(0)
         self.addCleanup(unreadable.chmod, 0o600)
         (self.root / "memory" / "MEMORY.md").write_text(MEMORY_WITH_PORTAL, encoding="utf-8")
         (self.root / "memory" / "MEMORY.md").chmod(0)
         self.addCleanup((self.root / "memory" / "MEMORY.md").chmod, 0o600)
 
-        self.assertIsNone(project_capture.waiting_capture(self.store, PORTAL))
-        self.assertIsNone(project_capture.known_as(self.store, PORTAL))
+        self.assertIsNone(project_capture.waiting_capture(self.store, PORTAL.addresses))
+        self.assertIsNone(project_capture.known_as(self.store, PORTAL.addresses))
 
     def test_a_note_that_only_mentions_the_address_is_no_project_capture(self) -> None:
         """Covers: B253"""
@@ -100,7 +100,7 @@ class KnownTest(StoreFixture):
             "---\nsource: claude\n---\nThe portal moved to github.com/acme/portal last week.\n", encoding="utf-8"
         )
 
-        self.assertIsNone(project_capture.waiting_capture(self.store, PORTAL))
+        self.assertIsNone(project_capture.waiting_capture(self.store, PORTAL.addresses))
 
 
 class CommandTest(StoreFixture):

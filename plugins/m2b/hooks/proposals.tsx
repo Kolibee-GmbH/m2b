@@ -241,6 +241,8 @@ const LEADS = new Map([
   [TYPED, 'said on'],
   ['pasted', 'pasted on'],
   ['agent', 'Claude wrote on'],
+  // A project stands on no words: on the sessions that worked in its repository.
+  ['worked', 'sessions worked in it, the last on'],
 ])
 
 /**

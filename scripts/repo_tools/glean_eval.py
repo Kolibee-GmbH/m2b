@@ -525,7 +525,7 @@ class ReplayDay:
         if self.answer is None or self.checked is None:
             return f"{read}, no answer: {self.problem}"
         kinds = Counter(proposal.kind for proposal in self.checked.kept)
-        by_kind = ", ".join(f"{kinds[kind]} {kind}" for kind in glean.KINDS)
+        by_kind = ", ".join(f"{kinds[kind]} {kind}" for kind in glean.READ_KINDS)
         return (
             f"{read}, {len(self.checked.kept)} proposals: {by_kind}; left out by code: "
             f"{len(self.checked.not_quoted)} not quoted, {self.answer.malformed} not in the form"

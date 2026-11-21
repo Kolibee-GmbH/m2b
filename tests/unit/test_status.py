@@ -304,6 +304,7 @@ class StatusTest(test_runner.RunnerTest):
                     "commitment": nothing,
                     "personal": nothing,
                     "lesson": nothing,
+                    "project": nothing,
                 },
                 "ways": {"reading": {"typed": {"waiting": 1, "answered": 0, "kept": 2, "dropped": 1, "expired": 1}}},
             },
@@ -341,6 +342,7 @@ class StatusTest(test_runner.RunnerTest):
             "000000000003": entry(3, "dropped", 31, "tool", "session", "Read"),
             "000000000004": entry(4, "open", 1, "agent", "session"),
             "000000000005": entry(5, "expired", 5, "pasted", None),
+            "000000000006": entry(6, "open", 1, "worked", None),
         }
         proposals.save(self.store, proposals.Proposals(entries))
 
@@ -350,7 +352,10 @@ class StatusTest(test_runner.RunnerTest):
         self.assertEqual(
             status["proposal_answers"]["ways"],
             {
-                "reading": {"pasted": {"waiting": 0, "answered": 0, "kept": 0, "dropped": 0, "expired": 1}},
+                "reading": {
+                    "pasted": {"waiting": 0, "answered": 0, "kept": 0, "dropped": 0, "expired": 1},
+                    "worked": {"waiting": 1, "answered": 0, "kept": 0, "dropped": 0, "expired": 0},
+                },
                 "session": {
                     "agent": {"waiting": 1, "answered": 0, "kept": 0, "dropped": 0, "expired": 0},
                     "tool": {"waiting": 1, "answered": 0, "kept": 1, "dropped": 0, "expired": 0},
@@ -359,6 +364,8 @@ class StatusTest(test_runner.RunnerTest):
         )
         for line in (
             "proposals a reading found in pasted text: 0 waiting, 0 kept, 0 dropped, 1 expired in the last 30 days",
+            "proposals a reading found in repositories worked in on two days: 1 waiting, 0 kept, 0 dropped, "
+            "0 expired in the last 30 days",
             "proposals sessions handed in from an answer of Claude: 1 waiting, 0 kept, 0 dropped, 0 expired "
             "in the last 30 days",
             "proposals sessions handed in from a tool's result: 1 waiting, 1 kept, 0 dropped, 0 expired "

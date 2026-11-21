@@ -87,6 +87,12 @@ names the topic, it comes into the session with the folder that repository lies 
 machine, or `not cloned on this machine`. A folder without a remote is not kept, and a project
 that already has a topic is not kept twice.
 
+Where the curation run reads your sessions, you need not say it: a repository you typed in on two
+days, within 30 days, that no topic names is proposed as a `project`. Keep it, and it becomes the
+same topic as if you had said it. Which days a repository was worked in is remembered on this
+machine only, in `~/.local/state/m2b/project-days.json`, with the repository's address and the
+days and nothing else.
+
 ## Fixes for the files Claude reads
 
 When a `CLAUDE.md` or a rule file says something wrongly, say so in a session: "keep this as a

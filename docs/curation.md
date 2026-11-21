@@ -344,6 +344,11 @@ at least three words, and when you did not capture the same thing in that time. 
 waits, or like one you kept or dropped or that expired within 90 days, is not kept a second time,
 so reading a period again adds nothing.
 
+Code proposes one more kind by itself, with no model and on no words: a `project`, a repository
+whose remote the session start noted and that you typed in on two days, in this reading or in one
+of the last 30 days, while no topic names it and no capture of it waits in the inbox
+([A project](using.md#a-project)). A session in a folder that is left out counts for none.
+
 **Your answer.** `m2b proposals` lists what waits, each with its id, its kind, the text, the words
 it stands on and their day: `said on <day>` before words you typed, `pasted on <day>` before words
 that stood in text you pasted, which may be someone else's:

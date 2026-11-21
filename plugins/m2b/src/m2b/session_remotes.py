@@ -32,7 +32,7 @@ import json
 import os
 import re
 import subprocess
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -187,9 +187,13 @@ class Repository:
 
     @property
     def name(self) -> str:
-        """The repository's own name, the last part of its first address: ``portal`` for
-        ``github.com/acme/portal``."""
-        return self.addresses[0].rsplit("/", 1)[-1]
+        return name_of(self.addresses)
+
+
+def name_of(addresses: Sequence[str]) -> str:
+    """A repository's own name, the last part of its first address: ``portal`` for
+    ``github.com/acme/portal``."""
+    return addresses[0].rsplit("/", 1)[-1]
 
 
 def repository_of(folder: Path, environ: Mapping[str, str], timeout: float = GIT_TIMEOUT_SECONDS) -> Repository:

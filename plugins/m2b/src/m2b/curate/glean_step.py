@@ -26,6 +26,10 @@ per kind, what was added and what stood on no words of the person. The counts go
 information, never into the review: nothing here asks the person to act. What the reader left out of
 the sessions it read is among them, so a day's reading shows what it did not take.
 
+A repository the person typed in on two days, in this reading or remembered from one before, and
+that no topic names, is proposed as a project by code (``project_proposals``), with no model and
+no words of the person; the days are remembered in machine state once the reading is saved.
+
 When anything fails, the transcripts that cannot be looked at, a model without an answer, an
 answer that cannot be read, nothing is saved and ``read_until`` stays, so the next run reads the
 period again. A period in which nothing carries Claude Code's mark of who sent it fails the same
@@ -53,6 +57,7 @@ from m2b import (
     kept_lessons,
     lesson_sources,
     lessons,
+    project_proposals,
     proposals,
     session_remotes,
     sessions,
@@ -151,8 +156,24 @@ def propose(
         placed, read, config, machine, environ, notes_folder, started, pass_fds, kept.entries
     )
     said = [proposals.Said(proposal, typed_at.astimezone(zone).date()) for proposal, typed_at in placed]
+    repositories = {
+        session.folder: tuple(sorted(_addresses(notes_folder, session.folder, started))) for session in read
+    }
+    worked = project_proposals.joined(
+        project_proposals.remembered(machine.state_dir, started.astimezone(zone).date()),
+        project_proposals.days_worked(read, repositories, zone),
+    )
+    said += project_proposals.proposed(store, worked)
     added = proposals.add(kept, said, started)
     counted = added.proposals
+    # Only what this reading added: a project that waits or was answered stays a candidate while
+    # its days are remembered, and ``add`` refuses it again.
+    new_projects = sum(entry.kind == glean.PROJECT for key, entry in counted.entries.items() if key not in kept.entries)
+    if new_projects:
+        notes.append(
+            f"{new_projects} {'repository' if new_projects == 1 else 'repositories'} without a topic "
+            f"{_were(new_projects)} worked in on two days and proposed as a project"
+        )
     for refused in checked.not_quoted:
         counted = proposals.counted(counted, refused.kind, "not_quoted")
     if not_keepable:
@@ -170,6 +191,7 @@ def propose(
             "no repository is known that both its sessions worked in"
         )
     proposals.save(store, dataclasses.replace(counted, read_until=started))
+    project_proposals.remember(machine.state_dir, worked, machine.temp_dir)
     sent = sum(len(session.prompts) for session in read)
     summary = (
         f"read {_count(len(read), 'session')} with {_count(sent, 'prompt')} since {start.strftime(_MOMENT)}: "

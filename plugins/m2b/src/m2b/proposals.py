@@ -41,7 +41,12 @@ not read, so this one never writes over what it does not know. That is why the f
 lowest format that an m2b which reads it shows rightly (``_format_of``): an m2b before the source
 would show a proposal from pasted text as said and write it back without the field, and one
 before a session could hand in would show a handed-in proposal as said or under a source it does
-not know and write it back without who proposed it and without the tool.
+not know and write it back without who proposed it and without the tool; one before a lesson or a
+project could be proposed would leave such a proposal out and write the file back without it.
+
+A project is proposed by code, not by a model (``project_proposals``): a repository the person
+worked in on two days that has no topic. Its quote is the repository's addresses, its source
+``WORKED``; it is no example for a reading's model, which proposes no project.
 """
 
 from __future__ import annotations
@@ -64,10 +69,13 @@ from m2b.glean import (
     KINDS,
     LESSON,
     PASTED,
+    PROJECT,
+    READ_KINDS,
     STATED,
     THIS_PROJECT,
     TOOL,
     TYPED,
+    WORKED,
     AtSource,
     Example,
     Examples,
@@ -79,7 +87,9 @@ from m2b.notes.layout import STATE
 from m2b.store.base import Store
 
 PROPOSALS_FILE = f"{STATE}/core/proposals.json"
-FORMAT = 4
+FORMAT = 5
+# What an m2b before a project could be proposed wrote and reads: no kind ``project``.
+FORMAT_WITHOUT_PROJECTS = 4
 # What an m2b before a lesson could be proposed wrote and reads: no kind ``lesson``.
 FORMAT_WITHOUT_LESSONS = 3
 # What an m2b before a proposal had a source wrote and reads.
@@ -281,10 +291,13 @@ def is_tool_name(text: str) -> bool:
 
 
 def _format_of(entries: Collection[Entry]) -> int:
-    """The format the file needs: 4 with a lesson; 3 with a proposal that names who proposed or a
-    tool, or whose source is neither typed nor pasted; else 2 with one from pasted text; else 1."""
-    if any(entry.kind == LESSON for entry in entries):
+    """The format the file needs: 5 with a project; 4 with a lesson; 3 with a proposal that names who
+    proposed or a tool, or whose source is neither typed nor pasted; else 2 with one from pasted
+    text; else 1."""
+    if any(entry.kind == PROJECT for entry in entries):
         return FORMAT
+    if any(entry.kind == LESSON for entry in entries):
+        return FORMAT_WITHOUT_PROJECTS
     if any(entry.by is not None or entry.tool is not None or entry.source not in (TYPED, PASTED) for entry in entries):
         return FORMAT_WITHOUT_LESSONS
     return FORMAT_WITHOUT_SOURCE if all(entry.source == TYPED for entry in entries) else FORMAT_OF_A_READING
@@ -388,8 +401,9 @@ def examples(current: Proposals, now: datetime.datetime) -> Examples:
             (
                 (entry.since, key, entry)
                 for key, entry in _remembered(current.entries, now).items()
-                # What a session handed in is none: its quote can be anyone's text.
-                if entry.state == state and entry.by is None
+                # What a session handed in is none: its quote can be anyone's text. Nor is a
+                # project: it stands on no words, and no model proposes one.
+                if entry.state == state and entry.by is None and entry.kind in READ_KINDS
             ),
             key=lambda item: item[:2],
             reverse=True,
@@ -410,7 +424,7 @@ def waiting_examples(current: Proposals) -> tuple[Example, ...]:
         (
             (entry.since, key, entry)
             for key, entry in current.entries.items()
-            if entry.state == OPEN and entry.by is None
+            if entry.state == OPEN and entry.by is None and entry.kind in READ_KINDS
         ),
         key=lambda item: item[:2],
         reverse=True,
@@ -559,6 +573,7 @@ def said_line(entry: Entry, quote: str) -> str:
         PASTED: "pasted on",
         TOOL: f"in a result of {entry.tool or 'a tool'} on",
         AGENT: "Claude wrote on",
+        WORKED: "sessions worked in it, the last on",
     }
     lead = leads.get(entry.source, f"from {entry.source} on")
     return f'{lead} {entry.day.isoformat()}: "{quote}"'

@@ -9,7 +9,7 @@ import unittest
 from typing import Any
 from unittest import mock
 
-from m2b import fixes, glean, harvest, lessons, proposal_answers, proposals
+from m2b import fixes, glean, harvest, lessons, project_proposals, proposal_answers, proposals
 from m2b.glean import Proposal
 from m2b.notes.frontmatter import Note
 from m2b.proposal_answers import DROP, KEEP
@@ -187,6 +187,24 @@ class KeepTest(ProposalHarvestFixture):
         self.assertEqual(self.answer_files(), [])
         self.assertEqual((len(report.captured), report.dropped, report.problems), (1, [], []))
         self.assertEqual(self.tasks.items(include_completed=True), [])
+
+    def test_a_kept_project_becomes_the_capture_of_keep_this_project(self) -> None:
+        """Covers: B276"""
+        two = project_proposals.proposal(
+            ("github.com/acme/portal", "gitlab.com/alex/portal"), [datetime.date(2026, 3, 1), NOW.date()]
+        )
+        self.answered(KEEP, two)
+
+        report = self.harvest()
+
+        (note,) = self.captures()
+        self.assertEqual(
+            note.body,
+            "Keep this project: portal\nRepository: github.com/acme/portal\nRepository: gitlab.com/alex/portal\n",
+        )
+        self.assertEqual(self.frontmatter(note).get("from_proposal"), proposals.proposal_id(two))
+        self.assertEqual(self.state(proposals.proposal_id(two))[0], "kept")
+        self.assertEqual(report.problems, [])
 
     def test_a_kept_commitment_with_a_day_has_its_task_at_once(self) -> None:
         """Covers: B121"""

@@ -11,7 +11,15 @@ from unittest import mock
 import test_proposals
 import test_runner
 import test_sessions
-from m2b import folders_left_out, glean, lesson_sources, proposal_answers, proposals, session_remotes
+from m2b import (
+    folders_left_out,
+    glean,
+    lesson_sources,
+    project_proposals,
+    proposal_answers,
+    proposals,
+    session_remotes,
+)
 from m2b.config.profile import save_profile
 from m2b.curate import machine_state, model
 from m2b.run_record import SUCCEEDED, load_run_record
@@ -561,6 +569,150 @@ class ProjectLessonTest(GleanStepTest):
         self.assertIn(
             "1 lesson for one project left out: no repository is known that both its sessions worked in", self.info()
         )
+
+
+class ProjectProposalTest(GleanStepTest):
+    PORTAL = "/home/alex/projects/portal"
+
+    def portal_noted(self, folder: str = PORTAL, remote: str = "git@github.com:acme/portal.git") -> None:
+        notes = self.machine.state_dir / session_remotes.NOTES_FOLDER
+        session_remotes.note(notes, folder, frozenset([remote]), START - HOUR, lambda path, text: path.write_text(text))
+
+    def days_file(self) -> Any:
+        return json.loads((self.machine.state_dir / project_proposals.DAYS_FILE).read_text(encoding="utf-8"))
+
+    def remembered(self, *days: str) -> None:
+        self.machine.state_dir.mkdir(parents=True, exist_ok=True)
+        (self.machine.state_dir / project_proposals.DAYS_FILE).write_text(
+            json.dumps({"days": {"github.com/acme/portal": list(days)}}), encoding="utf-8"
+        )
+
+    def project_entries(self) -> list[dict[str, Any]]:
+        return [entry for entry in self.kept()["proposals"].values() if entry["kind"] == "project"]
+
+    def test_a_repository_worked_in_on_two_days_without_a_topic_is_proposed_as_a_project(self) -> None:
+        """Covers: B275"""
+        self.reading()
+        self.portal_noted()
+        self.read_until(START - 3 * DAY)
+        self.typed("the login page needs a second button", START - 2 * DAY, "one", self.PORTAL)
+        self.typed("now the footer", START - HOUR, "two", self.PORTAL)
+        self.answers()
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        (entry,) = self.project_entries()
+        self.assertEqual(
+            (entry["quote"], entry["source"], entry["day"], entry["state"]),
+            ("github.com/acme/portal", "worked", "2026-11-07", "open"),
+        )
+        self.assertEqual(
+            entry["text"],
+            "portal (github.com/acme/portal) is a repository you worked in on 2026-11-05 and 2026-11-07, "
+            "with no topic: keep it as a project",
+        )
+        self.assertEqual(self.kept()["format"], 5)
+        self.assertIn("1 repository without a topic was worked in on two days and proposed as a project", self.info())
+        self.assertEqual(self.days_file(), {"days": {"github.com/acme/portal": ["2026-11-05", "2026-11-07"]}})
+
+    def test_a_project_that_waits_already_is_not_proposed_or_announced_again(self) -> None:
+        """Covers: B275"""
+        self.reading()
+        self.portal_noted()
+        self.remembered("2026-11-02")
+        waiting = project_proposals.proposal(("github.com/acme/portal",), [datetime.date(2026, 11, 2)])
+        added = proposals.add(proposals.Proposals({}), [proposals.Said(waiting, datetime.date(2026, 11, 2))], START)
+        proposals.save(self.store, added.proposals)
+        self.typed("now the footer", START - HOUR, "two", self.PORTAL)
+        self.answers()
+
+        self.run_curate()
+
+        (entry,) = self.project_entries()
+        self.assertIn("on 2026-11-02 and 2026-11-02", entry["text"])
+        self.assertFalse(any("proposed as a project" in note for note in self.info()))
+
+    def test_a_day_remembered_from_an_earlier_reading_is_one_of_the_two(self) -> None:
+        """Covers: B275"""
+        self.reading()
+        self.portal_noted()
+        self.remembered("2026-11-02")
+        self.typed("now the footer", START - HOUR, "two", self.PORTAL)
+        self.answers()
+
+        self.run_curate()
+
+        (entry,) = self.project_entries()
+        self.assertIn("on 2026-11-02 and 2026-11-07", entry["text"])
+
+    def test_one_day_proposes_nothing_and_is_remembered_and_a_day_older_than_30_days_is_forgotten(self) -> None:
+        """Covers: B275"""
+        self.reading()
+        self.portal_noted()
+        self.remembered("2026-10-07")
+        self.typed("now the footer", START - HOUR, "two", self.PORTAL)
+        self.answers()
+
+        self.run_curate()
+
+        self.assertEqual(self.project_entries(), [])
+        self.assertEqual(self.days_file(), {"days": {"github.com/acme/portal": ["2026-11-07"]}})
+
+    def test_a_repository_a_topic_names_or_whose_capture_waits_is_not_proposed(self) -> None:
+        """Covers: B275"""
+        for known in (
+            (
+                "memory/MEMORY.md",
+                "# Memory\n\n## Facts\n\n### Portal (portal)\n- Repository: github.com/acme/portal (portal.md)\n",
+            ),
+            (
+                "inbox/20261106-0900-cli.md",
+                "---\ncreated: 2026-11-06T09:00:00+00:00\nsource: cli\n---\n"
+                "Keep this project: portal\nRepository: github.com/acme/portal\n",
+            ),
+        ):
+            with self.subTest(known[0]):
+                self.setUp()
+                self.reading()
+                self.portal_noted()
+                self.remembered("2026-11-02")
+                self.write(*known)
+                self.typed("now the footer", START - HOUR, "two", self.PORTAL)
+                self.answers()
+
+                self.run_curate()
+
+                self.assertEqual(self.project_entries(), [])
+
+    def test_a_session_in_a_folder_left_out_or_without_a_noted_remote_counts_for_no_repository(self) -> None:
+        """Covers: B275"""
+        self.reading()
+        client = str(self.machine.home / "code" / "portal")
+        save_profile(
+            self.store,
+            {"version": 2, "owner": "Alex", "language": "en", "worklog_leave_out": {"path_under": ["~/code/portal"]}},
+        )
+        self.portal_noted(client)
+        self.remembered("2026-11-02")
+        self.typed("now the footer", START - HOUR, "two", client)
+        self.typed("the shed needs paint", START - 2 * HOUR, "shed", "/home/alex/projects/shed")
+        self.answers()
+
+        self.run_curate()
+
+        self.assertEqual(self.project_entries(), [])
+        self.assertEqual(self.days_file(), {"days": {"github.com/acme/portal": ["2026-11-02"]}})
+
+    def test_a_reading_that_fails_remembers_no_day(self) -> None:
+        """Covers: B275"""
+        self.reading()
+        self.portal_noted()
+        self.typed("now the footer", START - HOUR, "two", self.PORTAL)
+        self.answers(outcome="error")
+
+        self.run_curate()
+
+        self.assertFalse((self.machine.state_dir / project_proposals.DAYS_FILE).exists())
 
 
 class KeptFixTest(GleanStepTest):

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-from m2b import proposals
+from m2b import project_proposals, proposals
 from m2b.config.errors import ConfigError
 from m2b.glean import FIX, KINDS, AtSource, Example, Examples, LessonPart, Proposal
 from m2b.proposals import Said
@@ -239,6 +239,9 @@ class SourceTest(ProposalsFixture):
         self.assertTrue(lines["pasted"].startswith("pasted on 2026-03-04: "))
 
 
+PROJECT = project_proposals.proposal(
+    ("github.com/acme/portal",), [datetime.date(2026, 3, 1), datetime.date(2026, 3, 5)]
+)
 LESSON = Proposal(
     "lesson",
     "Run only the quick checks unless the change gives a reason.",
@@ -306,6 +309,39 @@ class LessonInFileTest(ProposalsFixture):
             with self.subTest(broken=broken):
                 self.write({**raw, "proposals": {key: {**raw["proposals"][key], **broken}}})
                 self.assertEqual(proposals.load(self.store).entries, {})
+
+
+class ProjectInFileTest(ProposalsFixture):
+    def test_a_project_has_format_5_an_m2b_before_projects_refuses_and_it_is_no_example(self) -> None:
+        """Covers: B275"""
+        self.kept(LESSON)
+        self.kept(PROJECT)
+        written = self.written()
+        self.assertEqual(written["format"], 5)
+        (entry,) = (each for each in written["proposals"].values() if each["kind"] == "project")
+        self.assertEqual((entry["quote"], entry["source"]), ("github.com/acme/portal", "worked"))
+        with (
+            mock.patch.object(proposals, "FORMAT", proposals.FORMAT_WITHOUT_PROJECTS),
+            self.assertRaises(proposals.ProposalsError),
+        ):
+            proposals.load(self.store)
+        for key in written["proposals"]:
+            self.settle(key, proposals.KEPT)
+
+        current = proposals.load(self.store)
+
+        self.assertEqual([example.kind for example in proposals.examples(current, NOW).kept], ["lesson"])
+        self.assertEqual(proposals.proposal_id(PROJECT), proposals.proposal_id(dataclasses.replace(PROJECT, text="")))
+
+    def test_a_project_is_listed_as_standing_on_the_sessions_that_worked_in_it(self) -> None:
+        """Covers: B275"""
+        self.kept(PROJECT)
+        (loaded,) = proposals.load(self.store).entries.values()
+
+        self.assertEqual(
+            proposals.said_line(loaded, loaded.quote),
+            'sessions worked in it, the last on 2026-03-04: "github.com/acme/portal"',
+        )
 
 
 class HandedInTest(ProposalsFixture):
