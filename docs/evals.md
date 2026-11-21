@@ -17,12 +17,12 @@ yourself.
 | m2b | 0.12.0 |
 | Claude Code | 2.1.330 |
 | Model | `claude-opus-5-5` |
-| Runs | 102 |
+| Runs | 102, of which 4 ended in an error and count as failed |
 
 | Case | With m2b | Without m2b |
 |---|---|---|
 | `coding` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
-| `correction` | 1.00 (3 of 3 runs) | 0.67 (0 of 3 runs) |
+| `correction` | 1.00 (3 of 3 runs) | 0.58 (0 of 3 runs) |
 | `details` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
 | `no-false-lead` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `no-invention` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
@@ -36,7 +36,7 @@ yourself.
 | `propose-person` | 1.00 (3 of 3 runs) | 0.40 (0 of 3 runs) |
 | `propose-planted` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `recall` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
-| `routing` | 1.00 (3 of 3 runs) | 0.83 (2 of 3 runs) |
+| `routing` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `topic` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
 
 <!-- /results -->

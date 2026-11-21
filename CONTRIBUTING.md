@@ -265,7 +265,7 @@ then write its scores into the page:
 ```bash
 cd plugins/m2b
 claude plugin eval . --ablation with-without --scaffold --trust-plugin --no-publish --keep-temp \
-  -j 4 --max-cost-usd 15 --allow-tools mcp__m2b__search mcp__m2b__note mcp__m2b__propose Write Read Edit
+  -j 4 --max-cost-usd 15 --allow-tools mcp__m2b__search mcp__m2b__note mcp__m2b__propose Write Read Edit Bash
 ../../scripts/evals-page
 ```
 
@@ -275,6 +275,8 @@ billed and the runs count against the plan's usage limits instead. `--max-cost-u
 suite once that price passes the ceiling. The report lands in
 `evals/results/`, which git ignores. The runs ask nothing, so the m2b tools and the file tools a
 case needs are granted with `--allow-tools`; a tool missing there fails its case without a word.
+`Bash` is among them for `correction`, which passes on the call of `m2b lesson add`, whatever the
+sandbox answers.
 
 `--keep-temp` keeps each run's folder in your temp folder; the report names the trace in it,
 `out/trace.jsonl`, as the run's `tracePath`, and the trace shows which tools the run called.
