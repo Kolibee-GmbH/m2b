@@ -189,12 +189,17 @@ def _settle_proposals(store: Store, tasks: Tasks, now: datetime.datetime, report
     to_keep = [
         key
         for key, answer in answers.items()
-        if answer == proposal_answers.KEEP and key in current.entries and _takes(current.entries[key], answer)
+        if answer == proposal_answers.KEEP
+        and key in current.entries
+        and _takes(current.entries[key], answer)
+        # A lesson writes no capture, so none is looked for.
+        and current.entries[key].lesson is None
     ]
     since = min((current.entries[key].since for key in to_keep), default=None)
     earlier = _earlier(store, since - CLOCK_MARGIN if since else None, PROPOSAL_SOURCE, keys.FROM_PROPOSAL)
     report.problems += _uncertain(earlier, "proposal", "kept proposals")
     settled: list[str] = []
+    lessons_kept = False
     try:
         for key, answer in sorted(answers.items()):
             entry = current.entries.get(key)
@@ -205,6 +210,11 @@ def _settle_proposals(store: Store, tasks: Tasks, now: datetime.datetime, report
                 current = proposals.settled(current, key, proposals.DROPPED, now)
                 report.dropped.append(entry.text)
                 settled.append(key)
+            elif entry.lesson is not None:
+                if _keep_lesson(store, entry, report):
+                    current = proposals.settled(current, key, proposals.KEPT, now)
+                    settled.append(key)
+                    lessons_kept = True
             elif key in earlier.ids or earlier.certain:
                 if key not in earlier.ids:
                     _capture_proposal(store, tasks, key, entry, now, report)
@@ -215,6 +225,30 @@ def _settle_proposals(store: Store, tasks: Tasks, now: datetime.datetime, report
             proposals.save(store, current)
     for key in settled:
         proposal_answers.remove(store, key)
+    if lessons_kept:
+        # Filed in this run too; a file the first filing could not take is named once.
+        filed = kept_lessons.file_kept(store)
+        report.lessons += filed.lessons
+        report.problems += [problem for problem in filed.problems if problem not in report.problems]
+
+
+def _keep_lesson(store: Store, entry: proposals.Entry, report: HarvestReport) -> bool:
+    """Hands a kept lesson to the way a lesson kept by hand goes, in code (B261), never to a capture
+    the filing model would read; False, with the reason for the review, where it cannot go there yet.
+
+    Keeping is safe to repeat: the same lesson waiting or filed already is not added twice.
+    """
+    lesson = entry.lesson
+    assert lesson is not None
+    given = kept_lessons.KeptLesson(
+        entry.text[:60], entry.text, lesson.kind, lesson.target, entry.day.isoformat(), lesson.words
+    )
+    try:
+        kept_lessons.keep(store, given)
+    except kept_lessons.LessonRefusedError as error:
+        report.problems.append(f"the lesson you kept waits: {entry.text} ({error})")
+        return False
+    return True
 
 
 def _takes(entry: proposals.Entry, answer: str) -> bool:

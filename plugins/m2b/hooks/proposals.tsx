@@ -1,6 +1,6 @@
 import type { CommandSpec, EngineInterface, ResolveInput } from 'claude-code'
 
-import type { BandHealth, BandPress, BandProposal, BandProposals, BandSettle } from '../types'
+import type { BandHealth, BandLesson, BandPress, BandProposal, BandProposals, BandSettle } from '../types'
 import { plainLine, writtenOut } from './plain-text'
 import { NOT_LOOKED, button, part, pressLine, said, under } from './look'
 import { CURATE_ROW, candidateRow, curateButton } from './rows'
@@ -88,7 +88,20 @@ function isProposal(value: unknown): value is BandProposal {
     (value['source'] === undefined || typeof value['source'] === 'string') &&
     // Nor does one before a session could hand in name a tool or who proposed.
     (value['tool'] === undefined || isTextOrNull(value['tool'])) &&
-    (value['by'] === undefined || isTextOrNull(value['by']))
+    (value['by'] === undefined || isTextOrNull(value['by'])) &&
+    // Nor does one before lessons name a lesson's part.
+    (value['lesson'] === undefined || value['lesson'] === null || isLesson(value['lesson']))
+  )
+}
+
+function isLesson(value: unknown): value is BandLesson {
+  return (
+    isObject(value) &&
+    typeof value['kind'] === 'string' &&
+    typeof value['target'] === 'string' &&
+    typeof value['quote'] === 'string' &&
+    Array.isArray(value['words']) &&
+    value['words'].every(word => typeof word === 'string')
   )
 }
 
@@ -129,7 +142,7 @@ export function parseProposals(part: unknown): BandProposals {
   if (handedIn !== null && !isCount(handedIn)) {
     return { ...NO_PROPOSALS, error: OTHER_SHAPE }
   }
-  const waiting = part['proposals'].map(({ id, kind, text, quote, day, topic, due, source, tool, by }) => ({
+  const waiting = part['proposals'].map(({ id, kind, text, quote, day, topic, due, source, tool, by, lesson }) => ({
     id,
     kind,
     text,
@@ -140,6 +153,7 @@ export function parseProposals(part: unknown): BandProposals {
     source,
     tool,
     by,
+    lesson,
   }))
   return { waiting, answered: part['answered'], handedIn, error: null }
 }
@@ -163,6 +177,10 @@ export function errorBesideTasks(tasksError: string | null, proposals: BandPropo
 /** `commitment, due 2026-03-06, topic Northwind`: what kind of thing is proposed, as `m2b proposals` heads it. */
 function heading(proposal: BandProposal): string {
   const parts = [writtenOut(proposal.kind)]
+  if (proposal.lesson) {
+    // What is kept fires on its commands and holds where its target says: the person sees both.
+    parts.push(lessonHeading(proposal.lesson))
+  }
   if (proposal.due !== null) {
     parts.push(`due ${writtenOut(proposal.due)}`)
   }
@@ -174,6 +192,17 @@ function heading(proposal: BandProposal): string {
     parts.push(proposal.by === HANDED_IN_BY ? 'handed in by a session' : `proposed by ${writtenOut(proposal.by)}`)
   }
   return parts.join(', ')
+}
+
+/** `action for every project, on a command with scripts/check`, as `m2b proposals` says it. */
+function lessonHeading(lesson: BandLesson): string {
+  const words = lesson.words.length > 0 ? `, on a command with ${lesson.words.map(word => writtenOut(word)).join(' ')}` : ''
+  return `${writtenOut(lesson.kind)} for ${writtenOut(lesson.target)}${words}`
+}
+
+/** The line under a lesson with the same correction said in a second session. */
+function againLine(lesson: BandLesson): string {
+  return `and again in another session: "${writtenOut(lesson.quote)}"`
 }
 
 // Who proposed, where it was no reading of the sessions: a session, by itself.
@@ -300,6 +329,7 @@ export function proposalLines(proposals: BandProposals | null): string[] {
       `${proposal.id}  ${heading(proposal)}`,
       `  ${writtenOut(proposal.text)}`,
       `  ${saidLine(proposal)}`,
+      ...(proposal.lesson ? [`  ${againLine(proposal.lesson)}`] : []),
     ]),
   ]
 }
@@ -354,6 +384,7 @@ export function proposalsPane(
           heading(proposal),
         )}
         {under(ui, saidLine(proposal))}
+        {proposal.lesson && under(ui, againLine(proposal.lesson))}
       </Box>
     )),
     error === null && waiting.length === 0 && said(ui, NONE_WAITS, 'quiet'),

@@ -263,6 +263,20 @@ test('a proposal a session handed in says so, and its line names the tool of a r
   await ui.unmount()
 })
 
+test('a proposed lesson shows its kind, whom it is for, the words it fires on and the correction said again', async ($, on) => {
+  // Covers: B273
+  const lesson = { kind: 'action', target: 'every project', words: ['scripts/check'], quote: 'no full check without a reason' }
+  const fake = new FakeM2b().proposal(DANA, 'Run only the quick checks.', 'only the quick round', { kind: 'lesson', lesson })
+  await start($, on, fake)
+  await typed($, 'm2b-proposals')
+
+  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  const drawn = await texts(ui)
+  expect(drawn).toContain('lesson, action for every project, on a command with scripts/check')
+  expect(drawn).toContain('and again in another session: "no full check without a reason"')
+  await ui.unmount()
+})
+
 test('the proposals command opens the same pane, also while nothing waits', async ($, on) => {
   // Covers: B127
   const fake = new FakeM2b()

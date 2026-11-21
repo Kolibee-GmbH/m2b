@@ -40,12 +40,12 @@ class ActionLesson:
         """All its words are in the command and none of the words that silence it, in a repository it is for."""
         if self.target != EVERY_PROJECT and self.target not in addresses:
             return False
-        return all(_holds(command, word) for word in self.words) and not any(
-            _holds(command, word) for word in self.unless
+        return all(holds_word(command, word) for word in self.words) and not any(
+            holds_word(command, word) for word in self.unless
         )
 
 
-def _holds(command: str, word: str) -> bool:
+def holds_word(command: str, word: str) -> bool:
     """The word stands in the command as a word of its own: ``scripts/check`` in ``./scripts/check`` and
     ``scripts/check.sh``, not in ``myscripts/checker``; ``--quick`` not in ``--quickly``."""
     return re.search(r"(?<![\w-])" + re.escape(word) + r"(?![\w-])", command) is not None

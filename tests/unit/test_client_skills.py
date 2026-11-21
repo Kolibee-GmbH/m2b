@@ -185,7 +185,7 @@ class ProposeToolTest(unittest.TestCase):
         """Covers: B178"""
         description = one_line(tool_description(PROPOSE_RULES))
         instruction = one_line(glean.INSTRUCTION.read_text(encoding="utf-8"))
-        self.assertEqual(tuple(KIND_IN_THE_READINGS_WORDS), glean.KINDS)
+        self.assertEqual(tuple(KIND_IN_THE_READINGS_WORDS), glean.HANDED_IN_KINDS)
         for kind, words in KIND_IN_THE_READINGS_WORDS.items():
             for said in (f"`{kind}`: ", *words):
                 with self.subTest(kind=kind, said=said):

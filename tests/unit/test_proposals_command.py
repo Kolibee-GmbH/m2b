@@ -13,7 +13,7 @@ from m2b import cli, handed_in, proposal_answers, proposals
 from m2b.store.base import StoreError
 from m2b.store.guard import DatalessGuard
 from test_proposal_answers import DANA_ID, LADDER_ID, NOBODYS_ID
-from test_proposals import DANA, DAY, LADDER, NOW, Said
+from test_proposals import DANA, DAY, LADDER, LESSON, NOW, Said
 
 
 class ProposalsCommandTest(test_commands.CommandTest):
@@ -104,6 +104,31 @@ class HandedInCountTest(ProposalsCommandTest):
 
 
 class ListTest(ProposalsCommandTest):
+    def test_a_lesson_is_listed_with_its_kind_target_words_and_the_correction_said_again(self) -> None:
+        """Covers: B273"""
+        self.proposed(LESSON)
+        key = proposals.proposal_id(LESSON)
+
+        out = self.run_command("proposals")[1]
+        listed = self.run_json("proposals")["proposals"][0]
+
+        self.assertIn(
+            f"{key}  lesson, action for github.com/acme/portal, on a command with scripts/check\n"
+            f"  {LESSON.text}\n"
+            f'  said on 2026-03-04: "{LESSON.quote}"\n'
+            '  and again in another session: "no full check without a reason"\n',
+            out,
+        )
+        self.assertEqual(
+            listed["lesson"],
+            {
+                "kind": "action",
+                "target": "github.com/acme/portal",
+                "words": ["scripts/check"],
+                "quote": "no full check without a reason",
+            },
+        )
+
     def test_it_lists_each_waiting_proposal_with_its_kind_text_words_day_and_id(self) -> None:
         """Covers: B122"""
         self.proposed(DANA, LADDER)
@@ -216,6 +241,7 @@ class ListTest(ProposalsCommandTest):
                         "source": "typed",
                         "tool": None,
                         "by": None,
+                        "lesson": None,
                     }
                 ],
                 "answered": 1,
@@ -267,7 +293,7 @@ class ListTest(ProposalsCommandTest):
     def test_a_proposals_file_a_newer_m2b_wrote_is_a_problem_the_person_can_act_on(self) -> None:
         target = self.store_root / proposals.PROPOSALS_FILE
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps({"format": 4, "proposals": {}}), encoding="utf-8")
+        target.write_text(json.dumps({"format": proposals.FORMAT + 1, "proposals": {}}), encoding="utf-8")
 
         code, out, err = self.run_command("proposals")
 

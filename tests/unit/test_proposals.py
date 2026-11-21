@@ -13,7 +13,7 @@ from unittest import mock
 
 from m2b import proposals
 from m2b.config.errors import ConfigError
-from m2b.glean import KINDS, Example, Examples, Proposal
+from m2b.glean import KINDS, Example, Examples, LessonPart, Proposal
 from m2b.proposals import Said
 from m2b.store.folder import FolderStore
 from m2b.store.guard import DatalessGuard
@@ -237,6 +237,61 @@ class SourceTest(ProposalsFixture):
 
         self.assertEqual(lines["typed"], 'said on 2026-03-04: "Dana runs IT at Northwind"')
         self.assertTrue(lines["pasted"].startswith("pasted on 2026-03-04: "))
+
+
+LESSON = Proposal(
+    "lesson",
+    "Run only the quick checks unless the change gives a reason.",
+    "only the quick round, not the whole proof",
+    "first",
+    lesson=LessonPart(
+        "action", "github.com/acme/portal", ("scripts/check",), "no full check without a reason", "second"
+    ),
+)
+
+
+class LessonInFileTest(ProposalsFixture):
+    def test_a_lesson_is_written_with_its_kind_target_words_and_second_quote_and_read_back(self) -> None:
+        """Covers: B270"""
+        self.kept(LESSON)
+
+        written = self.written()
+        (entry,) = written["proposals"].values()
+        self.assertEqual(
+            entry["lesson"],
+            {
+                "kind": "action",
+                "target": "github.com/acme/portal",
+                "words": ["scripts/check"],
+                "quote": "no full check without a reason",
+                "session": "second",
+            },
+        )
+        self.assertEqual(written["format"], 4)
+        (loaded,) = proposals.load(self.store).entries.values()
+        self.assertEqual(loaded.lesson, LESSON.lesson)
+
+    def test_an_m2b_before_lessons_refuses_a_file_with_one_and_one_without_keeps_the_earlier_format(self) -> None:
+        """Covers: B270"""
+        self.kept(DANA)
+        self.assertEqual(self.written()["format"], 1)
+        self.kept(LESSON)
+
+        with (
+            mock.patch.object(proposals, "FORMAT", proposals.FORMAT_WITHOUT_LESSONS),
+            self.assertRaises(proposals.ProposalsError),
+        ):
+            proposals.load(self.store)
+
+    def test_a_lesson_without_its_part_or_one_left_for_this_project_is_left_out(self) -> None:
+        """Covers: B270"""
+        self.kept(LESSON)
+        raw = self.written()
+        (key,) = raw["proposals"]
+        for broken in ({"lesson": None}, {"lesson": {**raw["proposals"][key]["lesson"], "target": "this project"}}):
+            with self.subTest(broken=broken):
+                self.write({**raw, "proposals": {key: {**raw["proposals"][key], **broken}}})
+                self.assertEqual(proposals.load(self.store).entries, {})
 
 
 class HandedInTest(ProposalsFixture):

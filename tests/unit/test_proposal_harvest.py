@@ -2,24 +2,26 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import json
 import unittest
 from typing import Any
 from unittest import mock
 
-from m2b import harvest, proposal_answers, proposals
+from m2b import harvest, lessons, proposal_answers, proposals
 from m2b.glean import Proposal
 from m2b.notes.frontmatter import Note
 from m2b.proposal_answers import DROP, KEEP
 from m2b.tasks.base import UnconfirmedTaskError
 from m2b.tasks.markdown import MarkdownTasks
 from test_proposal_answers import DANA_ID, LADDER_ID, NOBODYS_ID, AnswerFixture
-from test_proposals import DANA, LADDER, NOW, counts
+from test_proposals import DANA, LADDER, LESSON, NOW, counts
 
 LATER = NOW + datetime.timedelta(days=1)
 SOMEDAY = Proposal("commitment", "Send Dana the offer.", "I still have to send Dana the offer", "shed")
 SOMEDAY_ID = proposals.proposal_id(SOMEDAY)
+LESSON_ID = proposals.proposal_id(LESSON)
 
 
 class ProposalHarvestFixture(AnswerFixture):
@@ -44,6 +46,40 @@ class ProposalHarvestFixture(AnswerFixture):
     def frontmatter(self, note: Note) -> Any:
         assert note.frontmatter is not None
         return note.frontmatter
+
+
+class KeptLessonTest(ProposalHarvestFixture):
+    def test_a_kept_lesson_is_filed_in_code_as_a_lesson_and_never_as_a_capture(self) -> None:
+        """Covers: B272"""
+        self.answered(KEEP, LESSON)
+
+        report = self.harvest()
+
+        self.assertEqual(self.captures(), [])
+        (filed,) = lessons.read_all(self.store)
+        self.assertEqual(
+            (filed.text, filed.kind, filed.target, filed.words),
+            (LESSON.text, "action", "github.com/acme/portal", ("scripts/check",)),
+        )
+        self.assertEqual(self.state(LESSON_ID)[0], "kept")
+        self.assertEqual(self.answer_files(), [])
+        self.assertEqual(report.problems, [])
+        self.assertEqual(len(report.lessons), 1)
+
+    def test_a_knowledge_lesson_for_one_project_waits_with_its_answer_and_says_why(self) -> None:
+        """Covers: B272"""
+        for_one_project = dataclasses.replace(
+            LESSON, lesson=dataclasses.replace(LESSON.lesson, kind="knowledge", words=())
+        )
+        self.answered(KEEP, for_one_project)
+
+        report = self.harvest()
+
+        self.assertEqual((self.captures(), lessons.read_all(self.store)), ([], []))
+        self.assertEqual(self.state(LESSON_ID)[0], "open")
+        self.assertEqual(len(self.answer_files()), 1)
+        (problem,) = report.problems
+        self.assertTrue(problem.startswith(f"the lesson you kept waits: {LESSON.text}"))
 
 
 class KeepTest(ProposalHarvestFixture):
@@ -169,7 +205,7 @@ class CandidatesFailTest(ProposalHarvestFixture):
         """Covers: B121"""
         self.answered(KEEP, DANA)
         raw = self.written()
-        raw["format"] = 4
+        raw["format"] = proposals.FORMAT + 1
         self.write(raw)
         report = harvest.HarvestReport()
 
@@ -358,7 +394,7 @@ class CannotTellTest(ProposalHarvestFixture):
         """Covers: B121"""
         self.answered(KEEP, DANA)
         raw = self.written()
-        raw["format"] = 4
+        raw["format"] = proposals.FORMAT + 1
         self.write(raw)
 
         report = self.harvest()

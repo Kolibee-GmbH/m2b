@@ -303,6 +303,7 @@ class StatusTest(test_runner.RunnerTest):
                     "agreement": nothing,
                     "commitment": nothing,
                     "personal": nothing,
+                    "lesson": nothing,
                 },
                 "ways": {"reading": {"typed": {"waiting": 1, "answered": 0, "kept": 2, "dropped": 1, "expired": 1}}},
             },
@@ -462,11 +463,11 @@ class StatusTest(test_runner.RunnerTest):
     def test_a_proposals_file_that_cannot_be_used_says_so_instead_of_nothing(self) -> None:
         """Covers: B133"""
         self.curating()
-        self.write(proposals.PROPOSALS_FILE, json.dumps({"format": 4, "proposals": {}}))
+        self.write(proposals.PROPOSALS_FILE, json.dumps({"format": proposals.FORMAT + 1, "proposals": {}}))
 
         _, out, _ = self.run_command("status")
 
-        self.assertIn("format 4", self.status()["proposal_answers"]["error"])
+        self.assertIn(f"format {proposals.FORMAT + 1}", self.status()["proposal_answers"]["error"])
         self.assertIn("\nproposals: could not look: ", out)
 
     def set_curating(self, machine_id: str) -> None:

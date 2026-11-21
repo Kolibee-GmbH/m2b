@@ -249,8 +249,8 @@ field; without such an entry the format is 1.
 `read_until` is the moment up to which the sessions were read. `announced_until` is when the
 newest proposal was added that the task for the waiting proposals has told you of: a task you
 completed or deleted comes back only for a proposal added after it. A proposal's id comes from its
-session and its `quote`, the words of the session it stands on; `kind` is `person`, `agreement`, `commitment` or
-`personal`; `day` is the day those words were sent, `due` the day a commitment names. `state` is `open`,
+session and its `quote`, the words of the session it stands on; `kind` is `person`, `agreement`, `commitment`,
+`personal` or `lesson`; `day` is the day those words were sent, `due` the day a commitment names. `state` is `open`,
 `kept`, `dropped` or `expired`, and `since` the moment it got that state. An open proposal that
 has no answer 14 days after it was added expires. A kept, dropped or expired proposal stays for 90
 days, so the same one is not proposed again; the first curation run after that removes it. The
@@ -295,6 +295,24 @@ and is null otherwise; `at` is the time of the call. The file holds no folder. T
 `"tool"`, and its `source` can be `tool` or `agent`. While the file holds such an entry its
 `format` is 3, and an m2b that knows format 2 answers "update m2b on this machine" where it would
 show the proposal as said or under a source it does not know and write it back without the fields.
+
+A proposed lesson, a correction of Claude you made in two sessions, has one more field:
+
+```json
+"lesson": {
+  "kind": "action",
+  "target": "github.com/acme/portal",
+  "words": ["scripts/check"],
+  "quote": "no full check without a reason",
+  "session": "0a1b2c3d-1111-4222-8333-444455556666"
+}
+```
+
+`kind` is `knowledge` or `action`, as in a [lesson](using.md#lessons); `target` is `every project` or the
+address of the repository both sessions worked in; `words` are, for an action, the words a command
+holds when the lesson applies; `quote` and `session` are the same correction in the second session.
+While the file holds a lesson its `format` is 4, and an m2b that knows format 3 answers "update m2b
+on this machine" where it would leave the lesson out and write the file back without it.
 
 ## Fixes for the files Claude reads
 

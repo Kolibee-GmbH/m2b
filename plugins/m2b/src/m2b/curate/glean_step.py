@@ -44,8 +44,10 @@ import re
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
-from m2b import claude_code, folders_left_out, glean, proposals, sessions
+from m2b import claude_code, folders_left_out, glean, kept_lessons, lessons, proposals, session_remotes, sessions
+from m2b.candidates import same_text
 from m2b.config.machine import MachineConfig
 from m2b.curate import model, period_captures
 from m2b.notes.layout import MEMORY, MEMORY_INDEX
@@ -132,14 +134,25 @@ def propose(
         raise GleanStepError(run.failure())
     answer = glean.parse_answer(run.answer, read)
     checked = glean.check(answer.proposals, read, captures.texts)
-    said = [
-        proposals.Said(proposal, typed_at.astimezone(zone).date())
-        for proposal, typed_at in zip(checked.kept, checked.kept_at)
-    ]
+    notes_folder = machine.state_dir / session_remotes.NOTES_FOLDER
+    placed, without_repository = _for_their_project(checked, read, notes_folder, started)
+    placed, not_keepable, known = _new_lessons(placed, lessons.read_all(store), zone)
+    said = [proposals.Said(proposal, typed_at.astimezone(zone).date()) for proposal, typed_at in placed]
     added = proposals.add(kept, said, started)
     counted = added.proposals
     for refused in checked.not_quoted:
         counted = proposals.counted(counted, refused.kind, "not_quoted")
+    if not_keepable:
+        counted = proposals.counted(counted, glean.LESSON, "not_quoted", not_keepable)
+        notes.append(f"{_count(not_keepable, 'lesson')} left out: not in the form a lesson is kept in")
+    if known:
+        notes.append(f"{_count(known, 'lesson')} left out: a lesson like it is kept already")
+    if without_repository:
+        counted = proposals.counted(counted, glean.LESSON, "not_quoted", without_repository)
+        notes.append(
+            f"{_count(without_repository, 'lesson')} for one project left out: "
+            "no repository is known that both its sessions worked in"
+        )
     proposals.save(store, dataclasses.replace(counted, read_until=started))
     sent = sum(len(session.prompts) for session in read)
     summary = (
@@ -150,6 +163,83 @@ def propose(
         f"{len(checked.already_captured)} captured already, {answer.malformed} not in the form"
     )
     return Reading(None, (summary, *notes, *period_captures.capture_notes(captures)))
+
+
+def _for_their_project(
+    checked: glean.Checked, read: Sequence[sessions.Session], notes: Path, now: datetime.datetime
+) -> tuple[list[tuple[glean.Proposal, datetime.datetime]], int]:
+    """The kept proposals with when their words were typed, each lesson for one project named by the
+    address of the repository both its sessions worked in, and how many such lessons have none.
+
+    The address comes from the remotes the session start noted for each session's folder; a lesson
+    for one project is kept only where both folders name the same repository, so it reaches the
+    sessions of that repository on every machine.
+    """
+    folders = {session.session_id: session.folder for session in read}
+    placed: list[tuple[glean.Proposal, datetime.datetime]] = []
+    without = 0
+    for proposal, typed_at in zip(checked.kept, checked.kept_at):
+        lesson = proposal.lesson
+        if lesson is None or lesson.target != glean.THIS_PROJECT:
+            placed.append((proposal, typed_at))
+            continue
+        first, second = (_addresses(notes, folders.get(key, ""), now) for key in (proposal.session, lesson.session))
+        common = sorted(first & second)
+        if not common:
+            without += 1
+            continue
+        placed.append((dataclasses.replace(proposal, lesson=dataclasses.replace(lesson, target=common[0])), typed_at))
+    return placed, without
+
+
+def _new_lessons(
+    placed: Sequence[tuple[glean.Proposal, datetime.datetime]],
+    standing: Sequence[lessons.Lesson],
+    zone: datetime.tzinfo,
+) -> tuple[list[tuple[glean.Proposal, datetime.datetime]], int, int]:
+    """The proposals without the lessons that could never be kept and those kept already, and the
+    number of each left out.
+
+    A lesson is kept the way one kept by hand is (``kept_lessons.checked``); one it refuses would
+    wait with its answer on every run, so it is not proposed. A knowledge lesson for one project is
+    the one refusal that stays: it is kept as a fix of that project's CLAUDE.md. A lesson is known
+    when one of the same kind and target stands with the same words, or, for knowledge, the same text.
+    """
+    kept: list[tuple[glean.Proposal, datetime.datetime]] = []
+    not_keepable = known = 0
+    for proposal, typed_at in placed:
+        lesson = proposal.lesson
+        if lesson is None:
+            kept.append((proposal, typed_at))
+            continue
+        day = typed_at.astimezone(zone).date().isoformat()
+        given = kept_lessons.KeptLesson(
+            proposal.text[:60], proposal.text, lesson.kind, lesson.target, day, lesson.words
+        )
+        try:
+            kept_lessons.checked(given)
+        except kept_lessons.LessonRefusedError:
+            if lesson.kind != lessons.KNOWLEDGE or lesson.target == lessons.EVERY_PROJECT:
+                not_keepable += 1
+                continue
+        if any(_same_lesson(proposal, lesson, other) for other in standing):
+            known += 1
+            continue
+        kept.append((proposal, typed_at))
+    return kept, not_keepable, known
+
+
+def _same_lesson(proposal: glean.Proposal, lesson: glean.LessonPart, other: lessons.Lesson) -> bool:
+    if (other.kind, other.target) != (lesson.kind, lesson.target):
+        return False
+    if lesson.kind == lessons.ACTION:
+        return set(other.words) == set(lesson.words)
+    return same_text(other.text, proposal.text)
+
+
+def _addresses(notes: Path, folder: str, now: datetime.datetime) -> frozenset[str]:
+    remotes = session_remotes.noted(notes, folder, now) if folder else None
+    return frozenset(session_remotes.address_of(remote) for remote in remotes or ())
 
 
 def _nothing_marked(found: Sequence[sessions.Session]) -> int:

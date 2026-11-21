@@ -109,7 +109,12 @@ export type BandProposal = {
   tool?: string | null
   /** Who proposed where it was no reading: `session` for a proposal a session handed in. */
   by?: string | null
+  /** For a lesson: its kind, whom it is for, the words of a command it fires on, and the same correction said again. */
+  lesson?: BandLesson | null
 }
+
+/** What a proposed lesson carries beside its text, as `m2b band --json` names it. */
+export type BandLesson = { kind: string; target: string; words: string[]; quote: string }
 
 /**
  * The proposals that wait for keep or drop, as `m2b band --json` names them, how many answers

@@ -50,11 +50,14 @@ import dataclasses
 import datetime
 import json
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from m2b import kept_lessons, lessons
+from m2b.action_lessons import holds_word
+from m2b.lessons import EVERY_PROJECT
 from m2b.notes.characters import can_be_written, unsafe_characters
 from m2b.notes.memory_index import MAX_TOPIC_NAME
 from m2b.sessions import Prompt, Session
@@ -63,7 +66,19 @@ PERSON = "person"
 AGREEMENT = "agreement"
 COMMITMENT = "commitment"
 PERSONAL = "personal"
-KINDS = (PERSON, AGREEMENT, COMMITMENT, PERSONAL)
+# A correction of Claude the person made in two sessions: kept, it becomes a lesson (``lessons``).
+LESSON = "lesson"
+KINDS = (PERSON, AGREEMENT, COMMITMENT, PERSONAL, LESSON)
+# The kinds that become a fact or a task, and what a session may hand in by itself: a lesson stands
+# on a correction made in two sessions, which one session cannot show.
+FACT_KINDS = (PERSON, AGREEMENT, COMMITMENT, PERSONAL)
+HANDED_IN_KINDS = FACT_KINDS
+# Whom a proposed lesson is for: every project, or the repository both sessions worked in, which the
+# reading step names by its address (``curate.glean_step``).
+THIS_PROJECT = "this project"
+LESSON_TARGETS = (EVERY_PROJECT, THIS_PROJECT)
+# A word of a command an action lesson fires on, such as ``scripts/check`` or ``push``.
+MAX_WORD = 60
 # Where in a session a proposal's quote stands. What was pasted may be anyone's words. A reading
 # finds a quote in a prompt only; a session that hands a proposal in can also stand on what a tool
 # returned to it or on what Claude answered.
@@ -91,6 +106,19 @@ class GleanError(Exception):
 
 
 @dataclass(frozen=True)
+class LessonPart:
+    """What a proposed lesson carries beside its text: its kind and target, the words of the command
+    for an action, and the same correction in a second session."""
+
+    kind: str
+    target: str
+    words: tuple[str, ...]
+    quote: str
+    # The id of the second session.
+    session: str
+
+
+@dataclass(frozen=True)
 class Proposal:
     kind: str
     text: str
@@ -102,6 +130,8 @@ class Proposal:
     due: datetime.date | None = None
     # Where the quote stands in that session; ``check`` finds it, the model is never asked.
     source: str = TYPED
+    # For a lesson, and only for one.
+    lesson: LessonPart | None = None
 
 
 @dataclass(frozen=True)
@@ -197,7 +227,9 @@ def check(proposals: Sequence[Proposal], sessions: Sequence[Session], captures: 
     """Sorts the proposals by the two checks; ``captures`` are the texts captured in the period.
 
     A kept proposal says where its quote stands (``Proposal.source``): in what was typed, or else
-    in what was pasted.
+    in what was pasted. A lesson is a correction of Claude, so both its quotes must stand in what
+    was typed, each in its own session, and for an action every word in a command of the turn one
+    of them answers (``Prompt.commands``); a lesson that fails is counted with ``not_quoted``.
     """
     said = {
         session.session_id: [
@@ -206,6 +238,7 @@ def check(proposals: Sequence[Proposal], sessions: Sequence[Session], captures: 
         ]
         for session in sessions
     }
+    by_id = {session.session_id: session for session in sessions}
     # Only a capture adds in brackets; what the person typed in brackets are words of their prompt.
     captured = [(_bare(capture), _words(_ADDITION.sub(" ", capture))) for capture in captures]
     kept: list[Proposal] = []
@@ -215,7 +248,10 @@ def check(proposals: Sequence[Proposal], sessions: Sequence[Session], captures: 
     for proposal in proposals:
         quote = _collapsed(proposal.quote)
         stands_in = _where_it_stands(quote, said.get(proposal.session, ()))
-        if len(quote.split()) < QUOTE_WORDS or stands_in is None:
+        stands = stands_in is not None and len(quote.split()) >= QUOTE_WORDS
+        if stands and proposal.lesson is not None:
+            stands = stands_in is not None and _lesson_stands(proposal, stands_in.source, by_id)
+        if not stands or stands_in is None:
             not_quoted.append(proposal)
         elif _is_captured(quote, stands_in.texts, captured):
             already_captured.append(proposal)
@@ -223,6 +259,27 @@ def check(proposals: Sequence[Proposal], sessions: Sequence[Session], captures: 
             kept.append(dataclasses.replace(proposal, source=stands_in.source))
             kept_at.append(stands_in.first_at)
     return Checked(tuple(kept), tuple(not_quoted), tuple(already_captured), tuple(kept_at))
+
+
+def _lesson_stands(proposal: Proposal, source: str, sessions: Mapping[str, Session]) -> bool:
+    """Whether a lesson's two quotes stand typed in their two sessions and an action's words in a
+    command of a turn either of them answers."""
+    lesson = proposal.lesson
+    assert lesson is not None
+    first = _typed_in(proposal.quote, sessions.get(proposal.session))
+    second = _typed_in(lesson.quote, sessions.get(lesson.session))
+    if source != TYPED or not first or not second or len(lesson.quote.split()) < QUOTE_WORDS:
+        return False
+    if lesson.kind != lessons.ACTION:
+        return True
+    commands = [command for prompt in (*first, *second) for command in prompt.commands]
+    return any(all(holds_word(command, word) for word in lesson.words) for command in commands)
+
+
+def _typed_in(quote: str, session: Session | None) -> list[Prompt]:
+    """The prompts of the session whose typed text holds the quote, white space aside."""
+    wanted = _collapsed(quote)
+    return [prompt for prompt in (session.prompts if session else ()) if wanted and wanted in _collapsed(prompt.text)]
 
 
 @dataclass(frozen=True)
@@ -300,7 +357,37 @@ def _proposal(entry: object, sessions: Sequence[Session]) -> Proposal | None:
         return None
     if unsafe_characters(text + quote + topic) or not can_be_written(text + quote + topic):
         return None
-    return Proposal(kind, text, quote, sessions[number - 1].session_id, topic or None, due)
+    session_id = sessions[number - 1].session_id
+    if kind != LESSON:
+        return Proposal(kind, text, quote, session_id, topic or None, due)
+    lesson = _lesson_part(entry.get("lesson"), sessions)
+    if lesson is None or lesson.session == session_id or due is not None:
+        return None
+    return Proposal(kind, text, quote, session_id, topic or None, None, lesson=lesson)
+
+
+def _lesson_part(value: object, sessions: Sequence[Session]) -> LessonPart | None:
+    """The part of a lesson's entry beside its text; None for one that is not in the form."""
+    if not isinstance(value, dict):
+        return None
+    kind, target, quote = value.get("kind"), value.get("target"), value.get("quote")
+    number = _session_number(value.get("session"))
+    words = value.get("words", [])
+    if kind not in lessons.KINDS or target not in LESSON_TARGETS or not isinstance(quote, str) or not quote.strip():
+        return None
+    if number is None or not 1 <= number <= len(sessions):
+        return None
+    if not isinstance(words, list) or not all(isinstance(word, str) for word in words):
+        return None
+    cleaned = tuple(dict.fromkeys(" ".join(word.split()) for word in words if word.strip()))
+    if (kind == lessons.ACTION) != bool(cleaned) or len(cleaned) > kept_lessons.MAX_WORDS:
+        return None
+    if any(len(word) > MAX_WORD for word in cleaned):
+        return None
+    said = quote + "".join(cleaned)
+    if unsafe_characters(said) or not can_be_written(said):
+        return None
+    return LessonPart(kind, target, cleaned, quote, sessions[number - 1].session_id)
 
 
 def _one_line(value: object) -> str | None:

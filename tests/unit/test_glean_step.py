@@ -420,6 +420,95 @@ class RemotesLeftOutTest(GleanStepTest):
         self.assertFalse((self.machine.state_dir / session_remotes.NOTES_FOLDER).exists())
 
 
+PROJECT_LESSON = {
+    "kind": "lesson",
+    "text": "Never push to main here.",
+    "quote": "do not push to main here",
+    "session": 1,
+    "topic": None,
+    "due": None,
+    "lesson": {
+        "kind": "knowledge",
+        "target": "this project",
+        "words": [],
+        "quote": "again, never push to main",
+        "session": 2,
+    },
+}
+
+
+class ProjectLessonTest(GleanStepTest):
+    def two_sessions(self, first_remote: str, second_remote: str) -> None:
+        self.reading()
+        notes = self.machine.state_dir / session_remotes.NOTES_FOLDER
+        for folder, remote in (
+            ("/home/alex/projects/portal", first_remote),
+            ("/home/alex/trees/portal-fix", second_remote),
+        ):
+            session_remotes.note(
+                notes, folder, frozenset([remote]), START - HOUR, lambda path, text: path.write_text(text)
+            )
+        self.typed("do not push to main here", START - 3 * HOUR, "one", "/home/alex/projects/portal")
+        self.typed("again, never push to main", START - 2 * HOUR, "two", "/home/alex/trees/portal-fix")
+        self.answers(PROJECT_LESSON)
+
+    def test_a_lesson_for_this_project_is_for_the_repository_both_sessions_worked_in(self) -> None:
+        """Covers: B270"""
+        self.two_sessions("git@github.com:Acme/portal.git", "https://github.com/acme/portal")
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        (entry,) = self.kept()["proposals"].values()
+        self.assertEqual(entry["kind"], "lesson")
+        self.assertEqual(entry["lesson"]["target"], "github.com/acme/portal")
+        self.assertEqual(entry["lesson"]["session"], "two")
+
+    def test_a_lesson_that_could_never_be_kept_or_is_kept_already_is_not_proposed(self) -> None:
+        """Covers: B270"""
+        self.reading()
+        before = (START - 4 * HOUR).astimezone(datetime.timezone.utc)
+        self.record(test_sessions.answered("Running.", before, "scripts/check", "ruff --select=E,W"), "one")
+        self.typed("only the quick round please", START - 3 * HOUR, "one")
+        self.typed("again only the quick round", START - 2 * HOUR, "two")
+        action = {
+            **PROJECT_LESSON,
+            "text": "Run only the quick checks.",
+            "quote": "only the quick round please",
+            "lesson": {
+                "kind": "action",
+                "target": "every project",
+                "words": ["--select=E,W"],
+                "quote": "again only the quick round",
+                "session": 2,
+            },
+        }
+        known = {**action, "lesson": {**action["lesson"], "words": ["scripts/check"]}}
+        self.write(
+            "memory/lessons/quick.md",
+            "---\nkind: action\ntarget: every project\nkept: 2026-11-01\nwords: [scripts/check]\n---\n"
+            "# Quick\n\nRun only the quick checks.\n",
+        )
+        self.answers(action, known)
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        self.assertEqual(self.kept()["proposals"], {})
+        self.assertIn("1 lesson left out: not in the form a lesson is kept in", self.info())
+        self.assertIn("1 lesson left out: a lesson like it is kept already", self.info())
+
+    def test_without_a_repository_both_sessions_worked_in_the_lesson_is_left_out_and_counted(self) -> None:
+        """Covers: B270"""
+        self.two_sessions("git@github.com:acme/portal.git", "git@github.com:acme/shop.git")
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        self.assertEqual(self.kept()["proposals"], {})
+        self.assertEqual(self.kept()["counts"]["lesson"]["not_quoted"], 1)
+        self.assertIn(
+            "1 lesson for one project left out: no repository is known that both its sessions worked in", self.info()
+        )
+
+
 class ChecksTest(GleanStepTest):
     def test_a_reading_counts_per_kind_what_it_added_and_what_stood_on_no_words_of_the_person(self) -> None:
         """Covers: B132"""
@@ -664,7 +753,7 @@ class AnsweredTest(GleanStepTest):
         self.answers(DANA)
         self.run_curate()
         proposal_answers.give(self.store, [DANA_ID], proposal_answers.KEEP)
-        self.write(proposals.PROPOSALS_FILE, json.dumps({**self.kept(), "format": 4}))
+        self.write(proposals.PROPOSALS_FILE, json.dumps({**self.kept(), "format": proposals.FORMAT + 1}))
         real_items = MarkdownTasks.items
 
         def items(tasks: MarkdownTasks, *arguments: Any, **options: Any) -> Any:
@@ -771,7 +860,7 @@ class WaitingTaskTest(GleanStepTest):
 
     def test_a_cause_that_does_not_clear_by_itself_is_not_left_to_the_next_run(self) -> None:
         self.curating()
-        self.write(proposals.PROPOSALS_FILE, json.dumps({"format": 4, "proposals": {}}))
+        self.write(proposals.PROPOSALS_FILE, json.dumps({"format": proposals.FORMAT + 1, "proposals": {}}))
 
         outcome = self.run_curate()
 
@@ -780,7 +869,8 @@ class WaitingTaskTest(GleanStepTest):
         (review,) = self.review_tasks()
         self.assertIn(
             "The step proposals failed: the task for the proposals that wait was not brought up to date: "
-            "state/core/proposals.json has format 4 and this m2b knows 3: update m2b on this machine",
+            f"state/core/proposals.json has format {proposals.FORMAT + 1} and this m2b knows {proposals.FORMAT}: "
+            "update m2b on this machine",
             review.notes,
         )
         self.assertNotIn("the next run does it", review.notes)
@@ -959,7 +1049,9 @@ class FailingReadingTest(GleanStepTest):
         self.reading()
         self.typed(DANA_SAID, START - HOUR)
         self.capture()
-        from_a_newer_m2b = json.dumps({"format": 4, "proposals": {"aaaaaaaaaaaa": {"shape": "unknown here"}}})
+        from_a_newer_m2b = json.dumps(
+            {"format": proposals.FORMAT + 1, "proposals": {"aaaaaaaaaaaa": {"shape": "unknown here"}}}
+        )
         self.write(proposals.PROPOSALS_FILE, from_a_newer_m2b)
         self.answers(DANA, skills={"m2b:ingest": INGEST_FILES_THE_CAPTURE})
 
@@ -970,7 +1062,7 @@ class FailingReadingTest(GleanStepTest):
         self.assertEqual((self.store_root / proposals.PROPOSALS_FILE).read_text(encoding="utf-8"), from_a_newer_m2b)
         self.assertEqual([call for call in self.calls() if "stdin" in call], [])
         (review,) = self.review_tasks()
-        self.assertIn("has format 4 and this m2b knows 3", review.notes)
+        self.assertIn(f"has format {proposals.FORMAT + 1} and this m2b knows {proposals.FORMAT}", review.notes)
 
     def test_a_transcript_that_cannot_be_read_is_counted_and_the_others_are_read(self) -> None:
         self.reading()

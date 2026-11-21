@@ -9,6 +9,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- A curation run that reads your sessions proposes a lesson when you made the same correction of
+  Claude in two sessions, with its kind, whom it is for and, for a command, its words
+  ([Curation](docs/curation.md#reading-your-sessions)).
 - `m2b status` says how large everything is that a session in this folder starts with: your
   `CLAUDE.md` files and rules, the output style, Claude Code's auto memory and m2b's part, each in
   KB and list points, with the sum, so you see where to cut. A file it cannot read is named as such.

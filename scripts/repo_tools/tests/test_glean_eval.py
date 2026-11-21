@@ -100,7 +100,7 @@ class InventedDayTest(Sandbox):
         planted = self.case().day.planted
         typed = Counter(statement.label for statement in planted if not statement.pasted)
 
-        self.assertEqual(typed, dict.fromkeys(glean.KINDS, 5))
+        self.assertEqual(typed, dict.fromkeys(glean.FACT_KINDS, 5))
         self.assertEqual([statement.label for statement in planted if statement.pasted], [glean.PERSON, glean.PERSON])
 
     def test_the_day_holds_one_trap_of_each_class(self) -> None:
@@ -205,7 +205,7 @@ class InventedDayTest(Sandbox):
         answered = json.loads(case.step_input)["answered"]
 
         self.assertEqual((len(answered["kept"]), len(answered["dropped"])), (5, 4))
-        self.assertEqual({each["kind"] for each in answered["kept"]}, set(glean.KINDS))
+        self.assertEqual({each["kind"] for each in answered["kept"]}, set(glean.FACT_KINDS))
         self.assertEqual(case.day.examples.kept[0].quote, answered["kept"][0]["quote"])
 
     def test_asked_without_examples_the_model_is_shown_none_and_the_day_stays_the_same(self) -> None:
@@ -611,11 +611,11 @@ class ReplayTest(WithFakeClaude):
             [
                 "2026-03-03: no prompts",
                 "2026-03-04: 2 prompts in 1 sessions (with 0 pasted texts; left out: 0 sent by others, 0 suggested, "
-                "0 unmarked, 0 transcripts not read), 1 proposals: 1 person, 0 agreement, 0 commitment, 0 personal; "
-                "left out by code: 0 not quoted, 0 not in the form",
+                "0 unmarked, 0 transcripts not read), 1 proposals: 1 person, 0 agreement, 0 commitment, 0 personal, "
+                "0 lesson; left out by code: 0 not quoted, 0 not in the form",
                 "2026-03-05: 1 prompts in 1 sessions (with 0 pasted texts; left out: 0 sent by others, 0 suggested, "
-                "0 unmarked, 0 transcripts not read), 0 proposals: 0 person, 0 agreement, 0 commitment, 0 personal; "
-                "left out by code: 1 not quoted, 0 not in the form",
+                "0 unmarked, 0 transcripts not read), 0 proposals: 0 person, 0 agreement, 0 commitment, 0 personal, "
+                "0 lesson; left out by code: 1 not quoted, 0 not in the form",
                 f"glean-eval: 1 proposals from 3 days written to {self.out}",
             ],
         )

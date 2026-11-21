@@ -323,8 +323,13 @@ first reading and never more than 7 days; what lies before is named as not read.
 of yours in that time no model starts.
 
 **What is kept.** The model gets the distillate, so it can leave out what is known, the proposals
-you kept and dropped lately (below), and per session its folder, its day and its prompts. It answers with proposals of four kinds, a person, an
-agreement, a commitment and something personal, each with the words it stands on. Code keeps a
+you kept and dropped lately (below), and per session its folder, its day and its prompts. It answers with proposals of five kinds, a person, an
+agreement, a commitment, something personal and a lesson, each with the words it stands on. A
+lesson is a correction of how Claude works that you made in two sessions, such as "only the quick
+round" after Claude ran the whole proof: code keeps it only when both of your sentences stand in
+what you typed, in two sessions, and for a command when its words stand in a command Claude ran
+there. One for a single project names that project's repository, where both sessions' folders
+name the same one by a git remote; without one it is left out. Code keeps a
 proposal only when those words stand in one prompt of the session it names, typed or pasted, with
 at least three words, and when you did not capture the same thing in that time. A proposal like one that
 waits, or like one you kept or dropped or that expired within 90 days, is not kept a second time,

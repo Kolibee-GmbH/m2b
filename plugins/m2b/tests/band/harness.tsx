@@ -67,6 +67,7 @@ export type FakeProposal = {
   source?: string
   tool?: string | null
   by?: string | null
+  lesson?: { kind: string; target: string; words: string[]; quote: string } | null
   answer?: 'keep' | 'drop'
 }
 
