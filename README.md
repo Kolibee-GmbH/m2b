@@ -152,15 +152,15 @@ project folder's path names one of the topic's words, or through a search
 ([The distillate at session start](docs/using.md#the-distillate-at-session-start)).
 
 A topic can be a project. Say "remember this project" in a clone, and the run makes a topic that
-names the repository by its git remote. A session in that clone, or one whose prompt names the
-project, gets the topic together with the folder where the clone is on this machine. Its lines can
+names the repository by its git remote. A session whose prompt or folder path names the project
+gets the topic together with the folder where the clone is on this machine. Its lines can
 point into the repository, as a sentence and the file it stands in, so the content itself stays in
 the repository ([A project](docs/using.md#a-project)):
 
 ```markdown
 ### Acme portal (Acme, portal)
 - Repository: github.com/acme/portal (acme-portal.md)
-  on this machine: ~/code/acme-portal; the paths after → lie in it
+  on this machine: /Users/alex/code/acme-portal; the paths after → lie in it
 - Login moves to the customer's identity provider in March → docs/records/014-login.md (acme-portal.md)
 ```
 
