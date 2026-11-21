@@ -135,6 +135,16 @@ folder the repository lies in here, or `  not cloned on this machine`; the folde
 notes the session start keeps in this machine's state of the remotes of every folder a session
 starts in, the one seen last that is still there.
 
+Its other lines can point into the repository: a sentence, `→` and a path in the repository, with a
+heading where it helps; the path follows the last `→` and is one word with a `/` or a `.`,
+`- Login moves to the customer's identity provider in March →
+docs/records/014-login.md (acme-portal.md)`. The content stays in the repository; the line says that
+it exists and where. Where such a topic has a clone on the machine, its place line ends with
+`; the paths after → lie in it`. Lint on the curating machine reports a pointer whose file that
+clone does not hold, a pointer that leaves the repository, and, as information, a repository no
+folder there was opened in for 30 days; a project topic is measured against the 4 KB with its place
+line.
+
 `## Current` holds topics under the same headings: a current item above its first `###` heading
 reaches every session, one under a topic comes in with that topic, below its facts under
 `#### Current`. Headings with the same name, in either section, are one topic, and a word of any of

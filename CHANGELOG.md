@@ -16,6 +16,9 @@ All notable changes to this project are documented here. The format follows
 - "Remember this project" in a session keeps the project of its folder with the address of its git
   remote, and the next run makes it a topic with its `Repository:` line
   ([Using m2b](docs/using.md#a-project)).
+- A project topic's line can point into its repository (`- <sentence> → <path> (<file>.md)`); its
+  place line then says the paths lie in the folder shown, and lint reports a pointer whose file the
+  clone no longer holds and a repository nobody opened for 30 days ([Store format](docs/store-format.md)).
 - A fix for a file Claude reads: say "keep this as a fix" with the file, what is wrong and the new
   wording, and `m2b fix add` keeps it. m2b never writes that file; the next session in a clone of
   that repository, or on this machine for a file under `~/.claude/`, names the fix, applies it with

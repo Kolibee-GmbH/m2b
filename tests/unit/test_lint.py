@@ -11,7 +11,7 @@ from typing import Any
 from unittest import mock
 
 import test_commands
-from m2b import cli, lint, prompt_hook
+from m2b import cli, lint, prompt_hook, session_remotes
 from m2b.config import profile
 from m2b.curate import report
 from m2b.store.folder import FolderStore
@@ -790,6 +790,25 @@ class LintCommandTest(test_commands.CommandTest):
         (finding,) = report.read_findings(self.machine, token)
         self.assertEqual((finding.step, finding.kind), ("lint", "action"))
         self.assertIn("[[nothing.md]]", finding.text)
+
+    def test_scan_reads_this_machines_notes_of_the_remotes(self) -> None:
+        """Covers: B256"""
+        (self.store_root / "memory" / "MEMORY.md").write_text(
+            INDEX.replace(
+                "\n\n## Current",
+                "\n\n### Acme portal (Acme portal, portal)\n"
+                "- Repository: github.com/acme/portal (acme-portal.md)\n\n## Current",
+            ),
+            encoding="utf-8",
+        )
+        (self.store_root / "memory" / "acme-portal.md").write_text("# Acme portal\n", encoding="utf-8")
+        notes = self.machine.state_dir / session_remotes.NOTES_FOLDER
+        notes.mkdir(parents=True)
+
+        _, out, _ = self.run_command("lint", "scan", "--json")
+
+        codes = [finding["code"] for finding in test_commands.json.loads(out)["findings"]]
+        self.assertIn(lint.PROJECT_UNSEEN, codes)
 
     def test_scan_report_outside_a_run_exits_2(self) -> None:
         self.assertEqual(self.run_command("lint", "scan", "--report")[0], cli.EXIT_USAGE)

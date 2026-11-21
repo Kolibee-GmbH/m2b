@@ -14,7 +14,7 @@ from unittest import mock
 
 import test_commands
 import test_ingest
-from m2b import addons, candidates, expiry, glean, handed_in, launcher, proposals
+from m2b import addons, candidates, expiry, glean, handed_in, launcher, proposals, session_remotes
 from m2b.atomic_file import HIDDEN_TEMP_PREFIX
 from m2b.config import machine
 from m2b.config.profile import save_profile
@@ -478,6 +478,34 @@ class CleanRunTest(RunnerTest):
         self.assertIn(("lint", "succeeded"), [(step.name, step.result) for step in record.steps])
         (review,) = self.review_tasks()
         self.assertIn("lint: memory/dana.md links [[nothing-here.md]], which is no corpus file", review.notes)
+
+    def test_lint_checks_a_project_topic_against_this_machines_clone(self) -> None:
+        """Covers: B255"""
+        self.curating()
+        clone = self.home.parent / "code" / "acme-portal"
+        clone.mkdir(parents=True)
+        session_remotes.note(
+            self.machine.state_dir / session_remotes.NOTES_FOLDER,
+            str(clone),
+            frozenset({"git@github.com:acme/portal.git"}),
+            datetime.datetime.now(datetime.timezone.utc),
+            lambda path, text: path.write_text(text, encoding="utf-8"),
+            top=str(clone),
+        )
+        self.write(
+            "memory/MEMORY.md",
+            "# Memory\n\n## Facts\n\n### Acme portal (Acme portal, portal)\n"
+            "- Repository: github.com/acme/portal (acme-portal.md)\n"
+            "- Login moves in March → docs/login.md (acme-portal.md)\n\n## Current\n",
+        )
+        self.write("memory/acme-portal.md", "# Acme portal\n\n- Repository: github.com/acme/portal\n")
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, SUCCEEDED, outcome.message)
+        (review,) = self.review_tasks()
+        self.assertIn("the topic Acme portal points to docs/login.md, which the clone on this machine", review.notes)
+        self.assertNotIn(str(clone), review.notes)
 
     def test_without_the_model_lint_still_removes_the_old_temp_files(self) -> None:
         self.curating()

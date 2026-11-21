@@ -59,7 +59,17 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from m2b import current_check, expiry, ingest, launcher, lint, proposal_answers, proposals, proposals_task
+from m2b import (
+    current_check,
+    expiry,
+    ingest,
+    launcher,
+    lint,
+    proposal_answers,
+    proposals,
+    proposals_task,
+    session_remotes,
+)
 from m2b.addons import CURATION_SLOTS, Addon, names_on, steps_in
 from m2b.candidates import PREFIX_KEY
 from m2b.config.errors import ConfigError, NotSetUpError
@@ -904,13 +914,17 @@ class _Run:
         goes to the run's review. A model step costs money and time at every run, so the code takes
         everything it can decide.
         """
-        scanned = lint.scan(self.store, tasks)
+        scanned = lint.scan(self.store, tasks, self._remote_notes(), self.clock())
         if any(finding.code == lint.BROKEN_LINK and len(finding.candidates) == 1 for finding in scanned.findings):
             self._guarded(LINT, LINT_SKILL, LINT_RULES, token)
             return
         if lint.fix(self.store, tasks, self.clock()):
-            scanned = lint.scan(self.store, tasks)
+            scanned = lint.scan(self.store, tasks, self._remote_notes(), self.clock())
         self.findings += [report.Finding(LINT, finding.kind, finding.text) for finding in scanned.findings]
+
+    def _remote_notes(self) -> Path:
+        """Where this machine notes the remotes of session folders: lint checks project topics by them."""
+        return self.machine.state_dir / session_remotes.NOTES_FOLDER
 
     def _guarded(
         self,
