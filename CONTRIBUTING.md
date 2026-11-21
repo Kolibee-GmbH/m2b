@@ -555,15 +555,24 @@ run keep no session, so these runs leave nothing under `~/.claude/projects/`.
 
 Claude Code installs a plugin by its version number. `/plugin update` compares the installed
 version with the one in the marketplace and reports "already at the latest version" while they
-match, however many commits came since. A change reaches users only with a release:
+match, however many commits came since. A change reaches users only with a release, and a release
+is a pull request of its own:
 
-1. Pick the new version by [semantic versioning](https://semver.org/) and write it into
-   `version` in `plugins/m2b/.claude-plugin/plugin.json`.
-2. In `CHANGELOG.md`, turn the entries under `## [Unreleased]` into a section
-   `## [X.Y.Z] - YYYY-MM-DD` with the day of the release, and leave an empty `## [Unreleased]`
-   above it. Entries sit under `### Added`, `### Changed` or `### Fixed`, one sentence or two each
-   on what changes for the user, ending in the pull request that made it, as
-   `([#12](https://github.com/Kolibee-GmbH/m2b/pull/12))`.
+- **A pull request for a feature or a fix leaves `CHANGELOG.md` and the version alone.** It says what
+  changes for the user in the section "What changes for the user" of its description. Two pull
+  requests open at the same time then never conflict over the changelog.
+- **The release pull request writes both**, once the pull requests it releases are merged. Its
+  checks run on `main` with the new version, the state that is released.
+
+1. Branch `release-X.Y.Z` from `main`. Pick the version by [semantic
+   versioning](https://semver.org/) and write it into `version` in
+   `plugins/m2b/.claude-plugin/plugin.json`.
+2. In `CHANGELOG.md`, add a section `## [X.Y.Z] - YYYY-MM-DD` with the day of the release, above
+   the one before, written from "What changes for the user" of each pull request merged since the
+   last tag (`git log --oneline vA.B.C..main`). Entries sit under `### Added`, `### Changed` or
+   `### Fixed`, one sentence or two each on what changes for the user, ending in the pull request
+   that made it, as `([#12](https://github.com/Kolibee-GmbH/m2b/pull/12))`. A pull request that
+   changes nothing for the user gets no entry.
 3. Run `scripts/check`; it must end with `check: passed`. If the release changes what the model
    sees, such as a skill, a hook, a tool description, what a tool or command returns to a session,
    the text a session starts with or the distillate's format, run the [evals](#evals) too and
@@ -573,9 +582,13 @@ match, however many commits came since. A change reaches users only with a relea
    released as open. Three eval cases run in both, because the page reports one run of the whole
    suite and a promise counts only runs of its own; the second time costs about a minute.
 4. Commit both files, and the eval page if it was rewritten, as `chore(release): m2b X.Y.Z`, open
-   a pull request to `main` and merge it; a squash merge is fine. The marketplace reads
-   `plugins/m2b` from `main`, not from a tag, so until the merge `/plugin update` keeps reporting
-   the old version.
+   a pull request to `main` and let it merge itself once CI is green:
+
+   ```bash
+   gh pr create --title "m2b X.Y.Z" --body-file <notes> && gh pr merge --auto --squash
+   ```
+
+   Its description says what the release changes for the user and which checks ran.
 5. On `main`, at the merged release, tag and push the tag:
 
    ```bash
