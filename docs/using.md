@@ -66,8 +66,8 @@ every session.
 ## Lessons
 
 A correction you kept, such as "run only the checks the change touches", is a lesson. Every
-session starts with the lessons for every project in a block of their own after the distillate,
-written as corrections you made and kept, not as notes. A lesson that `~/.claude/CLAUDE.md` or
+session starts with the lessons for every project in a block of their own, in m2b's second output
+beside the distillate, written as corrections you made and kept, not as notes. A lesson that `~/.claude/CLAUDE.md` or
 another source states now is left out, and `m2b status` says where it is kept. When distillate and
 lessons together pass the 2 KB target, lint says so with both sizes, and a new lesson the reading
 of your sessions proposes for every session names the kept lesson it would replace: the one you
@@ -116,8 +116,9 @@ When a `CLAUDE.md` or a rule file says something wrongly, say so in a session: "
 fix: CLAUDE.md, the line about the whole proof is out of date, it should say: run the checks the
 change touches". The session keeps it with `m2b fix add`. m2b never writes that file, which is
 yours and often committed. The next session that starts in a clone of that repository, on any of
-your machines, gets one line before the distillate: a fix waits for this file, with its name. A
-fix for a file under `~/.claude/` waits in every session on the machine it was kept on. The
+your machines, gets one line at its start, beside the distillate: a fix waits for this file, with
+its name; past five, one line says how many more wait. A fix for a file under `~/.claude/` waits
+in every session on the machine it was kept on. The
 session reads the fix with `m2b fix show`, applies it with you, and marks it done once you confirm
 it. Where the file in that checkout holds neither the line the fix replaces nor its new wording,
 the session tells you: the checkout may be on another branch, so the fix waits on until you give it
@@ -210,11 +211,13 @@ belong in its repository and its `CLAUDE.md`; m2b is for what has no repository.
 
 Claude Code keeps its own memory: short notes it writes for itself during a session, in files
 under `~/.claude` for each project. It stays on beside m2b, and a first "remember this" may land
-in either. The rule every session gets with the distillate keeps them apart: how Claude should
-work stays with Claude Code, in its memory or in a `CLAUDE.md`; what concerns your life and world
-across projects goes to m2b. A correction that holds in every project goes to `~/.claude/CLAUDE.md`,
-not into the memory of the project you made it in, where no other project would see it; and where
-a `CLAUDE.md` already says the matter wrongly, the session keeps a fix for it
+in either. The rule every session gets at its start, in m2b's second output beside the
+distillate, keeps them apart: how Claude should work in one project stays with Claude Code, in its
+memory or the repository's `CLAUDE.md`; what concerns your life and world across projects goes to
+m2b. A correction that holds in every project becomes an m2b [lesson](#lessons), and goes to
+`~/.claude/CLAUDE.md` only where you ask for that file, never into the memory of the project you
+made it in, where no other project would see it; and where a `CLAUDE.md` already says the matter
+wrongly, the session keeps a fix for it
 ([Fixes](#fixes-for-the-files-claude-reads)) instead of a second rule beside it.
 
 What m2b has that Claude Code's memory does not:

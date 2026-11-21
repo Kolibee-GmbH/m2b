@@ -120,7 +120,15 @@
         "hook",
         "distillate"
       ],
-      "stdout": "\\Am2b distillate \\(memory/MEMORY\\.md[^\\n]*\\n\\n# Memory\\n(.*\\n)*- Alex prefers green tea in the morning \\(alex\\.md\\)\\n(.*\\n)*\\nRouting: [^\\n]+\\n\\Z"
+      "stdout": "\\Am2b distillate \\(memory/MEMORY\\.md[^\\n]*\\n\\n# Memory\\n(.*\\n)*- Alex prefers green tea in the morning \\(alex\\.md\\)\\n(.*\\n)*\\Z"
+    },
+    {
+      "run": [
+        "m2b",
+        "hook",
+        "start-notes"
+      ],
+      "stdout": "\\Am2b at session start, beside the distillate[^\\n]*\\n\\nRouting: [^\\n]+\\n\\Z"
     }
   ]
 }

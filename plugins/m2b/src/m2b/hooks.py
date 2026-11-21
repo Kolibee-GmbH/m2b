@@ -40,7 +40,7 @@ from pathlib import Path
 
 from m2b import action_lessons, fixes, launcher, lessons, repository_places, session_remotes, topic_state
 from m2b.atomic_file import write_text_atomically
-from m2b.config.errors import SETUP_COMMAND
+from m2b.config.errors import SETUP_COMMAND, StoreUnreachableError
 from m2b.config.machine import MachineConfig
 from m2b.curate import machine_state
 from m2b.curate.detach import NOT_DOWNLOADED, start_detached
@@ -67,6 +67,8 @@ REMOTES_TIMEOUT_SECONDS = 2.0
 _STEP_NAME = re.compile(r"[a-z][a-z0-9-]{0,39}")
 # Enough for an overview; beyond it the line itself would crowd the session start.
 MAX_TOPIC_NAMES = 40
+# Each kept fix that waits is a line of its own; past these, one line says how many more wait.
+MAX_FIX_NOTICES = 5
 
 DISTILLATE_HEADER = (
     "m2b distillate (memory/MEMORY.md: curated, stable facts about the owner and their world). "
@@ -78,16 +80,19 @@ TOPIC_LINE = (
     "m2b topics (their facts come in when one of their words is named in a prompt or in the project folder's "
     "path; m2b:search finds them too): "
 )
+NOTES_HEADER = (
+    "m2b at session start, beside the distillate: its own notices, the routing rule, and the lessons the owner kept."
+)
 CUT_LINE = f"[m2b: the distillate was cut to fit the session start; the rest is in {MEMORY_INDEX_PATH}]"
 ROUTING_RULE = (
-    "Routing: personal things without a home in a repository (facts, tasks, ideas) go to the second brain "
-    "with m2b:capture; a project's own things go to its repository; when something touches both, the "
-    "repository gets the content and the second brain a sentence naming the file. How Claude should work "
-    "(corrections, conventions) is not for the second brain: it belongs to Claude Code, in its own memory or "
-    "in a CLAUDE.md (the repository's for one project, ~/.claude/CLAUDE.md for what holds in every project, "
-    "not one project's memory); a CLAUDE.md that says it wrongly gets a fix (m2b:capture), not a second "
-    "rule. What concerns the owner's life and world across projects (people, agreements, facts, tasks) goes "
-    "to the second brain, not to Claude Code's own memory."
+    "Routing: personal things without a home in a repository (facts, tasks, ideas) go to the second brain with "
+    "m2b:capture; a project's own things go to its repository; when something touches both, the repository gets the "
+    "content and the second brain a sentence naming the file. How Claude should work (corrections, conventions) is "
+    "not for the second brain's notes: for one project it belongs to Claude Code, in its own memory or the "
+    "repository's CLAUDE.md; one that holds in every project becomes an m2b lesson (m2b:capture), or goes to "
+    "~/.claude/CLAUDE.md where the owner asks for that file, never into one project's memory; a CLAUDE.md that says "
+    "it wrongly gets a fix (m2b:capture), not a second rule. What concerns the owner's life and world across projects "
+    "(people, agreements, facts, tasks) goes to the second brain, not to Claude Code's own memory."
 )
 # Who is who and what was agreed is what a second brain is for, also at work; what else goes in,
 # a customer's document among it, the owner decides.
@@ -115,7 +120,7 @@ def distillate(
     could land after this one has read the notes.
     """
     hook_input = hook_input or HookInput()
-    place = note_remotes(machine, environ, hook_input)
+    note_remotes(machine, environ, hook_input)
     folder = project_folder(environ, hook_input)
     if config.distillate.covering(folder) is not None:
         return
@@ -123,7 +128,7 @@ def distillate(
     # How the distillate was printed; None when the printing itself failed.
     printed: str | None = None
     try:
-        shown, printed = _print_distillate(config, machine, environ, folder, place)
+        shown, printed = _print_distillate(config, machine, environ, folder)
     finally:
         # Also when nothing could be printed: after a compaction the list must start over, or the
         # prompt hook would skip topics the context no longer holds. Without the note it may bring a
@@ -134,58 +139,36 @@ def distillate(
 
 
 def _print_distillate(
-    config: MachineConfig, machine: MachinePaths, environ: Mapping[str, str], folder: Path, place: Place
+    config: MachineConfig, machine: MachinePaths, environ: Mapping[str, str], folder: Path
 ) -> tuple[list[TopicBlock], str]:
-    """Prints the notices and the session's view of the distillate; gives back the topics it showed
-    and whether the distillate came whole, cut or not at all."""
+    """Prints the session's view of the distillate; gives back the topics it showed and whether the
+    distillate came whole, cut or not at all."""
     store = open_store(config.store, machine.temp_dir)
-    # A notice can name a machine or a file, and neither is m2b's own text.
-    lines = [*_run_notices(store, machine, config.machine_id), *_fix_notices(store, config.machine_id, place, environ)]
-    notices = "".join(f"m2b: {without_hidden(line)}\n" for line in lines)
-    print(notices, end="")
     text = _distillate_text(store)
     if text is None:
         return [], topic_state.NONE
-    kept_lessons, unread = _kept_lessons(store)
-    if unread is None:
-        # The tool hook reads no file of the store before a Bash call, so the session start hands it the list.
-        with contextlib.suppress(OSError):
-            action_lessons.note(machine, kept_lessons)
-    else:
-        # The list from the last session start stays: lessons that could not be read are not given up.
-        print(unread, end="")
-        notices += unread
-    view = start_view(text, kept_lessons, machine, environ, folder, len(notices))
-    print(view.distillate + view.lessons, end="")
+    view = start_view(text, machine, environ, folder)
+    print(view.distillate, end="")
     return view.shown, topic_state.CUT if view.cut else topic_state.WHOLE
 
 
 @dataclass(frozen=True)
 class StartView:
-    """What the session start prints after the notices: the distillate part (the header, the session's
-    view of the distillate, the cut line, the routing rules) and the block of lessons."""
+    """The distillate's output: the header, the session's view of the distillate and the cut line."""
 
     distillate: str
-    lessons: str
     shown: list[TopicBlock]
     cut: bool
 
 
-def start_view(
-    text: str,
-    kept_lessons: Sequence[lessons.Lesson],
-    machine: MachinePaths,
-    environ: Mapping[str, str],
-    folder: Path,
-    notices_length: int = 0,
-) -> StartView:
-    """The session's view of the distillate and the lessons; it only reads, so ``status`` can measure it."""
+def start_view(text: str, machine: MachinePaths, environ: Mapping[str, str], folder: Path) -> StartView:
+    """The session's view of the distillate; it only reads, so ``status`` can measure it.
+
+    It is an output of its own (B287): Claude Code measures each hook's output on its own, so the
+    distillate keeps its 8 KB whatever the notices, the routing rule and the lessons weigh.
+    """
     head = f"{DISTILLATE_HEADER}\n\n"
-    rule = f"\n{ROUTING_RULE} {WORK_PEOPLE_RULE}\n"
-    # The lessons come whole and the distillate is cut earlier to make room for them (B259).
-    kept = lessons.block(kept_lessons)
-    tail = f"\n{kept}" if kept else ""
-    room = OUTPUT_LIMIT - notices_length - len(head) - len(rule) - len(tail) - len(CUT_LINE) - 2
+    room = OUTPUT_LIMIT - len(head) - len(CUT_LINE) - 1
     split = split_topics(text)
     notes = machine.state_dir / session_remotes.NOTES_FOLDER
     named = [
@@ -193,7 +176,66 @@ def start_view(
         for block in _named_by_path(split.blocks, folder, environ)
     ]
     body, shown, cut = _session_view(split.general, split.blocks, named, room)
-    return StartView(head + body + (f"{CUT_LINE}\n" if cut else "") + rule, tail, shown, cut)
+    return StartView(head + body + (f"{CUT_LINE}\n" if cut else ""), shown, cut)
+
+
+def start_notes(
+    config: MachineConfig, machine: MachinePaths, environ: Mapping[str, str], hook_input: HookInput | None = None
+) -> None:
+    """The second output at the session start: m2b's notices, the routing rule and the lessons (B287).
+
+    Nothing in a folder the owner turned m2b off for, and nothing where the store cannot be opened:
+    the distillate's output says that already. It asks git for the folder's remotes itself and notes
+    nothing; the distillate hook notes them, side by side with this one.
+    """
+    hook_input = hook_input or HookInput()
+    folder = project_folder(environ, hook_input)
+    if config.distillate.covering(folder) is not None:
+        return
+    try:
+        store = open_store(config.store, machine.temp_dir)
+    except (StoreUnreachableError, StoreError, OSError):
+        return
+    view = notes_view(store, config.machine_id, machine, environ, place_of(environ, hook_input))
+    if view.lessons is not None:
+        # The tool hook reads no file of the store before a Bash call, so the session start hands it the list.
+        with contextlib.suppress(OSError):
+            action_lessons.note(machine, view.lessons)
+    print(view.text, end="")
+
+
+@dataclass(frozen=True)
+class NotesView:
+    """The second output, and the lessons it read; None where it read none: no distillate, or
+    lessons that could not be read, whose last list the tool hook keeps."""
+
+    text: str
+    lessons: list[lessons.Lesson] | None
+
+
+def notes_view(
+    store: Store, machine_id: str, machine: MachinePaths, environ: Mapping[str, str], place: Place
+) -> NotesView:
+    """What ``start_notes`` prints; it only reads, so ``status`` can measure it."""
+    # A notice can name a machine or a file, and neither is m2b's own text.
+    lines = [*_run_notices(store, machine, machine_id), *_fix_notices(store, machine_id, place, environ)]
+    body = "".join(f"m2b: {without_hidden(line)}\n" for line in lines)
+    found: list[lessons.Lesson] | None = None
+    # No rule without a brain to route to (B9), and the lessons come with the rule.
+    if _distillate_is_there(store):
+        read, unread = _kept_lessons(store)
+        found = read if unread is None else None
+        kept = lessons.block(read)
+        body += (unread or "") + f"{ROUTING_RULE} {WORK_PEOPLE_RULE}\n" + (f"\n{kept}" if kept else "")
+    return NotesView(f"{NOTES_HEADER}\n\n{body}" if body else "", found)
+
+
+def _distillate_is_there(store: Store) -> bool:
+    try:
+        store.read_bytes(MEMORY_INDEX_PATH)
+    except (StoreError, OSError):
+        return False
+    return True
 
 
 def _named_by_path(blocks: Sequence[TopicBlock], folder: Path, environ: Mapping[str, str]) -> list[TopicBlock]:
@@ -287,7 +329,7 @@ class Place:
     remotes: frozenset[str] = frozenset()
 
 
-def note_remotes(machine: MachinePaths, environ: Mapping[str, str], hook_input: HookInput) -> Place:
+def note_remotes(machine: MachinePaths, environ: Mapping[str, str], hook_input: HookInput) -> None:
     """Notes the git remotes of the folder the session starts in, while the folder is there to ask.
 
     Whoever reads the session later leaves it out by them (``session_remotes``), and a project
@@ -295,32 +337,49 @@ def note_remotes(machine: MachinePaths, environ: Mapping[str, str], hook_input: 
     so they are noted in every session, with the top of the repository. The notes of folders that
     are gone and that nobody renewed for ``KEEP_FOR`` go at every session start, before anything
     else, also where git is gone. A git that is missing, fails or does not answer in time notes
-    nothing, and nothing here holds or fails the session start. What it found is given back.
+    nothing, and nothing here holds or fails the session start. Who needs the place asks
+    ``place_of``.
     """
     notes = machine.state_dir / session_remotes.NOTES_FOLDER
     with contextlib.suppress(OSError):
         session_remotes.forget_old_notes(notes, now())
-    git = usable_git(environ, timeout=REMOTES_TIMEOUT_SECONDS)
-    if git is None:
-        return Place()
-    folder = hook_input.cwd or environ.get(PROJECT_DIR_VARIABLE) or os.getcwd()
-    found = Place()
+    folder = _session_folder(environ, hook_input)
+    found = _asked_place(environ, folder)
+    if found is None:
+        return
     with contextlib.suppress(OSError):
-        remotes = session_remotes.remotes_in(Path(folder), git, timeout=REMOTES_TIMEOUT_SECONDS, environ=environ)
-        if remotes is None:
-            return found
-        top = session_remotes.repository_top(Path(folder))
-        found = Place(top, remotes)
         machine.temp_dir.mkdir(parents=True, exist_ok=True)
         session_remotes.note(
             notes,
             folder,
-            remotes,
+            found.remotes,
             now(),
             lambda path, text: write_text_atomically(path, text, machine.temp_dir),
-            top=None if top is None else str(top),
+            top=None if found.top is None else str(found.top),
         )
-    return found
+
+
+def place_of(environ: Mapping[str, str], hook_input: HookInput) -> Place:
+    """Where the session starts, asked of git and noted nowhere; an empty place where git cannot say."""
+    return _asked_place(environ, _session_folder(environ, hook_input)) or Place()
+
+
+def _session_folder(environ: Mapping[str, str], hook_input: HookInput) -> str:
+    return hook_input.cwd or environ.get(PROJECT_DIR_VARIABLE) or os.getcwd()
+
+
+def _asked_place(environ: Mapping[str, str], folder: str) -> Place | None:
+    """The folder's place, or None where git is missing, fails or does not answer in time."""
+    git = usable_git(environ, timeout=REMOTES_TIMEOUT_SECONDS)
+    if git is None:
+        return None
+    try:
+        remotes = session_remotes.remotes_in(Path(folder), git, timeout=REMOTES_TIMEOUT_SECONDS, environ=environ)
+        if remotes is None:
+            return None
+        return Place(session_remotes.repository_top(Path(folder)), remotes)
+    except OSError:
+        return None
 
 
 def _fix_notices(store: Store, machine_id: str, place: Place, environ: Mapping[str, str]) -> list[str]:
@@ -337,11 +396,13 @@ def _fix_notices(store: Store, machine_id: str, place: Place, environ: Mapping[s
         return []
     home = environ.get("HOME")
     addresses = {session_remotes.address_of(remote) for remote in place.remotes}
+    waiting = [
+        (fix, file)
+        for fix in fixes.waiting_for(kept, addresses, machine_id)
+        if (file := fixes.local_file(fix, place.top, Path(home) if home else None)) is not None
+    ]
     lines: list[str] = []
-    for fix in fixes.waiting_for(kept, addresses, machine_id):
-        file = fixes.local_file(fix, place.top, Path(home) if home else None)
-        if file is None:
-            continue
+    for fix, file in waiting[:MAX_FIX_NOTICES]:
         found = fixes.look(fix, file)
         if found == fixes.GONE:
             lines.append(
@@ -359,6 +420,10 @@ def _fix_notices(store: Store, machine_id: str, place: Place, environ: Mapping[s
                 f"a kept fix waits for {file}: read it with m2b fix show {fix.name}, apply it there with the owner, "
                 f"and once they confirm it, run m2b fix done {fix.name}."
             )
+    more = len(waiting) - MAX_FIX_NOTICES
+    if more > 0:
+        waits = "fix waits" if more == 1 else "fixes wait"
+        lines.append(f"{more} more kept {waits} for this place; m2b fix list shows them all.")
     return lines
 
 

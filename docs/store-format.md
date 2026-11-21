@@ -167,9 +167,8 @@ those that keep it silent, `unless: [--quick]`; `ask: true` has Claude Code ask 
 call. A lesson you keep in a session waits in `state/core/lessons-kept/` until the next run files it.
 `kind` is `knowledge` (how to name or judge a thing) or `action` (about a command), `target` is
 `every project` or a repository's address, and `kept_at` names the source that states it now,
-such as `~/.claude/CLAUDE.md`. Every session starts, after the distillate, with the knowledge
-lessons for every project that no source states; the distillate is cut earlier to make room for
-them.
+such as `~/.claude/CLAUDE.md`. Every session starts with the knowledge lessons for every project
+that no source states, in an output of their own beside the distillate, which keeps its 8 KB.
 
 `## Current` holds topics under the same headings: a current item above its first `###` heading
 reaches every session, one under a topic comes in with that topic, below its facts under

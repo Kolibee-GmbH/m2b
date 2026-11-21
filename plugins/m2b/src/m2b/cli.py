@@ -71,7 +71,12 @@ Hook = Callable[[MachineConfig, MachinePaths, Mapping[str, str], HookInput], Non
 Handler = Callable[[argparse.Namespace, Context], int]
 
 # Session-start hooks by name.
-HOOKS: Mapping[str, Hook] = {"distillate": hooks.distillate, "nudge": hooks.nudge, "launcher": hooks.launcher_hook}
+HOOKS: Mapping[str, Hook] = {
+    "distillate": hooks.distillate,
+    "start-notes": hooks.start_notes,
+    "nudge": hooks.nudge,
+    "launcher": hooks.launcher_hook,
+}
 # Set on the curation run's model runs: hooks run in ``claude -p`` too, and without it a model step
 # would load the distillate again or start a second run.
 CURATION_RUN_VARIABLE = model.CURATION_RUN_VARIABLE

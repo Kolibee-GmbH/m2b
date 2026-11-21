@@ -202,7 +202,7 @@ class SessionStartTest(ToolHookFixture):
             encoding="utf-8",
         )
         with mock.patch("sys.stdout", io.StringIO()):
-            cli.main(["hook", "distillate"], self.environ, stdin=io.StringIO("{}"))
+            cli.main(["hook", "start-notes"], self.environ, stdin=io.StringIO("{}"))
 
         self.assertIn(
             "Run the whole proof only when the change gives a reason.", json.dumps(self.call("scripts/check"))

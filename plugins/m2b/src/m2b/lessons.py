@@ -7,11 +7,11 @@ it was ``kept``, and ``kept_at`` once a source such as ``~/.claude/CLAUDE.md`` s
 title, the lesson as one sentence, and its evidence. A capture is never a lesson, whatever it says
 about itself: only what stands in this folder is read.
 
-The session start brings the knowledge lessons for every project in a block of their own after the
-distillate (B257). The block is not data like the distillate: it says that these are corrections
-the owner made and kept, written as facts. A lesson kept at its source is left out, since the
-source already reaches the session. The block comes whole up to ``MAX_BLOCK_CHARACTERS``; the
-distillate is cut earlier to make room for it, as the owner chose.
+The session start brings the knowledge lessons for every project in a block of their own, in the
+output beside the distillate's (B257, B287). The block is not data like the distillate: it says that
+these are corrections the owner made and kept, written as facts. A lesson kept at its source is left
+out, since the source already reaches the session. The block comes whole up to
+``MAX_BLOCK_CHARACTERS``, and the distillate keeps its 8 KB beside it.
 """
 
 from __future__ import annotations

@@ -23,6 +23,7 @@ from pathlib import Path
 
 from m2b import claude_code, hooks, lessons
 from m2b.config.machine import MachineConfig
+from m2b.hook_input import HookInput
 from m2b.notes.characters import without_hidden
 from m2b.notes.frontmatter import Note
 from m2b.paths import MachinePaths
@@ -358,18 +359,18 @@ def _m2b_parts(
     except (OSError, StoreError) as error:
         return [Part("m2b distillate", None, None, not_read=str(error))]
     try:
-        found, unread = lessons.read_all(store), None
+        lessons.read_all(store)
+        unread = None
     except EvictedFileError:
-        found, unread = [], Part("m2b lessons", None, None, not_read="not downloaded to this machine")
+        unread = Part("m2b lessons", None, None, not_read="not downloaded to this machine")
     except (OSError, StoreError) as error:
-        found, unread = [], Part("m2b lessons", None, None, not_read=str(error))
-    view = hooks.start_view(text, found, machine, environ, folder)
-    parts = [_part("m2b distillate", view.distillate)]
-    if unread is not None:
-        parts.append(unread)
-    elif view.lessons:
-        parts.append(_part("m2b lessons", view.lessons))
-    return parts
+        unread = Part("m2b lessons", None, None, not_read=str(error))
+    # Both outputs as the session start prints them, each measured on its own (B287).
+    view = hooks.start_view(text, machine, environ, folder)
+    place = hooks.place_of(environ, HookInput(cwd=str(folder)))
+    notes = hooks.notes_view(store, config.machine_id, machine, environ, place)
+    parts = [_part("m2b distillate", view.distillate), _part("m2b notices, rule and lessons", notes.text)]
+    return [*parts, unread] if unread is not None else parts
 
 
 def shown_path(path: Path, home: str | None) -> str:

@@ -1,11 +1,12 @@
 {
-  "description": "Session start: the distillate with the routing rule and one line per notice, after a note of the git remotes of the session's folder, the nudge that starts a due curation run in the background, the launcher check, and the worklog's recording switch, which prints nothing while its add-on is off. Before every prompt, the facts of each topic of the distillate the prompt names, once per session, silent on any error. Before every Bash call, the action lessons whose words the command holds, silent on any error. All always exit 0. The band above the prompt and the status line are the mod in register.tsx, which Claude Code loads while mods are on.",
+  "description": "Session start: the distillate in an output of its own, after a note of the git remotes of the session's folder; m2b's notices, the routing rule and the kept lessons in a second output; the nudge that starts a due curation run in the background, the launcher check, and the worklog's recording switch, which prints nothing while its add-on is off. Before every prompt, the facts of each topic of the distillate the prompt names, once per session, silent on any error. Before every Bash call, the action lessons whose words the command holds, silent on any error. All always exit 0. The band above the prompt and the status line are the mod in register.tsx, which Claude Code loads while mods are on.",
   "modules": ["./register.tsx"],
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
           {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/m2b hook distillate", "timeout": 20},
+          {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/m2b hook start-notes", "timeout": 20},
           {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/m2b hook nudge", "timeout": 20},
           {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/m2b hook launcher", "timeout": 20},
           {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/m2b-worklog hook session-start", "timeout": 30}

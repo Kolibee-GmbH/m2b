@@ -1,7 +1,7 @@
 ---
 name: correction
 tags: [routing]
-allowed_tools: [Read, Edit, Write]
+allowed_tools: [Read, Edit, Write, Bash, Skill]
 runs: 3
 max_turns: 6
 ---

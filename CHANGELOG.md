@@ -31,8 +31,9 @@ right before the command it is about.
   ([Curation](docs/curation.md#reading-your-sessions))
   ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - Every session starts with the lessons you kept for every project, corrections you made and kept,
-  in a block after the distillate (`memory/lessons/`). A lesson that `~/.claude/CLAUDE.md` or
-  another source states now is left out ([Using m2b](docs/using.md#lessons))
+  in a block of their own (`memory/lessons/`). They come with m2b's notices and the routing rule
+  in a second output at the session start, so the distillate keeps its 8 KB beside them. A lesson
+  that `~/.claude/CLAUDE.md` or another source states now is left out ([Using m2b](docs/using.md#lessons))
   ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - A lesson about a command comes right before Claude runs it: a hook before each Bash call adds the
   lesson whose words the command holds, or has Claude Code ask you first. "Keep this as a lesson" in
@@ -72,8 +73,9 @@ right before the command it is about.
   project's repository, the files the session wrote there, so a correction can be told by what it
   corrects ([Curation](docs/curation.md#reading-your-sessions))
   ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
-- The rule every session starts with sends a correction that holds in every project to
-  `~/.claude/CLAUDE.md`, not into the memory of the project it was made in, and one that a
+- The rule every session starts with sends a correction that holds in every project to an m2b
+  lesson, and to `~/.claude/CLAUDE.md` only where you ask for that file, never into the memory of
+  the project it was made in, and one that a
   `CLAUDE.md` says wrongly to a fix of that file. What touches both a project and you goes into the
   repository, and into the second brain as a sentence naming the file it stands in
   ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).

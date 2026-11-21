@@ -15,6 +15,7 @@ from unittest import mock
 import test_runner
 from m2b import hooks
 from m2b.config.machine import load_machine_config
+from m2b.hook_input import HookInput
 from m2b.store.base import StoreError
 from m2b.store.folder import FolderStore
 from m2b.store.guard import DatalessGuard
@@ -87,7 +88,7 @@ class StartSizeTest(test_runner.RunnerTest):
                 style_name,
                 str(memory),
                 "m2b distillate",
-                "m2b lessons",
+                "m2b notices, rule and lessons",
             ],
         )
         self.assertEqual(parts[str(self.claude / "CLAUDE.md")]["list_points"], 2)
@@ -95,24 +96,28 @@ class StartSizeTest(test_runner.RunnerTest):
         self.assertEqual(parts["~/work/acme-shop/CLAUDE.md"]["list_points"], 1)
         self.assertEqual(parts[style_name]["list_points"], 2)
         self.assertEqual(parts[str(memory)]["list_points"], 1)
-        self.assertEqual(parts["m2b lessons"]["list_points"], 1)
+        self.assertEqual(parts["m2b notices, rule and lessons"]["list_points"], 1)
         self.assertEqual(start["list_points"], sum(part["list_points"] for part in parts.values()))
         self.assertAlmostEqual(start["kb"], sum(part["kb"] for part in parts.values()), delta=0.3)
         self.assertEqual(start["not_read"], 0)
 
-    def test_m2bs_part_is_what_its_session_start_prints_after_the_notices(self) -> None:
-        """Covers: B268"""
+    def test_m2bs_two_parts_are_the_two_outputs_its_session_start_prints(self) -> None:
+        """Covers: B268, B287"""
         self.curating()
         self.write("memory/lessons/once.md", LESSON)
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            hooks.distillate(load_machine_config(self.machine), self.machine, self.environ)
-        printed = "".join(line for line in out.getvalue().splitlines(keepends=True) if not line.startswith("m2b: "))
+        config = load_machine_config(self.machine)
+        printed = []
+        for hook in (hooks.distillate, hooks.start_notes):
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                hook(config, self.machine, self.environ, HookInput(cwd=str(self.project)))
+            printed.append(out.getvalue())
 
         parts = self.parts()
 
-        size = parts["m2b distillate"]["kb"] + parts["m2b lessons"]["kb"]
-        self.assertAlmostEqual(size, len(printed.encode("utf-8")) / 1024, delta=0.1)
+        for name, text in zip(("m2b distillate", "m2b notices, rule and lessons"), printed):
+            with self.subTest(name=name):
+                self.assertAlmostEqual(parts[name]["kb"], len(text.encode("utf-8")) / 1024, delta=0.05)
 
     def test_a_rule_with_paths_is_listed_and_left_out_of_the_sum(self) -> None:
         """Covers: B268"""

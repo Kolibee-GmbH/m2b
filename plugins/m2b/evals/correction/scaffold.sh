@@ -1,9 +1,8 @@
 #!/bin/sh
 # The invented store, and a project in the run's working directory with a CLAUDE.md of its own.
-# The correction the prompt makes holds in every project, so it belongs in the CLAUDE.md every
-# session loads, not in this project's CLAUDE.md or the memory Claude Code keeps for this project.
-# An eval sets CLAUDE_CONFIG_DIR to the config folder beside HOME, so the global CLAUDE.md Claude
-# Code loads there is <config>/CLAUDE.md; a run may write that one or ~/.claude/CLAUDE.md, and both pass.
+# The correction the prompt makes holds in every project, so it becomes an m2b lesson, which every
+# session starts with, not a line in this project's CLAUDE.md or the memory Claude Code keeps for
+# this project.
 set -eu
 sh "$(dirname "$0")/../demo-store.sh"
 project="$HOME/cwd"
