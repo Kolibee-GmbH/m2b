@@ -63,6 +63,12 @@ def holds_word(command: str, word: str) -> bool:
     return re.search(r"(?<![\w-])" + re.escape(word) + r"(?![\w-])", command) is not None
 
 
+# A lesson's name is its file's name in a store others can write. The per-session marks of a denial
+# hold one name a line, so a name with a line break would never match its mark and its lesson would
+# stop every call: only a plain file name is listed.
+_PLAIN_NAME = re.compile(r"[A-Za-z0-9._-]{1,120}\.md")
+
+
 def note(machine: MachinePaths, found: Sequence[Lesson]) -> None:
     """Writes the action lessons for the tool hook, in place of the list before."""
     listed = [
@@ -75,7 +81,7 @@ def note(machine: MachinePaths, found: Sequence[Lesson]) -> None:
             "ask": lesson.ask,
         }
         for lesson in found
-        if lesson.kind == ACTION and lesson.words
+        if lesson.kind == ACTION and lesson.words and _PLAIN_NAME.fullmatch(lesson.name)
     ]
     machine.state_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     machine.temp_dir.mkdir(parents=True, exist_ok=True)

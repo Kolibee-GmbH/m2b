@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from m2b.notes.layout import STATE
-from m2b.store.base import EvictedFileError, Store
+from m2b.store.base import EvictedFileError, Store, StoreError
 
 FOLDER = f"{STATE}/core/fixes"
 VERSION = 1
@@ -284,7 +284,15 @@ def kept_from_lessons(store: Store) -> list[Fix]:
     for path in scan.evicted:
         if path == FOLDER or path.endswith(".json"):
             raise EvictedFileError(path)
-    return counted(read_all(store))
+    found = read_all(store)
+    # A fix file that is there and cannot be read as a fix (half synced, written by hand) raises too:
+    # left out, its lesson's counts would go with the next count.
+    read = {kept.fix.name for kept in found}
+    for path in scan.files:
+        named = _FILE.fullmatch(PurePosixPath(path).name)
+        if named is not None and named.group(2) == "json" and named.group(1) not in read:
+            raise StoreError(f"{path} could not be read as a fix")
+    return counted(found)
 
 
 def counted(found: Iterable[Kept]) -> list[Fix]:

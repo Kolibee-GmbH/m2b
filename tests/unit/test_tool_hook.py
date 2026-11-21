@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import io
 import json
@@ -234,6 +235,12 @@ class StopFirstTest(ToolHookFixture):
         self.assertNotIn("permissionDecision", second)
         self.assertIn(PROOF.text, second["additionalContext"])
         self.assertEqual(action_lessons.fired(self.machine), {"proof.md": 2})
+
+    def test_a_lesson_whose_name_is_no_plain_file_name_is_not_listed(self) -> None:
+        """Covers: B288"""
+        self.kept(dataclasses.replace(PROOF, name="proof\nother.md"), dataclasses.replace(PROOF, name="proof two.md"))
+
+        self.assertEqual([], action_lessons.read(self.machine))
 
     def test_another_session_is_stopped_once_too(self) -> None:
         """Covers: B288"""

@@ -84,6 +84,24 @@ class KeptLessonTest(ProposalHarvestFixture):
         self.assertEqual(report.replaced, ["weak.md"])
         self.assertEqual(self.written()["format"], 4)
 
+    def test_a_replaced_lesson_that_left_the_block_meanwhile_stays(self) -> None:
+        """Covers: B284"""
+        weak = self.root / "memory" / "lessons" / "weak.md"
+        weak.parent.mkdir(parents=True, exist_ok=True)
+        weak.write_text(
+            "---\nkind: knowledge\ntarget: every project\nkept: 2026-02-01\nkept_at: ~/.claude/CLAUDE.md\n---\n"
+            "# Weak\n\nKeep it short.\n"
+        )
+        part = dataclasses.replace(
+            LESSON.lesson, kind="knowledge", target="every project", words=(), replaces="weak.md"
+        )
+        self.answered(KEEP, dataclasses.replace(LESSON, lesson=part))
+
+        report = self.harvest()
+
+        self.assertTrue(weak.exists())
+        self.assertEqual(report.replaced, [])
+
     def kept_at(self, at_source: glean.AtSource, kind: str = "action") -> proposals.Entry:
         words = ("scripts/check",) if kind == "action" else ()
         part = dataclasses.replace(LESSON.lesson, kind=kind, words=words, at_source=at_source)

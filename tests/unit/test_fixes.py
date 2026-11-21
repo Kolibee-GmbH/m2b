@@ -15,7 +15,7 @@ from unittest import mock
 from m2b import cli, fixes, paths
 from m2b.config import machine
 from m2b.fixes import APPLIED, DONE, DROPPED, GONE, WAITING, WAITS, Fix, FixRefusedError
-from m2b.store.base import EvictedFileError
+from m2b.store.base import EvictedFileError, StoreError
 from m2b.store.folder import FolderStore
 from m2b.store.guard import DatalessGuard
 
@@ -150,6 +150,16 @@ class KeptFromLessonsTest(StoreFixture):
             mock.patch.object(DatalessGuard, "is_evicted", side_effect=lambda path: Path(path).name == not_downloaded),
             self.assertRaises(EvictedFileError),
         ):
+            fixes.kept_from_lessons(self.store)
+
+    def test_a_fix_file_that_cannot_be_read_as_a_fix_raises(self) -> None:
+        """Covers: B289"""
+        fixes.keep(self.store, portal_fix(lesson="Run only the quick checks."))
+        broken = portal_fix(wording="- Broken.", lesson="Other.")
+        fixes.keep(self.store, broken)
+        (self.root / fixes.FOLDER / f"{broken.name}.json").write_text("{not json", encoding="utf-8")
+
+        with self.assertRaises(StoreError):
             fixes.kept_from_lessons(self.store)
 
 

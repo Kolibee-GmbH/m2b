@@ -314,12 +314,22 @@ def _keep_lesson(store: Store, entry: proposals.Entry, report: HarvestReport, ma
         report.problems.append(f"the lesson you kept waits: {entry.text} ({error})")
         return False
     # A lesson kept past what every session starts with takes the place of the one it named.
+    # Only while it is still in the block: one a source states since is out of it, and freed nothing.
     if lesson.replaces is not None:
         replaced = f"{lessons.FOLDER}/{lesson.replaces}"
-        if store.exists(replaced):
+        standing = _lesson_in(store, replaced, lesson.replaces)
+        if standing is not None and standing.in_the_block:
             store.delete(replaced)
             report.replaced.append(lesson.replaces)
     return True
+
+
+def _lesson_in(store: Store, path: str, name: str) -> lessons.Lesson | None:
+    try:
+        return lessons.parse(name, store.read_bytes(path).decode("utf-8", errors="replace"))
+    # One that cannot be read now is not deleted unseen.
+    except (FileNotFoundError, StoreError):
+        return None
 
 
 def _takes(entry: proposals.Entry, answer: str) -> bool:
