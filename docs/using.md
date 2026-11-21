@@ -77,6 +77,11 @@ Bash call whose command holds its words, and stays silent where the command hold
 to keep it quiet (`--quick`). Say "keep this as a lesson" in a session and the next curation run
 files it. A lesson can ask you before the call instead of only reminding.
 
+`m2b status` says how each lesson does since you kept it: how often you corrected Claude on it
+again, which the curation run counts where it reads your sessions, and for a lesson about a command
+how often it fired on this machine and in how many Bash calls. A lesson you corrected again is
+named `not working`; whether you word it anew, have it ask instead of remind, or drop it is yours.
+
 ## A project
 
 Say "remember this project" in a session in a clone, and the session captures it with

@@ -3,7 +3,8 @@
 Claude Code runs it on ``PreToolUse`` for Bash. Where the command holds all of a lesson's words and
 none of the words that silence it, in a repository the lesson is for, the hook adds the lesson as
 context before the call runs, written as a correction the owner kept; a lesson set to ask has
-Claude Code ask the owner first (``permissionDecision: ask``). Each firing is counted.
+Claude Code ask the owner first (``permissionDecision: ask``). Each firing is counted, and so is
+each call while there are action lessons.
 
 It reads machine state only: the list the session start wrote (``action_lessons``), the notes of
 the remotes of the session's folder, and the machine config for the folders m2b is off in. No file
@@ -62,6 +63,7 @@ def _answer(environ: Mapping[str, str], stdin: TextIO) -> dict[str, object] | No
     if load_machine_config(machine).distillate.covering(Path(folder)) is not None:
         return None
     now = datetime.datetime.now(datetime.timezone.utc)
+    action_lessons.count_call(machine, now)
     remotes = session_remotes.noted(machine.state_dir / session_remotes.NOTES_FOLDER, folder, now) or frozenset()
     addresses = {session_remotes.address_of(remote) for remote in remotes}
     firing = [lesson for lesson in lessons if lesson.fires_on(command, addresses)]

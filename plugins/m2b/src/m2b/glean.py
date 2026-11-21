@@ -204,10 +204,30 @@ NO_EXAMPLES = Examples()
 
 
 @dataclass(frozen=True)
+class Correction:
+    """A prompt that corrects Claude again on a lesson the person kept: the lesson's name, the words
+    and the id of the session they were typed in."""
+
+    lesson: str
+    quote: str
+    session: str
+
+
+@dataclass(frozen=True)
+class KeptLesson:
+    """A lesson the person kept, as the model is shown it: its name, its text and the day it was kept."""
+
+    name: str
+    text: str
+    kept: str
+
+
+@dataclass(frozen=True)
 class Answer:
     proposals: tuple[Proposal, ...]
     # How many entries of the answer were not a proposal in the form.
     malformed: int
+    corrections: tuple[Correction, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -230,6 +250,7 @@ def step_input(
     zone: datetime.tzinfo = datetime.timezone.utc,
     examples: Examples = NO_EXAMPLES,
     waiting: Sequence[Example] = (),
+    kept_lessons: Sequence[KeptLesson] = (),
 ) -> str:
     """The JSON document the model reads; ``zone`` is where the person is, for the day of a session.
 
@@ -256,6 +277,12 @@ def step_input(
         "memory": distillate,
         "answered": answered,
         "waiting": [_as_given(example) for example in waiting],
+        # Only where there is one, so a reading without lessons is asked as before.
+        **(
+            {"lessons": [{"name": each.name, "text": each.text, "kept": each.kept} for each in kept_lessons]}
+            if kept_lessons
+            else {}
+        ),
         "sessions": given,
     }
     return json.dumps(document, ensure_ascii=False, indent=1)
@@ -265,13 +292,46 @@ def parse_answer(answer: str, sessions: Sequence[Session]) -> Answer:
     """The proposals in the model's answer; ``sessions`` is the sequence its input was built from."""
     proposals: list[Proposal] = []
     malformed = 0
-    for entry in _entries(answer):
+    found = _answer_object(answer)
+    for entry in found["proposals"]:
         proposal = _proposal(entry, sessions)
         if proposal is None:
             malformed += 1
         else:
             proposals.append(proposal)
-    return Answer(tuple(proposals), malformed)
+    given = found.get("corrected_again")
+    corrections = [_correction(entry, sessions) for entry in (given if isinstance(given, list) else [])]
+    return Answer(tuple(proposals), malformed, tuple(each for each in corrections if each is not None))
+
+
+def checked_corrections(
+    corrections: Sequence[Correction], sessions: Sequence[Session], kept: Sequence[KeptLesson], zone: datetime.tzinfo
+) -> list[Correction]:
+    """The corrections whose lesson the person kept and whose quote, at least ``QUOTE_WORDS`` words,
+    stands in what they typed in its session after the day the lesson was kept. A lesson is kept by
+    the day, so a prompt of that day may be the correction it was kept from."""
+    by_id = {session.session_id: session for session in sessions}
+    days = {lesson.name: lesson.kept for lesson in kept}
+    found = []
+    for correction in corrections:
+        kept_on = days.get(correction.lesson)
+        if kept_on is None or len(_collapsed(correction.quote).split()) < QUOTE_WORDS:
+            continue
+        typed = _typed_in(correction.quote, by_id.get(correction.session))
+        if any(prompt.time.astimezone(zone).date().isoformat() > kept_on for prompt in typed):
+            found.append(correction)
+    return found
+
+
+def _correction(entry: object, sessions: Sequence[Session]) -> Correction | None:
+    if not isinstance(entry, dict):
+        return None
+    lesson, quote, number = entry.get("lesson"), entry.get("quote"), _session_number(entry.get("session"))
+    if not isinstance(lesson, str) or not isinstance(quote, str) or not quote.strip():
+        return None
+    if number is None or not 1 <= number <= len(sessions):
+        return None
+    return Correction(lesson, quote, sessions[number - 1].session_id)
 
 
 def check(proposals: Sequence[Proposal], sessions: Sequence[Session], captures: Sequence[str]) -> Checked:
@@ -376,8 +436,8 @@ def _as_given(example: Example) -> dict[str, str]:
     return {"kind": example.kind, "text": example.text, "quote": example.quote}
 
 
-def _entries(answer: str) -> list[Any]:
-    """The list under ``proposals`` of the first JSON object in the answer that has one."""
+def _answer_object(answer: str) -> dict[str, Any]:
+    """The first JSON object in the answer that has a list under ``proposals``."""
     decoder = json.JSONDecoder()
     for start in (match.start() for match in re.finditer(r"\{", answer)):
         try:
@@ -385,8 +445,7 @@ def _entries(answer: str) -> list[Any]:
         except ValueError:
             continue
         if isinstance(found, dict) and isinstance(found.get("proposals"), list):
-            entries: list[Any] = found["proposals"]
-            return entries
+            return found
     raise GleanError("the answer holds no JSON object with a list of proposals")
 
 

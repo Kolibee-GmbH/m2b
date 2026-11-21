@@ -220,6 +220,20 @@ class CountTest(ToolHookFixture):
 
         self.assertEqual(action_lessons.fired(self.machine), {"proof.md": 2})
 
+    def test_each_call_is_counted_per_day_while_there_are_action_lessons_and_firings_count_from_a_day(self) -> None:
+        """Covers: B281"""
+        self.call("ls")
+        self.kept(PROOF)
+
+        self.call("scripts/check")
+        self.call("git status")
+
+        today = datetime.datetime.now(datetime.timezone.utc).date()
+        self.assertEqual(action_lessons.calls(self.machine, today), 2)
+        self.assertEqual(action_lessons.calls(self.machine, today + datetime.timedelta(days=1)), 0)
+        self.assertEqual(action_lessons.fired(self.machine, today), {"proof.md": 1})
+        self.assertEqual(action_lessons.fired(self.machine, today + datetime.timedelta(days=1)), {})
+
 
 if __name__ == "__main__":
     unittest.main()

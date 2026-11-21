@@ -22,7 +22,7 @@ import datetime
 import json
 from typing import Any
 
-from m2b import handed_in, lessons, proposal_answers, proposals, start_size
+from m2b import action_lessons, handed_in, lesson_counts, lessons, proposal_answers, proposals, start_size
 from m2b.addons import ADDONS, is_on
 from m2b.atomic_file import replace_atomically
 from m2b.commands import Context
@@ -102,21 +102,51 @@ def status_answer(config: MachineConfig, context: Context, tasks_check: Check | 
     if answers is not None:
         answer["proposal_answers"] = answers
     answer["handed_in"] = _handed_in(store)
-    answer["lessons"] = _lessons(store)
+    answer["lessons"] = _lessons(store, context.machine)
     return answer
 
 
-def _lessons(store: Store) -> dict[str, Any]:
-    """How many lessons every session starts with, and those left out because their source states
-    them now, by name and source (B258)."""
+def _lessons(store: Store, machine: MachinePaths) -> dict[str, Any]:
+    """How many lessons every session starts with, those left out because their source states them
+    now, by name and source (B258), and how each lesson does since it was kept: how often it fired
+    on this machine and in how many of the Bash calls seen here, and how often the owner corrected
+    Claude on it again."""
     found = lessons.read_all(store)
+    try:
+        again: dict[str, int] | None = lesson_counts.corrected_again(store)
+    except (lesson_counts.LessonCountsError, ConfigError, StoreError):
+        again = None
     return {
         "in_every_session": len(lessons.fitting(found)[0]),
         "kept_at_source": [
             {"name": with_hidden_written_out(lesson.name), "source": with_hidden_written_out(lesson.kept_at or "")}
             for lesson in lessons.kept_at_source(found)
         ],
+        "each": [_how_it_does(lesson, machine, again) for lesson in found],
     }
+
+
+def _how_it_does(lesson: lessons.Lesson, machine: MachinePaths, again: dict[str, int] | None) -> dict[str, Any]:
+    """A lesson's counts since it was kept; ``corrected_again`` is None where the counts could not be read."""
+    counted: dict[str, Any] = {
+        "name": with_hidden_written_out(lesson.name),
+        "kind": lesson.kind,
+        "kept": with_hidden_written_out(lesson.kept),
+        "corrected_again": None if again is None else again.get(lesson.name, 0),
+    }
+    if lesson.kind == lessons.ACTION:
+        since = _day_of(lesson.kept)
+        # Without a day it was kept, nothing can be counted since then: both stay 0.
+        counted["fired"] = action_lessons.fired(machine, since).get(lesson.name, 0) if since else 0
+        counted["calls"] = action_lessons.calls(machine, since) if since else 0
+    return counted
+
+
+def _day_of(text: str) -> datetime.date | None:
+    try:
+        return datetime.date.fromisoformat(text)
+    except ValueError:
+        return None
 
 
 def probe_backends(
@@ -293,8 +323,27 @@ def _print_text(answer: dict[str, Any]) -> None:
             f"; {item['name']} is kept at its source, {item['source']}" for item in kept["kept_at_source"]
         )
         print(f"lessons: {kept['in_every_session']} in every session{at_source}")
+    for each in kept["each"]:
+        print(_lesson_line(each))
     on = [name for name, is_addon_on in answer["addons"].items() if is_addon_on]
     print(f"add-ons on: {', '.join(on) if on else 'none'}")
+
+
+def _lesson_line(each: dict[str, Any]) -> str:
+    """How one lesson does since it was kept: ``lesson quick-checks (action, kept 2026-11-20): fired 3
+    times in 120 Bash calls (3%), corrected again 1 time: not working``."""
+    parts = []
+    if "fired" in each:
+        share = f" ({round(100 * each['fired'] / each['calls'])}%)" if each["calls"] else ""
+        parts.append(f"fired {_times(each['fired'])} in {each['calls']} Bash calls{share}")
+    again = each["corrected_again"]
+    parts.append("corrections not counted" if again is None else f"corrected again {_times(again)}")
+    verdict = ": not working" if again else ""
+    return f"lesson {each['name']} ({each['kind']}, kept {each['kept']}): {', '.join(parts)}{verdict}"
+
+
+def _times(number: int) -> str:
+    return "1 time" if number == 1 else f"{number} times"
 
 
 def _proposal_answers_text(answers: dict[str, Any]) -> str:

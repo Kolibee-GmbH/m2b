@@ -716,5 +716,51 @@ class PointerTest(unittest.TestCase):
         self.assertEqual(checked.not_quoted, (elsewhere,))
 
 
+class CorrectedAgainTest(unittest.TestCase):
+    QUICK = glean.KeptLesson(
+        "quick.md", "Run only the quick checks.", (MORNING.date() - datetime.timedelta(days=1)).isoformat()
+    )
+    AGAIN = session("again", "no, again only the quick round please")
+
+    def test_the_kept_lessons_go_in_by_name_and_text_and_none_go_in_without_any(self) -> None:
+        """Covers: B280"""
+        given = json.loads(glean.step_input([self.AGAIN], "# Memory\n", kept_lessons=[self.QUICK]))
+
+        self.assertEqual(
+            given["lessons"], [{"name": "quick.md", "text": "Run only the quick checks.", "kept": self.QUICK.kept}]
+        )
+        self.assertNotIn("lessons", json.loads(glean.step_input([self.AGAIN], "# Memory\n")))
+
+    def test_a_correction_counts_only_for_a_kept_lesson_on_typed_words_since_it_was_kept(self) -> None:
+        """Covers: B280"""
+        said = {"lesson": "quick.md", "quote": "again only the quick round", "session": 1}
+        read = glean.parse_answer(
+            json.dumps(
+                {
+                    "proposals": [],
+                    "corrected_again": [
+                        said,
+                        {**said, "lesson": "nothing.md"},
+                        {**said, "quote": "quick round"},
+                        {**said, "quote": "the whole proof again"},
+                        {**said, "session": 7},
+                        "quick.md",
+                    ],
+                }
+            ),
+            [self.AGAIN],
+        )
+        # Kept on the day of the prompt: that prompt may be the correction the lesson was kept from.
+        same_day = dataclasses.replace(self.QUICK, kept=MORNING.date().isoformat())
+
+        kept = glean.checked_corrections(read.corrections, [self.AGAIN], [self.QUICK], datetime.timezone.utc)
+
+        self.assertEqual(len(read.corrections), 4)
+        self.assertEqual(kept, [glean.Correction("quick.md", "again only the quick round", "again")])
+        self.assertEqual(
+            glean.checked_corrections(read.corrections, [self.AGAIN], [same_day], datetime.timezone.utc), []
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

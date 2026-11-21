@@ -26,6 +26,10 @@ per kind, what was added and what stood on no words of the person. The counts go
 information, never into the review: nothing here asks the person to act. What the reader left out of
 the sessions it read is among them, so a day's reading shows what it did not take.
 
+The model is also shown the lessons the person kept and asked which prompts correct Claude on one
+of them again; code keeps such a correction only where its words stand in what was typed on the
+day after the lesson was kept, and counts it under the lesson (``lesson_counts``).
+
 A repository the person typed in on two days, in this reading or remembered from one before, and
 that no topic names, is proposed as a project by code (``project_proposals``), with no model and
 no words of the person; the days are remembered in machine state once the reading is saved.
@@ -55,6 +59,7 @@ from m2b import (
     folders_left_out,
     glean,
     kept_lessons,
+    lesson_counts,
     lesson_sources,
     lessons,
     project_capture,
@@ -65,11 +70,12 @@ from m2b import (
     sessions,
 )
 from m2b.candidates import same_text
+from m2b.config.errors import ConfigError
 from m2b.config.machine import MachineConfig
 from m2b.curate import model, period_captures
 from m2b.notes.layout import MEMORY, MEMORY_INDEX
 from m2b.paths import MachinePaths
-from m2b.store.base import Store
+from m2b.store.base import Store, StoreError
 
 FIRST_PERIOD = datetime.timedelta(hours=24)
 LONGEST_PERIOD = datetime.timedelta(days=7)
@@ -148,7 +154,9 @@ def propose(
     pasted = sum(len(prompt.pasted) for session in read for prompt in session.prompts)
     if pasted:
         notes.append(f"{_count(pasted, 'pasted text')} {_were(pasted)} read with the prompts they stand in")
-    given = glean.step_input(read, _distillate(store), zone, examples, waiting)
+    standing = lessons.read_all(store)
+    shown_lessons = [glean.KeptLesson(lesson.name, lesson.text, lesson.kept) for lesson in standing]
+    given = glean.step_input(read, _distillate(store), zone, examples, waiting, shown_lessons)
     run = model.text_step(config, machine, environ, glean.instruction(), given, pass_fds)
     if run.answer is None:
         raise GleanStepError(run.failure())
@@ -156,7 +164,7 @@ def propose(
     checked = glean.check(answer.proposals, read, captures.texts)
     placed, without_repository = _for_their_project(checked, read, notes_folder, started)
     placed = project_files.pointed(placed, read, projects)
-    placed, not_keepable, known = _new_lessons(placed, lessons.read_all(store), zone)
+    placed, not_keepable, known = _new_lessons(placed, standing, zone)
     placed, unchecked = _at_their_sources(
         placed, read, config, machine, environ, notes_folder, started, pass_fds, kept.entries
     )
@@ -195,6 +203,16 @@ def propose(
             f"{_count(without_repository, 'lesson')} for one project left out: "
             "no repository is known that both its sessions worked in"
         )
+    corrections = glean.checked_corrections(answer.corrections, read, shown_lessons, zone)
+    try:
+        again = lesson_counts.add(store, corrections, {lesson.name for lesson in standing})
+    # A counter must not cost the reading its proposals: whatever keeps the file from being read or
+    # written is said, and the reading goes on.
+    except (lesson_counts.LessonCountsError, ConfigError, StoreError) as error:
+        notes.append(f"the corrections of kept lessons were not counted: {error}")
+    else:
+        if again:
+            notes.append(f"{_count(again, 'correction')} of a kept lesson counted: Claude was corrected on it again")
     proposals.save(store, dataclasses.replace(counted, read_until=started))
     project_proposals.remember(machine.state_dir, worked, machine.temp_dir)
     sent = sum(len(session.prompts) for session in read)

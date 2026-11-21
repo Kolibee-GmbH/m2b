@@ -9,7 +9,7 @@ from typing import Any
 from unittest import mock
 
 import test_runner
-from m2b import cli, handed_in, proposal_answers, proposals
+from m2b import action_lessons, cli, handed_in, lesson_counts, proposal_answers, proposals
 from m2b.curate import machine_state
 from m2b.run_record import RUN_RECORD
 from m2b.store.base import StoreError
@@ -51,13 +51,67 @@ class StatusTest(test_runner.RunnerTest):
         self.write("memory/lessons/once.md", lesson.format(more=""))
         self.write("memory/lessons/checks.md", lesson.format(more="kept_at: ~/.claude/CLAUDE.md\n"))
 
+        answer = self.run_json("status")["lessons"]
         self.assertEqual(
-            self.run_json("status")["lessons"],
-            {"in_every_session": 1, "kept_at_source": [{"name": "checks.md", "source": "~/.claude/CLAUDE.md"}]},
+            (answer["in_every_session"], answer["kept_at_source"]),
+            (1, [{"name": "checks.md", "source": "~/.claude/CLAUDE.md"}]),
         )
         self.assertIn(
             "lessons: 1 in every session; checks.md is kept at its source, ~/.claude/CLAUDE.md\n",
             self.run_command("status")[1],
+        )
+
+    def test_each_lesson_says_how_often_it_fired_in_how_many_calls_and_was_corrected_again_since_kept(self) -> None:
+        """Covers: B281"""
+        self.curating()
+        self.write(
+            "memory/lessons/proof.md",
+            "---\nkind: action\ntarget: every project\nkept: 2026-11-20\nwords: [scripts/check]\n---\n"
+            "# Proof\n\nRun the whole proof only with a reason.\n",
+        )
+        self.write(
+            "memory/lessons/once.md",
+            "---\nkind: knowledge\ntarget: every project\nkept: 2026-11-20\n---\n# Once\n\nSay it once.\n",
+        )
+        self.write(
+            lesson_counts.COUNTS_FILE,
+            json.dumps({"format": 1, "lessons": {"proof.md": {"corrected_again": ["a1b2c3d4e5f6"]}}}),
+        )
+        state = self.machine.state_dir
+        (state / action_lessons.CALLS_FOLDER).mkdir(parents=True)
+        (state / action_lessons.CALLS_FOLDER / "2026-11-19").write_bytes(b"." * 50)
+        (state / action_lessons.CALLS_FOLDER / "2026-11-21").write_bytes(b"." * 40)
+        (state / action_lessons.FIRED).write_text(
+            "2026-11-19T09:00:00+00:00\tproof.md\n2026-11-21T09:00:00+00:00\tproof.md\n", encoding="utf-8"
+        )
+
+        each = self.run_json("status")["lessons"]["each"]
+        out = self.run_command("status")[1]
+
+        self.assertEqual(
+            sorted(each, key=lambda item: item["name"]),
+            [
+                {"name": "once.md", "kind": "knowledge", "kept": "2026-11-20", "corrected_again": 0},
+                {
+                    "name": "proof.md",
+                    "kind": "action",
+                    "kept": "2026-11-20",
+                    "corrected_again": 1,
+                    "fired": 1,
+                    "calls": 40,
+                },
+            ],
+        )
+        self.assertIn(
+            "lesson proof.md (action, kept 2026-11-20): fired 1 time in 40 Bash calls (2%), "
+            "corrected again 1 time: not working\n",
+            out,
+        )
+        self.assertIn("lesson once.md (knowledge, kept 2026-11-20): corrected again 0 times\n", out)
+
+        self.write(lesson_counts.COUNTS_FILE, "{not json")
+        self.assertIn(
+            "lesson once.md (knowledge, kept 2026-11-20): corrections not counted\n", self.run_command("status")[1]
         )
 
     def test_a_folder_of_handed_in_proposals_that_cannot_be_listed_is_said_and_the_other_parts_answer(self) -> None:

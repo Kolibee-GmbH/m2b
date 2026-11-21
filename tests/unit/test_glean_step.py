@@ -14,6 +14,7 @@ import test_sessions
 from m2b import (
     folders_left_out,
     glean,
+    lesson_counts,
     lesson_sources,
     project_proposals,
     proposal_answers,
@@ -803,6 +804,57 @@ class PointerProposalTest(InPortalTest):
 
         self.assertNotIn("written", self.asked()[0]["sessions"][0])
         self.assertEqual([entry["kind"] for entry in self.kept()["proposals"].values()], [])
+
+
+class CorrectedAgainTest(GleanStepTest):
+    def test_a_correction_of_a_kept_lesson_is_counted_under_it_and_said(self) -> None:
+        """Covers: B280"""
+        self.reading()
+        self.write(
+            "memory/lessons/quick.md",
+            "---\nkind: knowledge\ntarget: every project\nkept: 2026-11-01\n---\n"
+            "# Quick\n\nRun only the quick checks.\n",
+        )
+        self.typed("no, again only the quick round please", START - HOUR)
+        self.model({})
+        script = json.loads(self.actions.read_text(encoding="utf-8"))
+        said = {"lesson": "quick.md", "quote": "again only the quick round", "session": 1}
+        script["text"] = {"answer": json.dumps({"proposals": [], "corrected_again": [said]}), "outcome": "success"}
+        self.actions.write_text(json.dumps(script), encoding="utf-8")
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        (asked,) = self.asked()
+        self.assertEqual(
+            asked["lessons"], [{"name": "quick.md", "text": "Run only the quick checks.", "kept": "2026-11-01"}]
+        )
+        self.assertEqual(lesson_counts.corrected_again(self.store), {"quick.md": 1})
+        self.assertIn("1 correction of a kept lesson counted: Claude was corrected on it again", self.info())
+
+    def test_a_counts_file_that_cannot_be_read_is_said_and_the_proposals_are_kept(self) -> None:
+        """Covers: B280"""
+        self.reading()
+        self.write(lesson_counts.COUNTS_FILE, "{not json")
+        self.write(
+            "memory/lessons/quick.md",
+            "---\nkind: knowledge\ntarget: every project\nkept: 2026-11-01\n---\n"
+            "# Quick\n\nRun only the quick checks.\n",
+        )
+        self.typed(DANA_SAID, START - 2 * HOUR)
+        self.typed("no, again only the quick round please", START - HOUR)
+        self.model({})
+        script = json.loads(self.actions.read_text(encoding="utf-8"))
+        said = {"lesson": "quick.md", "quote": "again only the quick round", "session": 1}
+        answer = {"proposals": [DANA], "corrected_again": [said]}
+        script["text"] = {"answer": json.dumps(answer), "outcome": "success"}
+        self.actions.write_text(json.dumps(script), encoding="utf-8")
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        self.assertEqual(list(self.kept()["proposals"]), [DANA_ID])
+        self.assertTrue(
+            any(note.startswith("the corrections of kept lessons were not counted") for note in self.info())
+        )
 
 
 class KeptFixTest(GleanStepTest):

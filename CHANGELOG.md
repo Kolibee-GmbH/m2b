@@ -35,6 +35,10 @@ All notable changes to this project are documented here. The format follows
 - A curation run that reads your sessions proposes a repository you worked in on two days, and
   that no topic names, as a project; kept, it becomes the same topic as "remember this project"
   ([Using m2b](docs/using.md#a-project)).
+- `m2b status` names each lesson with how often you corrected Claude on it again since you kept it,
+  counted by a curation run that reads your sessions, and for a lesson about a command how often it
+  fired in how many Bash calls; one corrected again is named `not working`
+  ([Using m2b](docs/using.md#lessons)).
 - A curation run that reads your sessions proposes a pointer when you stated a decision, an
   agreement, a person or a deadline in a project's repository and Claude wrote it into a file there;
   kept, it becomes the topic's line `- <sentence> → <path>` ([Curation](docs/curation.md#reading-your-sessions)).
