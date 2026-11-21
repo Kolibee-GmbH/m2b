@@ -53,7 +53,12 @@ def known_as(store: Store, addresses: Sequence[str]) -> str | None:
         text = store.read_bytes(f"{MEMORY}/{MEMORY_INDEX}").decode("utf-8", errors="replace")
     except (OSError, StoreError):
         return None
-    for block in split_topics(text).blocks:
+    return topic_naming(text, addresses)
+
+
+def topic_naming(distillate: str, addresses: Sequence[str]) -> str | None:
+    """The topic of ``distillate`` whose ``Repository:`` line names one of ``addresses``; None without one."""
+    for block in split_topics(distillate).blocks:
         for line in block.text.split("\n"):
             found = REPOSITORY_LINE.match(line)
             if found is not None and address_of(found.group("address")) in addresses:

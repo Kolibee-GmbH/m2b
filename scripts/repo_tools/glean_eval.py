@@ -5,7 +5,9 @@ pasted into a prompt, some of it planted (a person, an agreement, a
 commitment, something personal, and a lesson: the same correction of Claude in two sessions, each
 after an answer of Claude's that ran ``scripts/check``) and some of it a trap, one of each class a
 proposal must never come from, among them a correction made in one session only and one about the
-task at hand. A prompt that answers a turn has the answer and the commands before it in the
+task at hand, and a pointer: a decision stated in a session in a repository the memory has a
+project topic for, which Claude wrote into a file there, with the same sort of decision in a session
+that wrote nothing as a trap. A prompt that answers a turn has the answer and the commands before it in the
 transcript, as Claude Code writes them; a lesson stands on both its statements, one per quote. The
 check of a lesson's sources against the files a session loads is not run here: the day has no
 such files, so every lesson would stay one. What the step leaves out in code before that check is
@@ -62,7 +64,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from m2b import claude_code, folders_left_out, glean, kept_lessons
+from m2b import claude_code, folders_left_out, glean, kept_lessons, project_capture, project_files
 from m2b.config.machine import CURATION_MODELS, DEFAULT_CURATION_MODEL
 from m2b.curate import model as model_run
 from m2b.paths import HOME_VARIABLE, machine_paths
@@ -103,6 +105,8 @@ TRAPS = (
     # A correction of Claude made in one session only, and one about the task at hand: no lesson.
     "one-session",
     "task-correction",
+    # A decision of a project stated in a session that wrote no file of the repository: no pointer.
+    "unwritten",
 )
 # Their words must not be among the prompts the reader gives; no model is asked to resist them.
 TRAPS_OF_THE_READER = (AUTOMATION,)
@@ -133,6 +137,8 @@ class Statement:
     pasted: bool = False
     # For a trap that steers: what a proposal names when it took the bait, whatever it quotes.
     names: str = ""
+    # For a pointer: the file it points to, by its path in the repository.
+    file: str = ""
 
 
 @dataclass(frozen=True)
@@ -149,6 +155,8 @@ class Day:
     names: Mapping[str, str]
     planted: tuple[Statement, ...]
     traps: tuple[Statement, ...]
+    # A session's folder to the project its repository is, as the step finds it from noted remotes.
+    projects: Mapping[str, project_files.Project] = dataclasses.field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -218,19 +226,61 @@ def load_day(path: Path) -> Day:
                 answered_at = moment - datetime.timedelta(seconds=30)
                 transcripts[session_id].append(_answer(entry, session["folder"], answered_at))
             transcripts[session_id].append(_record(entry, session["folder"], moment, index))
+            if "wrote" in entry:
+                wrote_at = moment + datetime.timedelta(seconds=60)
+                transcripts[session_id].append(_wrote(entry["wrote"], session["folder"], wrote_at))
             for label, into in ((entry.get("planted"), planted), (entry.get("trap"), traps)):
                 if label is not None:
                     _must_hold(entry, session["name"])
                     is_pasted = entry["statement"] not in entry["text"]
-                    into.append(Statement(session_id, label, entry["statement"], is_pasted, entry.get("names", "")))
+                    file = entry["wrote"][0] if label == glean.POINTER else ""
+                    statement = Statement(
+                        session_id, label, entry["statement"], is_pasted, entry.get("names", ""), file
+                    )
+                    into.append(statement)
     memory = "\n".join(raw["memory"]) + "\n"
+    projects = _projects(raw.get("repositories", {}), memory)
     answered = raw.get("answered", {})
     examples = _examples(answered)
     waiting = _of(answered.get("waiting", ()))
     day = Day(
-        start, memory, tuple(raw["captures"]), examples, waiting, transcripts, names, tuple(planted), tuple(traps)
+        start,
+        memory,
+        tuple(raw["captures"]),
+        examples,
+        waiting,
+        transcripts,
+        names,
+        tuple(planted),
+        tuple(traps),
+        projects,
     )
     return day
+
+
+def _projects(repositories: Mapping[str, str], memory: str) -> dict[str, project_files.Project]:
+    """Each folder the day names with the address of its repository, as the project the memory's topic is."""
+    projects = {}
+    for folder, address in repositories.items():
+        topic = project_capture.topic_naming(memory, (address,))
+        if topic is None:
+            raise FixtureError(f"no topic of the memory has a Repository: line for {address}")
+        projects[folder] = project_files.Project(topic, folder, (address,))
+    return projects
+
+
+def _wrote(paths: Sequence[str], folder: str, moment: datetime.datetime) -> dict[str, Any]:
+    """Claude's answer that writes each file, by its path below the session's folder, with ``Write``."""
+    content = [
+        {"type": "tool_use", "id": f"write-{number}", "name": "Write", "input": {"file_path": f"{folder}/{path}"}}
+        for number, path in enumerate(paths)
+    ]
+    return {
+        "type": "assistant",
+        "timestamp": moment.isoformat().replace("+00:00", "Z"),
+        "cwd": folder,
+        "message": {"role": "assistant", "content": content},
+    }
 
 
 def _examples(answered: Mapping[str, Any]) -> glean.Examples:
@@ -290,7 +340,8 @@ def build_case(day: Day, projects: Path, with_examples: bool = True) -> Case:
     read = read_sessions(projects, day.start, day.start + datetime.timedelta(days=1))
     if read.unreadable:
         raise FixtureError(f"the reader could not read {', '.join(read.unreadable)}")
-    sent = _sent(read.sessions)
+    shown = tuple(project_files.shown(read.sessions, day.projects))
+    sent = _sent(shown)
     for statement in day.planted:
         holding = [text for text in sent.get(statement.session, ()) if statement.text in text]
         if len(holding) != 1:
@@ -300,8 +351,8 @@ def build_case(day: Day, projects: Path, with_examples: bool = True) -> Case:
         if any(example.quote in text for texts in sent.values() for text in texts):
             raise FixtureError(f"the example {example.quote!r} is typed in the day; an example is from before it")
     examples = day.examples if with_examples else glean.NO_EXAMPLES
-    given = glean.step_input(read.sessions, day.memory, examples=examples, waiting=day.waiting)
-    return Case(day, read.sessions, given)
+    given = glean.step_input(shown, day.memory, examples=examples, waiting=day.waiting)
+    return Case(day, shown, given)
 
 
 def score(case: Case, answer: str) -> Score:
@@ -372,7 +423,10 @@ def _sent(sessions: Sequence[Session]) -> dict[str, list[str]]:
 
 
 def _stands_on_any(proposal: glean.Proposal, statement: Statement, typed: Mapping[str, Sequence[str]]) -> bool:
-    """Like ``_stands_on``; a lesson stands on what each of its two quotes stands on."""
+    """Like ``_stands_on``; a lesson stands on what each of its two quotes stands on, and a pointer
+    stands on its statement only when it names the statement's file."""
+    if statement.file and (proposal.pointer is None or proposal.pointer.path != statement.file):
+        return False
     if _stands_on(proposal, statement, typed):
         return True
     lesson = proposal.lesson
@@ -554,12 +608,9 @@ def replay(
         read = _without(read_sessions(transcripts, start, end), leave_out)
         if not any(session.prompts for session in read.sessions):
             return ReplayDay(day, read)
-        # The step shows the files a session wrote only in a repository a project topic names, by
-        # their path there; the replay knows no notes of remotes, so it shows none, as the step
-        # shows none outside a project.
-        read = dataclasses.replace(
-            read, sessions=tuple(dataclasses.replace(session, written=()) for session in read.sessions)
-        )
+        # The replay knows no notes of remotes, so no session lies in a project, and the model is
+        # shown no written file, as the step shows none outside a project.
+        read = dataclasses.replace(read, sessions=tuple(project_files.shown(read.sessions, {})))
         run = asker.ask(model, glean.step_input(read.sessions, memory, start.tzinfo or _UTC))
         if run.answer is None:
             # Without what the command said: that goes into the file, not onto the terminal.

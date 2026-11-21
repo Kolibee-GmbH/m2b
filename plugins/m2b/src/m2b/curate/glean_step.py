@@ -44,7 +44,6 @@ from __future__ import annotations
 
 import dataclasses
 import datetime
-import os
 import re
 from collections import Counter
 from collections.abc import Mapping, Sequence
@@ -59,6 +58,7 @@ from m2b import (
     lesson_sources,
     lessons,
     project_capture,
+    project_files,
     project_proposals,
     proposals,
     session_remotes,
@@ -69,7 +69,6 @@ from m2b.config.machine import MachineConfig
 from m2b.curate import model, period_captures
 from m2b.notes.layout import MEMORY, MEMORY_INDEX
 from m2b.paths import MachinePaths
-from m2b.repository_places import can_point_to
 from m2b.store.base import Store
 
 FIRST_PERIOD = datetime.timedelta(hours=24)
@@ -134,7 +133,8 @@ def propose(
         proposals.save(store, dataclasses.replace(kept, read_until=started))
         return Reading(f"no session since {start.strftime(_MOMENT)} has a prompt of yours", tuple(notes))
     notes_folder = machine.state_dir / session_remotes.NOTES_FOLDER
-    read, projects_of = _written_in_projects(read, store, notes_folder, started)
+    projects = _projects_of(read, store, notes_folder, started)
+    read = project_files.shown(read, projects)
     captures = period_captures.captures_since(store, start, started)
     examples = proposals.examples(kept, started)
     if examples != glean.NO_EXAMPLES:
@@ -155,7 +155,7 @@ def propose(
     answer = glean.parse_answer(run.answer, read)
     checked = glean.check(answer.proposals, read, captures.texts)
     placed, without_repository = _for_their_project(checked, read, notes_folder, started)
-    placed = _into_their_project(placed, projects_of)
+    placed = project_files.pointed(placed, read, projects)
     placed, not_keepable, known = _new_lessons(placed, lessons.read_all(store), zone)
     placed, unchecked = _at_their_sources(
         placed, read, config, machine, environ, notes_folder, started, pass_fds, kept.entries
@@ -235,68 +235,25 @@ def _for_their_project(
     return placed, without
 
 
-@dataclass(frozen=True)
-class _Project:
-    """The project topic a session's repository has: its name and the repository's addresses."""
-
-    topic: str
-    addresses: tuple[str, ...]
-
-
-def _written_in_projects(
+def _projects_of(
     read: Sequence[sessions.Session], store: Store, notes: Path, now: datetime.datetime
-) -> tuple[list[sessions.Session], dict[str, _Project]]:
-    """The sessions, each with only the files it wrote in a repository a project topic names, by their
-    path in that repository, and the project of each such session.
-
-    A pointer can only be kept into a project topic, so the model is shown no other file. The
-    repository's folder is the one the session start noted, else the one the file system shows.
-    """
+) -> dict[str, project_files.Project]:
+    """The project of each session's folder that wrote a file: the topic whose ``Repository:`` line
+    names one of the addresses the session start noted for the folder, with the repository's folder,
+    the one the session start noted, else the one the file system shows."""
     # A note without the repository's folder gives the folder itself as its top: that is no answer.
     tops = {noted.folder: noted.top for noted in session_remotes.noted_folders(notes) if noted.top != noted.folder}
-    shown: list[sessions.Session] = []
-    projects: dict[str, _Project] = {}
+    projects: dict[str, project_files.Project] = {}
     for session in read:
+        if not session.written or session.folder in projects:
+            continue
         addresses = tuple(sorted(_addresses(notes, session.folder, now)))
-        topic = project_capture.known_as(store, addresses) if addresses and session.written else None
+        topic = project_capture.known_as(store, addresses) if addresses else None
         if topic is None:
-            shown.append(dataclasses.replace(session, written=()))
             continue
         top = tops.get(session.folder) or str(session_remotes.repository_top(Path(session.folder)) or session.folder)
-        written = tuple(path for path in (_in_repository(each, top) for each in session.written) if path)
-        shown.append(dataclasses.replace(session, written=written))
-        if written:
-            projects[session.session_id] = _Project(topic, addresses)
-    return shown, projects
-
-
-def _in_repository(path: str, top: str) -> str | None:
-    """``path`` relative to the repository's folder ``top``, as a pointer can name it; None outside it."""
-    if not os.path.isabs(path):
-        return None
-    relative = os.path.relpath(os.path.normpath(path), os.path.normpath(top))
-    if relative.startswith(os.pardir) or relative == os.curdir:
-        return None
-    posix = relative.replace(os.sep, "/")
-    return posix if can_point_to(posix) else None
-
-
-def _into_their_project(
-    placed: Sequence[tuple[glean.Proposal, datetime.datetime]], projects: Mapping[str, _Project]
-) -> list[tuple[glean.Proposal, datetime.datetime]]:
-    """The proposals, each pointer under its project's topic, naming its repository, its text the
-    line it becomes: the sentence, `` → `` and the file. ``glean.check`` kept only a pointer whose
-    file its session wrote, and only such a session has a project here."""
-    pointed: list[tuple[glean.Proposal, datetime.datetime]] = []
-    for proposal, typed_at in placed:
-        project = projects.get(proposal.session)
-        if proposal.pointer is None:
-            pointed.append((proposal, typed_at))
-        elif project is not None:
-            pointer = dataclasses.replace(proposal.pointer, repositories=project.addresses)
-            text = f"{proposal.text.rstrip().rstrip('.')} → {pointer.path}"
-            pointed.append((dataclasses.replace(proposal, text=text, topic=project.topic, pointer=pointer), typed_at))
-    return pointed
+        projects[session.folder] = project_files.Project(topic, top, addresses)
+    return projects
 
 
 @dataclass(frozen=True)

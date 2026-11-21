@@ -78,6 +78,8 @@ def entry(case: glean_eval.Case, statement: glean_eval.Statement, **changes: Any
     """A proposal that stands on the statement, as a model would write it."""
     number = [each.session_id for each in case.sessions].index(statement.session) + 1
     proposal = {"kind": statement.label, "text": "A fact.", "quote": statement.text, "session": number}
+    if statement.file:
+        proposal["file"] = statement.file
     proposal.update(changes)
     return proposal
 
@@ -101,24 +103,24 @@ def trap(case: glean_eval.Case, label: str) -> glean_eval.Statement:
 
 
 class InventedDayTest(Sandbox):
-    def test_the_day_plants_five_typed_statements_of_each_fact_kind_one_lesson_in_two_sessions_and_two_pasted(
+    def test_the_day_plants_five_of_each_fact_kind_a_lesson_in_two_sessions_a_pointer_and_two_pasted(
         self,
     ) -> None:
         planted = self.case().day.planted
         typed = Counter(statement.label for statement in planted if not statement.pasted)
 
-        self.assertEqual(typed, {**dict.fromkeys(glean.FACT_KINDS, 5), glean.LESSON: 2})
+        self.assertEqual(typed, {**dict.fromkeys(glean.FACT_KINDS, 5), glean.LESSON: 2, glean.POINTER: 1})
         self.assertEqual([statement.label for statement in planted if statement.pasted], [glean.PERSON, glean.PERSON])
 
     def test_the_day_holds_one_trap_of_each_class(self) -> None:
         self.assertEqual(sorted(each.label for each in self.case().day.traps), sorted(glean_eval.TRAPS))
 
-    def test_the_reader_gives_twelve_sessions_with_126_typed_prompts_and_one_that_is_pasted_whole(self) -> None:
+    def test_the_reader_gives_twelve_sessions_with_128_typed_prompts_and_one_that_is_pasted_whole(self) -> None:
         case = self.case()
         prompts = [prompt for each in case.sessions for prompt in each.prompts]
 
         self.assertEqual(len(case.sessions), 12)
-        self.assertEqual(sum(1 for prompt in prompts if prompt.text), 126)
+        self.assertEqual(sum(1 for prompt in prompts if prompt.text), 128)
         self.assertEqual([len(prompt.pasted) for prompt in prompts if not prompt.text], [1])
         self.assertEqual(sum(len(prompt.pasted) for prompt in prompts), 3)
 
@@ -294,10 +296,24 @@ class ScoreTest(Sandbox):
     def score(self, *entries: dict[str, Any]) -> glean_eval.Score:
         return glean_eval.score(self.given, answer(*entries))
 
+    def test_a_pointer_counts_on_its_statement_and_its_file_and_the_decision_without_a_file_is_a_trap(self) -> None:
+        pointer = next(statement for statement in self.given.day.planted if statement.label == glean.POINTER)
+        unwritten = trap(self.given, "unwritten")
+
+        shown = json.loads(self.given.step_input)["sessions"]
+        self.assertEqual(
+            [session["written"] for session in shown if "written" in session],
+            [["docs/decisions/003-export-formats.md"]],
+        )
+        elsewhere = self.score(entry(self.given, pointer, file="docs/decisions/004-other.md"))
+        self.assertEqual((elsewhere.found, elsewhere.not_quoted), (0, 1))
+        sprung = self.score(entry(self.given, unwritten, kind="agreement"))
+        self.assertEqual((sprung.found, sprung.sprung), (0, ("unwritten",)))
+
     def test_an_answer_with_every_planted_statement_and_nothing_else_is_all_found_and_all_right(self) -> None:
         result = self.score(*every_planted(self.given))
 
-        self.assertEqual((result.found, result.kept, result.right, result.right_kind), (24, 23, 23, 24))
+        self.assertEqual((result.found, result.kept, result.right, result.right_kind), (25, 24, 24, 25))
         self.assertEqual((result.recall, result.precision), (1.0, 1.0))
         self.assertEqual((result.missed, result.wrong, result.sprung), ((), (), ()))
 
@@ -327,7 +343,7 @@ class ScoreTest(Sandbox):
             with self.subTest(broken=broken):
                 result = self.score(*planted[:-1], {**lesson, "lesson": {**lesson["lesson"], **broken}})
 
-                self.assertEqual((result.found, result.not_quoted), (22, 1))
+                self.assertEqual((result.found, result.not_quoted), (23, 1))
 
     def test_a_prompt_that_answers_a_turn_comes_with_the_answer_and_the_command_before_it(self) -> None:
         lessons = [statement for statement in self.given.day.planted if statement.label == glean.LESSON]
@@ -344,14 +360,14 @@ class ScoreTest(Sandbox):
     def test_an_answer_without_proposals_finds_nothing_and_is_right_about_nothing(self) -> None:
         result = self.score()
 
-        self.assertEqual((result.recall, result.precision, len(result.missed)), (0.0, 0.0, 24))
+        self.assertEqual((result.recall, result.precision, len(result.missed)), (0.0, 0.0, 25))
 
     def test_a_second_proposal_for_the_same_statement_is_not_right(self) -> None:
         first = self.given.day.planted[0]
 
         result = self.score(*every_planted(self.given), entry(self.given, first, text="The same again."))
 
-        self.assertEqual((result.found, result.right, result.kept), (24, 23, 24))
+        self.assertEqual((result.found, result.right, result.kept), (25, 24, 25))
         self.assertEqual([wrong.text for wrong in result.wrong], ["The same again."])
 
     def test_a_quote_that_shares_half_of_itself_with_the_statement_stands_on_it(self) -> None:
@@ -456,7 +472,7 @@ class MainTest(WithFakeClaude):
 
         self.assertEqual(code, glean_eval.EXIT_PASSED, out)
         self.assertIn("haiku run 2 (claude-haiku-test", out)
-        self.assertIn("found 24 of 24, right 23 of 23 proposals, kind right 24 of 24", out)
+        self.assertIn("found 25 of 25, right 24 of 24 proposals, kind right 25 of 25", out)
         self.assertIn("glean-eval: haiku: found 1.00, right 1.00 over 2 runs, traps sprung: none; meets", out)
 
     def test_without_a_model_named_every_curation_model_is_asked_three_times(self) -> None:
@@ -475,7 +491,7 @@ class MainTest(WithFakeClaude):
         code, out = self.run_main("--runs", "1")
 
         self.assertEqual(code, glean_eval.EXIT_FAILED, out)
-        self.assertIn("glean-eval: haiku: found 0.42, right 1.00 over 1 runs, traps sprung: none; misses", out)
+        self.assertIn("glean-eval: haiku: found 0.40, right 1.00 over 1 runs, traps sprung: none; misses", out)
         self.assertIn("missed person in portal-morning: 'Dana runs IT at Northwind and signs off every release'", out)
         self.assertIn("glean-eval: sonnet: found 1.00, right 1.00 over 1 runs, traps sprung: none; meets", out)
 

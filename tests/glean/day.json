@@ -11,6 +11,7 @@
     "",
     "### Northwind (Northwind)",
     "",
+    "- Repository: github.com/northwind/portal (northwind.md)",
     "- Northwind is a customer; Alex builds their order portal (northwind.md)",
     "",
     "### Acme (Acme)",
@@ -21,6 +22,9 @@
     "",
     "- Building the order portal for Northwind"
   ],
+  "repositories": {
+    "/home/alex/projects/northwind-portal": "github.com/northwind/portal"
+  },
   "captures": [
     "Kim Lee ist ab April montags nicht erreichbar."
   ],
@@ -150,6 +154,14 @@
         },
         "rename the helper to format_order_row",
         "looks good",
+        {
+          "text": "we decided to drop the PDF export and keep only CSV, write that into the decision record",
+          "planted": "pointer",
+          "statement": "we decided to drop the PDF export and keep only CSV",
+          "wrote": [
+            "docs/decisions/003-export-formats.md"
+          ]
+        },
         "commit with a message about the export fix"
       ]
     },
@@ -291,6 +303,11 @@
           "text": "For questions about the import format ask Chris Wood, he is the developer on Northwind's side who built the old system.",
           "planted": "person",
           "statement": "ask Chris Wood, he is the developer on Northwind's side who built the old system"
+        },
+        {
+          "text": "we decided the import keeps the old ids for one more release",
+          "trap": "unwritten",
+          "statement": "we decided the import keeps the old ids for one more release"
         },
         "run the import on the sample file",
         "good, commit"
