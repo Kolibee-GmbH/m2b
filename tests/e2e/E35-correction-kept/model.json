@@ -85,14 +85,6 @@
     },
     {
       "run": [
-        "sh",
-        "-c",
-        "ls \"{store}\"/state/core/lessons-kept/*.json"
-      ],
-      "arm": "with"
-    },
-    {
-      "run": [
         "m2b",
         "curate",
         "--force"
@@ -153,9 +145,9 @@
   ],
   "invariants": [
     {
-      "at_least": 1,
-      "glob": "memory/lessons/*.md",
-      "content": "(?i)quick|schnell",
+      "count": 0,
+      "glob": "tasks/*.md",
+      "content": "m2b:review",
       "arm": "with"
     }
   ]

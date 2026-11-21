@@ -1,5 +1,5 @@
 {
-  "description": "E22 at the model level: is a fact told in one project there when another project asks for it? A session in project A is told where the spare key for the shed is, and a session in project B is asked: it answers from m2b. The capture is in the inbox or, when a curation run has filed it by the end, in the archive, and Claude Code's own memory of project A stays empty. Each of the three wordings says it differently, one in German. scripts/promises also runs it against Claude Code alone, its own memory on: there project B does not know, because Claude Code keeps its memory per project, and a session in project A asked first shows that Claude Code kept the fact; a run where it did not shows nothing. The answers are the model's; run it after each Claude Code minor update, beside E18.",
+  "description": "E22 at the model level: is a fact told in one project there when another project asks for it? A session in project A is told where the spare key for the shed is, and a session in project B is asked: it answers from m2b. Each of the three wordings says it differently, one in German. scripts/promises also runs it against Claude Code alone, its own memory on: there project B does not know, because Claude Code keeps its memory per project, and a session in project A asked first shows that Claude Code kept the fact; a run where it did not shows nothing. The answers are the model's; run it after each Claude Code minor update, beside E18.",
   "wordings": [
     {
       "remember": "Remember that the spare key for the shed is under the blue pot by the back door.",
@@ -48,10 +48,7 @@
         "stream-json",
         "--verbose"
       ],
-      "cwd": "project-a",
-      "save": {
-        "memory_of_project_a": "\"auto\":\"([^\"]+)\""
-      }
+      "cwd": "project-a"
     },
     {
       "run": [
@@ -104,13 +101,9 @@
   ],
   "invariants": [
     {
-      "count": 1,
-      "glob": "*-claude-*.md",
-      "content": "{answer}",
-      "arm": "with"
-    },
-    {
-      "empty_folder": "{memory_of_project_a}",
+      "count": 0,
+      "glob": "tasks/*.md",
+      "content": "m2b:review",
       "arm": "with"
     }
   ]

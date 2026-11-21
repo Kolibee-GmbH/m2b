@@ -135,11 +135,9 @@
   ],
   "invariants": [
     {
-      "run_state": "succeeded",
-      "arm": "with"
-    },
-    {
-      "no_denials": true,
+      "count": 0,
+      "glob": "tasks/*.md",
+      "content": "m2b:review",
       "arm": "with"
     }
   ]

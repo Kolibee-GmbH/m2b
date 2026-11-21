@@ -67,6 +67,29 @@ to keep of the core's rules (its skills, its hook command, its step in the core'
 it imports from the core) is tested in its own suite, `tests/unit/addons/<add-on>/`, which
 may use the fixtures of the core's tests. The core's tests use nothing of an add-on.
 
+## Test levels
+
+Every check has one level, the lowest that can show it, and a higher level checks nothing a lower
+one checks already. A level is strong at some things and weak at others:
+
+| Level | Strong at | Not for |
+|---|---|---|
+| Unit tests (`tests/unit/`) | the rules of one module: edge cases, error paths, formats, state files; fast and exact | anything across processes, Claude Code, a model |
+| Stub scenarios (`scripts/e2e --level stub`) | the chain of commands, hooks and curation steps with a scripted model: which files a run leaves, in which order, under which config | what a model judges, what Claude Code does |
+| Model step measures (`scripts/ingest-eval`, `scripts/glean-eval`) | how well one model step judges a fixed input: found, right, traps, per model | the chain, a session |
+| Eval cases (`claude plugin eval`) | what one session answers or calls with m2b and without, for one prompt | curation, several sessions, time |
+| Model scenarios (`scripts/e2e --level model`) | the seams to Claude Code: real hooks, the transcript, an interactive session, a real model step in the chain | rules a lower level checks, quality numbers |
+| Promise cases ([Promises](#promises)) | the outcome the owner sees, from what they say to what a later session does | any step a lower level checks |
+
+A new check starts at the lowest level that can fail for the reason it is written for. A model
+scenario beside a stub scenario checks only what the real model or Claude Code adds; a promise
+case asserts the outcome and trusts the levels below for the steps, so a step it needs is a setup
+step without a pattern, and the run fails on the outcome when the step did not happen. Where the
+outcome can fail and no lower level checks the step that would explain it, the gap is closed at
+that lower level, not in the promise case. [Test levels](docs/test-levels.md) maps every model
+scenario and eval case to what it checks, and names the checks that look alike and why each is
+made once.
+
 ## Behavior coverage
 
 Each behavior the product promises has an ID (B1 and up, X1 and up) in the behavior

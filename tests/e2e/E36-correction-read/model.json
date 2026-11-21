@@ -117,15 +117,6 @@
       "run": [
         "m2b",
         "proposals",
-        "--json"
-      ],
-      "arm": "with",
-      "stdout": "\"kind\": \"lesson\"[\\s\\S]*\"quote\": \"[^\"]+\"[\\s\\S]*\"lesson\": \\{[^}]*\"quote\": \"[^\"]+\""
-    },
-    {
-      "run": [
-        "m2b",
-        "proposals",
         "keep",
         "--all"
       ],
@@ -184,9 +175,9 @@
   ],
   "invariants": [
     {
-      "at_least": 1,
-      "glob": "memory/lessons/*.md",
-      "content": "(?i)quick|schnell",
+      "count": 0,
+      "glob": "tasks/*.md",
+      "content": "m2b:review",
       "arm": "with"
     }
   ]

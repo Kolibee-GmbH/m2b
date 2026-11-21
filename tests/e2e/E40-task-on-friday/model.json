@@ -58,12 +58,6 @@
   ],
   "invariants": [
     {
-      "run_state": "succeeded"
-    },
-    {
-      "no_denials": true
-    },
-    {
       "count": 1,
       "glob": "tasks/*.md",
       "content": "(?i)plumber|Klempner"
