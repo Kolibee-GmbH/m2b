@@ -368,6 +368,20 @@ class CaptureFileSkillTest(unittest.TestCase):
                 self.assertIn(said, text)
         self.assertIn(project_capture.FIRST_LINE.strip(), text)
 
+    def test_ingest_files_a_kept_pointer_as_a_line_of_the_topic_its_repository_names(self) -> None:
+        """Covers: B279"""
+        text = one_line(skill_text("ingest"))
+
+        for said in (
+            "A capture that begins `Keep this pointer:` is a line the owner kept for a project topic",
+            "File it in the topic whose `- Repository:` line names one of the capture's `Repository:` addresses, "
+            "as `- <sentence> → <path> (<file>.md)`",
+            "Where no topic has such a line, file the sentence alone as a fact, without the arrow and the path.",
+        ):
+            with self.subTest(said=said[:40]):
+                self.assertIn(said, text)
+        self.assertIn(project_capture.POINTER_FIRST_LINE.strip(), text)
+
     def test_the_capture_skill_keeps_a_lesson_about_a_command_with_its_words(self) -> None:
         """Covers: B267"""
         text = one_line(skill_text("capture"))

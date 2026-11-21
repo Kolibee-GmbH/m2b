@@ -30,6 +30,11 @@ what it corrects. Of an answer nothing else is read, and of a tool call only a B
 what it printed. Both are redacted like a prompt, and a command ends after ``COMMAND_LENGTH``
 characters; a turn gives its last ``MAX_COMMANDS``.
 
+Of a session also go the files Claude wrote in the period with one of the tools that write a file
+(``claude_code.WRITING_TOOLS``), each once, by the path its call named, in the order they were first
+written (``Session.written``): a decision the person stated can stand in one of them. Of such a
+call nothing else is read, not what it wrote. A session gives its first ``MAX_WRITTEN``.
+
 A slash command is only its name. Its record names no source and often no origin, so it is taken
 by its form, a record that starts with the command's tags, unless its origin is another sender.
 
@@ -49,7 +54,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from m2b.claude_code import BASH_TOOL, HUMAN, PROMPT_BLOCK, as_prompt_record, sender_of
+from m2b.claude_code import BASH_TOOL, HUMAN, PROMPT_BLOCK, WRITING_TOOLS, as_prompt_record, sender_of
 from m2b.redaction import REDACTED, is_removed_behind, redact
 
 PROMPT_LENGTH = 2000
@@ -58,6 +63,10 @@ PROMPT_LENGTH = 2000
 ANSWER_LENGTH = 500
 COMMAND_LENGTH = 300
 MAX_COMMANDS = 10
+# No session of a person writes more files that someone would look for from outside.
+MAX_WRITTEN = 50
+# A longer path is no file's: what would name one is cut or is something else.
+_LONGEST_PATH = 4096
 # The flags of a record Claude Code wrote itself or that belongs to a subagent's conversation.
 NOT_THE_MAIN_CONVERSATION = ("isMeta", "isCompactSummary", "isSidechain")
 
@@ -132,6 +141,8 @@ class Session:
     folder: str
     prompts: tuple[Prompt, ...]
     left_out: LeftOut
+    # The files Claude wrote in the period, by the path the call named; Claude's, never the person's.
+    written: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -183,9 +194,11 @@ class _Reading:
     # The turn since the message before: what Claude wrote, its end only, and the Bash commands it ran.
     answer: str = ""
     commands: list[str] = field(default_factory=list)
+    written: list[str] = field(default_factory=list)
 
-    def follow(self, record: Mapping[str, Any]) -> None:
-        """Takes in a record of Claude's in the main conversation: its text and its Bash commands."""
+    def follow(self, record: Mapping[str, Any], in_period: bool) -> None:
+        """Takes in a record of Claude's in the main conversation: its text, its Bash commands and,
+        in the period, the files it wrote."""
         message = record.get("message")
         content = message.get("content") if isinstance(message, dict) else None
         text = _text_of(content)
@@ -193,13 +206,17 @@ class _Reading:
             self.answer = _end_of(f"{self.answer} {text}", _REDACT_WINDOW)
         for command in _bash_commands(content):
             self.commands = [*self.commands, command][-MAX_COMMANDS:]
+        if in_period:
+            for path in _written_files(content):
+                if path not in self.written and len(self.written) < MAX_WRITTEN:
+                    self.written.append(path)
 
     def new_turn(self) -> None:
         self.answer, self.commands = "", []
 
     def session(self) -> Session:
         left_out = LeftOut(self.sent_by_others, self.suggested, self.unmarked)
-        return Session(self.session_id, self.folder, tuple(self.prompts), left_out)
+        return Session(self.session_id, self.folder, tuple(self.prompts), left_out, tuple(self.written))
 
 
 def _read(path: Path, start: datetime.datetime, end: datetime.datetime) -> _Reading:
@@ -221,12 +238,12 @@ def _read(path: Path, start: datetime.datetime, end: datetime.datetime) -> _Read
             # The first folder is where the session started; later records follow the Bash tool's `cd`.
             if folder is None and isinstance(record.get("cwd"), str):
                 folder = record["cwd"]
-            if _is_claudes(record):
-                reading.follow(record)
-                continue
-            starts_a_turn = _starts_a_turn(record)
             moment = _time(record.get("timestamp"))
             in_period = moment is not None and start <= moment < end
+            if _is_claudes(record):
+                reading.follow(record, in_period)
+                continue
+            starts_a_turn = _starts_a_turn(record)
             if moment is not None and in_period and _may_be_a_prompt(record) and _take(record, moment, reading):
                 reading.first = reading.first or moment
             if starts_a_turn:
@@ -269,6 +286,21 @@ def _bash_commands(content: object) -> list[str]:
         if isinstance(command, str) and command.strip():
             commands.append(_shown(command)[:COMMAND_LENGTH])
     return [command for command in commands if command]
+
+
+def _written_files(content: object) -> list[str]:
+    """The paths the calls of the writing tools in an answer's content name, as they name them."""
+    parts = content if isinstance(content, list) else []
+    paths = []
+    for part in parts:
+        if not isinstance(part, dict) or part.get("type") != "tool_use":
+            continue
+        field_name = WRITING_TOOLS.get(str(part.get("name")))
+        given = part.get("input")
+        path = given.get(field_name) if field_name is not None and isinstance(given, dict) else None
+        if isinstance(path, str) and path.strip() and len(path) <= _LONGEST_PATH:
+            paths.append(path)
+    return paths
 
 
 def _answer_shown(answer: str) -> str:

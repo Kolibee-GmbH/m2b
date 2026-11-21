@@ -679,6 +679,61 @@ def answered(text: str, when: datetime.datetime, *commands: str, **changes: Any)
     return record
 
 
+def wrote(when: datetime.datetime, *calls: tuple[str, str], **changes: Any) -> dict[str, Any]:
+    """An assistant record with a call of a writing tool per (tool, path)."""
+    record = answered("Done.", when, **changes)
+    for number, (tool, path) in enumerate(calls):
+        field_name = "notebook_path" if tool == "NotebookEdit" else "file_path"
+        record["message"]["content"].append(
+            {"type": "tool_use", "id": f"w{number}", "name": tool, "input": {field_name: path, "content": "secret"}}
+        )
+    return record
+
+
+class WrittenTest(SessionsFixture):
+    def test_a_session_names_the_files_claude_wrote_in_the_period_once_each_in_order(self) -> None:
+        """Covers: B277"""
+        self.transcript(
+            wrote(DAY - datetime.timedelta(minutes=1), ("Write", "/home/alex/projects/portal/old.md")),
+            typed("write down that the login moves in March", at(9)),
+            wrote(
+                at(9, 1),
+                ("Write", "/home/alex/projects/portal/docs/records/014-login.md"),
+                ("Edit", "/home/alex/projects/portal/README.md"),
+                ("Read", "/home/alex/projects/portal/CLAUDE.md"),
+            ),
+            wrote(
+                at(9, 2),
+                ("MultiEdit", "/home/alex/projects/portal/docs/records/014-login.md"),
+                ("NotebookEdit", "/home/alex/projects/portal/notes.ipynb"),
+            ),
+            wrote(at(9, 3), ("Write", "/home/alex/projects/portal/agent.md"), isSidechain=True),
+        )
+
+        session = self.only_session()
+
+        self.assertEqual(
+            session.written,
+            (
+                "/home/alex/projects/portal/docs/records/014-login.md",
+                "/home/alex/projects/portal/README.md",
+                "/home/alex/projects/portal/notes.ipynb",
+            ),
+        )
+        # Of a writing call only the path is read, never what it wrote.
+        self.assertNotIn("secret", repr(session))
+
+    def test_a_session_gives_its_first_fifty_files(self) -> None:
+        """Covers: B277"""
+        many = [("Write", f"/home/alex/projects/portal/file{number:02d}.md") for number in range(60)]
+        self.transcript(typed("split the notes", at(9)), wrote(at(9, 1), *many))
+
+        written = self.only_session().written
+
+        self.assertEqual(len(written), sessions.MAX_WRITTEN)
+        self.assertEqual(written[-1], "/home/alex/projects/portal/file49.md")
+
+
 class TurnBeforeTest(SessionsFixture):
     def test_a_prompt_comes_with_the_last_500_characters_of_the_answer_before_and_the_turns_bash_commands(
         self,

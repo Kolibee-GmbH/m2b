@@ -35,6 +35,9 @@ All notable changes to this project are documented here. The format follows
 - A curation run that reads your sessions proposes a repository you worked in on two days, and
   that no topic names, as a project; kept, it becomes the same topic as "remember this project"
   ([Using m2b](docs/using.md#a-project)).
+- A curation run that reads your sessions proposes a pointer when you stated a decision, an
+  agreement, a person or a deadline in a project's repository and Claude wrote it into a file there;
+  kept, it becomes the topic's line `- <sentence> → <path>` ([Curation](docs/curation.md#reading-your-sessions)).
 - A project topic's line can point into its repository (`- <sentence> → <path> (<file>.md)`); its
   place line then says the paths lie in the folder shown, and lint reports a pointer whose file the
   clone no longer holds and a repository nobody opened for 30 days ([Store format](docs/store-format.md)).

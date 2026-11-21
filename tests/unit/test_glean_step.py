@@ -571,13 +571,15 @@ class ProjectLessonTest(GleanStepTest):
         )
 
 
-class ProjectProposalTest(GleanStepTest):
+class InPortalTest(GleanStepTest):
     PORTAL = "/home/alex/projects/portal"
 
     def portal_noted(self, folder: str = PORTAL, remote: str = "git@github.com:acme/portal.git") -> None:
         notes = self.machine.state_dir / session_remotes.NOTES_FOLDER
         session_remotes.note(notes, folder, frozenset([remote]), START - HOUR, lambda path, text: path.write_text(text))
 
+
+class ProjectProposalTest(InPortalTest):
     def days_file(self) -> Any:
         return json.loads((self.machine.state_dir / project_proposals.DAYS_FILE).read_text(encoding="utf-8"))
 
@@ -713,6 +715,94 @@ class ProjectProposalTest(GleanStepTest):
         self.run_curate()
 
         self.assertFalse((self.machine.state_dir / project_proposals.DAYS_FILE).exists())
+
+
+POINTER = {
+    "kind": "pointer",
+    "text": "Login moves to the customer's identity provider in March.",
+    "quote": "the login moves to the customer's identity provider in March",
+    "session": 1,
+    "topic": None,
+    "due": None,
+    "file": "docs/records/014-login.md",
+}
+PORTAL_TOPIC = (
+    "# Memory\n\n## Facts\n\n### Acme portal (portal)\n- Repository: github.com/acme/portal (acme-portal.md)\n"
+)
+
+
+class PointerProposalTest(InPortalTest):
+    def decided(self, *written: str) -> None:
+        self.reading()
+        self.portal_noted()
+        self.typed(POINTER["quote"] + ", write that into the record", START - 2 * HOUR, "one", self.PORTAL)
+        when = (START - 2 * HOUR + datetime.timedelta(minutes=1)).astimezone(datetime.timezone.utc)
+        self.record(test_sessions.wrote(when, *(("Write", path) for path in written), cwd=self.PORTAL), "one")
+
+    def test_a_decision_a_session_wrote_into_a_file_of_a_project_is_proposed_as_a_pointer_to_it(self) -> None:
+        """Covers: B278"""
+        self.decided(self.PORTAL + "/docs/records/014-login.md", "/home/alex/.claude/CLAUDE.md")
+        self.write("memory/MEMORY.md", PORTAL_TOPIC)
+        self.answers(POINTER)
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        (asked,) = self.asked()
+        self.assertEqual(asked["sessions"][0]["written"], ["docs/records/014-login.md"])
+        (entry,) = self.kept()["proposals"].values()
+        self.assertEqual(
+            (entry["kind"], entry["text"], entry["topic"]),
+            (
+                "pointer",
+                "Login moves to the customer's identity provider in March → docs/records/014-login.md",
+                "Acme portal",
+            ),
+        )
+        self.assertEqual(
+            entry["pointer"], {"path": "docs/records/014-login.md", "repositories": ["github.com/acme/portal"]}
+        )
+        self.assertEqual(self.kept()["format"], 5)
+
+    def test_a_session_in_a_subfolder_whose_note_names_no_top_names_its_files_from_the_repositorys_folder(
+        self,
+    ) -> None:
+        """Covers: B278"""
+        top = self.machine.home / "code" / "portal"
+        (top / ".git").mkdir(parents=True)
+        subfolder = str(top / "plugins")
+        self.reading()
+        self.portal_noted(subfolder)
+        self.typed(POINTER["quote"] + ", write that into the record", START - 2 * HOUR, "one", subfolder)
+        when = (START - 2 * HOUR + datetime.timedelta(minutes=1)).astimezone(datetime.timezone.utc)
+        self.record(test_sessions.wrote(when, ("Write", str(top / "docs/records/014-login.md")), cwd=subfolder), "one")
+        self.write("memory/MEMORY.md", PORTAL_TOPIC)
+        self.answers(POINTER)
+
+        self.run_curate()
+
+        self.assertEqual(self.asked()[0]["sessions"][0]["written"], ["docs/records/014-login.md"])
+
+    def test_a_decision_written_into_no_file_of_the_repository_is_no_pointer(self) -> None:
+        """Covers: B278"""
+        self.decided()
+        self.write("memory/MEMORY.md", PORTAL_TOPIC)
+        self.answers(POINTER)
+
+        self.run_curate()
+
+        self.assertNotIn("written", self.asked()[0]["sessions"][0])
+        self.assertEqual(self.kept()["proposals"], {})
+        self.assertEqual(self.kept()["counts"]["pointer"]["not_quoted"], 1)
+
+    def test_without_a_project_topic_the_model_sees_no_file_and_no_pointer_is_kept(self) -> None:
+        """Covers: B278"""
+        self.decided(self.PORTAL + "/docs/records/014-login.md")
+        self.answers(POINTER)
+
+        self.run_curate()
+
+        self.assertNotIn("written", self.asked()[0]["sessions"][0])
+        self.assertEqual([entry["kind"] for entry in self.kept()["proposals"].values()], [])
 
 
 class KeptFixTest(GleanStepTest):

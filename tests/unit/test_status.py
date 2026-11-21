@@ -304,6 +304,7 @@ class StatusTest(test_runner.RunnerTest):
                     "commitment": nothing,
                     "personal": nothing,
                     "lesson": nothing,
+                    "pointer": nothing,
                     "project": nothing,
                 },
                 "ways": {"reading": {"typed": {"waiting": 1, "answered": 0, "kept": 2, "dropped": 1, "expired": 1}}},

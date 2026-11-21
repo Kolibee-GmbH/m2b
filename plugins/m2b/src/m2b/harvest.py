@@ -14,7 +14,8 @@ code, before anything else: no model step may write there.
 
 A kept proposal goes the same way: the capture first, marked ``from_proposal``, then the
 proposals file, then the answer file. A commitment that names its day gets its follow-up task with
-the capture; a project is the capture the owner's "keep this project" makes (``project_capture``);
+the capture; a project is the capture the owner's "keep this project" makes (``project_capture``),
+a pointer a capture of its line with its repository;
 any other proposal is a plain capture, and the filing decides what it becomes. Kept or
 dropped, the proposal stays known to the proposals file, so the next reading does not bring it
 back.
@@ -33,7 +34,7 @@ from pathlib import PurePosixPath
 from m2b import candidates, fixes, kept_lessons, project_capture, project_proposals, proposal_answers, proposals
 from m2b.capture import capture
 from m2b.config.errors import ConfigError
-from m2b.glean import COMMITMENT, FIX, PROJECT, AtSource
+from m2b.glean import COMMITMENT, FIX, POINTER, PROJECT, AtSource
 from m2b.notes import frontmatter as keys
 from m2b.notes.frontmatter import Note, NoteFormatError
 from m2b.notes.layout import CORPUS, INBOX
@@ -317,10 +318,14 @@ def _capture_proposal(
 ) -> None:
     """Writes the capture of a kept proposal; a task that could not be confirmed is a problem, the capture stands."""
     follow_up = entry.due if entry.kind == COMMITMENT else None
-    # A project is captured as the owner's own "keep this project" is, so the filing makes it a topic.
-    text = (
-        project_capture.capture_text(project_proposals.addresses_in(entry), "") if entry.kind == PROJECT else entry.text
-    )
+    # A project is captured as the owner's own "keep this project" is, so the filing makes it a topic;
+    # a pointer names its repository, so the filing finds the topic by its ``Repository:`` line.
+    if entry.kind == PROJECT:
+        text = project_capture.capture_text(project_proposals.addresses_in(entry), "")
+    elif entry.kind == POINTER and entry.pointer is not None:
+        text = project_capture.pointer_capture_text(entry.pointer.repositories, entry.text)
+    else:
+        text = entry.text
     try:
         result = capture(store, text, PROPOSAL_SOURCE, follow_up=follow_up, tasks=tasks, now=now, from_proposal=key)
     except UnconfirmedTaskError as error:

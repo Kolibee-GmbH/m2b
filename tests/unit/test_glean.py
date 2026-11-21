@@ -5,7 +5,7 @@ import datetime
 import json
 import time
 import unittest
-from typing import Any
+from typing import Any, ClassVar
 
 from m2b import glean
 from m2b.glean import Proposal
@@ -671,6 +671,49 @@ class InstructionTest(unittest.TestCase):
         self.assertIn("Leave out what is like something they dropped", instruction)
         self.assertIn("An example is no session", instruction)
         self.assertIn("Never propose an example itself", instruction)
+
+
+class PointerTest(unittest.TestCase):
+    PORTAL = dataclasses.replace(
+        session("portal", "the login moves to the customer's identity provider in March, write that into the record"),
+        written=("docs/records/014-login.md",),
+    )
+    POINTER: ClassVar[dict[str, Any]] = {
+        "kind": "pointer",
+        "text": "Login moves to the customer's identity provider in March.",
+        "quote": "the login moves to the customer's identity provider in March",
+        "session": 1,
+        "topic": "Somewhere",
+        "due": None,
+        "file": "docs/records/014-login.md",
+    }
+
+    def test_a_session_shows_the_files_it_wrote_and_none_where_it_wrote_none(self) -> None:
+        """Covers: B278"""
+        given = json.loads(glean.step_input([self.PORTAL, SHED], "# Memory\n"))
+
+        self.assertEqual(given["sessions"][0]["written"], ["docs/records/014-login.md"])
+        self.assertNotIn("written", given["sessions"][1])
+
+    def test_a_pointer_names_its_file_and_no_topic_and_one_without_a_file_is_not_in_the_form(self) -> None:
+        """Covers: B278"""
+        read = glean.parse_answer(
+            answer(self.POINTER, {**self.POINTER, "file": ""}, {**self.POINTER, "file": None}), [self.PORTAL]
+        )
+
+        (pointer,) = read.proposals
+        self.assertEqual(read.malformed, 2)
+        self.assertEqual((pointer.pointer, pointer.topic), (glean.PointerPart("docs/records/014-login.md"), None))
+
+    def test_a_pointer_is_kept_only_to_a_file_its_session_wrote(self) -> None:
+        """Covers: B278"""
+        (pointer,) = glean.parse_answer(answer(self.POINTER), [self.PORTAL]).proposals
+        elsewhere = dataclasses.replace(pointer, pointer=glean.PointerPart("docs/records/015-billing.md"))
+
+        checked = glean.check([pointer, elsewhere], [self.PORTAL], [])
+
+        self.assertEqual(checked.kept, (pointer,))
+        self.assertEqual(checked.not_quoted, (elsewhere,))
 
 
 if __name__ == "__main__":

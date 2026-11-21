@@ -599,6 +599,27 @@ class ReplayTest(WithFakeClaude):
     def replay(self, *arguments: str) -> tuple[int, str]:
         return self.run_main("--replay", "3", "--out", str(self.out), "--until", str(self.TODAY), *arguments)
 
+    def test_the_replay_shows_the_model_no_written_file_as_the_step_shows_none_outside_a_project(self) -> None:
+        path = self.projects / "-home-alex-second" / "second.jsonl"
+        wrote = {
+            "type": "assistant",
+            "timestamp": f"{self.TODAY}T12:05:00Z",
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {"type": "tool_use", "id": "w", "name": "Write", "input": {"file_path": "/home/alex/second/a.md"}}
+                ],
+            },
+        }
+        with path.open("a", encoding="utf-8") as transcript:
+            transcript.write(json.dumps(wrote) + "\n")
+
+        code, out = self.replay()
+
+        self.assertEqual(code, glean_eval.EXIT_PASSED, out)
+        for call in self.calls():
+            self.assertTrue(all("written" not in session for session in json.loads(call["stdin"])["sessions"]))
+
     def test_the_proposals_of_each_day_go_to_the_file_with_the_words_they_stand_on(self) -> None:
         code, out = self.replay()
 
@@ -659,10 +680,10 @@ class ReplayTest(WithFakeClaude):
                 "2026-03-03: no prompts",
                 "2026-03-04: 2 prompts in 1 sessions (with 0 pasted texts; left out: 0 sent by others, 0 suggested, "
                 "0 unmarked, 0 transcripts not read), 1 proposals: 1 person, 0 agreement, 0 commitment, 0 personal, "
-                "0 lesson; left out by code: 0 not quoted, 0 not in the form",
+                "0 lesson, 0 pointer; left out by code: 0 not quoted, 0 not in the form",
                 "2026-03-05: 1 prompts in 1 sessions (with 0 pasted texts; left out: 0 sent by others, 0 suggested, "
                 "0 unmarked, 0 transcripts not read), 0 proposals: 0 person, 0 agreement, 0 commitment, 0 personal, "
-                "0 lesson; left out by code: 1 not quoted, 0 not in the form",
+                "0 lesson, 0 pointer; left out by code: 1 not quoted, 0 not in the form",
                 f"glean-eval: 1 proposals from 3 days written to {self.out}",
             ],
         )

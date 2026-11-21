@@ -93,6 +93,11 @@ same topic as if you had said it. Which days a repository was worked in is remem
 machine only, in `~/.local/state/m2b/project-days.json`, with the repository's address and the
 days and nothing else.
 
+A project's topic also gets pointers from the reading: when you state a decision in a session in
+that repository and Claude writes it into a file there, the run proposes the line
+`- <the decision> → <the file>`. Kept, it comes into a session with the topic, and the session reads
+the file in the folder the place line names.
+
 ## Fixes for the files Claude reads
 
 When a `CLAUDE.md` or a rule file says something wrongly, say so in a session: "keep this as a

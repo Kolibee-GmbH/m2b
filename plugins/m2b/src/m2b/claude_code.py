@@ -20,7 +20,8 @@ beyond that, each with what breaks when it changes:
   it (``origin``, ``promptSource``), and on the attachment of type ``queued_command`` for a message
   sent while a turn ran (``as_prompt_record``); beside a prompt it reads the turn before from the
   ``assistant`` records of the main conversation (not ``isSidechain``): their ``text`` parts and the
-  ``input.command`` of their ``tool_use`` parts named ``BASH_TOOL``, and it ends a turn at a ``user``
+  ``input.command`` of their ``tool_use`` parts named ``BASH_TOOL``, and the file a part of one of
+  the ``WRITING_TOOLS`` names, and it ends a turn at a ``user``
   record with text that is no tool's result, no ``isMeta`` record of Claude Code's own and no note
   of an interruption. When those change, a prompt comes without the turn before and nothing fails;
   the worklog add-on reads prompts, answers and times for the facts of a period
@@ -79,6 +80,8 @@ PROMPT_BLOCK = re.compile(r"<(" + "|".join(PROMPT_BLOCK_TAGS) + r")\b[^>]*>.*?</
 
 # The name of Claude Code's shell tool in a ``tool_use`` part of an answer.
 BASH_TOOL = "Bash"
+# The tools with which Claude writes a file, each with the field of its input that names the file.
+WRITING_TOOLS = {"Write": "file_path", "Edit": "file_path", "MultiEdit": "file_path", "NotebookEdit": "notebook_path"}
 
 # The sender Claude Code names for what the person sent: typed in the terminal or in the desktop
 # app, also while Claude was busy, or a suggested prompt they accepted.

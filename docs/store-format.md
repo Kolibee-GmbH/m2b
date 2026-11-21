@@ -250,10 +250,12 @@ field; without such an entry the format is 1.
 newest proposal was added that the task for the waiting proposals has told you of: a task you
 completed or deleted comes back only for a proposal added after it. A proposal's id comes from its
 session and its `quote`, the words of the session it stands on; `kind` is `person`, `agreement`, `commitment`,
-`personal`, `lesson` or `project`; `day` is the day those words were sent, `due` the day a commitment names. A
+`personal`, `lesson`, `pointer` or `project`; `day` is the day those words were sent, `due` the day a commitment names. A
 `project` stands on no words: its `quote` is the addresses of the repository's remotes, its
 `"source": "worked"`, its id comes from the addresses alone, and `day` is the last day a session
-worked in it. `state` is `open`,
+worked in it. A `pointer` has `"pointer": {"path": "docs/records/014-login.md", "repositories":
+["github.com/acme/portal"]}`, the file in its repository and that repository's addresses, and its
+`text` is the line it becomes. `state` is `open`,
 `kept`, `dropped` or `expired`, and `since` the moment it got that state. An open proposal that
 has no answer 14 days after it was added expires. A kept, dropped or expired proposal stays for 90
 days, so the same one is not proposed again; the first curation run after that removes it. The

@@ -11,6 +11,10 @@ The address is the remote's, the same on every machine; the folder on this machi
 the store. A folder without a remote has no such address, so nothing is captured there. A project
 that already has a topic, or whose capture still waits in the inbox, is not captured again: two
 captures of one repository would make two topics.
+
+A pointer kept from a reading of the sessions is a capture of the same kind, ``Keep this pointer:``
+with the line and the repository's ``Repository:`` lines, so the run files the line into the topic
+whose ``Repository:`` line names one of them.
 """
 
 from __future__ import annotations
@@ -26,6 +30,8 @@ from m2b.session_remotes import address_of, name_of
 from m2b.store.base import Store, StoreError
 
 FIRST_LINE = "Keep this project: "
+# A pointer the owner kept from a reading of the sessions: one line for a project's topic.
+POINTER_FIRST_LINE = "Keep this pointer: "
 _CAPTURED_ADDRESS = re.compile(r"^Repository: (\S+)[ \t]*$", re.MULTILINE)
 
 
@@ -33,6 +39,11 @@ def capture_text(addresses: Sequence[str], words: str) -> str:
     """The capture: what the owner calls the project, or the repository's name, and each address."""
     called = " ".join(words.split()) or name_of(addresses)
     return FIRST_LINE + called + "\n" + "".join(f"Repository: {address}\n" for address in addresses)
+
+
+def pointer_capture_text(addresses: Sequence[str], line: str) -> str:
+    """The capture of a kept pointer: its line, ``<sentence> → <path>``, and the repository it is of."""
+    return POINTER_FIRST_LINE + line + "\n" + "".join(f"Repository: {address}\n" for address in addresses)
 
 
 def known_as(store: Store, addresses: Sequence[str]) -> str | None:

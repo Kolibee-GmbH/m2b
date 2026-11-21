@@ -13,7 +13,7 @@ from unittest import mock
 
 from m2b import project_proposals, proposals
 from m2b.config.errors import ConfigError
-from m2b.glean import FIX, KINDS, AtSource, Example, Examples, LessonPart, Proposal
+from m2b.glean import FIX, KINDS, AtSource, Example, Examples, LessonPart, PointerPart, Proposal
 from m2b.proposals import Said
 from m2b.store.folder import FolderStore
 from m2b.store.guard import DatalessGuard
@@ -242,6 +242,14 @@ class SourceTest(ProposalsFixture):
 PROJECT = project_proposals.proposal(
     ("github.com/acme/portal",), [datetime.date(2026, 3, 1), datetime.date(2026, 3, 5)]
 )
+POINTER = Proposal(
+    "pointer",
+    "Login moves to the customer's identity provider in March → docs/records/014-login.md",
+    "the login moves to the customer's identity provider in March",
+    "shed",
+    topic="Acme portal",
+    pointer=PointerPart("docs/records/014-login.md", ("github.com/acme/portal",)),
+)
 LESSON = Proposal(
     "lesson",
     "Run only the quick checks unless the change gives a reason.",
@@ -342,6 +350,26 @@ class ProjectInFileTest(ProposalsFixture):
             proposals.said_line(loaded, loaded.quote),
             'sessions worked in it, the last on 2026-03-04: "github.com/acme/portal"',
         )
+
+
+class PointerInFileTest(ProposalsFixture):
+    def test_a_pointer_is_written_with_its_path_and_repository_and_read_back_and_one_without_is_left_out(self) -> None:
+        """Covers: B278"""
+        self.kept(POINTER)
+
+        written = self.written()
+        (key,) = written["proposals"]
+        self.assertEqual(
+            written["proposals"][key]["pointer"],
+            {"path": "docs/records/014-login.md", "repositories": ["github.com/acme/portal"]},
+        )
+        self.assertEqual(written["format"], 5)
+        (loaded,) = proposals.load(self.store).entries.values()
+        self.assertEqual(loaded.pointer, POINTER.pointer)
+        for broken in ({"pointer": None}, {"pointer": {"path": "docs/x.md", "repositories": []}}):
+            with self.subTest(broken=broken):
+                self.write({**written, "proposals": {key: {**written["proposals"][key], **broken}}})
+                self.assertEqual(proposals.load(self.store).entries, {})
 
 
 class HandedInTest(ProposalsFixture):

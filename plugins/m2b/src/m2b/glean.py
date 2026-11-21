@@ -40,6 +40,11 @@ its own is not recognised; the person sees that proposal and drops it.
 The instruction the model is asked with is ``glean_instruction.md`` beside this module. It is the
 prompt of a run without tools (``curate.model.text_step``), not a skill: no session can call it.
 
+A session's ``written`` files go in only where its repository is a project of the memory (the
+reading step leaves them out elsewhere), each by its path in that repository. A ``pointer`` names one
+of them in ``file``; ``check`` keeps a pointer only when its file stands among its session's
+``written``, so a decision written into no file of the repository points nowhere.
+
 An answer that cannot be read is an error (``GleanError``), never an answer without proposals. A
 single proposal that is not in the form is left out and counted.
 """
@@ -68,8 +73,11 @@ COMMITMENT = "commitment"
 PERSONAL = "personal"
 # A correction of Claude the person made in two sessions: kept, it becomes a lesson (``lessons``).
 LESSON = "lesson"
+# A decision, an agreement, a person or a deadline of a project a session wrote into a file of its
+# repository: kept, it becomes a line of the project's topic that points to that file.
+POINTER = "pointer"
 # What a model may propose from the words of a session.
-READ_KINDS = (PERSON, AGREEMENT, COMMITMENT, PERSONAL, LESSON)
+READ_KINDS = (PERSON, AGREEMENT, COMMITMENT, PERSONAL, LESSON, POINTER)
 # A repository the person worked in on two days and that has no topic: code proposes it from where
 # the sessions worked (``project_proposals``), on no words, so no model is asked and none is shown it.
 PROJECT = "project"
@@ -149,6 +157,15 @@ class LessonPart:
 
 
 @dataclass(frozen=True)
+class PointerPart:
+    """Where a proposed pointer points: a file its session wrote, by its path in the repository, and
+    the addresses of that repository, which the reading step sets (``curate.glean_step``)."""
+
+    path: str
+    repositories: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class Proposal:
     kind: str
     text: str
@@ -162,6 +179,8 @@ class Proposal:
     source: str = TYPED
     # For a lesson, and only for one.
     lesson: LessonPart | None = None
+    # For a pointer, and only for one.
+    pointer: PointerPart | None = None
 
 
 @dataclass(frozen=True)
@@ -223,6 +242,8 @@ def step_input(
             "folder": session.folder,
             "day": session.prompts[0].time.astimezone(zone).strftime("%A %Y-%m-%d"),
             "prompts": [_as_shown(prompt) for prompt in session.prompts],
+            # Only where a pointer can be kept; the reading step leaves the files out elsewhere.
+            **({"written": list(session.written)} if session.written else {}),
         }
         for number, session in enumerate(sessions, start=1)
         if session.prompts
@@ -281,6 +302,10 @@ def check(proposals: Sequence[Proposal], sessions: Sequence[Session], captures: 
         stands = stands_in is not None and len(quote.split()) >= QUOTE_WORDS
         if stands and proposal.lesson is not None:
             stands = stands_in is not None and _lesson_stands(proposal, stands_in.source, by_id)
+        if stands and proposal.pointer is not None:
+            # A pointer points to what its session wrote, or it points nowhere.
+            session = by_id.get(proposal.session)
+            stands = session is not None and proposal.pointer.path in session.written
         if not stands or stands_in is None:
             not_quoted.append(proposal)
         elif _is_captured(quote, stands_in.texts, captured):
@@ -388,6 +413,12 @@ def _proposal(entry: object, sessions: Sequence[Session]) -> Proposal | None:
     if unsafe_characters(text + quote + topic) or not can_be_written(text + quote + topic):
         return None
     session_id = sessions[number - 1].session_id
+    if kind == POINTER:
+        path = entry.get("file")
+        if not isinstance(path, str) or not path.strip() or due is not None or not can_be_written(path):
+            return None
+        # The topic is the project's, which code knows; the model names none.
+        return Proposal(kind, text, quote, session_id, pointer=PointerPart(path))
     if kind != LESSON:
         return Proposal(kind, text, quote, session_id, topic or None, due)
     lesson = _lesson_part(entry.get("lesson"), sessions)

@@ -33,6 +33,7 @@ REPOSITORY_LINE = re.compile(r"- Repository: (?P<address>\S+) \((?P<file>[^()/\s
 POINTER_LINE = re.compile(
     r"- .+ → (?P<path>[^\s,()→]*[./][^\s,()→]*)(?:, (?P<heading>[^()→]+?))? \((?P<file>[^()/\s]+\.md)\)\s*\Z"
 )
+_POINTABLE = re.compile(r"[^\s,()→]*[./][^\s,()→]*")
 ON_THIS_MACHINE = "  on this machine: "
 POINTERS_LIE_IN_IT = "; the paths after → lie in it"
 NOT_CLONED = "  not cloned on this machine"
@@ -57,6 +58,11 @@ def with_places(text: str, notes: Path, is_there: Callable[[Path], bool] = os.pa
             else:
                 placed.append(ON_THIS_MACHINE + without_hidden(clone) + (POINTERS_LIE_IN_IT if has_pointers else ""))
     return "\n".join(placed)
+
+
+def can_point_to(path: str) -> bool:
+    """Whether a pointer line can name ``path``, a path in a repository, so ``POINTER_LINE`` reads it back."""
+    return _POINTABLE.fullmatch(path) is not None
 
 
 def clone_here(

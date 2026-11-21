@@ -16,7 +16,7 @@ from m2b.proposal_answers import DROP, KEEP
 from m2b.tasks.base import UnconfirmedTaskError
 from m2b.tasks.markdown import MarkdownTasks
 from test_proposal_answers import DANA_ID, LADDER_ID, NOBODYS_ID, AnswerFixture
-from test_proposals import DANA, LADDER, LESSON, NOW, counts
+from test_proposals import DANA, LADDER, LESSON, NOW, POINTER, counts
 
 LATER = NOW + datetime.timedelta(days=1)
 SOMEDAY = Proposal("commitment", "Send Dana the offer.", "I still have to send Dana the offer", "shed")
@@ -204,6 +204,21 @@ class KeepTest(ProposalHarvestFixture):
         )
         self.assertEqual(self.frontmatter(note).get("from_proposal"), proposals.proposal_id(two))
         self.assertEqual(self.state(proposals.proposal_id(two))[0], "kept")
+        self.assertEqual(report.problems, [])
+
+    def test_a_kept_pointer_becomes_a_capture_of_its_line_with_its_repository(self) -> None:
+        """Covers: B279"""
+        self.answered(KEEP, POINTER)
+
+        report = self.harvest()
+
+        (note,) = self.captures()
+        self.assertEqual(
+            note.body,
+            "Keep this pointer: Login moves to the customer's identity provider in March → docs/records/014-login.md\n"
+            "Repository: github.com/acme/portal\n",
+        )
+        self.assertEqual(self.state(proposals.proposal_id(POINTER))[0], "kept")
         self.assertEqual(report.problems, [])
 
     def test_a_kept_commitment_with_a_day_has_its_task_at_once(self) -> None:

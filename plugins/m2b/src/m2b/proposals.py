@@ -69,6 +69,7 @@ from m2b.glean import (
     KINDS,
     LESSON,
     PASTED,
+    POINTER,
     PROJECT,
     READ_KINDS,
     STATED,
@@ -80,6 +81,7 @@ from m2b.glean import (
     Example,
     Examples,
     LessonPart,
+    PointerPart,
     Proposal,
 )
 from m2b.notes.characters import can_be_written
@@ -88,7 +90,7 @@ from m2b.store.base import Store
 
 PROPOSALS_FILE = f"{STATE}/core/proposals.json"
 FORMAT = 5
-# What an m2b before a project could be proposed wrote and reads: no kind ``project``.
+# What an m2b before a project or a pointer could be proposed wrote and reads: neither kind.
 FORMAT_WITHOUT_PROJECTS = 4
 # What an m2b before a lesson could be proposed wrote and reads: no kind ``lesson``.
 FORMAT_WITHOUT_LESSONS = 3
@@ -146,6 +148,8 @@ class Entry:
     by: str | None = None
     # For a lesson: its kind, target, words and the same correction in a second session.
     lesson: LessonPart | None = None
+    # For a pointer: the file in its repository and the repository's addresses.
+    pointer: PointerPart | None = None
 
 
 @dataclass(frozen=True)
@@ -291,10 +295,10 @@ def is_tool_name(text: str) -> bool:
 
 
 def _format_of(entries: Collection[Entry]) -> int:
-    """The format the file needs: 5 with a project; 4 with a lesson; 3 with a proposal that names who
+    """The format the file needs: 5 with a project or a pointer; 4 with a lesson; 3 with a proposal that names who
     proposed or a tool, or whose source is neither typed nor pasted; else 2 with one from pasted
     text; else 1."""
-    if any(entry.kind == PROJECT for entry in entries):
+    if any(entry.kind in (PROJECT, POINTER) for entry in entries):
         return FORMAT
     if any(entry.kind == LESSON for entry in entries):
         return FORMAT_WITHOUT_PROJECTS
@@ -334,6 +338,7 @@ def add(current: Proposals, found: Sequence[Said], now: datetime.datetime) -> Ad
             said.tool,
             said.by,
             proposal.lesson,
+            proposal.pointer,
         )
         counts = _counted(counts, proposal.kind, "proposed")
         added += 1
@@ -489,7 +494,24 @@ def _entry(value: object) -> Entry | None:
     lesson = _lesson_of(value.get("lesson"))
     if (kind == LESSON) != (lesson is not None):
         return None
-    return Entry(kind, text, quote, day, state, since, topic, due, source, tool, by, lesson)
+    pointer = _pointer_of(value.get("pointer"))
+    if (kind == POINTER) != (pointer is not None):
+        return None
+    return Entry(kind, text, quote, day, state, since, topic, due, source, tool, by, lesson, pointer)
+
+
+def _pointer_of(value: object) -> PointerPart | None:
+    """A pointer's part as the file holds it: a path in a repository and at least one address."""
+    if not isinstance(value, dict):
+        return None
+    path, repositories = value.get("path"), value.get("repositories")
+    if not isinstance(path, str) or not path or not can_be_written(path):
+        return None
+    if not isinstance(repositories, list) or not repositories:
+        return None
+    if not all(isinstance(each, str) and each and can_be_written(each) for each in repositories):
+        return None
+    return PointerPart(path, tuple(repositories))
 
 
 def _lesson_of(value: object) -> LessonPart | None:
@@ -558,6 +580,8 @@ def _as_json(entry: Entry) -> dict[str, Any]:
         }
         if entry.lesson.at_source is not None:
             written["lesson"]["at_source"] = dataclasses.asdict(entry.lesson.at_source)
+    if entry.pointer is not None:
+        written["pointer"] = {"path": entry.pointer.path, "repositories": list(entry.pointer.repositories)}
     return written
 
 

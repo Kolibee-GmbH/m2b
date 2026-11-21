@@ -554,6 +554,12 @@ def replay(
         read = _without(read_sessions(transcripts, start, end), leave_out)
         if not any(session.prompts for session in read.sessions):
             return ReplayDay(day, read)
+        # The step shows the files a session wrote only in a repository a project topic names, by
+        # their path there; the replay knows no notes of remotes, so it shows none, as the step
+        # shows none outside a project.
+        read = dataclasses.replace(
+            read, sessions=tuple(dataclasses.replace(session, written=()) for session in read.sessions)
+        )
         run = asker.ask(model, glean.step_input(read.sessions, memory, start.tzinfo or _UTC))
         if run.answer is None:
             # Without what the command said: that goes into the file, not onto the terminal.

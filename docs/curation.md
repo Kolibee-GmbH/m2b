@@ -323,8 +323,8 @@ first reading and never more than 7 days; what lies before is named as not read.
 of yours in that time no model starts.
 
 **What is kept.** The model gets the distillate, so it can leave out what is known, the proposals
-you kept and dropped lately (below), and per session its folder, its day and its prompts. It answers with proposals of five kinds, a person, an
-agreement, a commitment, something personal and a lesson, each with the words it stands on. A
+you kept and dropped lately (below), and per session its folder, its day and its prompts. It answers with proposals of six kinds, a person, an
+agreement, a commitment, something personal, a lesson and a pointer, each with the words it stands on. A
 lesson is a correction of how Claude works that you made in two sessions, such as "only the quick
 round" after Claude ran the whole proof: code keeps it only when both of your sentences stand in
 what you typed, in two sessions, and for a command when its words stand in a command Claude ran
@@ -343,6 +343,13 @@ proposal only when those words stand in one prompt of the session it names, type
 at least three words, and when you did not capture the same thing in that time. A proposal like one that
 waits, or like one you kept or dropped or that expired within 90 days, is not kept a second time,
 so reading a period again adds nothing.
+
+A pointer is a decision, an agreement, a person or a deadline of a project you stated in a session
+that Claude wrote into a file of the repository, such as `docs/records/014-login.md`. The model
+sees the files a session wrote only where its repository has a project topic, by their path in
+the repository; code keeps a pointer only to a file its session wrote. Kept, it becomes a line of
+that project's topic, `- <sentence> → <path>`, so the decision stays in the repository and the
+second brain knows where.
 
 Code proposes one more kind by itself, with no model and on no words: a `project`, a repository
 whose remote the session start noted and that you typed in on two days, in this reading or in one

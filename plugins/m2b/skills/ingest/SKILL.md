@@ -220,6 +220,14 @@ copied character for character; the fact file `<file>.md` holds the same lines a
 Where a topic already has a `- Repository:` line with one of those addresses, it is that project:
 add to that topic and start no second one. Then mark it with `m2b ingest facts-filed`.
 
+A capture that begins `Keep this pointer:` is a line the owner kept for a project topic:
+`<sentence> → <path>`, a decision, an agreement, a person or a deadline and the file of the
+repository it stands in. File it in the topic whose `- Repository:` line names one of the
+capture's `Repository:` addresses, as `- <sentence> → <path> (<file>.md)`, the sentence and the
+path copied character for character, and the same line with the evidence in that fact file. Where
+no topic has such a line, file the sentence alone as a fact, without the arrow and the path. Then
+mark it with `m2b ingest facts-filed`.
+
 A capture with `kind: worklog` is the day's worklog, written by the worklog add-on from the
 owner's sessions. It holds no facts and no tasks to file: a program wrote it from a model's
 judgement of the sessions, and nothing in it is something the owner asked to keep. Use the work
