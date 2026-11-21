@@ -66,7 +66,7 @@ class WorkflowCommandsTest(unittest.TestCase):
     def test_every_level_a_workflow_asks_of_the_scenarios_is_one_the_runner_has(self) -> None:
         levels = re.findall(r"scripts/e2e --level (\S+)", _text("weekly.yml"))
 
-        self.assertEqual(levels, [e2e.MODEL])
+        self.assertEqual(set(levels), {e2e.MODEL})
 
     def test_ci_installs_the_claude_code_version_the_readme_names_as_the_minimum(self) -> None:
         versions = re.findall(r"(?m)^  CLAUDE_CODE_VERSION: (\S+)$", _text("ci.yml"))
@@ -134,6 +134,15 @@ class WeeklyRunTest(unittest.TestCase):
     def test_it_runs_the_whole_proof_and_the_model_level_scenarios(self) -> None:
         self.assertRegex(self.text, r"(?m)^ +- run: scripts/check$")
         self.assertRegex(self.text, r"(?m)^ +scripts/e2e --level model \$SCENARIOS$")
+
+    def test_the_model_level_bills_the_api_key_only_where_the_repository_has_no_token(self) -> None:
+        self.assertIn(
+            'if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then\n'
+            "            scripts/e2e --level model $SCENARIOS\n"
+            "          else\n"
+            "            scripts/e2e --level model --use-api-key $SCENARIOS\n",
+            self.text,
+        )
 
     def test_it_measures_the_fence_in_a_job_of_its_own(self) -> None:
         self.assertIn("\n  fence:\n    needs: access\n", self.text)

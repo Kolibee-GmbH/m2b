@@ -92,9 +92,14 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           SCENARIOS: ${{ inputs.scenarios }}
         run: |
-          # Unquoted, so that each name is its own argument.
+          # Unquoted, so that each name is its own argument. The API key, billed per run, only
+          # where the repository has no token for a subscription.
           # shellcheck disable=SC2086
-          scripts/e2e --level model $SCENARIOS
+          if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            scripts/e2e --level model $SCENARIOS
+          else
+            scripts/e2e --level model --use-api-key $SCENARIOS
+          fi
 
   # Whether the newest Claude Code still keeps a curation step inside its fence: two runs of a
   # model through the core's own start, one of them without the two switches of the fence. A job

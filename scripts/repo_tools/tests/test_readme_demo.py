@@ -13,7 +13,7 @@ from m2b.config import catalog
 
 from repo_tools import readme_demo, readme_images
 from repo_tools.readme_demo import Beat, Picture
-from repo_tools.readme_images import Recording
+from repo_tools.terminal import Recording
 
 
 class BeatsTest(unittest.TestCase):

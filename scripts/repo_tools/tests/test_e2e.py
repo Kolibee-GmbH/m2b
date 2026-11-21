@@ -511,7 +511,13 @@ class ModelLevelTest(unittest.TestCase):
                 probe = "import os; print(os.environ.get('M2B_MODEL_RUNNER', 'real'))"
                 steps = [{"run": [sys.executable, "-c", probe], "stdout": "real"}]
                 _write_json(folder / "model.json", {"steps": steps, "invariants": [{"count": 1, "glob": "note.md"}]})
-        self.environ = {"PATH": "/usr/bin:/bin", "M2B_HOME": str(root / "real-home"), "M2B_MODEL_RUNNER": "/tmp/stub"}
+        self.environ = {
+            "PATH": "/usr/bin:/bin",
+            "M2B_HOME": str(root / "real-home"),
+            "M2B_MODEL_RUNNER": "/tmp/stub",
+            "CLAUDE_CONFIG_DIR": str(root / "real-claude"),
+            e2e.TOKEN_VARIABLE: "sb-test-token",
+        }
 
     def test_the_model_level_runs_only_scenarios_with_a_model_file_without_the_stub_in_the_given_folder(self) -> None:
         out = io.StringIO()
@@ -586,6 +592,268 @@ class ModelLevelTest(unittest.TestCase):
         bound = fetch + step * runner.MODEL_STEPS + runner.CODE_STEPS_MARGIN
         self.assertLess(bound.total_seconds(), e2e.MODEL_STEP_TIMEOUT_SECONDS)
         self.assertNotIn("curation", e2e.isolated_machine_config(Path("/tmp/sb-test-store")))
+
+
+INTERACTIVE_CLAUDE = Path(__file__).resolve().parent / "claude_interactive.py"
+# A step's probe: prints "ok" when the environment the model level gives it is the one wanted.
+SANDBOX_PROBE = """
+import os, sys
+config = os.environ.get("CLAUDE_CONFIG_DIR", "")
+wanted = {
+    "config in the sandbox": "sb-test-e2e-" in config and os.path.isfile(os.path.join(config, ".claude.json")),
+    "account": os.environ.get(sys.argv[1]) == sys.argv[2],
+    "no other account": sys.argv[3] not in os.environ and "ANTHROPIC_AUTH_TOKEN" not in os.environ,
+    "no running session": not any(name.startswith("CLAUDE") and name not in (
+        "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_OAUTH_TOKEN") for name in os.environ),
+}
+print("ok" if all(wanted.values()) else wanted)
+"""
+
+
+class ModelSandboxTest(unittest.TestCase):
+    """At the model level every session runs in a Claude Code folder of the scenario's own, with the
+    subscription's token, so no transcript reaches the user's folder and nothing is billed per run."""
+
+    def setUp(self) -> None:
+        self._temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._temp.cleanup)
+        root = Path(self._temp.name)
+        self.root = root
+        self.scenarios = root / "scenarios"
+        self.scenario = self.scenarios / "sample"
+        self.scenario.mkdir(parents=True)
+        self.sandboxes = root / "sandboxes"
+        self.real_claude = root / "real-claude"
+        (self.real_claude / "projects").mkdir(parents=True)
+        bin_folder = root / "bin"
+        bin_folder.mkdir()
+        claude = bin_folder / "claude"
+        claude.write_text(f'#!/bin/sh\nexec {sys.executable} {INTERACTIVE_CLAUDE} "$@"\n', encoding="utf-8")
+        claude.chmod(0o755)
+        self.environ = {
+            "PATH": f"{bin_folder}:/usr/bin:/bin",
+            "M2B_HOME": str(root / "real-home"),
+            "CLAUDE_CONFIG_DIR": str(self.real_claude),
+            e2e.TOKEN_VARIABLE: "sb-test-token-value",
+        }
+
+    def given(self, steps: list[dict[str, Any]], invariants: list[dict[str, Any]] | None = None) -> None:
+        _write_json(self.scenario / "model.json", {"steps": steps, "invariants": invariants or []})
+
+    def run_model_level(self, *extra: str, keychain: str | None = None) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with (
+            contextlib.redirect_stdout(out),
+            contextlib.redirect_stderr(err),
+            mock.patch.dict("os.environ", self.environ, clear=True),
+            mock.patch.object(e2e, "keychain_token", return_value=keychain),
+        ):
+            code = e2e.main(
+                [
+                    "--level",
+                    "model",
+                    "--scenarios",
+                    str(self.scenarios),
+                    "--sandbox-root",
+                    str(self.sandboxes),
+                    *extra,
+                ]
+            )
+        return code, out.getvalue(), err.getvalue()
+
+    def probe(self, account: str, value: str, other: str) -> dict[str, Any]:
+        return {"run": [sys.executable, "-c", SANDBOX_PROBE, account, value, other], "stdout": "^ok$"}
+
+    def session(self, turns: list[str], **more: Any) -> dict[str, Any]:
+        return {"session": ["--plugin-dir", "{core_plugin}"], "turns": turns, "cwd": "repo-a", **more}
+
+    def test_a_step_runs_with_the_token_in_a_claude_code_folder_of_the_scenario_and_without_the_running_session(
+        self,
+    ) -> None:
+        self.environ.update(
+            {
+                "ANTHROPIC_API_KEY": "sb-test-key",
+                "ANTHROPIC_AUTH_TOKEN": "sb-test-bearer",
+                "CLAUDECODE": "1",
+                "CLAUDE_CODE_SESSION_ID": "x",
+            }
+        )
+        self.given([self.probe(e2e.TOKEN_VARIABLE, "sb-test-token-value", e2e.API_KEY_VARIABLE)])
+
+        code, out, _ = self.run_model_level()
+
+        self.assertEqual(code, e2e.EXIT_PASSED, out)
+        self.assertEqual(list(self.sandboxes.iterdir()), [])
+
+    def test_the_keychain_gives_the_token_when_the_environment_has_none(self) -> None:
+        del self.environ[e2e.TOKEN_VARIABLE]
+        self.given([self.probe(e2e.TOKEN_VARIABLE, "sb-test-from-keychain", e2e.API_KEY_VARIABLE)])
+
+        code, out, _ = self.run_model_level(keychain="sb-test-from-keychain")
+
+        self.assertEqual(code, e2e.EXIT_PASSED, out)
+
+    def test_without_a_token_the_model_level_stops_before_any_step_and_says_how_to_add_one(self) -> None:
+        del self.environ[e2e.TOKEN_VARIABLE]
+        self.environ["ANTHROPIC_API_KEY"] = "sb-test-key"
+        touched = self.root / "touched"
+        self.given([{"run": ["touch", str(touched)]}])
+
+        code, out, err = self.run_model_level()
+
+        self.assertEqual(code, e2e.EXIT_USAGE)
+        self.assertFalse(touched.exists())
+        self.assertIn("claude setup-token", err)
+        self.assertIn(e2e.KEYCHAIN_SERVICE, err)
+        self.assertIn("--use-api-key", err)
+        self.assertNotIn("sample", out)
+
+    def test_with_use_api_key_the_key_goes_through_and_no_token(self) -> None:
+        self.environ["ANTHROPIC_API_KEY"] = "sb-test-key"
+        self.given([self.probe(e2e.API_KEY_VARIABLE, "sb-test-key", e2e.TOKEN_VARIABLE)])
+
+        code, out, _ = self.run_model_level("--use-api-key")
+
+        self.assertEqual(code, e2e.EXIT_PASSED, out)
+
+    def test_with_use_api_key_an_interactive_session_finds_the_key_accepted(self) -> None:
+        config = Path(self._temp.name) / "claude-config"
+        e2e.prepare_claude_config(config, {e2e.API_KEY_VARIABLE: "sk-ant-sb-test-" + "k" * 30})
+
+        settings = json.loads((config / ".claude.json").read_text(encoding="utf-8"))
+        self.assertEqual(settings["customApiKeyResponses"], {"approved": ["k" * 20], "rejected": []})
+
+    def test_use_api_key_without_a_key_is_a_usage_error(self) -> None:
+        self.given([])
+
+        code, _, err = self.run_model_level("--use-api-key")
+
+        self.assertEqual(code, e2e.EXIT_USAGE)
+        self.assertIn("ANTHROPIC_API_KEY", err)
+
+    def test_an_interactive_session_types_each_turn_and_the_reading_sees_its_prompts_and_commands(self) -> None:
+        self.given(
+            [self.session(["run scripts/check", "No, only the quick round."])],
+            [
+                {
+                    "sessions_read": [
+                        {"prompt": "^run scripts/check$"},
+                        {"prompt": "only the quick round", "commands": "^scripts/check$"},
+                    ]
+                }
+            ],
+        )
+
+        code, out, _ = self.run_model_level()
+
+        self.assertEqual(code, e2e.EXIT_PASSED, out)
+        self.assertEqual(list((self.real_claude / "projects").iterdir()), [])
+
+    def test_a_prompt_the_reading_does_not_see_fails_and_names_what_it_read(self) -> None:
+        self.given([self.session(["run scripts/check"])], [{"sessions_read": [{"prompt": "quick round"}]}])
+
+        code, out, _ = self.run_model_level()
+
+        self.assertEqual(code, e2e.EXIT_FAILED)
+        self.assertIn("run scripts/check", out)
+
+    def test_a_turn_that_never_ends_fails_the_scenario_and_names_the_turn(self) -> None:
+        self.given([self.session(["run scripts/check"], env={"CLAUDE_INTERACTIVE_MODE": "silent"}, turn_seconds=1)])
+
+        code, out, _ = self.run_model_level()
+
+        self.assertEqual(code, e2e.EXIT_FAILED)
+        self.assertIn("end of turn 1", out)
+
+    def test_a_session_without_a_login_is_reported_as_a_missing_token_not_as_a_failed_scenario(self) -> None:
+        self.given([self.session(["run scripts/check"], env={"CLAUDE_INTERACTIVE_MODE": "logged-out"})])
+
+        code, out, err = self.run_model_level()
+
+        self.assertEqual(code, e2e.EXIT_REFUSED)
+        self.assertIn("not logged in", err)
+        self.assertIn("claude setup-token", err)
+        self.assertNotIn("FAILED", out)
+
+    def test_a_headless_step_without_a_login_is_reported_the_same_way(self) -> None:
+        refused = "print('Not logged in \\u00b7 Please run /login'); raise SystemExit(1)"
+        self.given([{"run": [sys.executable, "-c", refused]}])
+
+        code, _, err = self.run_model_level()
+
+        self.assertEqual(code, e2e.EXIT_REFUSED)
+        self.assertIn("not logged in", err)
+
+    def test_a_transcript_of_the_run_in_the_user_s_claude_code_folder_fails_the_scenario(self) -> None:
+        leak = (
+            "import os, pathlib, re; "
+            "(pathlib.Path(os.environ['REAL']) / 'projects' / re.sub('[^A-Za-z0-9]', '-', os.getcwd())).mkdir()"
+        )
+        self.given([{"run": [sys.executable, "-c", leak], "env": {"REAL": str(self.real_claude)}}])
+
+        code, out, _ = self.run_model_level()
+
+        self.assertEqual(code, e2e.EXIT_FAILED)
+        self.assertIn("the user's Claude Code folder", out)
+
+    def test_the_token_never_appears_in_the_report_even_where_the_output_is_cut(self) -> None:
+        self.environ[e2e.TOKEN_VARIABLE] = "sb-test-token-value-" + "x" * 40
+        across_the_cut = "import os, sys; sys.exit('y' * 390 + os.environ['CLAUDE_CODE_OAUTH_TOKEN'])"
+        self.given([{"run": [sys.executable, "-c", across_the_cut]}])
+
+        code, out, err = self.run_model_level()
+
+        self.assertEqual(code, e2e.EXIT_FAILED)
+        self.assertNotIn("sb-test-token-value", out + err)
+        self.assertIn("<token>", out)
+
+    def test_a_scenario_with_only_a_model_file_runs_at_the_model_level_and_is_left_out_below(self) -> None:
+        self.given([])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), mock.patch.dict("os.environ", self.environ, clear=True):
+            code = e2e.main(
+                ["--level", "stub", "--scenarios", str(self.scenarios), "--sandbox-root", str(self.sandboxes)]
+            )
+
+        self.assertEqual(code, e2e.EXIT_PASSED, out.getvalue())
+        self.assertIn("0 of 0", out.getvalue())
+        self.assertEqual(self.run_model_level()[0], e2e.EXIT_PASSED)
+
+
+class SessionTranscriptTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._temp.cleanup)
+        self.root = Path(self._temp.name)
+
+    def write(self, name: str, records: list[dict[str, Any]]) -> None:
+        path = self.root / "projects" / "-x" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("".join(json.dumps(record) + "\n" for record in records), encoding="utf-8")
+
+    def test_only_the_turn_ends_of_an_interactive_session_started_in_that_folder_count(self) -> None:
+        folder = self.root / "repo-a"
+        folder.mkdir()
+        end = {"type": "system", "subtype": "turn_duration", "entrypoint": "cli", "cwd": str(folder)}
+        after_a_cd = {**end, "cwd": str(folder / "scripts")}
+        self.write("one.jsonl", [{"type": "user", "cwd": str(folder)}, end, after_a_cd])
+        self.write("headless.jsonl", [{**end, "entrypoint": "sdk-cli"}])
+        self.write("elsewhere.jsonl", [{**end, "cwd": str(self.root / "repo-b")}, end])
+
+        self.assertEqual(e2e.turn_ends(self.root / "projects", folder), 2)
+        self.assertEqual(e2e.turn_ends(self.root / "nothing", folder), 0)
+
+    def test_the_scenario_s_claude_code_folder_skips_the_first_start_and_trusts_the_session_s_folder(self) -> None:
+        config = self.root / "claude-config"
+        e2e.prepare_claude_config(config, {e2e.TOKEN_VARIABLE: "sb-test-token"})
+        e2e.trust_folder(config, self.root / "repo-a")
+
+        settings = json.loads((config / ".claude.json").read_text(encoding="utf-8"))
+        self.assertTrue(settings["hasCompletedOnboarding"])
+        self.assertIn("theme", settings)
+        self.assertNotIn("customApiKeyResponses", settings)
+        trusted = {path for path, entry in settings["projects"].items() if entry["hasTrustDialogAccepted"]}
+        self.assertIn(str((self.root / "repo-a").resolve()), trusted)
 
 
 class AppleLevelTest(unittest.TestCase):

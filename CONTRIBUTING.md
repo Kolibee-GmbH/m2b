@@ -38,8 +38,9 @@ the newest Claude Code: m2b hangs on Claude Code's plugin interface, and the wee
 version before a user does. It also runs the [model-level scenarios](#end-to-end-scenarios) and
 the [fence probe](#whether-the-fence-still-holds), each in a job of its own, when
 the repository has one of two secrets: `ANTHROPIC_API_KEY`, an API key that is billed per run, or
-`CLAUDE_CODE_OAUTH_TOKEN`, the token `claude setup-token` gives for a subscription. Without either,
-both jobs are skipped and a notice on the run says so. Started by hand, the workflow takes the names
+`CLAUDE_CODE_OAUTH_TOKEN`, the token `claude setup-token` gives for a subscription; the scenarios
+take the key only where the token is missing. Without either, both jobs are skipped and a notice on
+the run says so. Started by hand, the workflow takes the names
 of the scenarios to run. A scheduled run that fails opens an issue, or adds a comment to the one
 still open; a run started by hand does not. GitHub starts scheduled runs from `main` only, and
 in a public repository it stops them after sixty days without activity until someone turns the
@@ -110,9 +111,10 @@ A scenario is a folder in `tests/e2e/` with `given/` (the store before), `steps.
 runs each one with its own `M2B_HOME` and a test config, so it never touches
 your own setup.
 
-A scenario with a `model.json` also runs at the model level, with the real `claude` and your own
-login, and checks invariants instead of exact files, because a model words things its own way. It
-costs model runs, so it is not part of `scripts/check`; run it on purpose:
+A scenario with a `model.json` also runs at the model level, with the real `claude`, and checks
+invariants instead of exact files, because a model words things its own way. A scenario that is only
+a `model.json` runs at that level alone. It costs model runs, so it is not part of `scripts/check`;
+run it on purpose:
 
 ```bash
 scripts/e2e --level model                                   # every scenario with a model.json
@@ -125,7 +127,38 @@ scripts/e2e --level model E32-file-captured                 # the same
 scripts/e2e --level model E17-planted-capture               # and after a change to the ingest skill
 scripts/e2e --level model E14-topics                        # after a change to the ingest skill
 scripts/e2e --level model E33-project-known                 # the same
+scripts/e2e --level model E34-session-read                  # after each Claude Code minor update
 ```
+
+Every session at this level runs in a Claude Code folder of the scenario's own, set as
+`CLAUDE_CONFIG_DIR`: its transcript stays out of yours, where your own curation reads, and Claude
+Code's own memory starts empty. A folder of its own has no login, so the sessions run with a token
+for your subscription. Make one once with `claude setup-token` and either set it as
+`CLAUDE_CODE_OAUTH_TOKEN` or, on macOS, keep it in the keychain, where the scenarios look when the
+variable is not set:
+
+```bash
+security add-generic-password -s m2b-journey-token -a "$USER" -w
+```
+
+The runs then count against the subscription's usage. `ANTHROPIC_API_KEY` would go before the token
+and bill each run, so the scenarios leave it out unless you pass `--use-api-key`. Without an account
+the model level stops before the first session and says how to add one; a session that says it is
+not logged in is reported as that, not as a failed scenario, and the run ends there. A token's value
+never shows in the report. After each scenario the runner looks in your Claude Code folder for
+transcripts of its sessions and fails the scenario when it finds one.
+
+A step `{"session": [arguments...], "turns": ["...", ...]}` runs Claude Code interactively in a
+hidden terminal and types each turn once the one before has ended, which it tells by the record
+Claude Code writes into the transcript at a turn's end. The reading of sessions passes over every
+transcript of a headless run, so only such a session shows what a curation run reads from what the
+owner typed. The invariant `sessions_read` checks that: the prompts it finds, in order, each with
+the Bash commands of the turn before it.
+
+`E34-session-read` types two turns into a session in an invented repository: "run scripts/check",
+then a correction to run only the quick round. It passes when the reading finds both prompts in
+that order and the correction carries the command of the turn before. The machine starts no
+curation run by itself there. Two turns on Haiku, under a minute.
 
 `E33-project-known` files a project kept with `m2b capture --project` through a real ingest step and
 checks the topic it becomes: a heading with two to five words, the repository's name among them, and

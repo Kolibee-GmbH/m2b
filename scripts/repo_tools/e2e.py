@@ -36,10 +36,23 @@ scenario's folder too, so an add-on never reads the user's own transcripts, asks
 or changes the user's timers.
 
 At ``--level model`` only scenarios with a ``model.json`` run: ``{"steps": [...], "invariants":
-[...]}``, the steps in the same form but with the real fenced ``claude`` and the user's own login,
-and invariants (``check_invariants``) in place of ``expect.json``, because a real model words its
-notes its own way. A value a step saved can name a folder outside the store for an invariant, such
-as the memory folder Claude Code reports at a session's start.
+[...]}``, the steps in the same form but with the real fenced ``claude``, and invariants
+(``check_invariants``) in place of ``expect.json``, because a real model words its notes its own way.
+A value a step saved can name a folder outside the store for an invariant, such as the memory folder
+Claude Code reports at a session's start. A scenario that is only a ``model.json`` runs at this level
+alone.
+
+Every session at the model level runs in a Claude Code folder of the scenario's own
+(``CLAUDE_CONFIG_DIR``), so its transcript never reaches the user's folder, where their own curation
+reads, and Claude Code's own memory starts empty. The account is the subscription's token
+(``CLAUDE_CODE_OAUTH_TOKEN``, from the environment or, on macOS, the keychain); ``ANTHROPIC_API_KEY``,
+which Claude Code would put before it and bill per run, is taken only with ``--use-api-key``. The
+variables of a Claude Code session that runs this script stay out too: inherited, they make the
+started one a child session that writes no transcript.
+
+A step ``{"session": [claude arguments...], "turns": ["...", ...], "cwd": "<name>"}`` runs Claude Code
+interactively in a hidden terminal and types each turn once the one before has ended, because the
+reading of sessions passes over every transcript of a headless run. ``turn_seconds`` bounds a turn.
 
 ``--plugin`` names another folder that holds the plugin, in place of this checkout's: the proof
 that the core stands without its add-ons runs the scenarios against a copy without them. The stub
@@ -59,15 +72,17 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from m2b.config.machine import StoreLocation, parse_machine_config
 from m2b.paths import HOME_VARIABLE, MachinePaths, machine_paths
+from m2b.sessions import Prompt, read_sessions
 
 from repo_tools import REPO_ROOT
+from repo_tools.terminal import TerminalError, Wait, record_timed
 
 SCENARIO_ROOT = REPO_ROOT / "tests" / "e2e"
 CORE_PLUGIN = REPO_ROOT / "plugins" / "m2b"
@@ -89,6 +104,40 @@ MODEL_FILE = "model.json"
 TRANSCRIPTS = "transcripts"
 AN_HOUR_AGO = "<an-hour-ago>"
 RUN_RECORD_PATH = "state/core/last-run.json"
+TOKEN_VARIABLE = "CLAUDE_CODE_OAUTH_TOKEN"
+API_KEY_VARIABLE = "ANTHROPIC_API_KEY"
+# A bearer credential Claude Code puts before the subscription's token, as a gateway setup sets it.
+AUTH_TOKEN_VARIABLE = "ANTHROPIC_AUTH_TOKEN"
+API_KEY_END_CHARACTERS = 20
+KEYCHAIN_SERVICE = "m2b-journey-token"
+CLAUDE_CONFIG_VARIABLE = "CLAUDE_CONFIG_DIR"
+# The variables of a running Claude Code session, and of the user's own Claude Code setup.
+CLAUDE_PREFIX = "CLAUDE"
+SANDBOX_CLAUDE = "claude-config"
+CLAUDE_SETTINGS = ".claude.json"
+ENTER = "\r"
+EXIT_COMMAND = "/exit"
+# What Claude Code says, headless or on its screen, when it has no account to work with.
+NOT_LOGGED_IN = ("Not logged in", "Please run /login")
+HOW_TO_ADD_A_TOKEN = (
+    "make a token for your subscription with `claude setup-token` and set it as "
+    f"{TOKEN_VARIABLE}, or on macOS keep it in the keychain: "
+    f'security add-generic-password -s {KEYCHAIN_SERVICE} -a "$USER" -w; '
+    f"to bill an API key per run instead, set {API_KEY_VARIABLE} and pass --use-api-key"
+)
+SESSION_COLUMNS = 120
+SESSION_ROWS = 40
+SESSION_READY_SECONDS = 60
+SESSION_TURN_SECONDS = 600
+SESSION_EXIT_SECONDS = 15
+# Text typed and its Enter go apart, or Claude Code takes the two as one paste and sends nothing.
+TYPING_PAUSE_SECONDS = 1
+# Claude Code draws its prompt with this sign once the session takes input.
+PROMPT_SIGN = "\u276f".encode()
+TURN_END_SUBTYPE = "turn_duration"
+HEADLESS_ENTRYPOINT = "sdk-cli"
+# How far back the sessions_read invariant reads: longer than any scenario runs.
+READ_BACK = datetime.timedelta(days=1)
 
 EXIT_PASSED = 0
 EXIT_FAILED = 1
@@ -98,6 +147,14 @@ EXIT_REFUSED = 2
 
 class RealStoreError(Exception):
     """The test setup would touch the user's real store."""
+
+
+class NoAccountError(Exception):
+    """The model level has no account to run Claude Code with; the message says how to add one."""
+
+
+class NotLoggedInError(Exception):
+    """Claude Code said it is not logged in: the account was refused, which is no failed scenario."""
 
 
 @dataclass
@@ -205,6 +262,176 @@ def compare_store(
     return problems
 
 
+def keychain_token() -> str | None:
+    """The token kept in the macOS keychain under ``KEYCHAIN_SERVICE``; None elsewhere or without one."""
+    if sys.platform != "darwin":
+        return None
+    try:
+        found = subprocess.run(
+            ["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"],
+            capture_output=True,
+            text=True,
+            timeout=STEP_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    token = found.stdout.strip()
+    return token if found.returncode == 0 and token else None
+
+
+def model_account(environ: Mapping[str, str], use_api_key: bool = False) -> dict[str, str]:
+    """The one variable that gives the model level's sessions an account."""
+    if use_api_key:
+        key = environ.get(API_KEY_VARIABLE)
+        if not key:
+            raise NoAccountError(f"--use-api-key needs {API_KEY_VARIABLE} set")
+        return {API_KEY_VARIABLE: key}
+    token = environ.get(TOKEN_VARIABLE) or keychain_token()
+    if not token:
+        raise NoAccountError(f"the model level needs an account and found none: {HOW_TO_ADD_A_TOKEN}")
+    return {TOKEN_VARIABLE: token}
+
+
+def model_environment(environ: Mapping[str, str], account: Mapping[str, str], claude_config: Path) -> dict[str, str]:
+    """The environment without a running session's variables and any account, with the scenario's
+    Claude Code folder and the one account given."""
+    kept = {
+        name: value
+        for name, value in environ.items()
+        if not name.startswith(CLAUDE_PREFIX) and name not in (API_KEY_VARIABLE, AUTH_TOKEN_VARIABLE)
+    }
+    return {**kept, **account, CLAUDE_CONFIG_VARIABLE: str(claude_config)}
+
+
+def prepare_claude_config(folder: Path, account: Mapping[str, str]) -> None:
+    """A Claude Code folder past its first start: without it an interactive session opens on the
+    theme picker instead of the prompt. An API key is marked as accepted, by its end as Claude Code
+    keeps it there, or an interactive session asks whether to use it and declines by default."""
+    folder.mkdir(parents=True, exist_ok=True)
+    settings: dict[str, Any] = {"hasCompletedOnboarding": True, "theme": "dark", "projects": {}}
+    key = account.get(API_KEY_VARIABLE)
+    if key:
+        settings["customApiKeyResponses"] = {"approved": [key[-API_KEY_END_CHARACTERS:]], "rejected": []}
+    _write_claude_settings(folder, settings)
+
+
+def trust_folder(claude_config: Path, folder: Path) -> None:
+    """Marks the folder as trusted, by the path given and the one it resolves to, so an interactive
+    session there opens without the trust dialog."""
+    settings = json.loads((claude_config / CLAUDE_SETTINGS).read_text(encoding="utf-8"))
+    for path in {str(folder), str(folder.resolve())}:
+        settings["projects"].setdefault(path, {})["hasTrustDialogAccepted"] = True
+    _write_claude_settings(claude_config, settings)
+
+
+def _write_claude_settings(folder: Path, settings: Mapping[str, Any]) -> None:
+    (folder / CLAUDE_SETTINGS).write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+
+
+def turn_ends(projects: Path, folder: Path) -> int:
+    """How many turns interactive sessions started in ``folder`` have ended, by the record Claude
+    Code writes into the transcript at the end of each. A transcript belongs to the folder its first
+    record names, as the reading of sessions takes it: later records follow the Bash tool's ``cd``.
+    A headless run's transcript does not count."""
+    if not projects.is_dir():
+        return 0
+    wanted = folder.resolve()
+    return sum(_turn_ends_in(path, wanted) for path in projects.glob("*/*.jsonl"))
+
+
+def _turn_ends_in(path: Path, folder: Path) -> int:
+    started_in: Path | None = None
+    ended = 0
+    with path.open(encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            # Asked between reads of the terminal: a line that can change nothing is not parsed.
+            if started_in is not None and TURN_END_SUBTYPE not in line and HEADLESS_ENTRYPOINT not in line:
+                continue
+            try:
+                record = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(record, dict):
+                continue
+            if record.get("entrypoint") == HEADLESS_ENTRYPOINT:
+                return 0
+            if started_in is None and isinstance(record.get("cwd"), str):
+                started_in = Path(record["cwd"]).resolve()
+            ended += record.get("subtype") == TURN_END_SUBTYPE
+    return ended if started_in == folder else 0
+
+
+def claude_folder_name(path: Path) -> str:
+    """The name Claude Code gives the folder of a project's transcripts: every character that is no
+    letter or digit becomes a dash."""
+    return re.sub(r"[^A-Za-z0-9]", "-", str(path))
+
+
+def leaked_transcripts(user_claude: Path, sandbox: Path) -> list[str]:
+    """The folders of the user's Claude Code transcripts that belong to a project in the sandbox."""
+    projects = user_claude / "projects"
+    if not projects.is_dir():
+        return []
+    marker = claude_folder_name(Path(sandbox.name))
+    return sorted(folder.name for folder in projects.iterdir() if marker in folder.name)
+
+
+def user_claude_folder(environ: Mapping[str, str]) -> Path:
+    configured = environ.get(CLAUDE_CONFIG_VARIABLE)
+    return Path(configured) if configured else Path(environ.get("HOME") or Path.home()) / ".claude"
+
+
+def _not_logged_in(text: str) -> bool:
+    return any(sign in text for sign in NOT_LOGGED_IN)
+
+
+def _run_session(
+    step: Mapping[str, Any], environment: Mapping[str, str], folder: Path, saved: Mapping[str, str]
+) -> str | None:
+    """Runs Claude Code interactively in ``folder`` and types the step's turns, each once the turn
+    before has ended in the transcript; a problem, or None. A session that says it is not logged in
+    raises ``NotLoggedInError``."""
+    claude_config = Path(environment[CLAUDE_CONFIG_VARIABLE])
+    trust_folder(claude_config, folder)
+    projects = claude_config / "projects"
+    ended_before = turn_ends(projects, folder)
+    turns = [str(turn) for turn in step.get("turns", [])]
+    if not turns:
+        return "a session step needs at least one turn"
+    turn_seconds = float(step.get("turn_seconds", SESSION_TURN_SECONDS))
+
+    def ended(count: int) -> Callable[[], bool]:
+        return lambda: turn_ends(projects, folder) >= ended_before + count
+
+    # Each wait reads, then types: the first turn once the prompt is drawn, each later one, and at
+    # last the command that ends the session, once the turn before has ended.
+    waits = [Wait(SESSION_READY_SECONDS, turns[0], until=PROMPT_SIGN)]
+    for number, following in enumerate([*turns[1:], EXIT_COMMAND], 1):
+        waits.append(Wait(TYPING_PAUSE_SECONDS, ENTER))
+        waits.append(Wait(turn_seconds, following, done=ended(number), waits_for=f"end of turn {number}"))
+    waits += [Wait(TYPING_PAUSE_SECONDS, ENTER), Wait(SESSION_EXIT_SECONDS)]
+    command = ["claude", *(_with_saved(str(argument), saved) for argument in step["session"])]
+    account = account_in(environment)
+    try:
+        recording = record_timed(command, folder, environment, SESSION_ROWS, SESSION_COLUMNS, waits)
+    except TerminalError as error:
+        drawn = redacted(error.drawn, account)
+        if _not_logged_in(drawn):
+            raise NotLoggedInError(_last_lines(drawn)) from None
+        return f"{error}; it drew last: {_last_lines(drawn)}"
+    drawn = redacted(recording.text(), account)
+    if _not_logged_in(drawn):
+        raise NotLoggedInError(_last_lines(drawn))
+    # Only the last wait may end early: the session ends there, after the command that ends it.
+    if len(recording.typed_at) < len(waits) - 1:
+        return f"Claude Code ended before its last turn; it drew last: {_last_lines(drawn)}"
+    return None
+
+
+def _last_lines(drawn: str) -> str:
+    return " | ".join(line.strip() for line in drawn.splitlines() if line.strip())[-400:] or "nothing"
+
+
 def _read_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -219,16 +446,23 @@ def _run_steps(
 ) -> list[str]:
     """Runs the steps in order; what they save is added to ``saved``, which also holds ``core_plugin``."""
     problems = []
+    account = account_in(environment)
     if saved is None:
         saved = {}
     saved.setdefault("core_plugin", str(plugin))
     for number, step in enumerate(steps, 1):
-        argv = [_with_saved(str(argument), saved) for argument in step["run"]]
-        expected_exit = step.get("exit", 0)
         folder = _step_folder(step, work)
         if folder is None:
-            problems.append(f"step {number} {argv[0]}: cwd must be a plain folder name, got {step['cwd']!r}")
+            problems.append(f"step {number}: cwd must be a plain folder name, got {step['cwd']!r}")
             break
+        if "session" in step:
+            problem = _run_session(step, {**environment, **step.get("env", {})}, folder, saved)
+            if problem:
+                problems.append(f"step {number} session: {problem}")
+                break
+            continue
+        argv = [_with_saved(str(argument), saved) for argument in step["run"]]
+        expected_exit = step.get("exit", 0)
         try:
             result = subprocess.run(
                 argv,
@@ -242,21 +476,25 @@ def _run_steps(
         except (OSError, subprocess.TimeoutExpired) as error:
             problems.append(f"step {number} {argv[0]}: could not run: {error}")
             break
+        # Shown only redacted, and redacted whole before it is cut, or a cut leaves part of a secret.
+        shown_out, shown_err = (redacted(text, account) for text in (result.stdout, result.stderr))
+        if result.returncode != expected_exit and _not_logged_in(shown_out + shown_err):
+            raise NotLoggedInError(_last_lines(shown_out + shown_err))
         if result.returncode != expected_exit:
             problems.append(
                 f"step {number} {argv[0]}: exit {result.returncode}, expected {expected_exit}; "
-                f"stderr: {result.stderr.strip()[:400]}"
+                f"stderr: {shown_err.strip()[:400]}"
             )
             break
         pattern = step.get("stdout")
         if pattern is not None and re.search(pattern, result.stdout) is None:
             problems.append(
-                f"step {number} {argv[0]}: standard output does not match {pattern!r}; got {result.stdout[:400]!r}"
+                f"step {number} {argv[0]}: standard output does not match {pattern!r}; got {shown_out[:400]!r}"
             )
             break
         unsaved = _save(step.get("save", {}), result.stdout, saved)
         if unsaved:
-            problems.append(f"step {number} {argv[0]}: cannot save {unsaved}; got {result.stdout[:400]!r}")
+            problems.append(f"step {number} {argv[0]}: cannot save {unsaved}; got {shown_out[:400]!r}")
             break
     return problems
 
@@ -323,10 +561,12 @@ def run_scenario(
     level: str = STUB,
     sandbox_root: Path | None = None,
     plugin: Path = CORE_PLUGIN,
+    account: Mapping[str, str] | None = None,
 ) -> ScenarioResult:
     """At ``stub`` the scripted model and ``expect.json``; at ``model`` the real fenced ``claude`` and
-    the invariants of ``model.json``, because a real model words things its own way. The steps run
-    the commands of the plugin in ``plugin``."""
+    the invariants of ``model.json``, because a real model words things its own way, every session in
+    the scenario's own Claude Code folder with ``account``. The steps run the commands of the plugin in
+    ``plugin``."""
     result = ScenarioResult(scenario.name)
     store: Path | None = None
     if sandbox_root is not None:
@@ -358,10 +598,17 @@ def run_scenario(
         if level == MODEL:
             environment.pop(MODEL_RUNNER_VARIABLE, None)
             environment.pop(MODEL_STUB_STORE_VARIABLE, None)
+            claude_config = sandbox / SANDBOX_CLAUDE
+            prepare_claude_config(claude_config, account or {})
+            environment = model_environment(environment, account or {}, claude_config)
+            saved["claude_config"] = str(claude_config)
             script = _read_json(scenario / MODEL_FILE)
             result.problems += _run_steps(script["steps"], environment, work, MODEL_STEP_TIMEOUT_SECONDS, saved, plugin)
             if not result.problems:
                 result.problems += check_invariants(script["invariants"], visible_store_files(store), saved)
+            leaked = leaked_transcripts(user_claude_folder(environ), sandbox)
+            if leaked:
+                result.problems.append(f"transcripts of this run lie in the user's Claude Code folder: {leaked}")
         else:
             scenario_steps = _read_json(scenario / "steps.json")
             environment["CLAUDE_CONFIG_DIR"] = str(sandbox / "claude-config")
@@ -401,7 +648,11 @@ def check_invariants(
     - ``{"run_state": "succeeded"}``: the run record says so;
     - ``{"no_denials": true}``: no finding of the run record says a tool call was denied;
     - ``{"empty_folder": "{name}"}``: the folder a step saved as ``name`` holds no file, or does not
-      exist, for a place outside the store such as Claude Code's own memory.
+      exist, for a place outside the store such as Claude Code's own memory;
+    - ``{"sessions_read": [{"prompt": "<regex>", "commands": "<regex>"}, ...]}``: the reading of
+      sessions (``m2b.sessions``) finds, in the scenario's Claude Code folder and in this order,
+      prompts whose typed text matches each ``prompt``, each with a Bash command of the turn before
+      it that matches ``commands`` when one is given.
     """
     problems = []
     for invariant in invariants:
@@ -438,6 +689,8 @@ def _invariant_problem(invariant: Mapping[str, Any], files: Mapping[str, str], s
             return None if state == invariant["run_state"] else f"the run record says {state}: {record.get('message')}"
         denied = [item.get("text") for item in record.get("findings", []) if "was denied" in str(item.get("text"))]
         return f"denied: {denied}" if denied else None
+    if "sessions_read" in invariant:
+        return _sessions_read_problem(invariant["sessions_read"], saved)
     if "empty_folder" in invariant:
         folder_text = _with_saved(str(invariant["empty_folder"]), saved)
         if "{" in folder_text:
@@ -448,12 +701,50 @@ def _invariant_problem(invariant: Mapping[str, Any], files: Mapping[str, str], s
     return "unknown invariant"
 
 
+def _sessions_read_problem(expected: Sequence[Mapping[str, str]], saved: Mapping[str, str]) -> str | None:
+    claude_config = saved.get("claude_config")
+    if claude_config is None:
+        return "no Claude Code folder of the scenario's own at this level"
+    now = datetime.datetime.now(datetime.timezone.utc)
+    reading = read_sessions(Path(claude_config) / "projects", now - READ_BACK, now + datetime.timedelta(minutes=1))
+    prompts = [prompt for session in reading.sessions for prompt in session.prompts]
+    position = 0
+    for wanted in expected:
+        while position < len(prompts) and not _prompt_matches(prompts[position], wanted):
+            position += 1
+        if position == len(prompts):
+            read = [(prompt.text, list(prompt.commands)) for prompt in prompts]
+            return f"no prompt like {wanted} after the ones before; read: {read}"
+        position += 1
+    return None
+
+
+def _prompt_matches(prompt: Prompt, wanted: Mapping[str, str]) -> bool:
+    if re.search(wanted["prompt"], prompt.text) is None:
+        return False
+    commands = wanted.get("commands")
+    return commands is None or any(re.search(commands, command) for command in prompt.commands)
+
+
+def account_in(environment: Mapping[str, str]) -> dict[str, str]:
+    """The account variables an environment holds, to redact their values from what is shown."""
+    return {name: environment[name] for name in (TOKEN_VARIABLE, API_KEY_VARIABLE) if environment.get(name)}
+
+
+def redacted(text: str, account: Mapping[str, str]) -> str:
+    """The text with the account's value replaced, so a report never shows the token or the key."""
+    for name, value in account.items():
+        text = text.replace(value, "<token>" if name == TOKEN_VARIABLE else "<api key>")
+    return text
+
+
 class UnknownScenarioError(Exception):
     """A scenario was named that does not exist."""
 
 
 def discover_scenarios(root: Path, names: Sequence[str]) -> list[Path]:
-    scenarios = sorted(p for p in root.iterdir() if (p / "steps.json").is_file())
+    """The scenarios with a ``steps.json`` or a ``model.json``; the levels leave out what they cannot run."""
+    scenarios = sorted(p for p in root.iterdir() if (p / "steps.json").is_file() or (p / MODEL_FILE).is_file())
     if not names:
         return scenarios
     by_name = {p.name: p for p in scenarios}
@@ -465,8 +756,9 @@ def discover_scenarios(root: Path, names: Sequence[str]) -> list[Path]:
 
 def turns_an_addon_on(scenario: Path) -> bool:
     """Whether a step of the scenario turns an add-on on, which is how a scenario says it needs one."""
-    steps = _read_json(scenario / "steps.json")["steps"]
-    return any(step["run"][: len(ADDON_ON)] == ADDON_ON for step in steps)
+    script = scenario / "steps.json" if (scenario / "steps.json").is_file() else scenario / MODEL_FILE
+    steps = _read_json(script)["steps"]
+    return any(step.get("run", [])[: len(ADDON_ON)] == ADDON_ON for step in steps)
 
 
 def _parse_arguments(argv: Sequence[str]) -> argparse.Namespace:
@@ -485,6 +777,11 @@ def _parse_arguments(argv: Sequence[str]) -> argparse.Namespace:
         "--plugin", type=Path, default=CORE_PLUGIN, help="the folder that holds the plugin (default: this checkout's)"
     )
     parser.add_argument("--core-only", action="store_true", help="leave out the scenarios that turn an add-on on")
+    parser.add_argument(
+        "--use-api-key",
+        action="store_true",
+        help=f"model level: run with {API_KEY_VARIABLE}, billed per run, in place of the subscription's token",
+    )
     parser.add_argument("names", nargs="*", help="scenario folder names (default: all)")
     return parser.parse_args(argv)
 
@@ -494,8 +791,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     if arguments.level == APPLE and (sys.platform != "darwin" or os.environ.get(INTEGRATION_VARIABLE) != "1"):
         print(f"e2e: the apple level runs on macOS only and only with {INTEGRATION_VARIABLE}=1", file=sys.stderr)
         return EXIT_USAGE
+    account: dict[str, str] = {}
     try:
         scenarios = discover_scenarios(arguments.scenarios, arguments.names)
+        if arguments.level != MODEL:
+            without = [scenario.name for scenario in scenarios if not (scenario / "steps.json").is_file()]
+            if arguments.names and without:
+                raise UnknownScenarioError(f"only a {MODEL_FILE}, for the model level: {', '.join(without)}")
+            scenarios = [scenario for scenario in scenarios if scenario.name not in without]
         if arguments.level == MODEL:
             without = [scenario.name for scenario in scenarios if not (scenario / MODEL_FILE).is_file()]
             if arguments.names and without:
@@ -505,7 +808,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise UnknownScenarioError(f"no scenario has a {MODEL_FILE}")
         if arguments.core_only:
             scenarios = [scenario for scenario in scenarios if not turns_an_addon_on(scenario)]
-    except UnknownScenarioError as error:
+        if arguments.level == MODEL:
+            account = model_account(os.environ, arguments.use_api_key)
+    except (UnknownScenarioError, NoAccountError) as error:
         print(f"e2e: {error}", file=sys.stderr)
         return EXIT_USAGE
     failed = 0
@@ -518,13 +823,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                 level=arguments.level,
                 sandbox_root=arguments.sandbox_root,
                 plugin=arguments.plugin,
+                account=account,
             )
         except RealStoreError as error:
             print(f"e2e: {error}", file=sys.stderr)
             return EXIT_REFUSED
+        except NotLoggedInError as error:
+            said = redacted(str(error), account)
+            print(f"e2e {scenario.name}: Claude Code is not logged in ({said}); {HOW_TO_ADD_A_TOKEN}", file=sys.stderr)
+            return EXIT_REFUSED
         print(f"e2e {arguments.level} {result.name}: {'passed' if result.passed else 'FAILED'}")
         for problem in result.problems:
-            print(f"  {problem}")
+            print(f"  {redacted(problem, account)}")
         failed += not result.passed
     print(f"e2e: {len(scenarios) - failed} of {len(scenarios)} scenarios passed")
     return EXIT_FAILED if failed else EXIT_PASSED

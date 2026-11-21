@@ -38,7 +38,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from repo_tools import readme_images
-from repo_tools.readme_images import DOWN, ENTER, ESCAPES, IMAGES, REPO_ROOT, ImagesError, Recording, Wait
+from repo_tools.readme_images import DOWN, ENTER, IMAGES, REPO_ROOT, ImagesError
+from repo_tools.terminal import ESCAPES, Recording, TerminalError, Wait, record_timed
 
 PROJECTS = {
     "invoice-tool": {"README.md": "# invoice-tool\n\nTurns time entries into PDF invoices.\n"},
@@ -460,7 +461,7 @@ def agg_command(
 
 
 def record_acts(
-    acts: Sequence[Act], columns: int, rows: int, record: Callable[..., Recording] = readme_images.record_timed
+    acts: Sequence[Act], columns: int, rows: int, record: Callable[..., Recording] = record_timed
 ) -> list[Recording]:
     """Each act's recording in a terminal of ``columns`` x ``rows``. An act whose command ended before
     its last wait fails with what it drew last, which is where a command says why it ended."""
@@ -530,7 +531,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         # model and a curation run, the pane's need neither.
         try:
             gif = record_picture(picture, environ, arguments.cast)
-        except ImagesError as error:
+        except (ImagesError, TerminalError) as error:
             print(f"readme-demo: {error}", file=sys.stderr)
             failed = True
             continue
