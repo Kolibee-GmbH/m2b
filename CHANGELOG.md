@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The plugin carries its icon at `plugins/m2b/.claude-plugin/icon.png`, the same 512 by 512
+  picture as `docs/images/icon.png`, so a plugin directory that lists m2b shows it.
+
 ## [0.12.0] - 2026-11-21
 
 Sessions learn your projects and the corrections you keep: a project becomes a topic that knows
