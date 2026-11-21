@@ -64,6 +64,7 @@ from m2b import (
     expiry,
     ingest,
     launcher,
+    lesson_check,
     lint,
     proposal_answers,
     proposals,
@@ -666,6 +667,11 @@ class _Run:
                 for place in result.fixes
             ]
         current_check.settle(self.store, tasks, self.clock().date(), task_list=self._task_list())
+        removed = lesson_check.settle(self.store, tasks, self.clock().date(), task_list=self._task_list())
+        self.findings += [
+            report.Finding(HARVEST, report.INFO, f"the lesson {name} is removed: you said it no longer holds")
+            for name in removed
+        ]
 
     def _take_in_handed_in(self) -> bool:
         """What sessions handed in becomes proposals that wait; whether there was anything to say of it.
@@ -828,10 +834,13 @@ class _Run:
 
     def _refresh(self, tasks: Tasks, locale: Locale, token: str) -> Skipped | None:
         """The model only for facts past their day, and allowed to edit those files alone (B41); quiet
-        current items become questions to the owner (B42)."""
+        current items and quiet lessons about a command become questions to the owner (B42, B283)."""
         found = expiry.due(self.store, self.clock().date())
         prefix = locale.text(current_check.PREFIX_KEY)
         current_check.ask(self.store, tasks, found.current, prefix, task_list=self._task_list())
+        quiet_lessons = lesson_check.quiet(self.store, self.machine, self.clock().date())
+        lesson_prefix = locale.text(lesson_check.PREFIX_KEY)
+        lesson_check.ask(self.store, tasks, quiet_lessons, lesson_prefix, task_list=self._task_list())
         if self.refresh_all:
             return self._backfill([fact.path for fact in found.facts], token)
         if not found.facts:

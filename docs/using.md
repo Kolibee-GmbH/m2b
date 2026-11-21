@@ -82,6 +82,11 @@ again, which the curation run counts where it reads your sessions, and for a les
 how often it fired on this machine and in how many Bash calls. A lesson you corrected again is
 named `not working`; whether you word it anew, have it ask instead of remind, or drop it is yours.
 
+A lesson about a command that did not fire for 30 days becomes a question in your task list, as a
+current item that went quiet does: `Still needed? <the lesson>`. Tick it, and the lesson stays and
+its 30 days start again; drop or delete it, and the next run removes the lesson. No lesson ends
+without your answer.
+
 ## A project
 
 Say "remember this project" in a session in a clone, and the session captures it with

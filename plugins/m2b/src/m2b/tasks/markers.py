@@ -14,9 +14,11 @@ CAPTURE = "capture"
 CURRENT = "current"
 # The one task that says proposals from the sessions wait for an answer.
 PROPOSALS = "proposals"
-KINDS = (REVIEW, CANDIDATE, CAPTURE, CURRENT, PROPOSALS)
+# A question to the owner whether a lesson about a command that has not fired still holds.
+LESSON = "lesson"
+KINDS = (REVIEW, CANDIDATE, CAPTURE, CURRENT, PROPOSALS, LESSON)
 # The curator's own tasks: never listed as the owner's todos, never journaled as the owner's work.
-CURATOR = frozenset({REVIEW, CANDIDATE, CURRENT, PROPOSALS})
+CURATOR = frozenset({REVIEW, CANDIDATE, CURRENT, PROPOSALS, LESSON})
 # Where a backend has no state for it (Apple Reminders), a dropped task carries this line in its notes.
 DROPPED_LINE = f"{PREFIX}dropped"
 

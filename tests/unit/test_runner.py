@@ -280,6 +280,30 @@ class CleanRunTest(RunnerTest):
         )
         self.assertEqual(self.tasks().items(marker=markers.CURRENT, include_completed=True), [])
 
+    def test_a_quiet_action_lesson_is_asked_about_and_a_drop_removes_it_in_the_next_run(self) -> None:
+        """Covers: B283"""
+        self.curating()
+        self.write(
+            "memory/lessons/proof.md",
+            "---\nkind: action\ntarget: every project\nkept: 2026-09-01\nwords: [scripts/check]\n---\n"
+            "# Proof\n\nRun the whole proof only with a reason.\n",
+        )
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+        [question] = self.tasks().items(marker=markers.LESSON)
+        self.assertEqual(question.title, "Still needed? Run the whole proof only with a reason.")
+
+        self.tasks().drop(question.id)
+        self.clock = START + datetime.timedelta(days=1)
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        self.assertFalse((self.store_root / "memory" / "lessons" / "proof.md").exists())
+        record = load_run_record(self.store)
+        assert record is not None
+        self.assertIn(
+            "the lesson proof.md is removed: you said it no longer holds", [finding.text for finding in record.findings]
+        )
+
     def test_refresh_all_runs_now_and_lets_the_refresh_step_date_the_undated_lines(self) -> None:
         """Covers: B43"""
         self.curating()

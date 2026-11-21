@@ -174,7 +174,8 @@ def _tasks_part(config: MachineConfig, context: Context, moment: datetime.dateti
 
     part: dict[str, Any] = {
         "candidates": marked(markers.CANDIDATE),
-        "questions": marked(markers.CURRENT),
+        # Still current? and still needed? are answered alike, with keep or drop.
+        "questions": marked(markers.CURRENT) + marked(markers.LESSON),
         "reviews": marked(markers.REVIEW),
     }
     due = _due(open_tasks, moment)
