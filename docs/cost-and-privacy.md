@@ -36,11 +36,17 @@ PDF up to its 60th page; refresh reads the distillate, the fact files that are
 due and any archive file; sorting reads memory. Ingest, lint, `--refresh-all` and the worklog step
 also get `m2b search` results over inbox, archive and memory. The reading of your sessions sends
 the distillate, up to 30 proposals you kept and 30 you dropped lately and 30 that wait, each with
-the words it stood on, and, per session, its folder, its day and the prompts you typed, with what
-you pasted into them, redacted, to a model that can call nothing. With the worklog add-on, its step sees the period's prompts and last
+the words it stood on, the lessons you kept, and, per session, its folder, its day and the prompts you typed, with what
+you pasted into them, beside each the last 500 characters of Claude's answer before it and the
+shell commands of that turn, and in a project's repository the paths of the files the session wrote
+there, redacted, to a model that can call nothing. Where it found a lesson, a second call that can
+call nothing gets the lesson and the lines of the files a session in its folder starts with (your
+`CLAUDE.md` files, `~/.claude/rules/`, Claude Code's memory, the output style), redacted the same
+way. With the worklog add-on, its step sees the period's prompts and last
 answers, commits and session folders, the inbox and memory (below). In every session:
-the distillate, the routing rule and the notices at session start; before a prompt that names a
-topic, that topic's facts; and what you ask it to look up, search hits or a fact's file or a note
+the distillate, the lessons you kept, the routing rule and the notices at session start; before a
+prompt that names a topic, that topic's facts; before a Bash call whose command holds a lesson's
+words, that lesson; and what you ask it to look up, search hits or a fact's file or a note
 read whole. Of a document in the archive, m2b's search tool and skill hand a session the note and
 the outline in it, never the document.
 
