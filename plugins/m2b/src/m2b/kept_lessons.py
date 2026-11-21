@@ -43,6 +43,8 @@ class KeptLesson:
     words: tuple[str, ...] = ()
     unless: tuple[str, ...] = ()
     ask: bool = False
+    # The file that states the lesson already, where a reading found it there: the lesson only counts.
+    kept_at: str | None = None
 
 
 @dataclass
@@ -59,7 +61,7 @@ def checked(given: KeptLesson) -> KeptLesson:
         raise LessonRefusedError(f"a lesson is one sentence of at most {MAX_TEXT} characters")
     if given.kind not in KINDS:
         raise LessonRefusedError(f"a lesson's kind is {' or '.join(KINDS)}")
-    if given.kind == KNOWLEDGE and given.target != EVERY_PROJECT:
+    if given.kind == KNOWLEDGE and given.target != EVERY_PROJECT and given.kept_at is None:
         raise LessonRefusedError(
             "a knowledge lesson for one project belongs in that project's CLAUDE.md: keep it as a fix with m2b fix add"
         )
@@ -72,7 +74,7 @@ def checked(given: KeptLesson) -> KeptLesson:
             raise LessonRefusedError(f"{word!r} is no word of a command: no comma, bracket or line break")
     # Harvest writes these into memory/, where no model step's check runs: a character that hides or
     # reorders text would read one way to the owner and another to the model.
-    for part in (given.text, given.title, *words, *unless):
+    for part in (given.text, given.title, *words, *unless, given.kept_at or ""):
         if (
             unsafe_characters(part)
             or CONTROL.sub("", part.replace("\n", "")) != part.replace("\n", "")
@@ -81,7 +83,8 @@ def checked(given: KeptLesson) -> KeptLesson:
             raise LessonRefusedError("a lesson holds no character that hides or reorders text or steers a terminal")
     if len(words) > MAX_WORDS or len(unless) > MAX_WORDS:
         raise LessonRefusedError(f"a lesson names at most {MAX_WORDS} words of each kind")
-    return KeptLesson(title or text[:60], text, given.kind, given.target, given.day, words, unless, given.ask)
+    kept_at = " ".join(given.kept_at.split()) if given.kept_at else None
+    return KeptLesson(title or text[:60], text, given.kind, given.target, given.day, words, unless, given.ask, kept_at)
 
 
 def keep(store: Store, lesson: KeptLesson) -> bool:
@@ -97,8 +100,11 @@ def keep(store: Store, lesson: KeptLesson) -> bool:
         "unless": list(lesson.unless),
         "ask": lesson.ask,
     }
+    if lesson.kept_at is not None:
+        raw["kept_at"] = lesson.kept_at
     drawn = json.dumps(
-        [lesson.text, lesson.kind, lesson.target, raw["words"], raw["unless"], lesson.ask], ensure_ascii=False
+        [lesson.text, lesson.kind, lesson.target, raw["words"], raw["unless"], lesson.ask, lesson.kept_at],
+        ensure_ascii=False,
     )
     name = hashlib.sha256(drawn.encode("utf-8")).hexdigest()[:12]
     try:
@@ -141,6 +147,7 @@ def _read(store: Store, path: str) -> KeptLesson:
             tuple(str(word) for word in raw.get("words", ())),
             tuple(str(word) for word in raw.get("unless", ())),
             raw.get("ask") is True,
+            str(raw["kept_at"]) if raw.get("kept_at") is not None else None,
         )
     )
 
@@ -148,16 +155,25 @@ def _read(store: Store, path: str) -> KeptLesson:
 def _place(store: Store, lesson: KeptLesson) -> str:
     """Writes the lesson under a name drawn from its title; a name taken by another lesson gets a number.
     A lesson that stands already, kept on another day, is not written twice."""
-    wanted = (lesson.text, lesson.kind, lesson.target, lesson.words, lesson.unless, lesson.ask)
+    wanted = (lesson.text, lesson.kind, lesson.target, lesson.words, lesson.unless, lesson.ask, lesson.kept_at)
     for standing in read_all(store):
-        if (standing.text, standing.kind, standing.target, standing.words, standing.unless, standing.ask) == wanted:
+        held = (standing.text, standing.kind, standing.target, standing.words, standing.unless, standing.ask)
+        if (*held, standing.kept_at) == wanted:
             return standing.name
     slug = _NOT_A_SLUG.sub("-", lesson.title.casefold()).strip("-")[:40].strip("-") or "lesson"
     for number in range(1, 100):
         name = f"{slug}.md" if number == 1 else f"{slug}-{number}.md"
         text = render(
             Lesson(
-                name, lesson.text, lesson.kind, lesson.target, lesson.day, None, lesson.words, lesson.unless, lesson.ask
+                name,
+                lesson.text,
+                lesson.kind,
+                lesson.target,
+                lesson.day,
+                lesson.kept_at,
+                lesson.words,
+                lesson.unless,
+                lesson.ask,
             ),
             lesson.title,
             [],

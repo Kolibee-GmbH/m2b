@@ -9,7 +9,7 @@ import unittest
 from typing import Any
 from unittest import mock
 
-from m2b import glean, harvest, lessons, proposal_answers, proposals
+from m2b import fixes, glean, harvest, lessons, proposal_answers, proposals
 from m2b.glean import Proposal
 from m2b.notes.frontmatter import Note
 from m2b.proposal_answers import DROP, KEEP
@@ -66,18 +66,95 @@ class KeptLessonTest(ProposalHarvestFixture):
         self.assertEqual(report.problems, [])
         self.assertEqual(len(report.lessons), 1)
 
-    def test_a_lesson_kept_at_its_source_waits_with_its_answer_and_says_where(self) -> None:
+    def kept_at(self, at_source: glean.AtSource, kind: str = "action") -> proposals.Entry:
+        words = ("scripts/check",) if kind == "action" else ()
+        part = dataclasses.replace(LESSON.lesson, kind=kind, words=words, at_source=at_source)
+        self.answered(KEEP, dataclasses.replace(LESSON, lesson=part))
+        return proposals.load(self.store).entries[LESSON_ID]
+
+    def test_a_lesson_a_source_states_already_is_kept_as_a_pointer_to_it(self) -> None:
         """Covers: B272"""
-        stated = glean.AtSource(glean.STATED, "~/.claude/CLAUDE.md", "- Run only the quick checks.")
-        self.answered(KEEP, dataclasses.replace(LESSON, lesson=dataclasses.replace(LESSON.lesson, at_source=stated)))
+        self.kept_at(glean.AtSource(glean.STATED, "~/.claude/CLAUDE.md", "- Run only the quick checks."), "knowledge")
 
         report = self.harvest()
 
-        self.assertEqual((self.captures(), lessons.read_all(self.store)), ([], []))
-        self.assertEqual(self.state(LESSON_ID)[0], "open")
+        (filed,) = lessons.read_all(self.store)
         self.assertEqual(
-            report.problems, [f"the lesson you kept waits: {LESSON.text} (it is kept at ~/.claude/CLAUDE.md)"]
+            (filed.kept_at, filed.kind, filed.target), ("~/.claude/CLAUDE.md", "knowledge", "github.com/acme/portal")
         )
+        self.assertEqual(lessons.block([filed]), "")
+        self.assertEqual((self.state(LESSON_ID)[0], report.problems, self.captures()), ("kept", [], []))
+
+    def test_a_pointer_to_a_file_of_a_repository_names_it_as_a_fix_would_not_by_this_machines_checkout(self) -> None:
+        """Covers: B272"""
+        stated = glean.AtSource(
+            glean.STATED, "~/code/portal/CLAUDE.md", "- Never push.", None, "CLAUDE.md", ("github.com/acme/portal",)
+        )
+        self.kept_at(stated)
+
+        self.harvest()
+
+        (filed,) = lessons.read_all(self.store)
+        self.assertEqual(filed.kept_at, "CLAUDE.md in github.com/acme/portal")
+
+    def test_a_fix_marked_done_or_dropped_before_stays_so_and_the_review_says_it(self) -> None:
+        """Covers: B272"""
+        home = glean.AtSource(
+            glean.FIX, "~/.claude/CLAUDE.md", "- Run the whole proof.", "- Run the quick checks.", "~/.claude/CLAUDE.md"
+        )
+        before = fixes.new_fix(
+            "~/.claude/CLAUDE.md",
+            (),
+            "sb-test-m1",
+            "- Run the whole proof.",
+            "- Run the quick checks.",
+            "x",
+            "2026-03-01",
+        )
+        fixes.keep(self.store, before)
+        fixes.settle(self.store, before.name, fixes.DROPPED)
+        self.kept_at(home)
+
+        report = harvest.harvest(self.store, self.tasks, "Remember? ", LATER, machine_id="sb-test-m1")
+
+        self.assertEqual(report.fixes, [])
+        self.assertEqual(
+            report.problems,
+            ["the lesson you kept is a fix of ~/.claude/CLAUDE.md you marked dropped before; it stays dropped"],
+        )
+        self.assertEqual(self.state(LESSON_ID)[0], "kept")
+
+    def test_a_lesson_that_is_a_fix_of_its_source_is_kept_as_a_fix_for_this_machine_or_its_repository(self) -> None:
+        """Covers: B272"""
+        home = glean.AtSource(
+            glean.FIX, "~/.claude/CLAUDE.md", "- Run the whole proof.", "- Run the quick checks.", "~/.claude/CLAUDE.md"
+        )
+        added = glean.AtSource(
+            glean.FIX,
+            "CLAUDE.md in github.com/acme/portal",
+            None,
+            "Name releases after the version.",
+            "CLAUDE.md",
+            ("github.com/acme/portal",),
+        )
+        for at_source, machine, line in ((home, "sb-test-m1", "- Run the whole proof."), (added, None, None)):
+            with self.subTest(file=at_source.file):
+                for leftover in (self.root / fixes.FOLDER).glob("*") if (self.root / fixes.FOLDER).is_dir() else ():
+                    leftover.unlink()
+                (self.root / proposals.PROPOSALS_FILE).unlink(missing_ok=True)
+                self.kept_at(at_source)
+
+                report = harvest.harvest(self.store, self.tasks, "Remember? ", LATER, machine_id="sb-test-m1")
+
+                (kept,) = fixes.read_all(self.store)
+                self.assertEqual(
+                    (kept.fix.path, kept.fix.machine, kept.fix.line, kept.fix.wording, kept.state),
+                    (at_source.path, machine, line, at_source.wording, fixes.WAITING),
+                )
+                self.assertIn(LESSON.quote, kept.fix.why)
+                self.assertEqual((lessons.read_all(self.store), self.captures(), report.problems), ([], [], []))
+                self.assertEqual(report.fixes, [kept.fix.place])
+                self.assertEqual(self.state(LESSON_ID)[0], "kept")
 
     def test_a_knowledge_lesson_for_one_project_waits_with_its_answer_and_says_why(self) -> None:
         """Covers: B272"""

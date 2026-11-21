@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import json
 from typing import Any
 from unittest import mock
 
+import test_proposals
 import test_runner
 import test_sessions
 from m2b import folders_left_out, glean, lesson_sources, proposal_answers, proposals, session_remotes
@@ -558,6 +560,26 @@ class ProjectLessonTest(GleanStepTest):
         self.assertEqual(self.kept()["counts"]["lesson"]["not_quoted"], 1)
         self.assertIn(
             "1 lesson for one project left out: no repository is known that both its sessions worked in", self.info()
+        )
+
+
+class KeptFixTest(GleanStepTest):
+    def test_a_run_names_the_fix_kept_from_a_lesson_in_its_information(self) -> None:
+        """Covers: B272"""
+        self.curating()
+        fix = glean.AtSource(
+            glean.FIX, "~/.claude/CLAUDE.md", "- Run the whole proof.", "- Run the quick checks.", "~/.claude/CLAUDE.md"
+        )
+        lesson = dataclasses.replace(test_proposals.LESSON.lesson, at_source=fix)
+        found = dataclasses.replace(test_proposals.LESSON, lesson=lesson)
+        added = proposals.add(proposals.load(self.store), [proposals.Said(found, test_proposals.DAY)], START - DAY)
+        proposals.save(self.store, added.proposals)
+        proposal_answers.give(self.store, [proposals.proposal_id(found)], proposal_answers.KEEP)
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        self.assertIn(
+            "a fix you kept waits for ~/.claude/CLAUDE.md: the next session there applies it", self.info("harvest")
         )
 
 

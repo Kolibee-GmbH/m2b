@@ -77,7 +77,10 @@ class VerdictTest(unittest.TestCase):
         (kept,) = verdicts.kept
         assert kept.lesson is not None
         self.assertEqual(
-            kept.lesson.at_source, AtSource(STATED, "~/code/portal/CLAUDE.md", "- Releases are named after the date.")
+            kept.lesson.at_source,
+            AtSource(
+                STATED, "~/code/portal/CLAUDE.md", "- Releases are named after the date.", None, "CLAUDE.md", (PORTAL,)
+            ),
         )
 
     def test_nothing_at_any_source_makes_a_knowledge_lesson_for_one_project_a_fix_that_adds_it_to_its_claude_md(

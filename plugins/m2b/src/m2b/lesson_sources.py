@@ -238,7 +238,7 @@ def _placed(
     if source is None or line is None or verdict.get("source") not in sources_of:
         return None
     if said == RIGHT:
-        stated = AtSource(STATED, source.shown, line)
+        stated = AtSource(STATED, source.shown, line, None, source.fix_path, source.repositories)
         return dataclasses.replace(proposal, lesson=dataclasses.replace(lesson, at_source=stated))
     wording = verdict.get("wording")
     if source.fix_path is None or not isinstance(wording, str) or not _one_text(wording):

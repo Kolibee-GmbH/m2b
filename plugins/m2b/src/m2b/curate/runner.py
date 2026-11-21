@@ -655,10 +655,16 @@ class _Run:
     def _harvest(self, tasks: Tasks, locale: Locale) -> None:
         result = HarvestReport()
         try:
-            harvest(self.store, tasks, locale.text(PREFIX_KEY), self.clock(), result)
+            harvest(self.store, tasks, locale.text(PREFIX_KEY), self.clock(), result, self.config.machine_id)
         finally:
             # A harvest that fails has still said what waits and why.
             self.findings += [report.Finding(HARVEST, report.ACTION, problem) for problem in result.problems]
+            self.findings += [
+                report.Finding(
+                    HARVEST, report.INFO, f"a fix you kept waits for {place}: the next session there applies it"
+                )
+                for place in result.fixes
+            ]
         current_check.settle(self.store, tasks, self.clock().date(), task_list=self._task_list())
 
     def _take_in_handed_in(self) -> bool:

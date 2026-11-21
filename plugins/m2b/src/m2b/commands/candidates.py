@@ -28,7 +28,9 @@ def harvest_command(arguments: argparse.Namespace, context: Context) -> int:
     config = load_machine_config(context.machine)
     store = configured_store(config, context.machine)
     require_store_writable(store)
-    report = harvest.harvest(store, configured_tasks(config, context.machine), candidate_prefix(store))
+    report = harvest.harvest(
+        store, configured_tasks(config, context.machine), candidate_prefix(store), machine_id=config.machine_id
+    )
     if arguments.json:
         print_json({"captured": report.captured, "dropped": report.dropped, "problems": report.problems})
     else:

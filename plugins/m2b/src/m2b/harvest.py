@@ -29,10 +29,10 @@ import datetime
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 
-from m2b import candidates, kept_lessons, proposal_answers, proposals
+from m2b import candidates, fixes, kept_lessons, proposal_answers, proposals
 from m2b.capture import capture
 from m2b.config.errors import ConfigError
-from m2b.glean import COMMITMENT
+from m2b.glean import COMMITMENT, FIX, AtSource
 from m2b.notes import frontmatter as keys
 from m2b.notes.frontmatter import Note, NoteFormatError
 from m2b.notes.layout import CORPUS, INBOX
@@ -56,6 +56,8 @@ class HarvestReport:
     dropped: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
     lessons: list[str] = field(default_factory=list)
+    # Where the fixes kept from proposed lessons are for, as ``Fix.place`` names them.
+    fixes: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -77,6 +79,7 @@ def harvest(
     prefix: str,
     now: datetime.datetime | None = None,
     report: HarvestReport | None = None,
+    machine_id: str | None = None,
 ) -> HarvestReport:
     """Settles the candidates, then the answers to proposals.
 
@@ -95,11 +98,11 @@ def harvest(
         _harvest_candidates(store, tasks, prefix, now, report)
     except Exception:
         try:
-            _settle_proposals(store, tasks, now, report)
+            _settle_proposals(store, tasks, now, report, machine_id)
         except Exception as error:
             report.problems.append(f"the answers to proposals were not settled ({error}); the next run settles them")
         raise
-    _settle_proposals(store, tasks, now, report)
+    _settle_proposals(store, tasks, now, report, machine_id)
     return report
 
 
@@ -174,7 +177,9 @@ def _oldest(items: list[Task], gone: list[str], entries: dict[str, candidates.En
     return oldest - CLOCK_MARGIN if oldest > _EVER + CLOCK_MARGIN else _EVER
 
 
-def _settle_proposals(store: Store, tasks: Tasks, now: datetime.datetime, report: HarvestReport) -> None:
+def _settle_proposals(
+    store: Store, tasks: Tasks, now: datetime.datetime, report: HarvestReport, machine_id: str | None = None
+) -> None:
     """Settles the answers to proposals; what stops it is a problem for the review, and the answers wait."""
     try:
         answers = proposal_answers.read(store)
@@ -211,7 +216,7 @@ def _settle_proposals(store: Store, tasks: Tasks, now: datetime.datetime, report
                 report.dropped.append(entry.text)
                 settled.append(key)
             elif entry.lesson is not None:
-                if _keep_lesson(store, entry, report):
+                if _keep_lesson(store, entry, report, machine_id):
                     current = proposals.settled(current, key, proposals.KEPT, now)
                     settled.append(key)
                     lessons_kept = True
@@ -232,7 +237,46 @@ def _settle_proposals(store: Store, tasks: Tasks, now: datetime.datetime, report
         report.problems += [problem for problem in filed.problems if problem not in report.problems]
 
 
-def _keep_lesson(store: Store, entry: proposals.Entry, report: HarvestReport) -> bool:
+def _pointer_to(at_source: AtSource) -> str:
+    if at_source.path is None:
+        return at_source.file
+    return f"{at_source.path} in {', '.join(at_source.repositories)}" if at_source.repositories else at_source.path
+
+
+def _keep_fix(
+    store: Store, entry: proposals.Entry, at_source: AtSource, machine_id: str | None, report: HarvestReport
+) -> bool:
+    """Keeps a lesson that is a fix of its source as a fix (``fixes``), which a session applies where
+    the file lies; one for a file under ``~/.claude/`` is this machine's, where the sessions were read."""
+    lesson = entry.lesson
+    assert lesson is not None
+    why = f'you said "{entry.quote}" and again "{lesson.quote}"'
+    try:
+        fix = fixes.new_fix(
+            at_source.path or "",
+            at_source.repositories,
+            machine_id,
+            at_source.line,
+            at_source.wording or "",
+            " ".join(why.split()),
+            entry.day.isoformat(),
+        )
+        is_new = fixes.keep(store, fix)
+    except fixes.FixRefusedError as error:
+        report.problems.append(f"the lesson you kept waits: {entry.text} ({error})")
+        return False
+    # The same fix kept before and done or dropped since stays so: a mark is never taken back.
+    state = fixes.WAITING if is_new else fixes.find(store, fix.name).state
+    if state == fixes.WAITING:
+        report.fixes.append(fix.place)
+    else:
+        report.problems.append(
+            f"the lesson you kept is a fix of {fix.place} you marked {state} before; it stays {state}"
+        )
+    return True
+
+
+def _keep_lesson(store: Store, entry: proposals.Entry, report: HarvestReport, machine_id: str | None = None) -> bool:
     """Hands a kept lesson to the way a lesson kept by hand goes, in code (B261), never to a capture
     the filing model would read; False, with the reason for the review, where it cannot go there yet.
 
@@ -240,12 +284,15 @@ def _keep_lesson(store: Store, entry: proposals.Entry, report: HarvestReport) ->
     """
     lesson = entry.lesson
     assert lesson is not None
-    if lesson.at_source is not None:
-        # A fix of a source, or a pointer to the line that states it: this m2b files neither yet.
-        report.problems.append(f"the lesson you kept waits: {entry.text} (it is kept at {lesson.at_source.file})")
-        return False
+    at_source = lesson.at_source
+    if at_source is not None and at_source.verdict == FIX:
+        return _keep_fix(store, entry, at_source, machine_id, report)
+    # A lesson a source states already is kept as a pointer to it: it counts, and no second text comes
+    # in. The file is named as a fix names it, the same on every machine; only one no session could
+    # fix, outside a repository and ~/.claude/, keeps the name this machine reads it by.
+    kept_at = None if at_source is None else _pointer_to(at_source)
     given = kept_lessons.KeptLesson(
-        entry.text[:60], entry.text, lesson.kind, lesson.target, entry.day.isoformat(), lesson.words
+        entry.text[:60], entry.text, lesson.kind, lesson.target, entry.day.isoformat(), lesson.words, kept_at=kept_at
     )
     try:
         kept_lessons.keep(store, given)
