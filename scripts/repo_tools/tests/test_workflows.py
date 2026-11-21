@@ -126,7 +126,7 @@ class WeeklyRunTest(unittest.TestCase):
     def test_it_installs_the_newest_claude_code_and_holds_no_version(self) -> None:
         installs = [line for line in self.text.splitlines() if CLAUDE_CODE_PACKAGE in line]
 
-        self.assertEqual(len(installs), 3)
+        self.assertEqual(len(installs), 4)
         for line in installs:
             self.assertRegex(line, rf'^ +- run: npm install --global "{CLAUDE_CODE_PACKAGE}@latest"$')
         self.assertNotIn("CLAUDE_CODE_VERSION", self.text)
@@ -144,6 +144,25 @@ class WeeklyRunTest(unittest.TestCase):
             self.text,
         )
 
+    def test_the_model_level_without_names_runs_the_scenarios_no_promise_names(self) -> None:
+        self.assertRegex(self.text, r"(?m)^ +SCENARIOS=\$\{SCENARIOS:-\$\(scripts/promises --other-scenarios\)\}$")
+        # An empty list would let scripts/e2e run every scenario.
+        self.assertRegex(self.text, r'(?m)^ +if \[ -z "\$SCENARIOS" \]; then\n(?: +echo [^\n]*\n)? +exit 0$')
+
+    def test_it_runs_the_promises_in_a_job_of_its_own_unless_started_with_scenario_names(self) -> None:
+        self.assertIn(
+            "\n  promises:\n    needs: access\n"
+            "    if: needs.access.outputs.granted == 'true' && inputs.scenarios == ''\n",
+            self.text,
+        )
+        self.assertIn(
+            'if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then\n'
+            "            scripts/promises --max-minutes 100\n"
+            "          else\n"
+            "            scripts/promises --max-minutes 100 --use-api-key\n",
+            self.text,
+        )
+
     def test_it_measures_the_fence_in_a_job_of_its_own(self) -> None:
         self.assertIn("\n  fence:\n    needs: access\n", self.text)
         self.assertRegex(self.text, r"(?m)^ +run: scripts/fence-probe$")
@@ -158,7 +177,7 @@ class WeeklyRunTest(unittest.TestCase):
     def test_an_account_reaches_single_steps_and_never_a_whole_job(self) -> None:
         with_secret = [line for line in self.text.splitlines() if "secrets." in line]
 
-        self.assertEqual(len(with_secret), 6)
+        self.assertEqual(len(with_secret), 8)
         for line in with_secret:
             self.assertEqual(len(line) - len(line.lstrip()), STEP_ENVIRONMENT_INDENT, line)
 
@@ -168,7 +187,8 @@ class WeeklyRunTest(unittest.TestCase):
 
     def test_only_a_failed_scheduled_run_reports_and_it_waits_for_every_other_job(self) -> None:
         self.assertIn(
-            "\n    needs: [check, model-scenarios, fence]\n    if: failure() && github.event_name == 'schedule'\n",
+            "\n    needs: [check, model-scenarios, promises, fence]\n"
+            "    if: failure() && github.event_name == 'schedule'\n",
             self.text,
         )
 
@@ -197,6 +217,7 @@ class WeeklyFailureReportTest(unittest.TestCase):
                     "CLAUDE_CODE": claude_code,
                     "CHECK": "failure",
                     "MODEL_SCENARIOS": "skipped",
+                    "PROMISES": "failure",
                     "FENCE": "success",
                 },
                 check=True,
@@ -217,6 +238,7 @@ class WeeklyFailureReportTest(unittest.TestCase):
         self.assertIn(f"Claude Code 9.8.7 (Claude Code): {self.RUN_URL}", body)
         self.assertIn("- scripts/check: failure", body)
         self.assertIn("- the model-level scenarios: skipped", body)
+        self.assertIn("- the promises: failure", body)
         self.assertIn("- the fence probe: success", body)
 
     def test_a_failure_while_the_issue_is_open_adds_a_comment_and_opens_no_second_issue(self) -> None:

@@ -306,6 +306,15 @@ class CommandTest(unittest.TestCase):
             )
         return code, out.getvalue(), err.getvalue()
 
+    def test_the_other_scenarios_are_the_model_scenarios_no_promise_names_and_need_no_account(self) -> None:
+        _write_json(self.tree.scenarios / "E9-fence" / "model.json", {"steps": [], "invariants": []})
+        _write_json(self.tree.scenarios / "E3-stub-only" / "steps.json", {"steps": []})
+        del self.environ[e2e.TOKEN_VARIABLE]
+
+        code, out, err = self.run_command("--other-scenarios")
+
+        self.assertEqual((code, out, err), (promises.EXIT_HELD, "E9-fence\n", ""))
+
     def test_each_run_plays_its_wording_from_a_fresh_start_and_the_run_without_m2b_has_no_plugin(self) -> None:
         # The step passes when the wording reached it and a store of the run's own is empty at its
         # start; the stand-in for claude passes only with --plugin-dir, as m2b would answer.

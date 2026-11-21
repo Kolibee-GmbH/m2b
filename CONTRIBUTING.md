@@ -35,13 +35,14 @@ Two workflows run `scripts/check` on GitHub. `.github/workflows/ci.yml` runs it 
 request and on `main`, with the Claude Code version the README names as the minimum.
 `.github/workflows/weekly.yml` runs it every Monday, and whenever someone starts it by hand, with
 the newest Claude Code: m2b hangs on Claude Code's plugin interface, and the weekly run meets a new
-version before a user does. It also runs the [model-level scenarios](#end-to-end-scenarios) and
-the [fence probe](#whether-the-fence-still-holds), each in a job of its own, when
-the repository has one of two secrets: `ANTHROPIC_API_KEY`, an API key that is billed per run, or
+version before a user does. It also runs the [model-level scenarios](#end-to-end-scenarios), the
+[promises](#promises) and the [fence probe](#whether-the-fence-still-holds), each in a job of its
+own, when the repository has one of two secrets: `ANTHROPIC_API_KEY`, an API key that is billed per run, or
 `CLAUDE_CODE_OAUTH_TOKEN`, the token `claude setup-token` gives for a subscription; the scenarios
-take the key only where the token is missing. Without either, both jobs are skipped and a notice on
-the run says so. Started by hand, the workflow takes the names
-of the scenarios to run. A scheduled run that fails opens an issue, or adds a comment to the one
+take the key only where the token is missing. Without either, these jobs are skipped and a notice on
+the run says so. The job of the scenarios runs those no promise names (`scripts/promises
+--other-scenarios`), because the job of the promises runs the others three times each. Started by
+hand, the workflow takes the names of the scenarios to run, and then leaves the promises out. A scheduled run that fails opens an issue, or adds a comment to the one
 still open; a run started by hand does not. GitHub starts scheduled runs from `main` only, and
 in a public repository it stops them after sixty days without activity until someone turns the
 workflow on again.
@@ -371,7 +372,13 @@ scripts/promises 1 7    # these two
 
 It runs the scenarios at the model level, with the account and the folders described in
 [End-to-end scenarios](#end-to-end-scenarios), and the eval cases through `claude plugin eval` with
-a Claude Code folder of their own. It exits 0 when every promise it ran holds, 1 when one does not
+a Claude Code folder of their own. The account is a token for your subscription: make one with
+`claude setup-token` and set it as `CLAUDE_CODE_OAUTH_TOKEN`, or on macOS keep it in the keychain
+under the service `m2b-journey-token`; `--use-api-key` takes `ANTHROPIC_API_KEY` instead and bills
+each run. A run of every promise starts 72 headless sessions and curation steps, 24 interactive
+sessions and nine eval cases of three runs each. On 2026-11-21 it took 15 minutes, and Claude Code priced it at
+about 4 dollars as the API would bill it; with the token nothing is billed and the runs count
+against the plan's usage limits instead. It exits 0 when every promise it ran holds, 1 when one does not
 and 2 when it could not start: a catalog it cannot read, no account, or a session that is not
 logged in. `--max-minutes` bounds the whole run; a run it did not start does not pass.
 
@@ -558,8 +565,13 @@ match, however many commits came since. A change reaches users only with a relea
    on what changes for the user, ending in the pull request that made it, as
    `([#12](https://github.com/Kolibee-GmbH/m2b/pull/12))`.
 3. Run `scripts/check`; it must end with `check: passed`. If the release changes what the model
-   sees, run the [evals](#evals) too and write their scores into `docs/evals.md` with
-   `scripts/evals-page`; every case must score 1.00 with m2b.
+   sees, such as a skill, a hook, a tool description, what a tool or command returns to a session,
+   the text a session starts with or the distillate's format, run the [evals](#evals) too and
+   write their scores into `docs/evals.md` with `scripts/evals-page`; every case must score 1.00
+   with m2b. Then run `scripts/promises`: every [promise](#promises) must hold. A promise that does
+   not hold blocks the release until it is fixed, in the product or in its case; it is never
+   released as open. Three eval cases run in both, because the page reports one run of the whole
+   suite and a promise counts only runs of its own; the second time costs about a minute.
 4. Commit both files, and the eval page if it was rewritten, as `chore(release): m2b X.Y.Z`, open
    a pull request to `main` and merge it; a squash merge is fine. The marketplace reads
    `plugins/m2b` from `main`, not from a tag, so until the merge `/plugin update` keeps reporting

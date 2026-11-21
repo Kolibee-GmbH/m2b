@@ -393,6 +393,13 @@ def _output(command: Sequence[str]) -> str:
         return "unknown"
 
 
+def other_scenarios(catalog: Sequence[Promise], scenarios: Path) -> list[str]:
+    """The model-level scenarios no promise names. A run of the whole catalog runs each scenario it
+    names three times, so a weekly run of the model level leaves those out and runs these once."""
+    named = {name for promise in catalog for case in promise.cases if case.kind == SCENARIO for name in case.names}
+    return sorted(path.parent.name for path in scenarios.glob(f"*/{e2e.MODEL_FILE}") if path.parent.name not in named)
+
+
 def _parse_arguments(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="promises", description=__doc__.split("\n", 1)[0])
     parser.add_argument("numbers", nargs="*", type=int, help="the promises to run (default: all)")
@@ -406,6 +413,11 @@ def _parse_arguments(argv: Sequence[str]) -> argparse.Namespace:
         help="start no run after this many minutes; a run not started does not pass",
     )
     parser.add_argument("--sandbox-root", type=Path, help="where the temporary scenario folders go")
+    parser.add_argument(
+        "--other-scenarios",
+        action="store_true",
+        help="print the model-level scenarios no promise names, one per line, and run nothing",
+    )
     parser.add_argument("--catalog", type=Path, default=CATALOG, help=argparse.SUPPRESS)
     parser.add_argument("--scenarios", type=Path, default=e2e.SCENARIO_ROOT, help=argparse.SUPPRESS)
     parser.add_argument("--evals", type=Path, nargs="+", default=[EVALS, WORDING_EVALS], help=argparse.SUPPRESS)
@@ -417,6 +429,9 @@ def main(argv: Sequence[str] | None = None, eval_runner: EvalRunner | None = Non
     arguments = _parse_arguments(sys.argv[1:] if argv is None else argv)
     try:
         catalog = read_catalog(arguments.catalog, arguments.scenarios, arguments.evals)
+        if arguments.other_scenarios:
+            print("".join(f"{name}\n" for name in other_scenarios(catalog, arguments.scenarios)), end="")
+            return EXIT_HELD
         known = {promise.number for promise in catalog}
         unknown = sorted(set(arguments.numbers) - known)
         if unknown:

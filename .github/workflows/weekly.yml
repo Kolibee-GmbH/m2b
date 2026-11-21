@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       scenarios:
-        description: Model-level scenarios to run, separated by spaces (empty runs all of them)
+        description: Model-level scenarios to run, separated by spaces (empty runs those no promise names)
         type: string
         default: ""
 
@@ -48,9 +48,9 @@ jobs:
         run: echo "version=$(claude --version)" >> "$GITHUB_OUTPUT"
       - run: scripts/check
 
-  # The model-level scenarios and the fence probe need a model, and a model needs an account: an
-  # API key, billed per run, or the token `claude setup-token` gives for a subscription. A
-  # repository without either says so and passes, so a fork's weekly run is not red for a secret
+  # The model-level scenarios, the promises and the fence probe need a model, and a model needs an
+  # account: an API key, billed per run, or the token `claude setup-token` gives for a subscription.
+  # A repository without either says so and passes, so a fork's weekly run is not red for a secret
   # it cannot have.
   access:
     runs-on: ubuntu-24.04
@@ -67,7 +67,7 @@ jobs:
             echo "granted=true" >> "$GITHUB_OUTPUT"
           else
             echo "granted=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Model scenarios skipped::This repository has neither the secret ANTHROPIC_API_KEY nor CLAUDE_CODE_OAUTH_TOKEN, so the model-level scenarios and the fence probe did not run."
+            echo "::notice title=Model scenarios skipped::This repository has neither the secret ANTHROPIC_API_KEY nor CLAUDE_CODE_OAUTH_TOKEN, so the model-level scenarios, the promises and the fence probe did not run."
           fi
 
   model-scenarios:
@@ -92,13 +92,49 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           SCENARIOS: ${{ inputs.scenarios }}
         run: |
-          # Unquoted, so that each name is its own argument. The API key, billed per run, only
-          # where the repository has no token for a subscription.
+          # Without names, the scenarios no promise names: the job promises runs the others three
+          # times each. Unquoted, so that each name is its own argument. The API key, billed per
+          # run, only where the repository has no token for a subscription.
+          SCENARIOS=${SCENARIOS:-$(scripts/promises --other-scenarios)}
+          # Without a name scripts/e2e would run every scenario, the promises' ones a fourth time.
+          if [ -z "$SCENARIOS" ]; then
+            echo "Every model-level scenario is a case of a promise; the job promises runs them."
+            exit 0
+          fi
           # shellcheck disable=SC2086
           if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
             scripts/e2e --level model $SCENARIOS
           else
             scripts/e2e --level model --use-api-key $SCENARIOS
+          fi
+
+  # Whether every promise of docs/promises.md still holds with the newest Claude Code: each case
+  # three times with m2b, and where a promise is compared, three times against Claude Code alone.
+  # Started by hand with scenario names, the run is about those, and this job is left out.
+  promises:
+    needs: access
+    if: needs.access.outputs.granted == 'true' && inputs.scenarios == ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.9"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: npm install --global "@anthropic-ai/claude-code@latest"
+      - run: claude --version
+      # As above: the account reaches this one step only.
+      - env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            scripts/promises --max-minutes 100
+          else
+            scripts/promises --max-minutes 100 --use-api-key
           fi
 
   # Whether the newest Claude Code still keeps a curation step inside its fence: two runs of a
@@ -129,7 +165,7 @@ jobs:
   # reaches everyone who watches the repository, and a week that fails again adds a comment to it
   # and opens no second one. A run started by hand reports to the person who started it.
   report:
-    needs: [check, model-scenarios, fence]
+    needs: [check, model-scenarios, promises, fence]
     if: failure() && github.event_name == 'schedule'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -142,6 +178,7 @@ jobs:
           CLAUDE_CODE: ${{ needs.check.outputs.claude-code }}
           CHECK: ${{ needs.check.result }}
           MODEL_SCENARIOS: ${{ needs.model-scenarios.result }}
+          PROMISES: ${{ needs.promises.result }}
           FENCE: ${{ needs.fence.result }}
         run: |
           title="The weekly run with the newest Claude Code failed"
@@ -149,9 +186,10 @@ jobs:
 
           - scripts/check: $CHECK
           - the model-level scenarios: $MODEL_SCENARIOS
+          - the promises: $PROMISES
           - the fence probe: $FENCE
 
-          A model words its answers anew each time, so a failed model-level scenario is not always a change in Claude Code. Re-run the failed job before reading it as one. The fence probe's log ends with its verdict: unproven can be the model too, broken is read from what a run did."
+          A model words its answers anew each time, so a failed model-level scenario or promise is not always a change in Claude Code. Re-run the failed job before reading it as one. The fence probe's log ends with its verdict: unproven can be the model too, broken is read from what a run did."
           open=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
           if [ -n "$open" ]; then
             gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body "$body"
