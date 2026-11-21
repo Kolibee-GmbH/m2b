@@ -90,8 +90,10 @@ named `not working`; whether you word it anew, have it ask instead of remind, or
 
 A lesson about a command that did not fire for 30 days becomes a question in your task list, as a
 current item that went quiet does: `Still needed? <the lesson>`. Tick it, and the lesson stays and
-its 30 days start again; drop or delete it, and the next run removes the lesson. No lesson ends
-without your answer.
+its 30 days start again; drop or delete it, and the next run removes the lesson. A lesson of the
+block that you did not correct Claude on again for 60 days is asked about the same way, since every
+session starts with it, while the reading of your sessions counts your corrections; ticked, it stays
+for 60 days more. No lesson ends without your answer.
 
 ## A project
 

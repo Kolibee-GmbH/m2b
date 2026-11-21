@@ -211,7 +211,9 @@ def propose(
         if as_fixes is None:
             # The counts are written with the lessons that stand, so a fix not known now would lose its own.
             raise StoreError("the fixes kept from lessons could not be read")
-        again = lesson_counts.add(store, corrections, {lesson.name: lesson.kept for lesson in shown_lessons})
+        again = lesson_counts.add(
+            store, corrections, {lesson.name: lesson.kept for lesson in shown_lessons}, started.astimezone(zone).date()
+        )
     # A counter must not cost the reading its proposals: whatever keeps the file from being read or
     # written is said, and the reading goes on.
     except (lesson_counts.LessonCountsError, ConfigError, StoreError) as error:

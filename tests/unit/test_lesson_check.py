@@ -7,7 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from m2b import action_lessons, lesson_check
+from m2b import action_lessons, lesson_check, lesson_counts
+from m2b.glean import Correction
 from m2b.paths import MachinePaths
 from m2b.store.folder import FolderStore
 from m2b.store.guard import DatalessGuard
@@ -22,7 +23,7 @@ PROOF = (
     "---\nkind: action\ntarget: every project\nkept: {kept}\nwords: [scripts/check]\n---\n"
     "# Proof\n\nRun the whole proof only with a reason.\n"
 )
-ONCE = "---\nkind: knowledge\ntarget: every project\nkept: 2026-10-01\n---\n# Once\n\nSay it once.\n"
+ONCE = "---\nkind: knowledge\ntarget: every project\nkept: {kept}\n---\n# Once\n\nSay it once.\n"
 
 
 class LessonCheckTest(unittest.TestCase):
@@ -48,7 +49,7 @@ class LessonCheckTest(unittest.TestCase):
         return self.tasks.items(marker=markers.LESSON, include_completed=True)
 
     def ask(self) -> list[str]:
-        found = lesson_check.quiet(self.store, self.machine, TODAY)
+        found = lesson_check.quiet(self.store, self.machine, TODAY, corrections_counted=True)
         return lesson_check.ask(self.store, self.tasks, found, PREFIX, task_list=LIST)
 
     def test_an_action_lesson_that_did_not_fire_for_a_month_is_asked_about_once(self) -> None:
@@ -60,7 +61,7 @@ class LessonCheckTest(unittest.TestCase):
         # It fired once, a few days after it was kept, and never again since.
         self.lesson("once-fired.md", PROOF.format(kept="2026-11-01"))
         self.fired_on("once-fired.md", "2026-11-05")
-        self.lesson("once.md", ONCE)
+        self.lesson("once.md", ONCE.format(kept="2026-11-01"))
 
         self.assertEqual(sorted(self.ask()), ["once-fired.md", "proof.md"])
         self.assertEqual(self.ask(), [])
@@ -68,6 +69,57 @@ class LessonCheckTest(unittest.TestCase):
         self.assertEqual(
             {question.title for question in self.questions()}, {"Still needed? Run the whole proof only with a reason."}
         )
+
+    def test_a_knowledge_lesson_of_the_block_not_corrected_for_60_days_is_asked_about(self) -> None:
+        """Covers: B292"""
+        self.lesson("once.md", ONCE.format(kept="2026-10-01"))
+        self.lesson("young.md", ONCE.format(kept="2026-11-01").replace("Say it once.", "Say it twice."))
+        self.lesson("corrected.md", ONCE.format(kept="2026-10-01").replace("Say it once.", "Name the day."))
+        lesson_counts.add(
+            self.store,
+            [Correction("corrected.md", "no, name the day again", "shed")],
+            {"corrected.md": "2026-10-01"},
+            datetime.date(2026, 11, 10),
+        )
+        stated = ONCE.format(kept="2026-10-01").replace(
+            "kept: 2026-10-01\n", "kept: 2026-10-01\nkept_at: ~/.claude/CLAUDE.md\n"
+        )
+        self.lesson("stated.md", stated.replace("Say it once.", "Keep it short."))
+
+        self.assertEqual(self.ask(), ["once.md"])
+        self.assertEqual({question.title for question in self.questions()}, {"Still needed? Say it once."})
+
+    def test_a_knowledge_lesson_said_to_still_hold_is_quiet_anew_for_60_days(self) -> None:
+        """Covers: B292"""
+        self.lesson("once.md", ONCE.format(kept="2026-10-01"))
+        self.ask()
+        (question,) = self.questions()
+        self.tasks.complete(question.id)
+        lesson_check.settle(self.store, self.tasks, TODAY, task_list=LIST)
+
+        later = TODAY + datetime.timedelta(days=59)
+        self.assertEqual(lesson_check.quiet(self.store, self.machine, later, corrections_counted=True), [])
+        self.assertEqual(
+            [
+                lesson.name
+                for lesson in lesson_check.quiet(
+                    self.store, self.machine, later + datetime.timedelta(days=1), corrections_counted=True
+                )
+            ],
+            ["once.md"],
+        )
+
+    def test_while_the_sessions_are_not_read_a_knowledge_lesson_is_not_asked_about(self) -> None:
+        """Covers: B292"""
+        self.lesson("once.md", ONCE.format(kept="2026-10-01"))
+        self.assertEqual(lesson_check.quiet(self.store, self.machine, TODAY, corrections_counted=False), [])
+
+    def test_without_the_counts_a_knowledge_lesson_is_not_asked_about(self) -> None:
+        """Covers: B292"""
+        self.lesson("once.md", ONCE.format(kept="2026-10-01"))
+        (self.root / "state" / "core").mkdir(parents=True, exist_ok=True)
+        (self.root / lesson_counts.COUNTS_FILE).write_text('{"format": 99, "lessons": {}}', encoding="utf-8")
+        self.assertEqual(lesson_check.quiet(self.store, self.machine, TODAY, corrections_counted=True), [])
 
     def test_a_ticked_question_keeps_the_lesson_quiet_anew_from_that_day(self) -> None:
         """Covers: B283"""
@@ -81,9 +133,17 @@ class LessonCheckTest(unittest.TestCase):
         self.assertEqual(removed, [])
         self.assertTrue((self.root / "memory" / "lessons" / "proof.md").exists())
         self.assertEqual(self.questions(), [])
-        self.assertEqual(lesson_check.quiet(self.store, self.machine, TODAY + datetime.timedelta(days=29)), [])
         self.assertEqual(
-            [each.name for each in lesson_check.quiet(self.store, self.machine, TODAY + datetime.timedelta(days=30))],
+            lesson_check.quiet(self.store, self.machine, TODAY + datetime.timedelta(days=29), corrections_counted=True),
+            [],
+        )
+        self.assertEqual(
+            [
+                each.name
+                for each in lesson_check.quiet(
+                    self.store, self.machine, TODAY + datetime.timedelta(days=30), corrections_counted=True
+                )
+            ],
             ["proof.md"],
         )
 

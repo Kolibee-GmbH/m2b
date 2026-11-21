@@ -55,7 +55,8 @@ right before the command it is about.
   ([Using m2b](docs/using.md#lessons))
   ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - A lesson about a command that did not fire for 30 days is asked about in your task list,
-  `Still needed?`: a drop removes it, a tick keeps it for another 30 days. Where the block of
+  `Still needed?`: a drop removes it, a tick keeps it for another 30 days. A lesson of the block
+  you did not correct Claude on again for 60 days is asked about the same way. Where the block of
   lessons is full, a proposed lesson names the kept lesson it would replace, the one corrected again
   most often; keeping it removes that one ([Using m2b](docs/using.md#lessons))
   ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).

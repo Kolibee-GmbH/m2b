@@ -851,7 +851,9 @@ class _Run:
         found = expiry.due(self.store, self.clock().date())
         prefix = locale.text(current_check.PREFIX_KEY)
         current_check.ask(self.store, tasks, found.current, prefix, task_list=self._task_list())
-        quiet_lessons = lesson_check.quiet(self.store, self.machine, self.clock().date())
+        quiet_lessons = lesson_check.quiet(
+            self.store, self.machine, self.clock().date(), corrections_counted=self.config.curation.read_sessions
+        )
         lesson_prefix = locale.text(lesson_check.PREFIX_KEY)
         lesson_check.ask(self.store, tasks, quiet_lessons, lesson_prefix, task_list=self._task_list())
         if self.refresh_all:
