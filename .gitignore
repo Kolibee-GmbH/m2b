@@ -9,3 +9,4 @@ docs/notes/
 
 # Results of claude plugin eval runs
 plugins/m2b/evals/results/
+plugins/m2b/evals-wordings/results/

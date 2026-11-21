@@ -14,7 +14,7 @@ that shows each best ([Contributing](../CONTRIBUTING.md#promises)).
 | 4 | Your words stay, every fact points to them | not compared | open | `details` |
 | 5 | A correction you keep you do not repeat | compared | open | `correction` |
 | 6 | A project knows where it lies | compared | open | `E33-project-known` |
-| 7 | Nothing from another project, nothing filed without you | not compared | `no-leak`, `propose-person`, `propose-planted` | `topic` |
+| 7 | Nothing from another project, nothing filed without you | not compared | `no-leak` / `no-leak-de` / `no-leak-plain`, `propose-person` / `propose-person-de` / `propose-person-plain`, `propose-planted` / `propose-planted-de` / `propose-planted-plain` | `topic` |
 | 8 | The start stays small | not compared | open | |
 
 ## When a promise holds
@@ -40,7 +40,9 @@ incomplete and does not hold.
 **Three wordings.** The three runs of a case say what the owner says in three wordings, at least one
 of them in German, so that a promise never rests on one lucky sentence. A scenario holds its
 wordings in its `model.json`; an eval case holds one prompt, so a case of evals names three of them,
-one per wording, joined by ` / `. A case with one wording does not hold.
+one per wording, joined by ` / `: the case of the suite in `plugins/m2b/evals/` and two rewordings
+of it in `plugins/m2b/evals-wordings/`, which start as it does and check the same. A case with one
+wording does not hold.
 
 A promise holds when it has a case and every case holds. A promise without a case is open, and an
 open promise does not hold either.

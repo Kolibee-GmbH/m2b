@@ -3,7 +3,9 @@
 ``docs/promises.md`` holds the catalog: one table row per promise, whether it is compared against
 Claude Code alone, and its cases. A case is a model-level scenario (``tests/e2e/<name>/model.json``)
 or an eval case (``plugins/m2b/evals/<name>``); three eval cases joined by `` / `` are one case in
-three wordings, since an eval case has one prompt. Every case runs three times with m2b, each from a
+three wordings, since an eval case has one prompt. The second and third wording of a suite case
+live in ``plugins/m2b/evals-wordings/``, apart from the suite, which ``docs/evals.md`` reports
+whole from one run of it. Every case runs three times with m2b, each from a
 fresh start, and three times without m2b where the promise is compared. A case holds when all three
 runs with m2b pass and, where compared, at most one without; a case that starts Claude Code needs
 three wordings of what the owner says, one in German, so that no promise rests on one sentence.
@@ -34,6 +36,7 @@ from repo_tools.evals_page import REPORT_NAME, model_of_run
 
 CATALOG = REPO_ROOT / "docs" / "promises.md"
 EVALS = e2e.CORE_PLUGIN / "evals"
+WORDING_EVALS = e2e.CORE_PLUGIN / "evals-wordings"
 SCENARIO = "scenario"
 EVAL = "eval"
 RUNS = 3
@@ -141,7 +144,7 @@ class Versions:
     m2b_commit: str
 
 
-def read_catalog(catalog: Path, scenarios: Path, evals: Path) -> list[Promise]:
+def read_catalog(catalog: Path, scenarios: Path, evals: Sequence[Path]) -> list[Promise]:
     """The promises of the catalog's table, each case checked to exist as a scenario with a
     ``model.json`` or an eval case."""
     try:
@@ -162,7 +165,7 @@ def read_catalog(catalog: Path, scenarios: Path, evals: Path) -> list[Promise]:
     return read
 
 
-def _cases(number: str, cell: str, scenarios: Path, evals: Path) -> tuple[Case, ...]:
+def _cases(number: str, cell: str, scenarios: Path, evals: Sequence[Path]) -> tuple[Case, ...]:
     if cell == OPEN_CELL:
         return ()
     cases = []
@@ -177,12 +180,17 @@ def _cases(number: str, cell: str, scenarios: Path, evals: Path) -> tuple[Case, 
     return tuple(cases)
 
 
-def _kind(number: str, name: str, scenarios: Path, evals: Path) -> str:
+def _kind(number: str, name: str, scenarios: Path, evals: Sequence[Path]) -> str:
     if (scenarios / name / e2e.MODEL_FILE).is_file():
         return SCENARIO
-    if (evals / name).is_dir():
+    if eval_folder(name, evals) is not None:
         return EVAL
     raise CatalogError(f"promise {number}: {name} is neither a scenario with a {e2e.MODEL_FILE} nor an eval case")
+
+
+def eval_folder(name: str, evals: Sequence[Path]) -> Path | None:
+    """The folder of eval cases that holds the case ``name``, or None."""
+    return next((folder for folder in evals if (folder / name).is_dir()), None)
 
 
 def run_case(
@@ -281,12 +289,14 @@ def scenario_runner(
     return run
 
 
-def eval_command(name: str, runs: int, compared: bool, output: Path) -> list[str]:
+def eval_command(name: str, runs: int, compared: bool, output: Path, eval_dir: str = EVALS.name) -> list[str]:
     return [
         "claude",
         "plugin",
         "eval",
         ".",
+        "--eval-dir",
+        eval_dir,
         "--case",
         name,
         "--runs",
@@ -326,6 +336,7 @@ def claude_eval_runner(
     environ: Mapping[str, str], account: Mapping[str, str], plugin: Path = e2e.CORE_PLUGIN
 ) -> EvalRunner:
     def run(name: str, runs: int, compared: bool) -> tuple[list[Run], list[Run]]:
+        folder_of_case = eval_folder(name, (EVALS, WORDING_EVALS)) or EVALS
         with tempfile.TemporaryDirectory(prefix=f"{e2e.TEST_RESOURCE_PREFIX}promises-") as folder:
             claude_config = Path(folder) / e2e.SANDBOX_CLAUDE
             e2e.prepare_claude_config(claude_config, account)
@@ -333,7 +344,7 @@ def claude_eval_runner(
             output = Path(folder) / "report"
             try:
                 done = subprocess.run(
-                    eval_command(name, runs, compared, output),
+                    eval_command(name, runs, compared, output, folder_of_case.name),
                     cwd=plugin,
                     env=environment,
                     capture_output=True,
@@ -388,7 +399,7 @@ def _parse_arguments(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--sandbox-root", type=Path, help="where the temporary scenario folders go")
     parser.add_argument("--catalog", type=Path, default=CATALOG, help=argparse.SUPPRESS)
     parser.add_argument("--scenarios", type=Path, default=e2e.SCENARIO_ROOT, help=argparse.SUPPRESS)
-    parser.add_argument("--evals", type=Path, default=EVALS, help=argparse.SUPPRESS)
+    parser.add_argument("--evals", type=Path, nargs="+", default=[EVALS, WORDING_EVALS], help=argparse.SUPPRESS)
     return parser.parse_args(argv)
 
 

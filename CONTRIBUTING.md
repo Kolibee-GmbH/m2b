@@ -315,6 +315,10 @@ does to Claude's answers: each case runs the same prompt in a session with m2b a
 and `claude plugin eval` scores both. [Evals](docs/evals.md) lists what each case asks and when it
 passes, how to read the scores, and the scores of the last run.
 
+`plugins/m2b/evals-wordings/` holds a second and a third wording of some suite cases, one in German,
+for the [promises](#promises): each starts as its case does and checks the same. They are not part
+of the suite and not on that page, so a run of the suite stays the run the page reports.
+
 Every case starts from the same invented store, `evals/demo-store.sh`: it sets m2b up in the
 fresh `HOME` the eval gives each run, so your own store is never read. Its owner turned
 `sessions.propose` on, so every run with m2b carries the third tool, also in the cases that ask

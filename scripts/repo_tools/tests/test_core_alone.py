@@ -47,6 +47,7 @@ CORE_AT_THE_TOP = (
     ".claude-plugin",
     "bin",
     "evals",
+    "evals-wordings",
     "hooks",
     "locale",
     "schemas",

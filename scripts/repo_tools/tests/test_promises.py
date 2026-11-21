@@ -52,7 +52,7 @@ class Tree:
             (self.evals / name / "prompt.md").write_text("---\nname: x\n---\nQ?\n", encoding="utf-8")
 
     def read(self) -> list[promises.Promise]:
-        return promises.read_catalog(self.catalog, self.scenarios, self.evals)
+        return promises.read_catalog(self.catalog, self.scenarios, [self.evals])
 
 
 class CatalogTest(unittest.TestCase):
@@ -76,7 +76,7 @@ class CatalogTest(unittest.TestCase):
         )
 
     def test_the_page_lists_the_eight_promises_and_names_only_cases_that_exist(self) -> None:
-        page = promises.read_catalog(promises.CATALOG, e2e.SCENARIO_ROOT, promises.EVALS)
+        page = promises.read_catalog(promises.CATALOG, e2e.SCENARIO_ROOT, [promises.EVALS, promises.WORDING_EVALS])
 
         self.assertEqual([promise.number for promise in page], list(range(1, 9)))
         self.assertTrue(any(not promise.cases for promise in page))
@@ -357,6 +357,42 @@ class CommandTest(unittest.TestCase):
         self.assertIn("9", err)
 
 
+# The one way a rewording checks more than its case: a leak in German would call the shed "Schuppen".
+WORDING_GRADER_CHANGES = {"no-leak-de": {"no-names.md": ('|shed"', '|shed|Schuppen"')}}
+
+
+def _graders(case: Path, changes: dict[str, tuple[str, str]] | None = None) -> dict[str, str]:
+    """Each grader of an eval case by its name, with ``changes`` made: a name and (old, new)."""
+    graders = {path.name: path.read_text(encoding="utf-8") for path in sorted((case / "graders").glob("*.md"))}
+    for name, (old, new) in (changes or {}).items():
+        graders[name] = graders[name].replace(old, new)
+    return graders
+
+
+class WordingEvalsTest(unittest.TestCase):
+    """The second and third wording of a suite case run apart from the suite."""
+
+    def test_each_wording_case_starts_as_the_case_it_rewords_and_checks_the_same(self) -> None:
+        for folder in sorted(case.parent for case in promises.WORDING_EVALS.glob("*/case.yaml")):
+            original = promises.EVALS / folder.name.rsplit("-", 1)[0]
+            with self.subTest(case=folder.name):
+                self.assertTrue(original.is_dir())
+                self.assertIn(
+                    f"evals/{original.name}/scaffold.sh", (folder / "scaffold.sh").read_text(encoding="utf-8")
+                )
+                self.assertEqual(_graders(folder), _graders(original, WORDING_GRADER_CHANGES.get(folder.name, {})))
+                self.assertIn(f"name: {folder.name}\n", (folder / "prompt.md").read_text(encoding="utf-8"))
+
+    def test_every_wording_case_is_one_of_the_three_wordings_of_a_case_of_the_catalog(self) -> None:
+        catalog = promises.read_catalog(promises.CATALOG, e2e.SCENARIO_ROOT, [promises.EVALS, promises.WORDING_EVALS])
+        named = {name for promise in catalog for case in promise.cases if len(case.names) == 3 for name in case.names}
+
+        cases = {case.parent.name for case in promises.WORDING_EVALS.glob("*/case.yaml")}
+
+        self.assertTrue(cases)
+        self.assertLessEqual(cases, named)
+
+
 class EvalRunnerTest(unittest.TestCase):
     """The eval cases run through ``claude plugin eval``, whose report says per arm which run passed."""
 
@@ -387,6 +423,9 @@ class EvalRunnerTest(unittest.TestCase):
         for argument in ("--case", "no-leak", "--scaffold", "--trust-plugin", "--no-publish", "--keep-temp"):
             self.assertIn(argument, one)
         self.assertEqual(one[one.index("--runs") + 1], "3")
+        self.assertEqual(one[one.index("--eval-dir") + 1], "evals")
+        wording = promises.eval_command("no-leak-de", 1, False, Path("/tmp/sb-test-out"), "evals-wordings")
+        self.assertEqual(wording[wording.index("--eval-dir") + 1], "evals-wordings")
         self.assertIn("mcp__m2b__note", one)
 
 
