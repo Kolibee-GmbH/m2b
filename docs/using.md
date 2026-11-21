@@ -74,11 +74,13 @@ the block is full, a new lesson the reading of your sessions proposes for every 
 kept lesson it would replace: the one you corrected Claude on again most often, then the oldest.
 Keep it, and that lesson goes.
 
-A lesson about a command, such as "run the whole proof only when the change gives a reason, when
-you start scripts/check", comes right before Claude runs that command: a hook adds it before each
-Bash call whose command holds its words, and stays silent where the command holds a word you named
-to keep it quiet (`--quick`). Say "keep this as a lesson" in a session and the next curation run
-files it. A lesson can ask you before the call instead of only reminding.
+A lesson about a command, such as "run the whole proof only when the change gives a reason, when you
+start scripts/check", comes before Claude runs that command: the first Bash call of a session whose
+command holds its words does not run, and Claude gets the lesson as the reason; it changes the
+command or says why it holds, and the next call runs with the lesson beside it. The hook stays
+silent where the command holds a word you named to keep it quiet (`--quick`). Say "keep this as a
+lesson" in a session and the next curation run files it. A lesson can ask you before every call
+instead.
 
 `m2b status` and the overview's part "m2b" say how each lesson does since you kept it: how often you corrected Claude on it
 again, which the curation run counts where it reads your sessions, and for a lesson about a command

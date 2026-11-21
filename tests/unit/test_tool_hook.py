@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import io
 import json
+import os
 import subprocess
 import tempfile
 import time
@@ -57,8 +58,21 @@ class ToolHookFixture(unittest.TestCase):
             top=str(folder),
         )
 
-    def call(self, command: str, folder: Path | None = None, tool: str = "Bash", **environ: str) -> dict[str, object]:
-        given = {"tool_name": tool, "tool_input": {"command": command}, "cwd": str(folder or self.clone)}
+    def call(
+        self,
+        command: str,
+        folder: Path | None = None,
+        tool: str = "Bash",
+        session: str | None = None,
+        **environ: str,
+    ) -> dict[str, object]:
+        given: dict[str, object] = {
+            "tool_name": tool,
+            "tool_input": {"command": command},
+            "cwd": str(folder or self.clone),
+        }
+        if session is not None:
+            given["session_id"] = session
         out = io.StringIO()
         with mock.patch("sys.stdout", out):
             code = tool_hook.main({**self.environ, **environ}, io.StringIO(json.dumps(given)))
@@ -188,6 +202,106 @@ class SilentTest(ToolHookFixture):
 
         self.assertIn(PROOF.text, result.stdout)
         self.assertLess(elapsed, 0.5)
+
+
+SESSION = "0a1b2c3d-1111-4222-8333-444455556666"
+OTHER_SESSION = "9f8e7d6c-5555-4666-8777-888899990000"
+ASKING = Lesson("deploy.md", "Ask before a deploy.", ACTION, EVERY_PROJECT, "2026-11-20", words=("deploy",), ask=True)
+
+
+class StopFirstTest(ToolHookFixture):
+    """The first call of a session that a lesson fires on is denied with the lesson, so Claude reads
+    it before anything runs."""
+
+    def output(self, command: str, session: str | None = SESSION) -> dict[str, object]:
+        answer = self.call(command, session=session)
+        output = answer.get("hookSpecificOutput", {})
+        assert isinstance(output, dict)
+        return output
+
+    def test_the_first_call_is_denied_with_the_lesson_and_the_next_goes_through_with_it(self) -> None:
+        """Covers: B288"""
+        self.kept(PROOF)
+
+        first = self.output("scripts/check")
+        second = self.output("scripts/check")
+
+        self.assertEqual(first["permissionDecision"], "deny")
+        reason = first["permissionDecisionReason"]
+        assert isinstance(reason, str)
+        self.assertIn(tool_hook.LESSON_LINE + PROOF.text, reason)
+        self.assertIn("the same call goes through", reason)
+        self.assertNotIn("permissionDecision", second)
+        self.assertIn(PROOF.text, second["additionalContext"])
+        self.assertEqual(action_lessons.fired(self.machine), {"proof.md": 2})
+
+    def test_another_session_is_stopped_once_too(self) -> None:
+        """Covers: B288"""
+        self.kept(PROOF)
+        self.output("scripts/check")
+
+        self.assertEqual(self.output("scripts/check", OTHER_SESSION)["permissionDecision"], "deny")
+
+    def test_a_lesson_set_to_ask_asks_as_before(self) -> None:
+        """Covers: B264, B288"""
+        self.kept(ASKING)
+
+        for _ in range(2):
+            self.assertEqual(self.output("./deploy prod")["permissionDecision"], "ask")
+
+    def test_a_denying_lesson_comes_before_one_that_asks_and_the_next_call_asks(self) -> None:
+        """Covers: B288"""
+        self.kept(PROOF, ASKING)
+
+        first = self.output("scripts/check && ./deploy prod")
+        second = self.output("scripts/check && ./deploy prod")
+
+        self.assertEqual(first["permissionDecision"], "deny")
+        self.assertEqual(second["permissionDecision"], "ask")
+
+    def test_without_a_plain_session_id_nothing_is_denied(self) -> None:
+        """Covers: B288"""
+        self.kept(PROOF)
+
+        for session in (None, "", "../../outside", "a" * 200):
+            with self.subTest(session=session):
+                self.assertNotIn("permissionDecision", self.output("scripts/check", session))
+        self.assertEqual(list(self.base.glob("outside*")), [])
+
+    def test_a_call_let_through_keeps_its_session_from_being_forgotten(self) -> None:
+        """Covers: B288"""
+        self.kept(PROOF)
+        self.output("scripts/check")
+        mark = self.machine.state_dir / action_lessons.DENIED_FOLDER / SESSION
+        old = time.time() - 3 * 24 * 3600
+        os.utime(mark, (old, old))
+
+        self.output("scripts/check")
+        self.output("scripts/check", OTHER_SESSION)
+
+        self.assertNotIn("permissionDecision", self.output("scripts/check"))
+
+    def test_where_the_mark_cannot_be_written_nothing_is_denied(self) -> None:
+        """Covers: B265, B288"""
+        self.kept(PROOF)
+        (self.machine.state_dir / action_lessons.DENIED_FOLDER).write_text("a file, not a folder", encoding="utf-8")
+
+        for _ in range(2):
+            output = self.output("scripts/check")
+            self.assertNotIn("permissionDecision", output)
+            self.assertIn(PROOF.text, output["additionalContext"])
+
+    def test_the_marks_of_sessions_older_than_two_days_go_when_a_new_session_is_marked(self) -> None:
+        """Covers: B288"""
+        self.kept(PROOF)
+        self.output("scripts/check", OTHER_SESSION)
+        folder = self.machine.state_dir / action_lessons.DENIED_FOLDER
+        old = time.time() - 3 * 24 * 3600
+        os.utime(folder / OTHER_SESSION, (old, old))
+
+        self.output("scripts/check")
+
+        self.assertEqual(sorted(path.name for path in folder.iterdir()), [SESSION])
 
 
 class SessionStartTest(ToolHookFixture):

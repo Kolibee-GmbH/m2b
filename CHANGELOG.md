@@ -35,8 +35,9 @@ right before the command it is about.
   in a second output at the session start, so the distillate keeps its 8 KB beside them. A lesson
   that `~/.claude/CLAUDE.md` or another source states now is left out ([Using m2b](docs/using.md#lessons))
   ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
-- A lesson about a command comes right before Claude runs it: a hook before each Bash call adds the
-  lesson whose words the command holds, or has Claude Code ask you first. "Keep this as a lesson" in
+- A lesson about a command comes before Claude runs it: a hook before each Bash call stops the first
+  call of a session whose command holds the lesson's words, with the lesson as the reason, and lets
+  the next one through with it, or has Claude Code ask you first. "Keep this as a lesson" in
   a session keeps one with `m2b lesson add` ([Using m2b](docs/using.md#lessons))
   ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - A curation run that reads your sessions proposes a lesson when you made the same correction of

@@ -38,7 +38,7 @@ TARGET = "target"
 KEPT = "kept"
 KEPT_AT = "kept_at"
 # An action lesson's words: all of ``words`` in a command and none of ``unless`` make it fire; with
-# ``ask`` Claude Code asks the owner before the command runs instead of only reminding.
+# ``ask`` Claude Code asks the owner before the command runs, every time.
 WORDS = "words"
 UNLESS = "unless"
 ASK = "ask"

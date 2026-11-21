@@ -19,6 +19,7 @@ import os
 import re
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 from m2b.atomic_file import write_text_atomically
 from m2b.lessons import ACTION, EVERY_PROJECT, Lesson
@@ -31,6 +32,11 @@ FIRED = "action-lessons-fired.log"
 # One file per day, one byte per Bash call the hook saw while there were action lessons: its size is
 # the count, and appending a byte is one write, as a firing's line is.
 CALLS_FOLDER = "bash-calls"
+# One file per session, a line per lesson that denied its first call there (B288).
+DENIED_FOLDER = "action-lessons-denied"
+# Marks untouched this long go when a new session is marked; a call let through renews its session's.
+DENIED_KEPT_FOR = datetime.timedelta(days=2)
+_SESSION_ID = re.compile(r"[A-Za-z0-9_-]{1,100}")
 
 
 @dataclass(frozen=True)
@@ -151,3 +157,51 @@ def calls(machine: MachinePaths, since: datetime.date) -> int:
                 with contextlib.suppress(OSError):
                     total += path.stat().st_size
     return total
+
+
+def is_session_id(session: str) -> bool:
+    """A session id that can name a file of its own: letters, digits, ``-`` and ``_``."""
+    return _SESSION_ID.fullmatch(session) is not None
+
+
+def denied_in(machine: MachinePaths, session: str) -> set[str]:
+    """The lessons that denied a call in this session already; none where nothing is marked."""
+    try:
+        text = (machine.state_dir / DENIED_FOLDER / session).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return set()
+    return set(text.splitlines())
+
+
+def mark_denied(machine: MachinePaths, session: str, names: Sequence[str], now: datetime.datetime) -> bool:
+    """Notes that these lessons denied a call in this session; a session's first mark removes the
+    marks of sessions older than ``DENIED_KEPT_FOR``. False where the mark could not be written
+    whole: a call denied then would be denied again at every call of the session."""
+    folder = machine.state_dir / DENIED_FOLDER
+    marked = "".join(f"{name}\n" for name in names).encode("utf-8")
+    try:
+        folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+        path = folder / session
+        if not path.exists():
+            _forget_old_sessions(folder, now)
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            return os.write(descriptor, marked) == len(marked)
+        finally:
+            os.close(descriptor)
+    except OSError:
+        return False
+
+
+def keep_marks(machine: MachinePaths, session: str) -> None:
+    """A call let through renews the session's marks, so a session open for days keeps them."""
+    with contextlib.suppress(OSError):
+        os.utime(machine.state_dir / DENIED_FOLDER / session)
+
+
+def _forget_old_sessions(folder: Path, now: datetime.datetime) -> None:
+    oldest = (now - DENIED_KEPT_FOR).timestamp()
+    for path in folder.iterdir():
+        with contextlib.suppress(OSError):
+            if path.stat().st_mtime < oldest:
+                path.unlink()

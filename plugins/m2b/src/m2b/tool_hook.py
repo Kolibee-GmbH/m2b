@@ -1,14 +1,17 @@
 """The tool hook: before a Bash call, the action lessons whose words the command holds (B263).
 
 Claude Code runs it on ``PreToolUse`` for Bash. Where the command holds all of a lesson's words and
-none of the words that silence it, in a repository the lesson is for, the hook adds the lesson as
-context before the call runs, written as a correction the owner kept; a lesson set to ask has
-Claude Code ask the owner first (``permissionDecision: ask``). Each firing is counted, and so is
-each call while there are action lessons.
+none of the words that silence it, in a repository the lesson is for, the first such call of a
+session is denied with the lesson as the reason (B288): context a PreToolUse hook adds reaches
+Claude only beside the tool's result, after the call ran, while a denial's reason is read before
+anything runs. The next call of that session goes through, with the lesson as context; a lesson set
+to ask has Claude Code ask the owner first (``permissionDecision: ask``), every time. Each firing is
+counted, and so is each call while there are action lessons.
 
 It reads machine state only: the list the session start wrote (``action_lessons``), the notes of
 the remotes of the session's folder, and the machine config for the folders m2b is off in. No file
-of the store, no git. It never fails or holds a call: on any error it prints nothing and exits 0.
+of the store, no git, and in the folder of each session one small file of the lessons that denied a
+call there. It never fails a call: on any error it prints nothing and exits 0, and the call runs.
 It has its own small command, as the prompt hook has, because the core's command line loads every
 command first.
 """
@@ -30,6 +33,10 @@ from m2b.paths import machine_paths
 
 CURATION_RUN_VARIABLE = "M2B_CURATION_RUN"
 LESSON_LINE = "m2b lesson for this command: the owner corrected Claude on it and kept the correction: "
+SECOND_CALL = (
+    "The call did not run, so that this is read first; change the command, or explain why it holds here, "
+    "and the same call goes through in this session."
+)
 
 
 def main(environ: Mapping[str, str] | None = None, stdin: TextIO | None = None) -> int:
@@ -70,6 +77,22 @@ def _answer(environ: Mapping[str, str], stdin: TextIO) -> dict[str, object] | No
     if not firing:
         return None
     action_lessons.count_fired(machine, [lesson.name for lesson in firing], now)
+    session = given.get("session_id")
+    if isinstance(session, str) and action_lessons.is_session_id(session):
+        already = action_lessons.denied_in(machine, session)
+        stopping = [lesson for lesson in firing if not lesson.ask and lesson.name not in already]
+        if not stopping and already:
+            action_lessons.keep_marks(machine, session)
+        # Only a noted denial is a first one: unnoted, the same call would be denied again and again.
+        if stopping and action_lessons.mark_denied(machine, session, [lesson.name for lesson in stopping], now):
+            reason = " ".join(LESSON_LINE + lesson.text for lesson in stopping)
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": f"{reason} {SECOND_CALL}",
+                }
+            }
     said = "\n".join(LESSON_LINE + lesson.text for lesson in firing)
     output: dict[str, object] = {"hookEventName": "PreToolUse", "additionalContext": said}
     asking = [lesson for lesson in firing if lesson.ask]

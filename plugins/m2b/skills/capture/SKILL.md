@@ -132,7 +132,8 @@ LESSON
 ```
 
 A line that begins `Kept` means it was kept; the next curation run files it, and from then on an
-action lesson comes before each call of its command, a knowledge lesson at every session start.
+action lesson stops the first call of its command in a session, a knowledge lesson comes at every
+session start.
 Exit 2 says in one line why not: tell the user that line.
 
 ## A fix for a file Claude reads

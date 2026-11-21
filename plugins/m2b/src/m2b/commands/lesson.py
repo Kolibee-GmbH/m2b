@@ -3,10 +3,10 @@
 It reads one JSON object from standard input: ``text`` (the lesson as one sentence), ``kind``
 (``knowledge`` or ``action``), optionally ``title``, for an action ``words`` (what a command holds
 when the lesson applies), ``unless`` (what keeps it silent) and ``ask`` (Claude Code asks the owner
-before the command instead of only reminding), and ``for``: ``every project`` (the default) or
-``this project``, the repository of the working folder by its remote. A lesson for this project in
-a folder without a remote is refused, as is one that is no lesson; both end with exit 2.
-"""
+before the command every time, instead of stopping only the first call of a session), and ``for``:
+``every project`` (the default) or ``this project``, the repository of the working folder by its
+remote. A lesson for this project in a folder without a remote is refused, as is one that is no
+lesson; both end with exit 2."""
 
 from __future__ import annotations
 
