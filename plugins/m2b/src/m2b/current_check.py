@@ -59,7 +59,8 @@ def ask(store: Store, tasks: Tasks, quiet: Sequence[QuietCurrent], prefix: str, 
     """
     loaded, asked_in = _load(store)
     # Questions asked in another list are asked again here; the old list is not read.
-    asked = loaded if asked_in == task_list else {}
+    # A copy, so that the comparison with ``loaded`` below sees what this run changed.
+    asked = dict(loaded) if asked_in == task_list else {}
     questions = _questions(tasks)
     items = _current_keys(store)
     if items is not None:

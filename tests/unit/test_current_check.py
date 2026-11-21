@@ -30,6 +30,7 @@ INDEX = """# Memory
 - Planning the trip to Porto (since 2026-10-02)
 """
 PORTO = QuietCurrent("Planning the trip to Porto", "2026-10-02")
+SHED = QuietCurrent("Rebuilding the garden shed roof", "2026-11-03")
 ACME_EXPORT = QuietCurrent("Building the Acme export", "2026-10-01")
 ACME_UNDER_CURRENT = "\n### Acme Ltd (Acme, Kim Lee)\n- Building the Acme export (since 2026-10-01)\n"
 LIST = "markdown:"
@@ -206,6 +207,19 @@ class CurrentCheckTest(unittest.TestCase):
 
         self.assertNotIn("Porto", self.index().read_text(encoding="utf-8"))
         self.assertEqual(self.questions(), [])
+
+    def test_a_second_question_asked_in_a_later_run_is_remembered_and_its_deletion_drops_the_item(self) -> None:
+        """Covers: B42"""
+        ask(self.store, self.tasks, [PORTO], PREFIX, task_list=LIST)
+        ask(self.store, self.tasks, [PORTO, SHED], PREFIX, task_list=LIST)
+        [shed_question] = [task for task in self.questions() if "shed" in task.title]
+        self.tasks.delete(shed_question.id)
+
+        settle(self.store, self.tasks, TODAY, task_list=LIST)
+
+        memory = self.index().read_text(encoding="utf-8")
+        self.assertNotIn("garden shed", memory)
+        self.assertIn("Planning the trip to Porto (since 2026-10-02)", memory)
 
     def test_after_a_switch_to_another_task_list_an_unanswered_question_is_asked_again_not_dropped(self) -> None:
         """Covers: B58"""

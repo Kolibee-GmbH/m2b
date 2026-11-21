@@ -69,6 +69,12 @@ All notable changes to this project are documented here. The format follows
   are read, and keeps a note while its folder is there; for leaving work out a note still counts
   for 30 days.
 
+### Fixed
+
+- A "Still current?" question asked in a later curation run than the first one is remembered, so
+  deleting it takes its line out of `## Current` as deleting the first one does. Before, only the
+  questions of the first run were kept, and a later one you deleted left its line standing.
+
 ## [0.11.0] - 2026-11-20
 
 A message you send while Claude is still working counts as your prompt, and the reading of your
