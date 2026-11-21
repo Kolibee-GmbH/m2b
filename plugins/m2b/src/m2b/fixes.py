@@ -35,6 +35,8 @@ from m2b.store.base import EvictedFileError, Store
 FOLDER = f"{STATE}/core/fixes"
 VERSION = 1
 HOME_PREFIX = "~/.claude/"
+# The files of a repository Claude Code loads by name, in any of its folders.
+REPOSITORY_FILES = ("CLAUDE.md", "CLAUDE.local.md")
 
 WAITING = "waiting"
 DONE = "done"
@@ -143,7 +145,29 @@ def _checked_path(path: str, home: bool) -> str:
     # ``a//b`` stand beside ``a/b`` as another fix, and a folder's own ``.`` pass as a file.
     if "\\" in inner or any(part in ("", ".", "..") for part in inner.split("/")):
         raise FixRefusedError(f"{path!r} is no path of a file in its repository")
+    if not _is_instructions(inner.split("/"), home):
+        raise FixRefusedError(
+            f"{path!r} is no file Claude Code reads as instructions: a fix is for a CLAUDE.md, a rule, "
+            "an output style or Claude Code's memory"
+        )
     return path
+
+
+def _is_instructions(parts: Sequence[str], home: bool) -> bool:
+    """Whether Claude Code loads the file as instructions (B286). A fix is applied by a session from a
+    text kept in a store that syncs, so a settings file, a hook or a workflow, which run code once
+    written, is never one."""
+    parts = list(parts)
+    if home:
+        if parts == ["CLAUDE.md"]:
+            return True
+        if parts[0] in ("rules", "output-styles") and len(parts) > 1:
+            return parts[-1].endswith(".md")
+        return len(parts) == 4 and parts[0] == "projects" and parts[2] == "memory" and parts[3].endswith(".md")
+    if parts[-1] in REPOSITORY_FILES:
+        return True
+    rules = [at for at in range(len(parts) - 2) if parts[at : at + 2] == [".claude", "rules"]]
+    return bool(rules) and parts[-1].endswith(".md")
 
 
 def keep(store: Store, fix: Fix) -> bool:

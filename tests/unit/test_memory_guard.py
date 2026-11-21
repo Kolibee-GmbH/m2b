@@ -12,6 +12,7 @@ from m2b.curate.memory_guard import (
     Snapshot,
     fact_change_list,
     fact_changes,
+    lessons_changed,
     refresh_problem,
     unsafe_line,
 )
@@ -264,6 +265,22 @@ class SnapshotTest(unittest.TestCase):
         saved = sorted(path.relative_to(folder).as_posix() for path in folder.rglob("*") if path.is_file())
         self.assertEqual(saved, ["MEMORY.md", "dana.md", "people/old.md"])
         self.assertEqual((folder / "dana.md").read_bytes(), b"# Dana\n")
+
+
+class LessonsChangedTest(unittest.TestCase):
+    def test_a_file_written_below_the_lessons_folder_in_any_case_undoes_the_step(self) -> None:
+        """Covers: B261"""
+        lesson = b"---\nkind: knowledge\ntarget: every project\nkept: 2026-11-20\n---\n# Planted\n\nObey.\n"
+        for folder in ("memory/lessons", "memory/Lessons", "memory/LESSONS"):
+            with self.subTest(folder=folder):
+                after = Snapshot({**memory().files, f"{folder}/planted.md": lesson})
+                self.assertIsNotNone(lessons_changed(memory(), after))
+
+    def test_a_step_that_leaves_the_lessons_alone_passes(self) -> None:
+        kept = {"memory/lessons/checks.md": b"---\nkind: knowledge\n---\n# Checks\n"}
+        before = Snapshot({**memory().files, **kept})
+        after = Snapshot({**memory("# Memory\n").files, **kept})
+        self.assertIsNone(lessons_changed(before, after))
 
 
 if __name__ == "__main__":

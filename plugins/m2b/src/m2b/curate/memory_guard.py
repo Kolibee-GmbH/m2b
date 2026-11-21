@@ -143,7 +143,9 @@ def lessons_changed(before: Snapshot, after: Snapshot) -> str | None:
     """Why the step must be undone: it wrote below ``memory/lessons/``. Said without the file's name,
     which the model chose."""
     prefix = f"{LESSONS_FOLDER}/"
-    paths = {path for path in (*before.files, *after.files) if path.startswith(prefix)}
+    # Compared without case: on a store that ignores case, as macOS and iCloud Drive do by default,
+    # ``memory/Lessons/`` written by a step is the folder every session start reads its lessons from.
+    paths = {path for path in (*before.files, *after.files) if path.casefold().startswith(prefix.casefold())}
     if any(before.files.get(path) != after.files.get(path) for path in paths):
         return f"the step changed {prefix}, where only lessons the owner kept go and no model step writes"
     return None

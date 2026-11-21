@@ -38,6 +38,43 @@ def portal_fix(**changed: object) -> Fix:
     return fixes.new_fix(**given)  # type: ignore[arg-type]
 
 
+class InstructionFilesTest(unittest.TestCase):
+    def test_a_fix_is_kept_only_for_a_file_claude_code_loads_as_instructions(self) -> None:
+        """Covers: B286"""
+        for path in (
+            "CLAUDE.md",
+            "CLAUDE.local.md",
+            "web/CLAUDE.md",
+            ".claude/CLAUDE.md",
+            ".claude/rules/tests.md",
+            "web/.claude/rules/api/style.md",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(portal_fix(path=path).path, path)
+        for path in ("~/.claude/CLAUDE.md", "~/.claude/rules/git.md", "~/.claude/output-styles/terse.md"):
+            with self.subTest(path=path):
+                self.assertEqual(portal_fix(path=path, repositories=(), machine="mac").path, path)
+        memory = "~/.claude/projects/-home-alex-portal/memory/MEMORY.md"
+        self.assertEqual(portal_fix(path=memory, repositories=(), machine="mac").path, memory)
+
+    def test_a_fix_for_a_file_that_can_run_code_or_holds_settings_is_refused(self) -> None:
+        """Covers: B286"""
+        for path in (
+            ".claude/settings.json",
+            ".git/hooks/pre-commit",
+            ".github/workflows/ci.yml",
+            "AGENTS.md",
+            "docs/rules.md",
+            ".claude/rules/run.sh",
+            "scripts/CLAUDE.md.sh",
+        ):
+            with self.subTest(path=path), self.assertRaises(fixes.FixRefusedError):
+                portal_fix(path=path)
+        for path in ("~/.claude/settings.json", "~/.claude/hooks/pre.sh", "~/.claude/plugins/x/CLAUDE.md"):
+            with self.subTest(path=path), self.assertRaises(fixes.FixRefusedError):
+                portal_fix(path=path, repositories=(), machine="mac")
+
+
 class StoreFixture(unittest.TestCase):
     def setUp(self) -> None:
         self._temp = tempfile.TemporaryDirectory(prefix="sb-test-fixes-")
@@ -98,7 +135,8 @@ class KeepTest(StoreFixture):
 class SettleTest(StoreFixture):
     def test_done_and_dropped_each_add_an_empty_file_beside_the_fix(self) -> None:
         """Covers: B250"""
-        first, second, third = portal_fix(), portal_fix(path="docs/rules.md"), portal_fix(path="AGENTS.md")
+        first, second = portal_fix(), portal_fix(path=".claude/rules/testing.md")
+        third = portal_fix(path="docs/CLAUDE.md")
         for fix in (first, second, third):
             fixes.keep(self.store, fix)
 
@@ -263,12 +301,14 @@ class AddCommandTest(CommandFixture):
     def test_a_file_in_a_folder_of_the_clone_keeps_its_path_in_the_repository(self) -> None:
         """Covers: B248"""
         clone = self.clone("https://github.com/acme/portal")
-        (clone / "docs" / "rules.md").write_text("- Old rule.\n", encoding="utf-8")
+        rules = clone / ".claude" / "rules"
+        rules.mkdir(parents=True)
+        (rules / "testing.md").write_text("- Old rule.\n", encoding="utf-8")
 
-        code, _, _ = self.add(file=str(clone / "docs" / "rules.md"), line="- Old rule.", wording="- New.", why=WHY)
+        code, _, _ = self.add(file=str(rules / "testing.md"), line="- Old rule.", wording="- New.", why=WHY)
 
         self.assertEqual(code, 0)
-        self.assertEqual(fixes.read_all(self.store)[0].fix.path, "docs/rules.md")
+        self.assertEqual(fixes.read_all(self.store)[0].fix.path, ".claude/rules/testing.md")
 
     def test_a_fix_for_the_global_claude_md_is_kept_for_this_machine(self) -> None:
         """Covers: B248"""
