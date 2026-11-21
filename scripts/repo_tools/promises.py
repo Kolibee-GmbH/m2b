@@ -60,6 +60,7 @@ INCOMPLETE = "incomplete"
 WORST_FIRST = (BROKEN, UNSTEADY, NO_DIFFERENCE, WORDINGS, INCOMPLETE)
 PASSED_MARK = "✓"
 FAILED_MARK = "✗"
+SHOWS_NOTHING_MARK = "\u25cb"
 
 EXIT_HELD = 0
 EXIT_NOT_HELD = 1
@@ -261,16 +262,24 @@ def report(results: Sequence[tuple[Promise, Sequence[CaseResult]]], versions: Ve
 
 
 def _marks(runs: Sequence[Run]) -> str:
-    return "".join(PASSED_MARK if run.passed else FAILED_MARK for run in runs) or "-"
+    return "".join(_mark(run) for run in runs) or "-"
+
+
+def _mark(run: Run) -> str:
+    if not run.shows:
+        return SHOWS_NOTHING_MARK
+    return PASSED_MARK if run.passed else FAILED_MARK
 
 
 def _what_broke(result: CaseResult) -> list[str]:
     worded = result.case.kind == SCENARIO or len(result.case.names) == RUNS
     found = []
-    for number, run in enumerate(result.with_m2b, 1):
-        if not run.passed:
+    for arm, runs in (("with m2b", result.with_m2b), ("without m2b", result.without_m2b)):
+        for number, run in enumerate(runs, 1):
+            if run.passed if arm == "with m2b" else run.shows:
+                continue
             wording = f" (wording {number})" if worded else ""
-            found.append(f"{result.case.label} with m2b, run {number}{wording}: {run.evidence or 'no detail'}")
+            found.append(f"{result.case.label} {arm}, run {number}{wording}: {run.evidence or 'no detail'}")
     return found
 
 

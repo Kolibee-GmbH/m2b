@@ -769,6 +769,8 @@ def check_invariants(
 
     - ``{"count": n, "glob": "...", "content": "<regex>"}``: n visible files match the glob (and the
       regular expression, searched, when given);
+    - ``{"at_least": n, "glob": "...", "content": "<regex>"}``: as ``count``, n or more, where a model
+      may write one thing as one file or as two;
     - ``{"once": "<regex>", "glob": "..."}``: the expression occurs exactly once across those files;
     - ``{"matches": "<regex>", "path": "..."}``: the file exists and the expression is found in it;
     - ``{"run_state": "succeeded"}``: the run record says so;
@@ -792,10 +794,12 @@ def _invariant_problem(invariant: Mapping[str, Any], files: Mapping[str, str], s
     def matching(glob: str) -> list[str]:
         return [name for name in sorted(files) if fnmatch.fnmatchcase(name, glob)]
 
-    if "count" in invariant:
+    if "count" in invariant or "at_least" in invariant:
         names = matching(invariant["glob"])
         if "content" in invariant:
             names = [name for name in names if re.search(invariant["content"], files[name])]
+        if "at_least" in invariant:
+            return None if len(names) >= invariant["at_least"] else f"found {len(names)}: {names}"
         return None if len(names) == invariant["count"] else f"found {len(names)}: {names}"
     if "once" in invariant:
         found = sum(len(re.findall(invariant["once"], files[name])) for name in matching(invariant["glob"]))

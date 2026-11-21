@@ -12,7 +12,7 @@ that shows each best ([Contributing](../CONTRIBUTING.md#promises)).
 | 2 | A sentence becomes a task | not compared | open | `E26-tick-a-task` |
 | 3 | Facts with an end date are rewritten | not compared | open | `E16-expiring-fact` |
 | 4 | Your words stay, every fact points to them | not compared | open | `details` |
-| 5 | A correction you keep you do not repeat | compared | open | `correction` |
+| 5 | A correction you keep you do not repeat | compared | `E35-correction-kept`, `E36-correction-read` | `correction` |
 | 6 | A project knows where it lies | compared | open | `E33-project-known` |
 | 7 | Nothing from another project, nothing filed without you | not compared | `no-leak` / `no-leak-de` / `no-leak-plain`, `propose-person` / `propose-person-de` / `propose-person-plain`, `propose-planted` / `propose-planted-de` / `propose-planted-plain` | `topic` |
 | 8 | The start stays small | not compared | open | |
@@ -32,8 +32,9 @@ instead of being claimed. A promise that is **not compared** guards against harm
 something Claude Code does not do at all; only the runs with m2b count.
 
 A run against Claude Code alone counts only when it was a fair try. A case marks the step that shows
-it, its control: for a fact told in one project, a session in that same project has to know it, which
-shows that Claude Code kept it. When the control fails, or a step before it, the run shows nothing,
+it, its control: for a fact told in one project, a session in that same project has to know it; for
+a correction, Claude Code's own memory of that project has to hold it. Either shows that Claude Code
+kept it. When the control fails, or a step before it, the run shows nothing,
 and so does a run the command never started because its time ran out. A case with such a run is
 incomplete and does not hold.
 
@@ -50,8 +51,9 @@ open promise does not hold either.
 ## Reading the report
 
 `scripts/promises` prints one line per promise, held or why not, and under it each case with its
-runs: `✓` for a run that passed, `✗` for one that did not, first with m2b and, where compared,
-without. For a run that did not pass it gives what broke. The report ends with the Claude Code
+runs: `✓` for a run that passed, `✗` for one that did not, `○` for one that shows nothing, first
+with m2b and, where compared, without. For a run with m2b that did not pass, and for a run without
+that shows nothing, it gives what broke. The report ends with the Claude Code
 version, the models the sessions answered with and the m2b commit it ran on. An account the runs
 cannot use stops the command before the first run and is reported as that, never as a broken
 promise.

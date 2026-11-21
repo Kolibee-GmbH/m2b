@@ -456,6 +456,11 @@ class InvariantTest(unittest.TestCase):
         self.assertEqual(self.check({"count": 1, "glob": "tasks/*.md", "content": "m2b:capture \\S+ call"}), [])
         self.assertEqual(len(self.check({"count": 2, "glob": "tasks/*.md"})), 1)
 
+    def test_at_least_counts_the_matching_files_as_a_lower_bound(self) -> None:
+        self.assertEqual(self.check({"at_least": 1, "glob": "memory/*.md", "content": "tea"}), [])
+        self.assertEqual(self.check({"at_least": 2, "glob": "memory/*.md", "content": "[Tt]ea"}), [])
+        self.assertEqual(len(self.check({"at_least": 3, "glob": "memory/*.md"})), 1)
+
     def test_once_counts_occurrences_across_the_files(self) -> None:
         link = "\\[\\[\\d{8}T\\d{6}Z-cli-[0-9a-f]{4}\\.md\\]\\]"
         self.assertEqual(self.check({"once": link, "glob": "memory/*.md"}), [])

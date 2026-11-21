@@ -1,0 +1,193 @@
+{
+  "description": "E36 at the model level, a correction the reading of sessions finds: as E35, but the owner only corrects Claude, in two repositories, and nothing in the sessions can keep it: m2b lesson add, m2b capture and the note tool are not allowed, and nothing may wait in the inbox before the run. A curation run that reads the sessions proposes the lesson quoting the correction in each of the two sessions; the owner keeps it, the next run files it, and in a third repository Claude runs only scripts/check --quick. scripts/promises also runs it against Claude Code alone, its own memory on, with a control that every session ran a check. Claude Code alone is not asked to keep anything here, and keeping a correction nobody asked to keep is what the reading adds; that its own memory is on and works shows E35's control. Three wordings, one in German.",
+  "wordings": [
+    {
+      "ask": "run scripts/check",
+      "correct": "No, only the quick round: scripts/check --quick.",
+      "task": "I fixed a typo in README.md. Check that nothing broke."
+    },
+    {
+      "ask": "Lass scripts/check laufen.",
+      "correct": "Nein, nur die schnelle Runde: scripts/check --quick.",
+      "task": "Ich habe in README.md einen Tippfehler korrigiert. Prüf, ob noch alles läuft.",
+      "language": "de"
+    },
+    {
+      "ask": "Please run the checks with scripts/check.",
+      "correct": "Too much, the whole proof is not needed: just scripts/check --quick.",
+      "task": "I changed one word in README.md; make sure the checks still pass."
+    }
+  ],
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "settings",
+        "set",
+        "curation.read_sessions",
+        "true"
+      ],
+      "arm": "with"
+    },
+    {
+      "run": [
+        "sh",
+        "-c",
+        "git init -q && git remote add origin https://github.com/acme/invoice-tool.git && mkdir scripts && printf '#!/bin/sh\\nhere=$(dirname \"$0\")/..\\nif [ \"$1\" = --quick ]; then touch \"$here/quick.ran\"; echo \"quick round: passed\"; else touch \"$here/full.ran\"; echo \"check: passed\"; fi\\n' > scripts/check && chmod +x scripts/check && echo 'Leafpress builds static sites.' > README.md"
+      ],
+      "cwd": "invoice-tool"
+    },
+    {
+      "run": [
+        "sh",
+        "-c",
+        "git init -q && git remote add origin https://github.com/acme/garden-site.git && mkdir scripts && printf '#!/bin/sh\\nhere=$(dirname \"$0\")/..\\nif [ \"$1\" = --quick ]; then touch \"$here/quick.ran\"; echo \"quick round: passed\"; else touch \"$here/full.ran\"; echo \"check: passed\"; fi\\n' > scripts/check && chmod +x scripts/check && echo 'Leafpress builds static sites.' > README.md"
+      ],
+      "cwd": "garden-site"
+    },
+    {
+      "run": [
+        "sh",
+        "-c",
+        "git init -q && git remote add origin https://github.com/acme/pages.git && mkdir scripts && printf '#!/bin/sh\\nhere=$(dirname \"$0\")/..\\nif [ \"$1\" = --quick ]; then touch \"$here/quick.ran\"; echo \"quick round: passed\"; else touch \"$here/full.ran\"; echo \"check: passed\"; fi\\n' > scripts/check && chmod +x scripts/check && echo 'Leafpress builds static sites.' > README.md"
+      ],
+      "cwd": "pages"
+    },
+    {
+      "session": [
+        "--setting-sources",
+        "project",
+        "--plugin-dir",
+        "{core_plugin}",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Bash,Read,Skill,mcp__m2b__search,Write,Edit",
+        "--disallowedTools",
+        "Bash(m2b lesson:*),Bash(m2b capture:*)",
+        "--model",
+        "sonnet"
+      ],
+      "turns": [
+        "{ask}",
+        "{correct}"
+      ],
+      "turn_seconds": 300,
+      "cwd": "invoice-tool"
+    },
+    {
+      "session": [
+        "--setting-sources",
+        "project",
+        "--plugin-dir",
+        "{core_plugin}",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Bash,Read,Skill,mcp__m2b__search,Write,Edit",
+        "--disallowedTools",
+        "Bash(m2b lesson:*),Bash(m2b capture:*)",
+        "--model",
+        "sonnet"
+      ],
+      "turns": [
+        "{ask}",
+        "{correct}"
+      ],
+      "turn_seconds": 300,
+      "cwd": "garden-site"
+    },
+    {
+      "run": [
+        "sh",
+        "-c",
+        "! ls \"{store}\"/state/core/lessons-kept/*.json \"{store}\"/inbox/*.md 2>/dev/null"
+      ],
+      "arm": "with"
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "arm": "with"
+    },
+    {
+      "run": [
+        "m2b",
+        "proposals",
+        "--json"
+      ],
+      "arm": "with",
+      "stdout": "\"kind\": \"lesson\"[\\s\\S]*\"quote\": \"[^\"]+\"[\\s\\S]*\"lesson\": \\{[^}]*\"quote\": \"[^\"]+\""
+    },
+    {
+      "run": [
+        "m2b",
+        "proposals",
+        "keep",
+        "--all"
+      ],
+      "arm": "with"
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "arm": "with"
+    },
+    {
+      "run": [
+        "claude",
+        "-p",
+        "{task}",
+        "--setting-sources",
+        "project",
+        "--plugin-dir",
+        "{core_plugin}",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Bash,Read,Edit",
+        "--max-turns",
+        "10",
+        "--max-budget-usd",
+        "1",
+        "--model",
+        "sonnet",
+        "--output-format",
+        "json"
+      ],
+      "cwd": "pages"
+    },
+    {
+      "run": [
+        "sh",
+        "-c",
+        "ls ../invoice-tool/*.ran ../garden-site/*.ran *.ran >/dev/null 2>&1 || { echo \"a session ran no check: $(ls ../invoice-tool ../garden-site .)\" >&2; exit 1; }"
+      ],
+      "cwd": "pages",
+      "arm": "without",
+      "control": true
+    },
+    {
+      "run": [
+        "sh",
+        "-c",
+        "test -e quick.ran && test ! -e full.ran || { echo \"the third repository holds: $(ls)\" >&2; exit 1; }"
+      ],
+      "cwd": "pages"
+    }
+  ],
+  "invariants": [
+    {
+      "at_least": 1,
+      "glob": "memory/lessons/*.md",
+      "content": "(?i)quick|schnell",
+      "arm": "with"
+    }
+  ]
+}

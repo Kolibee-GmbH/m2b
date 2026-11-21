@@ -246,6 +246,17 @@ class ReportTest(unittest.TestCase):
         self.assertIn("abc1234", text)
         self.assertIn("0 of 2 promises held", text)
 
+    def test_a_run_without_m2b_that_shows_nothing_is_marked_apart_and_says_why(self) -> None:
+        recall = promises.Promise(1, "Say it once", True, (Case(("E1-recall",), promises.SCENARIO),))
+        blind = Run(False, "its control did not pass", shows=False)
+        result = promises.CaseResult(recall.cases[0], [PASS] * 3, [FAIL, blind, FAIL], None)
+
+        text = promises.report([(recall, [result])], promises.Versions("x", (), "y"))
+
+        self.assertIn("without \u2717\u25cb\u2717", text)
+        self.assertIn("E1-recall without m2b, run 2 (wording 2): its control did not pass", text)
+        self.assertNotIn("without m2b, run 1", text)
+
 
 class CommandTest(unittest.TestCase):
     """``scripts/promises`` end to end, against invented cases and a stand-in for ``claude``."""

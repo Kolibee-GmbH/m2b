@@ -128,6 +128,8 @@ scripts/e2e --level model E17-planted-capture               # and after a change
 scripts/e2e --level model E14-topics                        # after a change to the ingest skill
 scripts/e2e --level model E33-project-known                 # the same
 scripts/e2e --level model E34-session-read                  # after each Claude Code minor update
+scripts/e2e --level model E35-correction-kept               # the same, and after a change to lessons
+scripts/e2e --level model E36-correction-read               # the same, and after a change to the reading
 ```
 
 Every session at this level runs in a Claude Code folder of the scenario's own, set as
@@ -162,6 +164,18 @@ Claude Code writes into the transcript at a turn's end. The reading of sessions 
 transcript of a headless run, so only such a session shows what a curation run reads from what the
 owner typed. The invariant `sessions_read` checks that: the prompts it finds, in order, each with
 the Bash commands of the turn before it.
+
+`E35-correction-kept` and `E36-correction-read` are the cases of the promise that a correction
+you keep you do not repeat. In two invented repositories the owner asks for the checks and corrects
+Claude to the quick round; each repository's `scripts/check` leaves a file for the round it ran. In
+E35 the owner asks to keep it, and Claude keeps it with `m2b lesson add`; in E36 `m2b lesson add` is
+not allowed, and a curation run that reads the sessions proposes the lesson, which the owner keeps.
+In both a run files the lesson, and in a third repository Claude, asked to check a small change,
+runs only the quick round. Against Claude Code alone the third repository runs the whole proof. The
+control of E35 is that Claude Code alone, asked to keep the correction, kept it in its own memory of
+the second repository; the control of E36 is that every session ran a check, since keeping a
+correction nobody asked to keep is what the reading adds. Two interactive sessions and a headless one
+on Sonnet, one or two curation runs, under a minute each.
 
 `E34-session-read` types two turns into a session in an invented repository: "run scripts/check",
 then a correction to run only the quick round. It passes when the reading finds both prompts in
