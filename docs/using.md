@@ -49,7 +49,7 @@ up to its 60th page, and a picture as a picture ([A document in the inbox](curat
 A session-start hook prints the distillate, at most 8 KB: lasting facts, each pointing to its
 fact file, and what is going on right now. Facts that matter only for one subject sit under a
 topic; a session sees the topic's name, and its facts come in when a prompt or the project
-folder's path names it. The hook also prints one line when something needs you: the last
+folder's path names it. In a second output beside it, m2b prints one line when something needs you: the last
 curation run failed, the curating machine has not run for three days, or the store cannot be
 found. The distillate is marked as data from your notes, not instructions. In a project where it
 should not appear, such as a screen share or a customer's repository, `m2b distillate off` in
@@ -80,7 +80,7 @@ start scripts/check", comes before Claude runs that command: the first Bash call
 command holds its words does not run, and Claude gets the lesson as the reason; it changes the
 command or says why it holds, and the next call runs with the lesson beside it. The hook stays
 silent where the command holds a word you named to keep it quiet (`--quick`). Say "keep this as a
-lesson" in a session and the next curation run files it. A lesson can ask you before every call
+lesson" in a session and Claude Code asks you before it is kept; the next curation run files it. A lesson can ask you before every call
 instead.
 
 `m2b status` and the overview's part "m2b" say how each lesson does since you kept it: how often you corrected Claude on it
@@ -179,8 +179,11 @@ one, a curation run starts in the background on the machine that curates and fil
 so the next session knows it; on another machine, or with `curation.run_after_answers` off, your
 answers wait for the next run. Only the prompts you typed are read, with what you pasted into them
 and with credentials redacted, and beside each one the end of Claude's answer before it and the
-shell commands of that turn; nothing else of Claude's answers, no tool's output, nothing a plugin or another
-agent sent, and no session you left out by its folder or its git remote ([Reading your sessions](curation.md#reading-your-sessions)).
+shell commands of that turn, and in a repository with a project topic the paths of the files Claude
+wrote there; nothing else of Claude's answers, no tool's output, nothing a plugin or another agent
+sent, and no session you left out by its folder or its git remote. To check a lesson, a model also
+reads your `CLAUDE.md` files, rules, output style and Claude Code's memory
+([Reading your sessions](curation.md#reading-your-sessions)).
 
 A session can also hand in a proposal by itself, with words from what its agent read for you, a
 mail or a document. That is off until you turn `sessions.propose` on, and such a proposal says in

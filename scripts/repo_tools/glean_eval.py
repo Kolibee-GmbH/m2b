@@ -644,12 +644,14 @@ def replay_page(replayed: Sequence[ReplayDay], model: str, with_memory: bool = F
     """The proposals in their words, for the person whose days these are and nobody else."""
     given = (
         [
-            "The model got what you typed and the memory you gave it, and nothing else: not your",
-            "captures. So it also proposes what you captured yourself.",
+            "The model got what you typed and pasted, beside each prompt the end of Claude's answer",
+            "before it and the shell commands of that turn, and the memory you gave it, and nothing",
+            "else: not your captures. So it also proposes what you captured yourself.",
         ]
         if with_memory
         else [
-            "The model got what you typed, and nothing else:",
+            "The model got what you typed and pasted, beside each prompt the end of Claude's answer",
+            "before it and the shell commands of that turn, and nothing else:",
             "not your memory and not your captures. So it also proposes what your second brain knows",
             "already and what you captured yourself.",
         ]

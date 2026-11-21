@@ -46,8 +46,8 @@ flowchart LR
 |---|---|---|
 | Preflight | code | removes leftover temp files, downloads the files the run reads, loads the profile |
 | Migrate | code, only when the store's format is older than this m2b | brings `memory/` up to the rules of this m2b, one format at a time, each checked in code; a failing one puts `memory/` back, keeps the format and ends the run with the review |
-| Harvest | code | settles the memory candidates and "Still current? ..." questions you ticked or dropped, and the proposals you kept or dropped |
-| Glean | code and one model call without tools, only with `curation.read_sessions` | reads what you typed in Claude Code since the last reading and keeps what the model proposes for your memory ([Reading your sessions](#reading-your-sessions)) |
+| Harvest | code | settles the memory candidates, the "Still current? ..." and "Still needed? ..." questions you ticked or dropped, and the proposals you kept or dropped; writes the lessons you kept into `memory/lessons/` and keeps the fixes |
+| Glean | code and up to three model calls without tools, only with `curation.read_sessions` | reads what you typed in Claude Code since the last reading and keeps what the model proposes for your memory ([Reading your sessions](#reading-your-sessions)) |
 | Ingest | model, only with captures in the inbox | files facts and what is going on into memory, under its topic what concerns one subject only, tasks into your list, each capture into `corpus/YYYY/MM/`; reads a PDF whole up to its 60th page and writes what stands on which page into the note beside it ([A document in the inbox](#a-document-in-the-inbox)) |
 | Refresh | model, only when a fact is past its day | rewrites the facts whose `until` has passed |
 | Sort | model, only with `m2b curate --sort-facts` | moves facts lines of an older distillate into topics; code puts the file back if a statement changed |
@@ -321,10 +321,14 @@ is gone and nothing was noted for it or git does not answer. The run's informati
 **When.** The step `glean` runs after harvest and before ingest, so what you captured yourself is
 in the store by then. It covers the time since the last reading ended: the last 24 hours at the
 first reading and never more than 7 days; what lies before is named as not read. Without a prompt
-of yours in that time no model starts.
+of yours in that time the reading starts no model; the check of your lessons against the files
+every session loads (below) still asks one when those lessons or files changed.
 
 **What is kept.** The model gets the distillate, so it can leave out what is known, the proposals
-you kept and dropped lately (below), and per session its folder, its day and its prompts. It answers with proposals of six kinds, a person, an
+you kept and dropped lately (below), per session its folder, its day and its prompts, and the
+lessons you kept, each with the day it was kept. Beside its proposals it names the prompts that
+correct Claude on a kept lesson again; code counts such a correction only where its words, at
+least three, stand in what you typed after that day. It answers with proposals of six kinds, a person, an
 agreement, a commitment, something personal, a lesson and a pointer, each with the words it stands on. A
 lesson is a correction of how Claude works that you made in two sessions, such as "only the quick
 round" after Claude ran the whole proof: code keeps it only when both of your sentences stand in
@@ -410,8 +414,8 @@ the sessions.
 **What your answers change.** The next reading shows the model what you answered: up to 30
 proposals you kept and up to 30 you dropped, of each those a run settled last, with the kind, the
 text and the words it stood on. The model is told to leave out what is like something you dropped, also where
-it would otherwise propose it, and in doubt to propose what is like something you kept; the four
-kinds and what is never proposed stay as they are. So dropping the time of a call a few times is
+it would otherwise propose it, and in doubt to propose what is like something you kept; the kinds
+and what is never proposed stay as they are. So dropping the time of a call a few times is
 how you say that such things do not belong in your memory. It is a rule a model follows, not a
 check in code. An expired proposal is not shown: you did not look at it, which says nothing about
 it. A proposal is no example any more 90 days after a run settled your answer to it. The model is
@@ -626,7 +630,7 @@ color of a warning. It is refreshed about once a minute and after each of your t
 |---|---|
 | `last curation run failed` | the last run failed; the review task in your list names the step and the cause, and `/m2b-review` shows it |
 | `last curation run interrupted` | the last run ended without finishing, for example because the computer shut down or its process was killed |
-| `could not read the last curation run` or `could not read the inbox` | that part of the store could not be read |
+| `could not read the last curation run`, `could not read the inbox` or `could not read the lessons` | that part of the store could not be read |
 | `could not read store.json`, `tasks not reachable` (likewise for the store and the calendar) | that file or backend; the task list, store and calendar are checked every 5 minutes, so such a problem can show up or clear that much later |
 | `could not look` | `m2b status` gave no answer at all; run it in a terminal to see why |
 

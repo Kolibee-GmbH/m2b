@@ -136,8 +136,11 @@ turn it on ([The band](band.md#handing-in-a-proposal-a-tool-you-turn-on)). The w
 Setup asked, on the machine that curates, whether curation runs may read your sessions. It is off
 until you say yes there, or later with `m2b config set curation.read_sessions true`. With a yes, a
 run reads what you typed and pasted in Claude Code since the last reading, and beside each prompt
-the end of Claude's answer before it and the shell commands of that turn: no other part of Claude's
-answers, no tool's output, nothing a plugin or another agent sent. A model proposes from it what
+the end of Claude's answer before it and the shell commands of that turn, and in a repository with a
+project topic the paths of the files Claude wrote there: no other part of Claude's answers, no tool's
+output, nothing a plugin or another agent sent. To check a lesson, a model also reads your
+`CLAUDE.md` files, rules, output style and Claude Code's memory
+([Reading your sessions](curation.md#reading-your-sessions)). A model proposes from it what
 belongs in your memory although you never said "remember this", each proposal with the words it
 stands on, said or pasted, and nothing is filed
 before you keep it: `/m2b-proposals` in a session, or from a terminal:
@@ -226,7 +229,7 @@ m2b config set executables.claude "$(command -v claude)"
 | `<store>/memory/MEMORY.md` | the distillate every session sees |
 | `<store>/tasks/` | your tasks, with the `markdown` backend |
 | `~/.config/m2b/config.json` | this machine's settings |
-| `~/.local/state/m2b/` | lock, run log, temp files, the worklog's recordings, which topics each session of the last seven days was given, and the git remotes of the folders sessions start in |
+| `~/.local/state/m2b/` | lock, run log, temp files, the worklog's recordings, which topics each session of the last seven days was given, the git remotes of the folders sessions start in, the lessons about a command with how often each fired and how many Bash calls a day saw, which lessons stopped a call in which session, the days a repository was worked in, and when the lessons were last checked against the files every session loads |
 | `~/.local/state/m2b/memory-before-run/` | copies of `memory/` from before a run's model steps: the latest run's copy until the next run, and an older one while a review task still names it for a facts line a run removed or rewrote ([The curation run](curation.md)). They hold what your facts say, outside the store folder |
 | `~/.local/share/m2b/` | the copy of the worklog's herdr recorder, with the worklog add-on |
 | `~/.local/bin/m2b` | the launcher scripts and schedules call |

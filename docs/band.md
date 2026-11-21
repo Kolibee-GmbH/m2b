@@ -23,7 +23,8 @@ than its line, its counts are cut at their end and `m2b` stays whole.
 
 - **How many things wait for your answer**, `4 wait for you`: memory candidates
   ("Remember? ...", proposed with `m2b tasks add --candidate`), "Still current?" questions about
-  items of the distillate that have gone quiet, proposals from your sessions
+  items of the distillate that have gone quiet, "Still needed?" questions about lessons that went
+  quiet, proposals from your sessions
   ([curation](curation.md#reading-your-sessions)) and the open review of the last curation run,
   each counted as one. The pane lists them with keep, drop and `ok`.
 - **How many proposals your sessions handed in**, `1 handed in`, while they wait for a curation
@@ -234,7 +235,7 @@ columns a bar down the left stands in for each frame. A row is its text and, on 
 what you can press.
 
 - **Waits for you** holds what the band counts: one row for the proposals from your sessions,
-  every memory candidate and "Still current?" question with keep and drop, and the open review
+  every memory candidate, "Still current?" and "Still needed?" question with keep and drop, and the open review
   with `ok`. The tab `Proposals` turns the pane to
   [them](#the-proposals-from-your-sessions-in-the-pane), the tab `Review` to
   [the whole review](#the-whole-review-and-search-in-a-pane); the tab `Overview`, Escape or
@@ -283,7 +284,9 @@ what you can press.
   last curated, and `curation paused` where this machine starts no run by itself. What is wrong
   stands above it in the error color, each with its reason: a curation run that failed, a
   calendar m2b could not reach, an inbox it could not read. A session that still runs an older
-  m2b than the installed one says so here and names `/reload-plugins`.
+  m2b than the installed one says so here and names `/reload-plugins`. Below it stands each lesson
+  you kept with how it does since you kept it, as `m2b status` says it; a lesson you corrected
+  Claude on again is marked `not working` and stands out in the color of what waits.
 
   On the machine that curates the store, the button `curate now` stands below the line about
   curation. A press writes nothing for five seconds: the row offers `undo` beside
@@ -713,6 +716,9 @@ each proposal with its text, below it keep and drop with what kind of thing it i
 (with the due day of a commitment and the topic, where it has one), and then the words it was
 taken from and their day: `said on` before words you
 typed, `pasted on` before words from text you pasted into a prompt, which may be someone else's.
+A lesson's proposal has three more lines: its kind, for what and, for a command, the words it fires
+on and the kept lesson it would replace; the words of the second session it was said in; and what
+becomes of a file that already says it: `stated already in`, `adds to` or `fixes` that file.
 
 ![The pane after /m2b-proposals, under the tab Proposals 3: the part "Proposals from your sessions", framed in the warning color, with "keep all" and then each proposal as its text, keep and drop with its kind beside them, a due day for the commitment, and below them the words it was taken from with the day they were said. Under the pane the band is one row, "m2b 5 wait for you" with the button "open", and one task due today and one overdue below it](images/proposals.png)
 

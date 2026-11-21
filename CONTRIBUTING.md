@@ -124,7 +124,13 @@ scripts/e2e --level model E31-file-asks-first               # the same
 scripts/e2e --level model E32-file-captured                 # the same
 scripts/e2e --level model E17-planted-capture               # and after a change to the ingest skill
 scripts/e2e --level model E14-topics                        # after a change to the ingest skill
+scripts/e2e --level model E33-project-known                 # the same
 ```
+
+`E33-project-known` files a project kept with `m2b capture --project` through a real ingest step and
+checks the topic it becomes: a heading with two to five words, the repository's name among them, and
+the `Repository:` line first, with the address as captured; a session in the clone then gets the
+topic with the folder it lies in.
 
 The [weekly workflow](#checks) runs all of them with the newest Claude Code, where the repository
 has an account for it.
@@ -348,8 +354,9 @@ scripts/glean-eval --replay 7 --out ~/glean-replay.md
 It reads your last seven days from Claude Code's transcripts (`--until <day>` ends them on another
 day than today, `--leave-out <folder>` skips the sessions in a folder), asks the model once for
 each day and writes the proposals with their quotes to the file, which only you can read. It prints
-counts and no word of a prompt. What you typed and pasted goes to the model on your own login, as it
-did when you sent it. The model gets no captures, and a memory only with `--memory <file>`, a copy
+counts and no word of a prompt. What you typed and pasted, with the end of Claude's answer before
+each prompt and the shell commands of that turn, goes to the model on your own login, as it did
+when you sent it. The model gets no captures, and a memory only with `--memory <file>`, a copy
 of your distillate you made; without one it also proposes what your second brain knows already. A
 file inside this repository is refused, for `--out` and for `--memory`.
 

@@ -228,8 +228,9 @@ def _of_this_machine() -> tuple[Setting, ...]:
             "Curation reads your sessions",
             "A curation run on this machine reads what you typed and pasted in Claude Code since the last "
             "reading, beside each prompt the end of Claude's answer before it and its shell commands, and a model "
-            "proposes facts from it for your memory. Pasted text can be someone else's. Nothing is filed before "
-            "you keep it.",
+            "proposes facts and lessons from it for your memory. To check a lesson, a model also reads your "
+            "CLAUDE.md files, rules, output style and Claude Code's memory. Pasted text can be someone else's. "
+            "Nothing new is filed before you keep it.",
             False,
         ),
         _switch(

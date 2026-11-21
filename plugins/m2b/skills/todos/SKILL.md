@@ -27,8 +27,8 @@ The JSON has `today`, four groups of tasks (`overdue`, `due_within_7_days`, `lat
 - `"reachable": false`: the calendar could not be read; `message` says why.
 - Otherwise `events` lists today's events, each with `title`, `start`, `end` and `all_day`.
 
-The review task of the curation run, the memory candidates and the "Still current?" questions are not
-in the groups; they are handled elsewhere.
+The review task of the curation run, the memory candidates and the "Still current?" and "Still
+needed?" questions are not in the groups; they are handled elsewhere.
 
 ## Answer
 
@@ -70,5 +70,5 @@ search the notes for it: the task list is where it lives.
    and note nothing.
 
 The command fails: say that the task is not ticked, with the message on standard error. The review
-task of the curation run, the memory candidates and the "Still current?" questions are not in the
-list and are not ticked here; the user answers them in the m2b pane or in their task list.
+task of the curation run, the memory candidates and the "Still current?" and "Still needed?"
+questions are not in the list and are not ticked here; the user answers them in the m2b pane or in their task list.

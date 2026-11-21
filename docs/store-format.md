@@ -13,11 +13,15 @@ integration needs, generated from `store.json`.
 ├── profile.json    the owner's profile
 ├── inbox/          new captures; every client only adds files here
 ├── corpus/YYYY/MM/ the archive, by month, no topic folders
-├── memory/         MEMORY.md (the distillate) and one file per fact
+├── memory/         MEMORY.md (the distillate), one file per fact, and lessons/ with one file
+│                   per lesson you kept
 ├── tasks/          only with the markdown task backend: one file per task
 └── state/
-    ├── core/       the run record, the memory candidates, the open "Still current?" questions,
-    │               the proposals from your sessions and your answers to them
+    ├── core/       the run record, the memory candidates, the open "Still current?" and
+    │               "Still needed?" questions (lesson-questions.json), the proposals from your
+    │               sessions and your answers to them, lessons kept in a session (lessons-kept/),
+    │               the fixes (fixes/) and how often you corrected Claude on a lesson again
+    │               (lesson-counts.json)
     ├── addons/<add-on>/
     └── integrations/<integration>/
 ```
@@ -187,7 +191,8 @@ to remove the heading with the last item it takes out.
 
 The curator's own tasks carry a marker as the first line of their notes, so they are found by
 marker, never by title: `m2b:review` for the review task, `m2b:candidate` for a memory candidate,
-`m2b:current` for a "Still current? ..." question about a current item, `m2b:proposals` for the
+`m2b:current` for a "Still current? ..." question about a current item, `m2b:lesson <key>` for a
+"Still needed? ..." question about a lesson, `m2b:proposals` for the
 one task that says proposals from your sessions wait for an answer, and
 `m2b:capture <file> <key>` for a task ingest made from a capture. On Apple Reminders, which has
 no dropped state, a dropped curator task carries the line `m2b:dropped` in its notes.
@@ -352,9 +357,9 @@ The session start only reads the fixes.
 |---|---|---|---|
 | `inbox/` | clients, integrations, harvest (a ticked candidate, a kept proposal), the worklog | the curating machine (name, frontmatter, trailer; never the text) | ingest moves files into the archive; normalize removes conflict copies identical to their original |
 | `corpus/` | ingest, the journal | the journal (appends to the month's file) | lint, only conflict copies identical to their original |
-| `memory/` | ingest | ingest, refresh, the sorting step, a migration after an update, harvest (only `## Current`, from "Still current?" answers), lint (a broken link it repairs) | nobody |
+| `memory/` | ingest; harvest (a lesson under `memory/lessons/`) | ingest, refresh, the sorting step, a migration after an update, harvest (only `## Current`, from "Still current?" answers), lint (a broken link it repairs, a current item it moves under its topic), the reading of your sessions (`kept_at` of a lesson a source states) | harvest (a lesson a kept one replaces) and the curation run (a lesson whose "Still needed?" you dropped) |
 | `state/core/` | the curation run; any client adds an answer to a proposal under `proposal-answers/`, a proposal a session hands in under `handed-in/`, and a fix and what became of it under `fixes/` | the curating machine | harvest prunes settled candidates and removes the answers it settled; the run removes the handed-in proposals it took in; every curation run removes the proposals kept, dropped or expired 90 days ago or longer |
-| tasks (`tasks/` with the `markdown` backend, or the Reminders list) | you, integrations, capture (a follow-up), ingest, `m2b tasks add --candidate` (a memory candidate), the curation run (review, "Still current?" questions, the task for waiting proposals) | you, also through the todos skill, which ticks a task you say is done, and through the m2b pane, which ticks one of your tasks with `done` and ticks or drops a curator task with keep, drop or `ok`; the curation run completes its review task when nothing needs you, and the task for waiting proposals when none waits | harvest and the refresh step, once a curator task is settled or its item is gone; lint, with the `markdown` backend, only conflict copies of task files identical to their original; you |
+| tasks (`tasks/` with the `markdown` backend, or the Reminders list) | you, integrations, capture (a follow-up), ingest, `m2b tasks add --candidate` (a memory candidate), the curation run (review, "Still current?" and "Still needed?" questions, the task for waiting proposals) | you, also through the todos skill, which ticks a task you say is done, and through the m2b pane, which ticks one of your tasks with `done` and ticks or drops a curator task with keep, drop or `ok`; the curation run completes its review task when nothing needs you, and the task for waiting proposals when none waits | harvest and the refresh step, once a curator task is settled or its item is gone; lint, with the `markdown` backend, only conflict copies of task files identical to their original; you |
 | `state/addons/<a>/`, `state/integrations/<i>/` | that add-on or integration | the same | the same |
 
 Nothing captured is ever deleted by m2b.
