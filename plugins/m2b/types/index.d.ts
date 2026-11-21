@@ -130,7 +130,15 @@ export type BandProposal = {
 }
 
 /** What a proposed lesson carries beside its text, as `m2b band --json` names it. */
-export type BandLesson = { kind: string; target: string; words: string[]; quote: string; at_source?: BandAtSource | null }
+export type BandLesson = {
+  kind: string
+  target: string
+  words: string[]
+  quote: string
+  at_source?: BandAtSource | null
+  // The kept lesson this one takes the place of, where every session's start is past its target.
+  replaces?: string | null
+}
 
 /** What a source a lesson is kept at says: `fix` replaces `line` (or adds, without one) with `wording`; `stated` names the line that says it. */
 export type BandAtSource = { verdict: string; file: string; line: string | null; wording: string | null }

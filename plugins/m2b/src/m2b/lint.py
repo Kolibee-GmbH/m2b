@@ -23,6 +23,7 @@ from __future__ import annotations
 import datetime
 import os
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
@@ -337,6 +338,14 @@ def _index(
                 report.add("unindexed-fact", ACTION, relative, f"{relative} has no facts line in {index_path}")
 
 
+def start_bytes(distillate: str, found: Sequence[lessons.Lesson]) -> tuple[int, int]:
+    """What every session starts with, as lint measures it against ``DISTILLATE_TARGET_BYTES``: the
+    distillate's general part with the names of its topics, and the block of lessons."""
+    split = split_topics(distillate)
+    start = len((split.general + ", ".join(block.topic.name for block in split.blocks)).encode("utf-8"))
+    return start, len(lessons.block(found).encode("utf-8"))
+
+
 def _sizes(report: LintReport, index_path: str, text: str, machine: _Machine | None, lessons_bytes: int = 0) -> None:
     """Each view against the target: what every session starts with, and each topic on its own.
 
@@ -346,7 +355,7 @@ def _sizes(report: LintReport, index_path: str, text: str, machine: _Machine | N
     The lessons every session starts with count into that part, and a finding names both sizes (B260).
     """
     split = split_topics(text)
-    start = len((split.general + ", ".join(block.topic.name for block in split.blocks)).encode("utf-8"))
+    start, _ = start_bytes(text, ())
     if lessons_bytes and start + lessons_bytes > DISTILLATE_TARGET_BYTES:
         report.add(
             "distillate-size",

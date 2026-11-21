@@ -154,6 +154,9 @@ class LessonPart:
     session: str
     # What a source says of it, where one does; set by the reading step, never by the model's answer.
     at_source: AtSource | None = None
+    # The kept lesson it would replace, where what every session starts with is past its target;
+    # set by the reading step, never by the model's answer.
+    replaces: str | None = None
 
 
 @dataclass(frozen=True)

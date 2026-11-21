@@ -31,7 +31,16 @@ import datetime
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 
-from m2b import candidates, fixes, kept_lessons, project_capture, project_proposals, proposal_answers, proposals
+from m2b import (
+    candidates,
+    fixes,
+    kept_lessons,
+    lessons,
+    project_capture,
+    project_proposals,
+    proposal_answers,
+    proposals,
+)
 from m2b.capture import capture
 from m2b.config.errors import ConfigError
 from m2b.glean import COMMITMENT, FIX, POINTER, PROJECT, AtSource
@@ -60,6 +69,8 @@ class HarvestReport:
     lessons: list[str] = field(default_factory=list)
     # Where the fixes kept from proposed lessons are for, as ``Fix.place`` names them.
     fixes: list[str] = field(default_factory=list)
+    # The lessons a kept lesson took the place of, by name.
+    replaced: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -301,6 +312,12 @@ def _keep_lesson(store: Store, entry: proposals.Entry, report: HarvestReport, ma
     except kept_lessons.LessonRefusedError as error:
         report.problems.append(f"the lesson you kept waits: {entry.text} ({error})")
         return False
+    # A lesson kept past what every session starts with takes the place of the one it named.
+    if lesson.replaces is not None:
+        replaced = f"{lessons.FOLDER}/{lesson.replaces}"
+        if store.exists(replaced):
+            store.delete(replaced)
+            report.replaced.append(lesson.replaces)
     return True
 
 

@@ -296,6 +296,18 @@ test('a proposed lesson shows its kind, whom it is for, the words it fires on an
   await ui.unmount()
 })
 
+test('a lesson that would take the place of a kept one names it in its heading', async ($, on) => {
+  // Covers: B284
+  const lesson = { kind: 'knowledge', target: 'every project', words: [], quote: 'again: herdr is an agent runtime', replaces: 'weak.md' }
+  const fake = new FakeM2b().proposal(DANA, 'Name herdr an agent runtime.', 'herdr is an agent runtime', { kind: 'lesson', lesson })
+  await start($, on, fake)
+  await typed($, 'm2b-proposals')
+
+  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  expect(await texts(ui)).toContain('lesson, knowledge for every project, replaces weak.md')
+  await ui.unmount()
+})
+
 test('a lesson kept at its source says what becomes of the source', async ($, on) => {
   // Covers: B273
   const at_source = { verdict: 'fix', file: '~/.claude/CLAUDE.md', line: '- Run the whole proof.', wording: '- Run the quick checks.' }

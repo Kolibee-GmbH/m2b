@@ -102,7 +102,8 @@ function isLesson(value: unknown): value is BandLesson {
     typeof value['quote'] === 'string' &&
     Array.isArray(value['words']) &&
     value['words'].every(word => typeof word === 'string') &&
-    (value['at_source'] === undefined || value['at_source'] === null || isAtSource(value['at_source']))
+    (value['at_source'] === undefined || value['at_source'] === null || isAtSource(value['at_source'])) &&
+    (value['replaces'] === undefined || value['replaces'] === null || typeof value['replaces'] === 'string')
   )
 }
 
@@ -208,7 +209,8 @@ function heading(proposal: BandProposal): string {
 /** `action for every project, on a command with scripts/check`, as `m2b proposals` says it. */
 function lessonHeading(lesson: BandLesson): string {
   const words = lesson.words.length > 0 ? `, on a command with ${lesson.words.map(word => writtenOut(word)).join(' ')}` : ''
-  return `${writtenOut(lesson.kind)} for ${writtenOut(lesson.target)}${words}`
+  const replaces = lesson.replaces ? `, replaces ${writtenOut(lesson.replaces)}` : ''
+  return `${writtenOut(lesson.kind)} for ${writtenOut(lesson.target)}${words}${replaces}`
 }
 
 /** What becomes of the source a lesson is kept at, as `m2b proposals` says it. */

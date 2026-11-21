@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import datetime
 import json
-from typing import Any
+from typing import Any, ClassVar
 from unittest import mock
 
 import test_proposals
@@ -855,6 +855,88 @@ class CorrectedAgainTest(GleanStepTest):
         self.assertTrue(
             any(note.startswith("the corrections of kept lessons were not counted") for note in self.info())
         )
+
+
+class StartBudgetTest(GleanStepTest):
+    KNOWN = "---\nkind: knowledge\ntarget: every project\nkept: {kept}\n---\n# {name}\n\n{text}\n"
+    NEW: ClassVar[dict[str, Any]] = {
+        "kind": "lesson",
+        "text": "Name herdr an agent runtime.",
+        "quote": "herdr is an agent runtime, say so",
+        "session": 1,
+        "topic": None,
+        "due": None,
+        "lesson": {
+            "kind": "knowledge",
+            "target": "every project",
+            "words": [],
+            "quote": "again: herdr is an agent runtime",
+            "session": 2,
+        },
+    }
+
+    LONG = "# Memory\n\n## Facts\n\n" + "".join(f"- Fact number {n} about the shed (shed.md)\n" for n in range(80))
+    SECOND: ClassVar[dict[str, Any]] = {
+        **NEW,
+        "text": "Call the band the band.",
+        "quote": "it is the band, not the bar",
+        "lesson": {**NEW["lesson"], "quote": "again, the band, not the bar"},
+    }
+
+    def proposed(self, distillate: str, counted: bool = True, *found: dict[str, Any]) -> list[dict[str, Any]]:
+        self.reading()
+        self.write("memory/MEMORY.md", distillate)
+        self.write("memory/lessons/old.md", self.KNOWN.format(kept="2026-10-01", name="Old", text="Say it once."))
+        self.write("memory/lessons/weak.md", self.KNOWN.format(kept="2026-10-20", name="Weak", text="Keep it short."))
+        if counted:
+            self.write(
+                lesson_counts.COUNTS_FILE,
+                json.dumps({"format": 1, "lessons": {"weak.md": {"corrected_again": ["a1", "b2"]}}}),
+            )
+        self.typed("herdr is an agent runtime, say so. it is the band, not the bar", START - 3 * HOUR, "one")
+        self.typed("again: herdr is an agent runtime. again, the band, not the bar", START - 2 * HOUR, "two")
+        entries = found or (self.NEW,)
+        self.answers(*entries, verdicts=[{"lesson": n, "verdict": "none"} for n in range(1, len(entries) + 1)])
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+        return [dict(entry["lesson"]) for entry in self.kept()["proposals"].values() if entry["state"] == "open"]
+
+    def test_past_the_start_target_a_new_lesson_names_the_weakest_it_would_replace(self) -> None:
+        """Covers: B284"""
+        (lesson,) = self.proposed(self.LONG)
+
+        self.assertEqual(lesson["replaces"], "weak.md")
+
+    def test_without_counts_the_oldest_is_named_and_two_new_lessons_name_two(self) -> None:
+        """Covers: B284"""
+        (lesson,) = self.proposed(self.LONG, False)
+        self.assertEqual(lesson["replaces"], "old.md")
+
+        self.setUp()
+        both = self.proposed(self.LONG, True, self.NEW, self.SECOND)
+        self.assertEqual({each["replaces"] for each in both}, {"weak.md", "old.md"})
+
+    def test_a_lesson_a_waiting_proposal_names_already_is_not_named_again(self) -> None:
+        """Covers: B284"""
+        waiting = glean.Proposal(
+            "lesson",
+            "Write dates as days.",
+            "write the date as a day",
+            "earlier",
+            lesson=glean.LessonPart("knowledge", "every project", (), "again a day", "later", replaces="weak.md"),
+        )
+        added = proposals.add(proposals.Proposals({}), [proposals.Said(waiting, datetime.date(2026, 11, 6))], START)
+        proposals.save(self.store, added.proposals)
+
+        (lesson,) = [each for each in self.proposed(self.LONG) if each["quote"] != "again a day"]
+
+        self.assertEqual(lesson["replaces"], "old.md")
+
+    def test_within_the_start_target_a_new_lesson_replaces_none(self) -> None:
+        """Covers: B284"""
+        (lesson,) = self.proposed("# Memory\n\n## Facts\n\n- Sam brings plywood (sam.md)\n")
+
+        self.assertNotIn("replaces", lesson)
 
 
 class KeptFixTest(GleanStepTest):

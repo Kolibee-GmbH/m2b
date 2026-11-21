@@ -666,6 +666,12 @@ class _Run:
                 )
                 for place in result.fixes
             ]
+            self.findings += [
+                report.Finding(
+                    HARVEST, report.INFO, f"the lesson {name} is removed: the lesson you kept takes its place"
+                )
+                for name in result.replaced
+            ]
         current_check.settle(self.store, tasks, self.clock().date(), task_list=self._task_list())
         removed = lesson_check.settle(self.store, tasks, self.clock().date(), task_list=self._task_list())
         self.findings += [

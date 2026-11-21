@@ -121,6 +121,7 @@ _SOURCE = re.compile(r"[a-z][a-z-]{0,19}")
 # A tool as Claude Code names it, its own or one of an MCP server: letters, digits and the signs
 # such names are joined with. The name is shown to the person, so nothing else is taken for one.
 _TOOL = re.compile(r"[A-Za-z][A-Za-z0-9_.-]{0,127}")
+_LESSON_FILE = re.compile(r"[^/\\\x00]+\.md")
 
 
 class ProposalsError(Exception):
@@ -298,7 +299,8 @@ def _format_of(entries: Collection[Entry]) -> int:
     """The format the file needs: 5 with a project or a pointer; 4 with a lesson; 3 with a proposal that names who
     proposed or a tool, or whose source is neither typed nor pasted; else 2 with one from pasted
     text; else 1."""
-    if any(entry.kind in (PROJECT, POINTER) for entry in entries):
+    # A lesson that replaces another would be kept beside it by an m2b before that field.
+    if any(entry.kind in (PROJECT, POINTER) or (entry.lesson and entry.lesson.replaces) for entry in entries):
         return FORMAT
     if any(entry.kind == LESSON for entry in entries):
         return FORMAT_WITHOUT_PROJECTS
@@ -531,7 +533,14 @@ def _lesson_of(value: object) -> LessonPart | None:
     source = None if at_source is None else _at_source_of(at_source)
     if at_source is not None and source is None:
         return None
-    return LessonPart(kind, target, tuple(words), quote, session, source)
+    replaces = value.get("replaces")
+    # A lesson's file name, never a path: harvest removes the file it names.
+    if not (
+        replaces is None
+        or (isinstance(replaces, str) and _LESSON_FILE.fullmatch(replaces) and can_be_written(replaces))
+    ):
+        return None
+    return LessonPart(kind, target, tuple(words), quote, session, source, replaces)
 
 
 def _at_source_of(value: object) -> AtSource | None:
@@ -580,6 +589,8 @@ def _as_json(entry: Entry) -> dict[str, Any]:
         }
         if entry.lesson.at_source is not None:
             written["lesson"]["at_source"] = dataclasses.asdict(entry.lesson.at_source)
+        if entry.lesson.replaces is not None:
+            written["lesson"]["replaces"] = entry.lesson.replaces
     if entry.pointer is not None:
         written["pointer"] = {"path": entry.pointer.path, "repositories": list(entry.pointer.repositories)}
     return written
@@ -607,7 +618,8 @@ def lesson_heading(lesson: LessonPart, shown: Callable[[str], str]) -> str:
     """What a proposed lesson is, beside its kind in a listing: ``action for every project, on a
     command with scripts/check``; ``shown`` is how the caller shows text."""
     words = f", on a command with {' '.join(shown(word) for word in lesson.words)}" if lesson.words else ""
-    return f"{lesson.kind} for {shown(lesson.target)}{words}"
+    replaces = f", replaces {shown(lesson.replaces)}" if lesson.replaces else ""
+    return f"{lesson.kind} for {shown(lesson.target)}{words}{replaces}"
 
 
 def again_line(quote: str) -> str:

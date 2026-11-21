@@ -39,6 +39,9 @@ All notable changes to this project are documented here. The format follows
   counted by a curation run that reads your sessions, and for a lesson about a command how often it
   fired in how many Bash calls; one corrected again is named `not working`
   ([Using m2b](docs/using.md#lessons)).
+- Past the 2 KB target of what every session starts with, a proposed lesson for every session names
+  the kept lesson it would replace, the one corrected again most often; keeping it removes that one
+  ([Using m2b](docs/using.md#lessons)).
 - A lesson about a command that did not fire for 30 days is asked about in your task list,
   `Still needed?`; a drop removes it, a tick keeps it for another 30 days
   ([Using m2b](docs/using.md#lessons)).

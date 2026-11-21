@@ -62,6 +62,7 @@ from m2b import (
     lesson_counts,
     lesson_sources,
     lessons,
+    lint,
     project_capture,
     project_files,
     project_proposals,
@@ -168,6 +169,18 @@ def propose(
     placed, unchecked = _at_their_sources(
         placed, read, config, machine, environ, notes_folder, started, pass_fds, kept.entries
     )
+    # Before the weakest lesson is chosen, so this reading's corrections count in that choice.
+    corrections = glean.checked_corrections(answer.corrections, read, shown_lessons, zone)
+    try:
+        again = lesson_counts.add(store, corrections, {lesson.name for lesson in standing})
+    # A counter must not cost the reading its proposals: whatever keeps the file from being read or
+    # written is said, and the reading goes on.
+    except (lesson_counts.LessonCountsError, ConfigError, StoreError) as error:
+        notes.append(f"the corrections of kept lessons were not counted: {error}")
+    else:
+        if again:
+            notes.append(f"{_count(again, 'correction')} of a kept lesson counted: Claude was corrected on it again")
+    placed = _within_the_start(placed, standing, store, kept.entries)
     said = [proposals.Said(proposal, typed_at.astimezone(zone).date()) for proposal, typed_at in placed]
     repositories = {
         session.folder: tuple(sorted(_addresses(notes_folder, session.folder, started))) for session in read
@@ -203,16 +216,6 @@ def propose(
             f"{_count(without_repository, 'lesson')} for one project left out: "
             "no repository is known that both its sessions worked in"
         )
-    corrections = glean.checked_corrections(answer.corrections, read, shown_lessons, zone)
-    try:
-        again = lesson_counts.add(store, corrections, {lesson.name for lesson in standing})
-    # A counter must not cost the reading its proposals: whatever keeps the file from being read or
-    # written is said, and the reading goes on.
-    except (lesson_counts.LessonCountsError, ConfigError, StoreError) as error:
-        notes.append(f"the corrections of kept lessons were not counted: {error}")
-    else:
-        if again:
-            notes.append(f"{_count(again, 'correction')} of a kept lesson counted: Claude was corrected on it again")
     proposals.save(store, dataclasses.replace(counted, read_until=started))
     project_proposals.remember(machine.state_dir, worked, machine.temp_dir)
     sent = sum(len(session.prompts) for session in read)
@@ -384,6 +387,67 @@ def _new_lessons(
             continue
         kept.append((proposal, typed_at))
     return kept, not_keepable, known
+
+
+def _within_the_start(
+    placed: Sequence[tuple[glean.Proposal, datetime.datetime]],
+    standing: Sequence[lessons.Lesson],
+    store: Store,
+    known: Mapping[str, proposals.Entry],
+) -> list[tuple[glean.Proposal, datetime.datetime]]:
+    """The proposals, each new lesson for every session's start with the kept lesson it would
+    replace where that start, with it, would be past its target (``lint.DISTILLATE_TARGET_BYTES``).
+
+    The lesson replaced is the weakest of those every session starts with: the one corrected again
+    most often since it was kept, then the oldest; each is named for one new lesson at most, also
+    across readings: one a waiting proposal names already is not named again. Where no kept lesson
+    is left to name, the new one is proposed alone. A proposal like one that waits, is answered or
+    expired is no new lesson: it would not be added.
+    """
+    named = {entry.lesson.replaces for entry in known.values() if entry.state == proposals.OPEN and entry.lesson}
+    new = [proposal for proposal, _ in placed if _goes_into_the_start(proposal) and not _is_known(proposal, known)]
+    if not new:
+        return list(placed)
+    start, lessons_bytes = lint.start_bytes(_distillate(store), standing)
+    added = sum(len(f"- {proposal.text}\n".encode()) for proposal in new)
+    if start + lessons_bytes + added <= lint.DISTILLATE_TARGET_BYTES:
+        return list(placed)
+    try:
+        again = lesson_counts.corrected_again(store)
+    except (lesson_counts.LessonCountsError, ConfigError, StoreError):
+        again = {}
+    weakest = iter(
+        sorted(
+            (lesson for lesson in standing if lesson.in_the_block and lesson.name not in named),
+            key=lambda lesson: (-again.get(lesson.name, 0), lesson.kept, lesson.name),
+        )
+    )
+    result: list[tuple[glean.Proposal, datetime.datetime]] = []
+    for proposal, typed_at in placed:
+        replaced = next(weakest, None) if any(proposal is each for each in new) else None
+        if replaced is not None and proposal.lesson is not None:
+            proposal = dataclasses.replace(
+                proposal, lesson=dataclasses.replace(proposal.lesson, replaces=replaced.name)
+            )
+        result.append((proposal, typed_at))
+    return result
+
+
+def _is_known(proposal: glean.Proposal, known: Mapping[str, proposals.Entry]) -> bool:
+    return proposals.proposal_id(proposal) in known or any(
+        same_text(entry.text, proposal.text) for entry in known.values()
+    )
+
+
+def _goes_into_the_start(proposal: glean.Proposal) -> bool:
+    """A lesson kept as its own text for every session: no fix of a source, no pointer to one."""
+    lesson = proposal.lesson
+    return (
+        lesson is not None
+        and lesson.kind == lessons.KNOWLEDGE
+        and lesson.target == lessons.EVERY_PROJECT
+        and lesson.at_source is None
+    )
 
 
 def _same_lesson(proposal: glean.Proposal, lesson: glean.LessonPart, other: lessons.Lesson) -> bool:

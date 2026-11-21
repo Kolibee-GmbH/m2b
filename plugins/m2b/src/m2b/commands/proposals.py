@@ -214,5 +214,6 @@ def _as_json(key: str, entry: Entry) -> dict[str, Any]:
             "words": list(entry.lesson.words),
             "quote": entry.lesson.quote,
             "at_source": None if entry.lesson.at_source is None else dataclasses.asdict(entry.lesson.at_source),
+            "replaces": entry.lesson.replaces,
         },
     }

@@ -139,6 +139,7 @@ class ListTest(ProposalsCommandTest):
                 "words": ["scripts/check"],
                 "quote": "no full check without a reason",
                 "at_source": None,
+                "replaces": None,
             },
         )
 

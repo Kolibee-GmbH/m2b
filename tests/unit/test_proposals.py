@@ -308,6 +308,27 @@ class LessonInFileTest(ProposalsFixture):
         (loaded,) = proposals.load(self.store).entries.values()
         self.assertEqual(loaded.lesson.at_source if loaded.lesson else None, fix)
 
+    def test_a_lesson_that_replaces_another_is_written_with_it_and_listed_so(self) -> None:
+        """Covers: B284"""
+        replacing = dataclasses.replace(LESSON, lesson=dataclasses.replace(LESSON.lesson, replaces="weak.md"))
+
+        self.kept(replacing)
+
+        written = self.written()
+        (entry,) = written["proposals"].values()
+        self.assertEqual((entry["lesson"]["replaces"], written["format"]), ("weak.md", 5))
+        (loaded,) = proposals.load(self.store).entries.values()
+        assert loaded.lesson is not None
+        self.assertEqual(loaded.lesson.replaces, "weak.md")
+        self.assertTrue(proposals.lesson_heading(loaded.lesson, str).endswith(", replaces weak.md"))
+        # A path is no lesson's name: harvest would remove the file it names.
+        (key,) = written["proposals"]
+        for path in ("sub/x.md", "../MEMORY.md", "weak.txt"):
+            with self.subTest(path):
+                lesson = {**written["proposals"][key]["lesson"], "replaces": path}
+                self.write({**written, "proposals": {key: {**written["proposals"][key], "lesson": lesson}}})
+                self.assertEqual(proposals.load(self.store).entries, {})
+
     def test_a_lesson_without_its_part_or_one_left_for_this_project_is_left_out(self) -> None:
         """Covers: B270"""
         self.kept(LESSON)
