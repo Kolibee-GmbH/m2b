@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 
 from m2b.notes.characters import without_hidden
-from m2b.notes.frontmatter import Note
+from m2b.notes.frontmatter import Note, NoteFormatError
 from m2b.notes.layout import MEMORY
 from m2b.store.base import Store, StoreError
 
@@ -34,6 +34,11 @@ KIND = "kind"
 TARGET = "target"
 KEPT = "kept"
 KEPT_AT = "kept_at"
+# An action lesson's words: all of ``words`` in a command and none of ``unless`` make it fire; with
+# ``ask`` Claude Code asks the owner before the command runs instead of only reminding.
+WORDS = "words"
+UNLESS = "unless"
+ASK = "ask"
 
 BLOCK_HEADER = (
     "m2b lessons: the owner corrected Claude on each of these and kept the correction; they hold in "
@@ -51,6 +56,9 @@ class Lesson:
     target: str
     kept: str
     kept_at: str | None = None
+    words: tuple[str, ...] = ()
+    unless: tuple[str, ...] = ()
+    ask: bool = False
 
     @property
     def in_the_block(self) -> bool:
@@ -90,7 +98,13 @@ def _parsed(name: str, text: str) -> Lesson | None:
     sentence = _sentence(note.body)
     if sentence is None:
         return None
-    return Lesson(name, sentence, kind, target, kept, fields.get(KEPT_AT) or None)
+    try:
+        words, unless = tuple(fields.get_list(WORDS)), tuple(fields.get_list(UNLESS))
+    except NoteFormatError:
+        return None
+    if kind == ACTION and not words:
+        return None
+    return Lesson(name, sentence, kind, target, kept, fields.get(KEPT_AT) or None, words, unless, fields.get_flag(ASK))
 
 
 def _sentence(body: str) -> str | None:
@@ -111,6 +125,22 @@ def _sentence(body: str) -> str | None:
             continue
         paragraph.append(stripped)
     return " ".join(paragraph) or None
+
+
+def render(lesson: Lesson, title: str, evidence: Sequence[str]) -> str:
+    """A lesson's file as the curation run writes it."""
+    fields: dict[str, str | bool | list[str]] = {KIND: lesson.kind, TARGET: lesson.target, KEPT: lesson.kept}
+    if lesson.kept_at:
+        fields[KEPT_AT] = lesson.kept_at
+    if lesson.words:
+        fields[WORDS] = list(lesson.words)
+    if lesson.unless:
+        fields[UNLESS] = list(lesson.unless)
+    if lesson.ask:
+        fields[ASK] = True
+    links = "".join(f"- [[{name}]]\n" for name in evidence)
+    body = f"# {title}\n\n{lesson.text}\n" + (f"\n## Evidence\n\n{links}" if links else "")
+    return Note.new(fields, body).render()
 
 
 def kept_at_source(found: Iterable[Lesson]) -> list[Lesson]:

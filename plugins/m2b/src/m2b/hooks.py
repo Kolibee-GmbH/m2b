@@ -38,7 +38,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from m2b import fixes, launcher, lessons, repository_places, session_remotes, topic_state
+from m2b import action_lessons, fixes, launcher, lessons, repository_places, session_remotes, topic_state
 from m2b.atomic_file import write_text_atomically
 from m2b.config.errors import SETUP_COMMAND
 from m2b.config.machine import MachineConfig
@@ -149,7 +149,11 @@ def _print_distillate(
     head = f"{DISTILLATE_HEADER}\n\n"
     rule = f"\n{ROUTING_RULE} {WORK_PEOPLE_RULE}\n"
     # The lessons come whole and the distillate is cut earlier to make room for them (B259).
-    kept = lessons.block(lessons.read_all(store))
+    kept_lessons = lessons.read_all(store)
+    # The tool hook reads no file of the store before a Bash call, so the session start hands it the list.
+    with contextlib.suppress(OSError):
+        action_lessons.note(machine, kept_lessons)
+    kept = lessons.block(kept_lessons)
     tail = f"\n{kept}" if kept else ""
     room = OUTPUT_LIMIT - len(notices) - len(head) - len(rule) - len(tail) - len(CUT_LINE) - 2
     split = split_topics(text)

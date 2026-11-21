@@ -1,6 +1,6 @@
 ---
 name: capture
-description: Captures something into the owner's second brain - a note, a fact about a person, an idea, a task for later, a calendar entry, a file the user names with its path, the project a session works in, a fix for a file Claude reads. Use when the user says "remember this", "note that", "don't forget", "remind me to", "put it in my calendar", "keep this file", "remember this PDF", "merk dir das", "notier das", "denk dran", "erinnere mich an", "trag das in meinen Kalender ein", "keep this as a fix", "merk dir als Fix", "remember this project", "merk dir dieses Projekt", or when something personal without a home in the current repository comes up and the user wants to keep it. Only writes new notes and copies a file the user named; never curates.
+description: Captures something into the owner's second brain - a note, a fact about a person, an idea, a task for later, a calendar entry, a file the user names with its path, the project a session works in, a lesson, a fix for a file Claude reads. Use when the user says "remember this", "note that", "don't forget", "remind me to", "put it in my calendar", "keep this file", "remember this PDF", "merk dir das", "notier das", "denk dran", "erinnere mich an", "trag das in meinen Kalender ein", "keep this as a fix", "merk dir als Fix", "keep this as a lesson", "merk dir als Lehre", "remember this project", "merk dir dieses Projekt", or when something personal without a home in the current repository comes up and the user wants to keep it. Only writes new notes and copies a file the user named; never curates.
 allowed-tools: Bash(m2b capture *), Bash(m2b calendar *), Bash(m2b fix add *), Bash(m2b fix show *)
 ---
 
@@ -112,6 +112,27 @@ A printed `inbox/` path means it was kept. A line that the project is already kn
 or that its capture waits in the inbox, means nothing new was kept: tell the user that line. Exit
 2 says in one line why nothing was captured, such as a folder without a remote, which m2b needs
 to know the project on another machine: tell the user that line.
+
+## A lesson
+
+When the user asks to keep a correction of how Claude works as a lesson ("keep this as a lesson",
+"merk dir als Lehre: ..., wenn du scripts/check startest"), and no CLAUDE.md or rule file says the
+matter (where one says it wrongly, it is a fix, below), keep it with `m2b lesson add`, even where
+the tool is offered. Give the lesson as one sentence in the user's words, `kind` `action` when it
+is about a command, with the words that command holds (`words`) and those that keep the lesson
+silent (`unless`), else `knowledge`; `for` is `every project` unless the user says an action lesson
+is for this one (`this project`). A knowledge lesson for one project belongs in its CLAUDE.md: keep
+it as a fix. Claude Code asks the user before the command runs, and shows them the lesson:
+
+```bash
+m2b lesson add - <<'LESSON'
+{"text": "Run the whole proof only when the change gives a reason.", "kind": "action", "title": "The whole proof", "words": ["scripts/check"], "unless": ["--quick"], "for": "every project"}
+LESSON
+```
+
+A line that begins `Kept` means it was kept; the next curation run files it, and from then on an
+action lesson comes before each call of its command, a knowledge lesson at every session start.
+Exit 2 says in one line why not: tell the user that line.
 
 ## A fix for a file Claude reads
 

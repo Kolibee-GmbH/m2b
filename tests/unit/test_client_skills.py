@@ -368,6 +368,24 @@ class CaptureFileSkillTest(unittest.TestCase):
                 self.assertIn(said, text)
         self.assertIn(project_capture.FIRST_LINE.strip(), text)
 
+    def test_the_capture_skill_keeps_a_lesson_about_a_command_with_its_words(self) -> None:
+        """Covers: B267"""
+        text = one_line(skill_text("capture"))
+
+        self.assertTrue(any(block.startswith("m2b lesson add -") for block in bash_examples("capture")))
+        for said in (
+            "merk dir als Lehre",
+            "keep it with `m2b lesson add`, even where the tool is offered",
+            "with the words that command holds (`words`) and those that keep the lesson silent (`unless`)",
+        ):
+            with self.subTest(said=said):
+                self.assertIn(said, text)
+        self.assertIn(
+            "A correction the user asks to keep as a lesson is not a note either: the skill m2b:capture keeps it as a "
+            "lesson.",
+            tool_description("NOTE_RULES"),
+        )
+
     def test_the_capture_skill_keeps_a_fix_for_a_file_claude_reads_with_the_fix_command(self) -> None:
         """Covers: B248"""
         text = one_line(skill_text("capture"))

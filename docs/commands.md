@@ -17,6 +17,7 @@ need none of it: you say what you want kept or want to know, and the session doe
 | "keep this contract, ~/Documents/lease.pdf" | the `capture` skill, and Claude Code asks you before the copy | a copy of the file in `inbox/` with a note beside it that holds your words; the next curation run reads it |
 | "put it in my calendar: dentist, Tuesday at 10" | the `capture` skill | an event in the calendar you name (macOS, with a calendar set up) |
 | "remember this project", "merk dir dieses Projekt" | the `capture` skill | `m2b capture --project` keeps the project with the address of the folder's git remote; the next curation run makes it a topic, which then comes into a session that names it, with the folder it lies in on that machine. Without a remote nothing is kept |
+| "keep this as a lesson: run the whole proof only with a reason, when you start scripts/check" | the `capture` skill | `m2b lesson add` keeps it; the next curation run files it under `memory/lessons/`, and from then on it comes before each Bash call whose command holds its words |
 | "keep this as a fix: CLAUDE.md, the line about the whole proof is out of date, it should say ..." | the `capture` skill | `m2b fix add` keeps the fix in the store; the next session in a clone of that repository, or on this machine for a file under `~/.claude/`, names it, applies it with you and marks it done on your word |
 | "what did I note about the shed?" | the search tool, or the `search` skill | the lines that match, each with its file |
 | "what exactly does the rowing club's handbook say about lockers?" | the same, called with the fact file's name | the whole fact file, then the note of the document behind it with its outline |
@@ -101,6 +102,12 @@ commit the change ([Using m2b](using.md#fixes-for-the-files-claude-reads)).
 | `m2b fix show <name>` | one fix, whole: the file, what is wrong, the line it replaces and the new wording |
 | `m2b fix done <name>` | marks the fix applied, once you confirmed it |
 | `m2b fix drop <name>` | gives the fix up |
+
+### Lessons
+
+| Command | What it does |
+|---|---|
+| `m2b lesson add` | keeps a lesson, read as one JSON object from standard input: `text`, `kind` (`knowledge` or `action`), `title`, for an action `words`, `unless` and `ask`, and `for` (`every project`, or `this project`, the working folder's repository by its remote); the next curation run files it under `memory/lessons/` |
 
 ### Tasks and calendar
 

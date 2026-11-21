@@ -9,6 +9,9 @@ task whose capture exists is deleted in whatever state it is: Apple Reminders re
 reminder to delete it, so a failed delete can leave it open. A candidate gone from the task list
 counts as dropped, unless its capture exists: then the crash came after the delete.
 
+A lesson the owner kept by hand (``kept_lessons``) is written into ``memory/lessons/`` here, in
+code, before anything else: no model step may write there.
+
 A kept proposal goes the same way: the capture first, marked ``from_proposal``, then the
 proposals file, then the answer file. A commitment that names its day gets its follow-up task with
 the capture; any other proposal is a plain capture, and the filing decides what it becomes. Kept or
@@ -26,7 +29,7 @@ import datetime
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 
-from m2b import candidates, proposal_answers, proposals
+from m2b import candidates, kept_lessons, proposal_answers, proposals
 from m2b.capture import capture
 from m2b.config.errors import ConfigError
 from m2b.glean import COMMITMENT
@@ -52,6 +55,7 @@ class HarvestReport:
     captured: list[str] = field(default_factory=list)
     dropped: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
+    lessons: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -83,6 +87,10 @@ def harvest(
     """
     now = now or datetime.datetime.now(datetime.timezone.utc)
     report = report if report is not None else HarvestReport()
+    # Lessons kept by hand need no task list, so they are filed first, whatever the candidates do.
+    filed = kept_lessons.file_kept(store)
+    report.lessons += filed.lessons
+    report.problems += filed.problems
     try:
         _harvest_candidates(store, tasks, prefix, now, report)
     except Exception:

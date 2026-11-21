@@ -13,6 +13,9 @@ All notable changes to this project are documented here. The format follows
   where the topic comes into a session, it says which folder that repository lies in on this
   machine, or that it is not cloned here, so a session reads the project's files itself
   ([Store format](docs/store-format.md)).
+- A lesson about a command comes right before Claude runs it: a hook before each Bash call adds the
+  lesson whose words the command holds, or has Claude Code ask you first; "keep this as a lesson"
+  in a session keeps one with `m2b lesson add` ([Using m2b](docs/using.md#lessons)).
 - Every session starts with the lessons you kept for every project (`memory/lessons/`), as
   corrections after the distillate; `m2b status` counts them and names those kept at their source
   ([Using m2b](docs/using.md#lessons)).

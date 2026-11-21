@@ -162,6 +162,9 @@ Run only the checks the change touches; the whole proof only when the change giv
 - [[20261120T101500Z-claude-a1b2.md]]
 ```
 
+An action lesson names the words a command holds when it applies, `words: [scripts/check]`, and
+those that keep it silent, `unless: [--quick]`; `ask: true` has Claude Code ask you before the
+call. A lesson you keep in a session waits in `state/core/lessons-kept/` until the next run files it.
 `kind` is `knowledge` (how to name or judge a thing) or `action` (about a command), `target` is
 `every project` or a repository's address, and `kept_at` names the source that states it now,
 such as `~/.claude/CLAUDE.md`. Every session starts, after the distillate, with the knowledge

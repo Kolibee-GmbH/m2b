@@ -243,7 +243,7 @@ class CommandFixture(StoreFixture):
         return code, out.getvalue(), err.getvalue()
 
     def add(self, **given: object) -> tuple[int, str, str]:
-        return self.m2b("fix", "add", stdin=json.dumps(given))
+        return self.m2b("fix", "add", "-", stdin=json.dumps(given))
 
 
 class AddCommandTest(CommandFixture):

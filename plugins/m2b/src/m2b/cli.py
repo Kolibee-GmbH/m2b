@@ -34,6 +34,7 @@ from m2b.commands import doctor as doctor_command
 from m2b.commands import fixes as fix_commands
 from m2b.commands import ingest as ingest_commands
 from m2b.commands import launcher as launcher_commands
+from m2b.commands import lesson as lesson_commands
 from m2b.commands import lint as lint_commands
 from m2b.commands import proposals as proposals_commands
 from m2b.commands import rediscover as rediscover_commands
@@ -352,11 +353,23 @@ def _parser() -> argparse.ArgumentParser:
     add.add_argument("input", nargs="?", choices=("-",), default="-", help="-: read standard input")
 
     fix_group = _group(commands, "fix", "fixes kept for a file Claude reads, applied there by a session")
-    _command(fix_group, fix_commands.ADD, fix_commands.fix_command, "keep a fix, read as JSON from standard input")
+    fix_add = _command(
+        fix_group, fix_commands.ADD, fix_commands.fix_command, "keep a fix, read as JSON from standard input"
+    )
+    fix_add.add_argument("input", nargs="?", choices=("-",), default="-", help="-: read standard input")
     _command(fix_group, fix_commands.LIST, fix_commands.fix_command, "the kept fixes and what became of them", True)
     _command(fix_group, fix_commands.SHOW, fix_commands.fix_command, "one fix, whole, by its name").add_argument("name")
     for name, help_text in (("done", "the fix is applied, as the owner confirmed"), ("drop", "give the fix up")):
         _command(fix_group, name, fix_commands.fix_command, help_text).add_argument("name")
+
+    lesson_group = _group(commands, "lesson", "lessons the owner keeps for how Claude works")
+    lesson_add = _command(
+        lesson_group,
+        lesson_commands.ADD,
+        lesson_commands.lesson_command,
+        "keep a lesson, read as JSON from standard input",
+    )
+    lesson_add.add_argument("input", nargs="?", choices=("-",), default="-", help="-: read standard input")
 
     refresh_group = _group(commands, "refresh", "memory lines past their day or gone quiet")
     refresh_due = _command(refresh_group, "due", refresh_commands.refresh_due, "what is due, for the refresh", True)

@@ -71,6 +71,12 @@ written as corrections you made and kept, not as notes. A lesson that `~/.claude
 another source states now is left out, and `m2b status` says where it is kept. When distillate and
 lessons together pass the 2 KB target, lint says so with both sizes.
 
+A lesson about a command, such as "run the whole proof only when the change gives a reason, when
+you start scripts/check", comes right before Claude runs that command: a hook adds it before each
+Bash call whose command holds its words, and stays silent where the command holds a word you named
+to keep it quiet (`--quick`). Say "keep this as a lesson" in a session and the next curation run
+files it. A lesson can ask you before the call instead of only reminding.
+
 ## A project
 
 Say "remember this project" in a session in a clone, and the session captures it with

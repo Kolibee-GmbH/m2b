@@ -44,6 +44,7 @@ const NOTE_RULES = [
   'A task the user says is done is not a note either: the skill m2b:todos ticks it.',
   'A fix for a file Claude reads, a CLAUDE.md or a rule file under ~/.claude/, is not a note either: the skill m2b:capture keeps it as a fix.',
   'The project a session works in, when the user asks to keep it, is not a note either: the skill m2b:capture keeps it with its repository.',
+  'A correction the user asks to keep as a lesson is not a note either: the skill m2b:capture keeps it as a lesson.',
 ] as const
 
 const SEARCH_RULES = [

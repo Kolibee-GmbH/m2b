@@ -72,6 +72,43 @@ class ReadTest(StoreFixture):
         self.assertEqual(lessons.read_all(self.store), [])
 
 
+PROOF = (
+    "---\nkind: action\ntarget: every project\nkept: 2026-11-20\nwords: [scripts/check]\nunless: [--quick]\n---\n"
+    "# The whole proof\n\nRun the whole proof only when the change gives a reason.\n"
+)
+
+
+class ActionLessonTest(StoreFixture):
+    def test_an_action_lesson_gives_its_words_the_words_that_silence_it_and_whether_it_asks(self) -> None:
+        """Covers: B262"""
+        self.write("proof.md", PROOF.replace("unless: [--quick]\n", "unless: [--quick]\nask: true\n"))
+
+        [lesson] = lessons.read_all(self.store)
+
+        self.assertEqual((lesson.words, lesson.unless, lesson.ask), (("scripts/check",), ("--quick",), True))
+
+    def test_an_action_lesson_without_words_is_no_lesson(self) -> None:
+        """Covers: B262"""
+        self.write("proof.md", PROOF.replace("words: [scripts/check]\n", ""))
+
+        self.assertEqual(lessons.read_all(self.store), [])
+
+    def test_a_lesson_written_by_render_reads_back_as_it_was(self) -> None:
+        """Covers: B262"""
+        kept = lessons.Lesson(
+            "proof.md",
+            "Run the whole proof only when the change gives a reason.",
+            lessons.ACTION,
+            lessons.EVERY_PROJECT,
+            "2026-11-20",
+            words=("scripts/check",),
+            unless=("--quick",),
+        )
+        self.write("proof.md", lessons.render(kept, "The whole proof", ["20261120T101500Z-claude-a1b2.md"]))
+
+        self.assertEqual(lessons.read_all(self.store), [kept])
+
+
 class BlockTest(StoreFixture):
     def test_the_block_holds_every_knowledge_lesson_for_every_project_as_kept_corrections(self) -> None:
         """Covers: B257"""
