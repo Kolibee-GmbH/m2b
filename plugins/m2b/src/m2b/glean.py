@@ -105,6 +105,26 @@ class GleanError(Exception):
     """The model's answer could not be read; that is not an answer without proposals."""
 
 
+# What a source a session loads says of a proposed lesson (``lesson_sources``): wrongly, so the
+# lesson is a fix of it; or rightly, so the lesson is a pointer to the line that states it.
+FIX = "fix"
+STATED = "stated"
+
+
+@dataclass(frozen=True)
+class AtSource:
+    """A proposed lesson's source: the file as the person reads its name, the line a fix replaces or
+    that states the lesson (None for a fix that adds), a fix's new wording, and where a fix is kept:
+    its path in its repository with the repository's addresses, or from ``~`` with none."""
+
+    verdict: str
+    file: str
+    line: str | None
+    wording: str | None = None
+    path: str | None = None
+    repositories: tuple[str, ...] = ()
+
+
 @dataclass(frozen=True)
 class LessonPart:
     """What a proposed lesson carries beside its text: its kind and target, the words of the command
@@ -116,6 +136,8 @@ class LessonPart:
     quote: str
     # The id of the second session.
     session: str
+    # What a source says of it, where one does; set by the reading step, never by the model's answer.
+    at_source: AtSource | None = None
 
 
 @dataclass(frozen=True)

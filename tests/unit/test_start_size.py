@@ -182,7 +182,8 @@ class StartSizeTest(test_runner.RunnerTest):
 
         part = self.parts()["output style"]
 
-        self.assertTrue(part["not_read"].startswith(f"{self.claude / 'settings.json'} could not be read"))
+        self.assertTrue(part["not_read"].startswith(f"{self.claude / 'settings.json'} could not be read: "))
+        self.assertIn("line 1", part["not_read"])
 
     def test_a_distillate_that_is_not_downloaded_or_cannot_be_read_is_not_read_and_a_missing_one_is_left_out(
         self,

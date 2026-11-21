@@ -10,6 +10,7 @@ from unittest import mock
 
 import test_commands
 from m2b import cli, handed_in, proposal_answers, proposals
+from m2b.glean import STATED, AtSource
 from m2b.store.base import StoreError
 from m2b.store.guard import DatalessGuard
 from test_proposal_answers import DANA_ID, LADDER_ID, NOBODYS_ID
@@ -104,6 +105,17 @@ class HandedInCountTest(ProposalsCommandTest):
 
 
 class ListTest(ProposalsCommandTest):
+    def test_a_lesson_kept_at_its_source_says_what_becomes_of_the_source(self) -> None:
+        """Covers: B273"""
+        stated = AtSource(STATED, "~/.claude/CLAUDE.md", "- Run only the quick checks.")
+        self.proposed(dataclasses.replace(LESSON, lesson=dataclasses.replace(LESSON.lesson, at_source=stated)))
+
+        out = self.run_command("proposals")[1]
+        listed = self.run_json("proposals")["proposals"][0]
+
+        self.assertIn('  stated already in ~/.claude/CLAUDE.md: "- Run only the quick checks."\n', out)
+        self.assertEqual(listed["lesson"]["at_source"]["verdict"], "stated")
+
     def test_a_lesson_is_listed_with_its_kind_target_words_and_the_correction_said_again(self) -> None:
         """Covers: B273"""
         self.proposed(LESSON)
@@ -126,6 +138,7 @@ class ListTest(ProposalsCommandTest):
                 "target": "github.com/acme/portal",
                 "words": ["scripts/check"],
                 "quote": "no full check without a reason",
+                "at_source": None,
             },
         )
 

@@ -329,7 +329,15 @@ lesson is a correction of how Claude works that you made in two sessions, such a
 round" after Claude ran the whole proof: code keeps it only when both of your sentences stand in
 what you typed, in two sessions, and for a command when its words stand in a command Claude ran
 there. One for a single project names that project's repository, where both sessions' folders
-name the same one by a git remote; without one it is left out. Code keeps a
+name the same one by a git remote; without one it is left out. Before a lesson is proposed, a second
+model run without tools reads it with the files a session in its folders loads (the `CLAUDE.md`
+files, the rules, the output style, Claude Code's memory, the list `m2b status` measures), each
+line numbered. Where a line says the matter wrongly, the lesson becomes a fix of that line, with
+the new wording; where a line says it rightly, a pointer to that line, without text of its own; a
+lesson for one project that no file states becomes a fix that adds it to that project's
+`CLAUDE.md`. Code keeps a verdict only for a line that stands in a file it showed, and a fix only
+for a file under `~/.claude/` or in a repository. A kept fix or pointer waits for now, and the
+review says so. Code keeps a
 proposal only when those words stand in one prompt of the session it names, typed or pasted, with
 at least three words, and when you did not capture the same thing in that time. A proposal like one that
 waits, or like one you kept or dropped or that expired within 90 days, is not kept a second time,

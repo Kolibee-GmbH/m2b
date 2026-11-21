@@ -46,7 +46,17 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from m2b import claude_code, folders_left_out, glean, kept_lessons, lessons, proposals, session_remotes, sessions
+from m2b import (
+    claude_code,
+    folders_left_out,
+    glean,
+    kept_lessons,
+    lesson_sources,
+    lessons,
+    proposals,
+    session_remotes,
+    sessions,
+)
 from m2b.candidates import same_text
 from m2b.config.machine import MachineConfig
 from m2b.curate import model, period_captures
@@ -137,6 +147,9 @@ def propose(
     notes_folder = machine.state_dir / session_remotes.NOTES_FOLDER
     placed, without_repository = _for_their_project(checked, read, notes_folder, started)
     placed, not_keepable, known = _new_lessons(placed, lessons.read_all(store), zone)
+    placed, unchecked = _at_their_sources(
+        placed, read, config, machine, environ, notes_folder, started, pass_fds, kept.entries
+    )
     said = [proposals.Said(proposal, typed_at.astimezone(zone).date()) for proposal, typed_at in placed]
     added = proposals.add(kept, said, started)
     counted = added.proposals
@@ -147,6 +160,9 @@ def propose(
         notes.append(f"{_count(not_keepable, 'lesson')} left out: not in the form a lesson is kept in")
     if known:
         notes.append(f"{_count(known, 'lesson')} left out: a lesson like it is kept already")
+    if unchecked.count:
+        counted = proposals.counted(counted, glean.LESSON, "not_quoted", unchecked.count)
+        notes.append(f"{_count(unchecked.count, 'lesson')} left out: {unchecked.why}")
     if without_repository:
         counted = proposals.counted(counted, glean.LESSON, "not_quoted", without_repository)
         notes.append(
@@ -190,6 +206,81 @@ def _for_their_project(
             continue
         placed.append((dataclasses.replace(proposal, lesson=dataclasses.replace(lesson, target=common[0])), typed_at))
     return placed, without
+
+
+@dataclass(frozen=True)
+class _Unchecked:
+    count: int = 0
+    why: str = ""
+
+
+def _at_their_sources(
+    placed: Sequence[tuple[glean.Proposal, datetime.datetime]],
+    read: Sequence[sessions.Session],
+    config: MachineConfig,
+    machine: MachinePaths,
+    environ: Mapping[str, str],
+    notes: Path,
+    now: datetime.datetime,
+    pass_fds: Sequence[int],
+    known: Mapping[str, proposals.Entry],
+) -> tuple[list[tuple[glean.Proposal, datetime.datetime]], _Unchecked]:
+    """The proposals, each lesson with what the files its sessions load say of it (``lesson_sources``).
+
+    Asked only when there is a lesson. Where the model gives no answer that can be read, the lessons
+    are left out with the reason: proposed unchecked, one might stand beside a source that says it.
+    """
+    # A lesson that waits under its id or its text already is refused when it is added: no model
+    # run is spent on its sources.
+    found = [
+        proposal
+        for proposal, _ in placed
+        if proposal.lesson is not None
+        and proposals.proposal_id(proposal) not in known
+        and not any(same_text(entry.text, proposal.text) for entry in known.values())
+    ]
+    if not found:
+        return list(placed), _Unchecked()
+    folders = {session.session_id: session.folder for session in read}
+    wanted: list[lesson_sources.Folder] = []
+    for proposal in found:
+        assert proposal.lesson is not None
+        for key in (proposal.session, proposal.lesson.session):
+            folder = folders.get(key, "")
+            if folder and all(each.path != folder for each in wanted):
+                wanted.append(lesson_sources.Folder(folder, tuple(sorted(_addresses(notes, folder, now)))))
+    sources = lesson_sources.sources_for(wanted, environ)
+    their_folders = [[folders.get(proposal.session, ""), folders.get(_second(proposal), "")] for proposal in found]
+    loaded = [sources.of(each) for each in their_folders]
+    complete = [not any(folder in sources.incomplete for folder in each) for each in their_folders]
+    given = lesson_sources.step_input(found, sources.sources, loaded)
+    run = model.text_step(config, machine, environ, lesson_sources.instruction(), given, pass_fds)
+    if run.answer is None:
+        return _without_lessons(placed), _Unchecked(len(found), f"their sources could not be checked ({run.failure()})")
+    try:
+        verdicts = lesson_sources.apply(run.answer, found, sources.sources, loaded, complete)
+    except lesson_sources.LessonSourcesError as error:
+        return _without_lessons(placed), _Unchecked(len(found), f"their sources could not be checked ({error})")
+    checked = {(proposal.session, proposal.quote): proposal for proposal in verdicts.kept}
+    kept = [
+        (checked.get((proposal.session, proposal.quote), proposal), typed_at)
+        for proposal, typed_at in placed
+        if proposal.lesson is None or (proposal.session, proposal.quote) in checked
+    ]
+    why = "what their sources say could not be used"
+    if sources.not_shown:
+        why += f" (not shown to the model: {', '.join(sources.not_shown)})"
+    return kept, _Unchecked(verdicts.left_out, why)
+
+
+def _second(proposal: glean.Proposal) -> str:
+    return proposal.lesson.session if proposal.lesson else ""
+
+
+def _without_lessons(
+    placed: Sequence[tuple[glean.Proposal, datetime.datetime]],
+) -> list[tuple[glean.Proposal, datetime.datetime]]:
+    return [(proposal, typed_at) for proposal, typed_at in placed if proposal.lesson is None]
 
 
 def _new_lessons(

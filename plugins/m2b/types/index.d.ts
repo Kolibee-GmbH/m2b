@@ -114,7 +114,10 @@ export type BandProposal = {
 }
 
 /** What a proposed lesson carries beside its text, as `m2b band --json` names it. */
-export type BandLesson = { kind: string; target: string; words: string[]; quote: string }
+export type BandLesson = { kind: string; target: string; words: string[]; quote: string; at_source?: BandAtSource | null }
+
+/** What a source a lesson is kept at says: `fix` replaces `line` (or adds, without one) with `wording`; `stated` names the line that says it. */
+export type BandAtSource = { verdict: string; file: string; line: string | null; wording: string | null }
 
 /**
  * The proposals that wait for keep or drop, as `m2b band --json` names them, how many answers

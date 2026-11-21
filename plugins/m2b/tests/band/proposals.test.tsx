@@ -277,6 +277,37 @@ test('a proposed lesson shows its kind, whom it is for, the words it fires on an
   await ui.unmount()
 })
 
+test('a lesson kept at its source says what becomes of the source', async ($, on) => {
+  // Covers: B273
+  const at_source = { verdict: 'fix', file: '~/.claude/CLAUDE.md', line: '- Run the whole proof.', wording: '- Run the quick checks.' }
+  const lesson = { kind: 'action', target: 'every project', words: ['scripts/check'], quote: 'no full check without a reason', at_source }
+  const fake = new FakeM2b().proposal(DANA, 'Run only the quick checks.', 'only the quick round', { kind: 'lesson', lesson })
+  await start($, on, fake)
+  await typed($, 'm2b-proposals')
+
+  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  expect(await texts(ui)).toContain('fixes ~/.claude/CLAUDE.md: "- Run the whole proof." becomes "- Run the quick checks."')
+  await ui.unmount()
+})
+
+test('a lesson stated at its source or added to a project names that line or what is added', async ($, on) => {
+  // Covers: B273
+  const stated = { verdict: 'stated', file: '~/.claude/CLAUDE.md', line: '- Run only the quick checks.', wording: null }
+  const adds = { verdict: 'fix', file: 'CLAUDE.md in github.com/acme/portal', line: null, wording: 'Name releases after the version.' }
+  const lesson = { kind: 'knowledge', target: 'github.com/acme/portal', words: [], quote: 'the version, not the date' }
+  const fake = new FakeM2b()
+    .proposal(DANA, 'Run only the quick checks.', 'only the quick round', { kind: 'lesson', lesson: { ...lesson, at_source: stated } })
+    .proposal(LADDER, 'Name releases after the version.', 'after the version please', { kind: 'lesson', lesson: { ...lesson, at_source: adds } })
+  await start($, on, fake)
+  await typed($, 'm2b-proposals')
+
+  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  const drawn = await texts(ui)
+  expect(drawn).toContain('stated already in ~/.claude/CLAUDE.md: "- Run only the quick checks."')
+  expect(drawn).toContain('adds to CLAUDE.md in github.com/acme/portal: "Name releases after the version."')
+  await ui.unmount()
+})
+
 test('the proposals command opens the same pane, also while nothing waits', async ($, on) => {
   // Covers: B127
   const fake = new FakeM2b()

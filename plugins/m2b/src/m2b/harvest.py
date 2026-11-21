@@ -240,6 +240,10 @@ def _keep_lesson(store: Store, entry: proposals.Entry, report: HarvestReport) ->
     """
     lesson = entry.lesson
     assert lesson is not None
+    if lesson.at_source is not None:
+        # A fix of a source, or a pointer to the line that states it: this m2b files neither yet.
+        report.problems.append(f"the lesson you kept waits: {entry.text} (it is kept at {lesson.at_source.file})")
+        return False
     given = kept_lessons.KeptLesson(
         entry.text[:60], entry.text, lesson.kind, lesson.target, entry.day.isoformat(), lesson.words
     )

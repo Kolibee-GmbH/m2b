@@ -9,7 +9,7 @@ import unittest
 from typing import Any
 from unittest import mock
 
-from m2b import harvest, lessons, proposal_answers, proposals
+from m2b import glean, harvest, lessons, proposal_answers, proposals
 from m2b.glean import Proposal
 from m2b.notes.frontmatter import Note
 from m2b.proposal_answers import DROP, KEEP
@@ -65,6 +65,19 @@ class KeptLessonTest(ProposalHarvestFixture):
         self.assertEqual(self.answer_files(), [])
         self.assertEqual(report.problems, [])
         self.assertEqual(len(report.lessons), 1)
+
+    def test_a_lesson_kept_at_its_source_waits_with_its_answer_and_says_where(self) -> None:
+        """Covers: B272"""
+        stated = glean.AtSource(glean.STATED, "~/.claude/CLAUDE.md", "- Run only the quick checks.")
+        self.answered(KEEP, dataclasses.replace(LESSON, lesson=dataclasses.replace(LESSON.lesson, at_source=stated)))
+
+        report = self.harvest()
+
+        self.assertEqual((self.captures(), lessons.read_all(self.store)), ([], []))
+        self.assertEqual(self.state(LESSON_ID)[0], "open")
+        self.assertEqual(
+            report.problems, [f"the lesson you kept waits: {LESSON.text} (it is kept at ~/.claude/CLAUDE.md)"]
+        )
 
     def test_a_knowledge_lesson_for_one_project_waits_with_its_answer_and_says_why(self) -> None:
         """Covers: B272"""

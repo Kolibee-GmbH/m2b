@@ -84,7 +84,7 @@ def measure(
     ]
     counted = [part for part in parts if part.counts]
     return {
-        "folder": _shown(folder, home),
+        "folder": shown_path(folder, home),
         "parts": [part.as_json() for part in parts],
         "kb": _kb(sum(part.size or 0 for part in counted)),
         "list_points": sum(part.points or 0 for part in counted),
@@ -153,7 +153,7 @@ def _files(
         if key in seen:
             continue
         seen.add(key)
-        name = _shown(path, home)
+        name = shown_path(path, home)
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
         except FileNotFoundError:
@@ -200,6 +200,20 @@ def _part(name: str, text: str, when: str | None = None) -> Part:
 def _output_style(claude: Path, folder: Path, home: str | None, environ: Mapping[str, str]) -> Part | None:
     """The active output style: one an enabled plugin forces, else the one the settings name; a name
     whose file cannot be found, such as a style built into Claude Code, is named as not read."""
+    style, chosen, problem = _style_choice(claude, folder, environ)
+    if problem is not None:
+        path, _, error = problem.partition(": ")
+        return Part("output style", None, None, not_read=f"{shown_path(Path(path), home)} could not be read: {error}")
+    if style is None:
+        return None if chosen is None else Part(f"output style {chosen}", None, None, not_read=NOT_FOUND)
+    return _part(f"output style {style.name} ({shown_path(style.path, home)})", style.text)
+
+
+def _style_choice(
+    claude: Path, folder: Path, environ: Mapping[str, str]
+) -> tuple[_Style | None, str | None, str | None]:
+    """The active style where its file is found; else the name the settings give, None for the
+    default; and the settings file that could not be read, which leaves both unknown."""
     chosen: str | None = None
     enabled: dict[str, object] = {}
     for path in [*(claude / name for name in SETTINGS_FILES), *(folder / name for name in PROJECT_SETTINGS_FILES)]:
@@ -208,7 +222,7 @@ def _output_style(claude: Path, folder: Path, home: str | None, environ: Mapping
         except FileNotFoundError:
             continue
         except (OSError, ValueError) as error:
-            return Part("output style", None, None, not_read=f"{_shown(path, home)} could not be read: {error}")
+            return None, None, f"{path}: {error}"
         if not isinstance(settings, dict):
             continue
         plugins = settings.get("enabledPlugins")
@@ -222,12 +236,26 @@ def _output_style(claude: Path, folder: Path, home: str | None, environ: Mapping
         *_plugin_styles(environ, folder, enabled),
     ]
     forced = next((style for style in styles if style.forced), None)
-    if forced is None and (chosen is None or chosen.lower() == DEFAULT_STYLE):
-        return None
-    style = forced or next((style for style in styles if style.name == chosen), None)
-    if style is None:
-        return Part(f"output style {chosen}", None, None, not_read=NOT_FOUND)
-    return _part(f"output style {style.name} ({_shown(style.path, home)})", style.text)
+    if forced is not None:
+        return forced, forced.name, None
+    if chosen is None or chosen.lower() == DEFAULT_STYLE:
+        return None, None, None
+    return next((style for style in styles if style.name == chosen), None), chosen, None
+
+
+def start_files(environ: Mapping[str, str], folder: Path) -> list[Path]:
+    """The files of Claude Code's part of a session's start in ``folder`` that are there, in the
+    order ``measure`` lists them, a rule with ``paths`` among them: what a lesson's sources are."""
+    home = environ.get("HOME")
+    claude = claude_code.claude_folder(environ)
+    paths = [claude / "CLAUDE.md", *_rules(claude / RULES_FOLDER)]
+    for above in _folders_up_to_home(folder, home):
+        paths += [*(above / name for name in FOLDER_FILES), *_rules(above / ".claude" / RULES_FOLDER)]
+    style = _style_choice(claude, folder, environ)[0]
+    if style is not None:
+        paths.append(style.path)
+    paths.append(_memory_index(environ, folder))
+    return [path for path in dict.fromkeys(paths) if path.is_file()]
 
 
 @dataclass(frozen=True)
@@ -276,6 +304,14 @@ def _plugin_styles(environ: Mapping[str, str], folder: Path, enabled: Mapping[st
         if entry is not None:
             plugin = key.split("@", 1)[0]
             yield from _styles_in(Path(entry["installPath"]) / OUTPUT_STYLES_FOLDER, f"{plugin}:", may_force=True)
+
+
+def as_loaded(path: Path, text: str, environ: Mapping[str, str], folder: Path) -> str:
+    """What a session in ``folder`` loads of a file's text: of the auto memory's index only its start."""
+    if path != _memory_index(environ, folder):
+        return text
+    text = "".join(text.splitlines(keepends=True)[:MEMORY_INDEX_LINES])
+    return text.encode("utf-8")[:MEMORY_INDEX_BYTES].decode("utf-8", errors="ignore")
 
 
 def _memory_index(environ: Mapping[str, str], folder: Path) -> Path:
@@ -328,7 +364,8 @@ def _m2b_parts(
     return parts
 
 
-def _shown(path: Path, home: str | None) -> str:
+def shown_path(path: Path, home: str | None) -> str:
+    """A path as the person reads it: from ``~`` below the home folder."""
     if home:
         try:
             return str(Path("~") / path.relative_to(home))

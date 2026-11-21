@@ -13,7 +13,7 @@ from unittest import mock
 
 from m2b import proposals
 from m2b.config.errors import ConfigError
-from m2b.glean import KINDS, Example, Examples, LessonPart, Proposal
+from m2b.glean import FIX, KINDS, AtSource, Example, Examples, LessonPart, Proposal
 from m2b.proposals import Said
 from m2b.store.folder import FolderStore
 from m2b.store.guard import DatalessGuard
@@ -282,6 +282,20 @@ class LessonInFileTest(ProposalsFixture):
             self.assertRaises(proposals.ProposalsError),
         ):
             proposals.load(self.store)
+
+    def test_a_lesson_kept_at_its_source_is_written_with_the_verdict_and_read_back(self) -> None:
+        """Covers: B274"""
+        fix = AtSource(
+            FIX, "~/.claude/CLAUDE.md", "- Run the whole proof.", "- Run the quick checks.", "~/.claude/CLAUDE.md"
+        )
+        at_source = dataclasses.replace(LESSON, lesson=dataclasses.replace(LESSON.lesson, at_source=fix))
+
+        self.kept(at_source)
+
+        (entry,) = self.written()["proposals"].values()
+        self.assertEqual(entry["lesson"]["at_source"]["verdict"], "fix")
+        (loaded,) = proposals.load(self.store).entries.values()
+        self.assertEqual(loaded.lesson.at_source if loaded.lesson else None, fix)
 
     def test_a_lesson_without_its_part_or_one_left_for_this_project_is_left_out(self) -> None:
         """Covers: B270"""

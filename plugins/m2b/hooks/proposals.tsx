@@ -1,6 +1,6 @@
 import type { CommandSpec, EngineInterface, ResolveInput } from 'claude-code'
 
-import type { BandHealth, BandLesson, BandPress, BandProposal, BandProposals, BandSettle } from '../types'
+import type { BandAtSource, BandHealth, BandLesson, BandPress, BandProposal, BandProposals, BandSettle } from '../types'
 import { plainLine, writtenOut } from './plain-text'
 import { NOT_LOOKED, button, part, pressLine, said, under } from './look'
 import { CURATE_ROW, candidateRow, curateButton } from './rows'
@@ -101,7 +101,18 @@ function isLesson(value: unknown): value is BandLesson {
     typeof value['target'] === 'string' &&
     typeof value['quote'] === 'string' &&
     Array.isArray(value['words']) &&
-    value['words'].every(word => typeof word === 'string')
+    value['words'].every(word => typeof word === 'string') &&
+    (value['at_source'] === undefined || value['at_source'] === null || isAtSource(value['at_source']))
+  )
+}
+
+function isAtSource(value: unknown): value is BandAtSource {
+  return (
+    isObject(value) &&
+    typeof value['verdict'] === 'string' &&
+    typeof value['file'] === 'string' &&
+    isTextOrNull(value['line']) &&
+    isTextOrNull(value['wording'])
   )
 }
 
@@ -198,6 +209,23 @@ function heading(proposal: BandProposal): string {
 function lessonHeading(lesson: BandLesson): string {
   const words = lesson.words.length > 0 ? `, on a command with ${lesson.words.map(word => writtenOut(word)).join(' ')}` : ''
   return `${writtenOut(lesson.kind)} for ${writtenOut(lesson.target)}${words}`
+}
+
+/** What becomes of the source a lesson is kept at, as `m2b proposals` says it. */
+function sourceLine(source: BandAtSource): string {
+  const file = writtenOut(source.file)
+  if (source.verdict === 'stated') {
+    return `stated already in ${file}: "${writtenOut(source.line ?? '')}"`
+  }
+  if (source.line === null) {
+    return `adds to ${file}: "${writtenOut(source.wording ?? '')}"`
+  }
+  return `fixes ${file}: "${writtenOut(source.line)}" becomes "${writtenOut(source.wording ?? '')}"`
+}
+
+/** The lines under a lesson: the same correction said again, and what becomes of its source. */
+function lessonLines(lesson: BandLesson): string[] {
+  return [againLine(lesson), ...(lesson.at_source ? [sourceLine(lesson.at_source)] : [])]
 }
 
 /** The line under a lesson with the same correction said in a second session. */
@@ -329,7 +357,7 @@ export function proposalLines(proposals: BandProposals | null): string[] {
       `${proposal.id}  ${heading(proposal)}`,
       `  ${writtenOut(proposal.text)}`,
       `  ${saidLine(proposal)}`,
-      ...(proposal.lesson ? [`  ${againLine(proposal.lesson)}`] : []),
+      ...(proposal.lesson ? lessonLines(proposal.lesson).map(line => `  ${line}`) : []),
     ]),
   ]
 }
@@ -384,7 +412,7 @@ export function proposalsPane(
           heading(proposal),
         )}
         {under(ui, saidLine(proposal))}
-        {proposal.lesson && under(ui, againLine(proposal.lesson))}
+        {proposal.lesson && lessonLines(proposal.lesson).map(line => under(ui, line))}
       </Box>
     )),
     error === null && waiting.length === 0 && said(ui, NONE_WAITS, 'quiet'),

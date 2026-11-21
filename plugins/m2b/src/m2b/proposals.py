@@ -58,7 +58,22 @@ from m2b import lessons
 from m2b.candidates import REMEMBER_DROPPED as REMEMBER_SETTLED
 from m2b.candidates import same_text
 from m2b.config.json_file import read_store_json_object, write_store_json_object
-from m2b.glean import AGENT, KINDS, LESSON, PASTED, THIS_PROJECT, TOOL, TYPED, Example, Examples, LessonPart, Proposal
+from m2b.glean import (
+    AGENT,
+    FIX,
+    KINDS,
+    LESSON,
+    PASTED,
+    STATED,
+    THIS_PROJECT,
+    TOOL,
+    TYPED,
+    AtSource,
+    Example,
+    Examples,
+    LessonPart,
+    Proposal,
+)
 from m2b.notes.characters import can_be_written
 from m2b.notes.layout import STATE
 from m2b.store.base import Store
@@ -476,7 +491,28 @@ def _lesson_of(value: object) -> LessonPart | None:
         can_be_written(part) for part in (quote, target, *words)
     ):
         return None
-    return LessonPart(kind, target, tuple(words), quote, session)
+    at_source = value.get("at_source")
+    source = None if at_source is None else _at_source_of(at_source)
+    if at_source is not None and source is None:
+        return None
+    return LessonPart(kind, target, tuple(words), quote, session, source)
+
+
+def _at_source_of(value: object) -> AtSource | None:
+    if not isinstance(value, dict):
+        return None
+    verdict, file, line, wording, path = (value.get(name) for name in ("verdict", "file", "line", "wording", "path"))
+    repositories = value.get("repositories", [])
+    texts = (file, *(part for part in (line, wording, path) if part is not None))
+    if verdict not in (FIX, STATED) or not all(isinstance(part, str) and can_be_written(part) for part in texts):
+        return None
+    if not isinstance(file, str):
+        return None
+    if not isinstance(repositories, list) or not all(isinstance(each, str) for each in repositories):
+        return None
+    if (verdict == FIX) != (wording is not None and path is not None):
+        return None
+    return AtSource(verdict, file, line, wording, path, tuple(repositories))
 
 
 def _as_json(entry: Entry) -> dict[str, Any]:
@@ -506,6 +542,8 @@ def _as_json(entry: Entry) -> dict[str, Any]:
             "quote": entry.lesson.quote,
             "session": entry.lesson.session,
         }
+        if entry.lesson.at_source is not None:
+            written["lesson"]["at_source"] = dataclasses.asdict(entry.lesson.at_source)
     return written
 
 
@@ -536,6 +574,16 @@ def lesson_heading(lesson: LessonPart, shown: Callable[[str], str]) -> str:
 def again_line(quote: str) -> str:
     """The line that shows a lesson's second quote, as the caller shows it: what was said again."""
     return f'and again in another session: "{quote}"'
+
+
+def source_line(at_source: AtSource, shown: Callable[[str], str]) -> str:
+    """What becomes of a source a lesson is kept at: the line a fix replaces and its new wording, the
+    wording a fix adds, or the line that says the lesson already."""
+    if at_source.verdict == STATED:
+        return f'stated already in {shown(at_source.file)}: "{shown(at_source.line or "")}"'
+    if at_source.line is None:
+        return f'adds to {shown(at_source.file)}: "{shown(at_source.wording or "")}"'
+    return f'fixes {shown(at_source.file)}: "{shown(at_source.line)}" becomes "{shown(at_source.wording or "")}"'
 
 
 def proposer_of(entry: Entry) -> str | None:

@@ -9,7 +9,7 @@ from unittest import mock
 
 import test_runner
 import test_sessions
-from m2b import folders_left_out, glean, proposal_answers, proposals, session_remotes
+from m2b import folders_left_out, glean, lesson_sources, proposal_answers, proposals, session_remotes
 from m2b.config.profile import save_profile
 from m2b.curate import machine_state, model
 from m2b.run_record import SUCCEEDED, load_run_record
@@ -74,11 +74,18 @@ class GleanStepTest(test_runner.RunnerTest):
             transcript.write(json.dumps(record) + "\n")
 
     def answers(
-        self, *entries: dict[str, Any], outcome: str = "success", skills: dict[str, list[dict[str, Any]]] | None = None
+        self,
+        *entries: dict[str, Any],
+        outcome: str = "success",
+        skills: dict[str, list[dict[str, Any]]] | None = None,
+        verdicts: list[dict[str, Any]] | None = None,
     ) -> None:
+        """What the reading's model answers, and where it found a lesson, what the check of its sources answers."""
         self.model(skills or {})
         script = json.loads(self.actions.read_text(encoding="utf-8"))
         script["text"] = {"answer": json.dumps({"proposals": list(entries)}), "outcome": outcome}
+        if verdicts is not None:
+            script["text"] = [script["text"], {"answer": json.dumps({"verdicts": verdicts}), "outcome": "success"}]
         self.actions.write_text(json.dumps(script), encoding="utf-8")
 
     def asked(self) -> list[dict[str, Any]]:
@@ -450,7 +457,7 @@ class ProjectLessonTest(GleanStepTest):
             )
         self.typed("do not push to main here", START - 3 * HOUR, "one", "/home/alex/projects/portal")
         self.typed("again, never push to main", START - 2 * HOUR, "two", "/home/alex/trees/portal-fix")
-        self.answers(PROJECT_LESSON)
+        self.answers(PROJECT_LESSON, verdicts=[{"lesson": 1, "verdict": "none"}])
 
     def test_a_lesson_for_this_project_is_for_the_repository_both_sessions_worked_in(self) -> None:
         """Covers: B270"""
@@ -462,6 +469,51 @@ class ProjectLessonTest(GleanStepTest):
         self.assertEqual(entry["kind"], "lesson")
         self.assertEqual(entry["lesson"]["target"], "github.com/acme/portal")
         self.assertEqual(entry["lesson"]["session"], "two")
+        # No file the sessions load says it, so it is a fix that adds it to the project's CLAUDE.md.
+        self.assertEqual(
+            entry["lesson"]["at_source"],
+            {
+                "verdict": "fix",
+                "file": "CLAUDE.md in github.com/acme/portal",
+                "line": None,
+                "wording": "Never push to main here.",
+                "path": "CLAUDE.md",
+                "repositories": ["github.com/acme/portal"],
+            },
+        )
+
+    def test_the_sources_of_a_lesson_are_checked_by_a_second_model_run_with_the_files_its_sessions_load(self) -> None:
+        """Covers: B274"""
+        self.two_sessions("git@github.com:acme/portal.git", "git@github.com:acme/portal.git")
+        claude_md = self.claude_settings.parent / "CLAUDE.md"
+        claude_md.write_text("# Global\n- Never push to main; open a pull request.\n", encoding="utf-8")
+        self.answers(PROJECT_LESSON, verdicts=[{"lesson": 1, "verdict": "right", "source": 1, "line": 2}])
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        _, check = self.asked()
+        self.assertEqual(check["instruction"], lesson_sources.instruction())
+        self.assertEqual(check["lessons"][0]["said"], ["do not push to main here", "again, never push to main"])
+        self.assertIn("2: - Never push to main; open a pull request.", check["sources"][0]["lines"])
+        (entry,) = self.kept()["proposals"].values()
+        self.assertEqual(entry["lesson"]["at_source"]["verdict"], "stated")
+        self.assertEqual(entry["lesson"]["at_source"]["line"], "- Never push to main; open a pull request.")
+
+    def test_a_check_of_the_sources_without_an_answer_leaves_the_lesson_out_and_says_why(self) -> None:
+        """Covers: B274"""
+        self.two_sessions("git@github.com:acme/portal.git", "git@github.com:acme/portal.git")
+
+        self.answers(PROJECT_LESSON, verdicts=[])
+        script = json.loads(self.actions.read_text(encoding="utf-8"))
+        script["text"][1] = {"answer": "no idea", "outcome": "success"}
+        self.actions.write_text(json.dumps(script), encoding="utf-8")
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        self.assertEqual(self.kept()["proposals"], {})
+        self.assertTrue(
+            any(note.startswith("1 lesson left out: their sources could not be checked") for note in self.info())
+        )
 
     def test_a_lesson_that_could_never_be_kept_or_is_kept_already_is_not_proposed(self) -> None:
         """Covers: B270"""
