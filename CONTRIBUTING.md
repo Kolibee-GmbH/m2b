@@ -146,7 +146,15 @@ and bill each run, so the scenarios leave it out unless you pass `--use-api-key`
 the model level stops before the first session and says how to add one; a session that says it is
 not logged in is reported as that, not as a failed scenario, and the run ends there. A token's value
 never shows in the report. After each scenario the runner looks in your Claude Code folder for
-transcripts of its sessions and fails the scenario when it finds one.
+transcripts of its sessions and fails the scenario when it finds one. The test config pauses
+curation, so a run comes only from a step that starts one, never from a session's start.
+
+A `model.json` can hold three `wordings` of what the owner says, one marked `"language": "de"`;
+a run plays one of them (`--wording 2`), its texts put in for `{name}` in the steps and invariants.
+A step or an invariant marked `"arm": "with"` is left out when the scenario runs against Claude Code
+alone, which [`scripts/promises`](#promises) does by taking every `--plugin-dir` out of it, and
+one marked `"arm": "without"` is left out of the runs with m2b. A step marked `"control": true`
+shows that such a run was fair; when it or a step before it fails, the run shows nothing.
 
 A step `{"session": [arguments...], "turns": ["...", ...]}` runs Claude Code interactively in a
 hidden terminal and types each turn once the one before has ended, which it tells by the record
@@ -157,8 +165,8 @@ the Bash commands of the turn before it.
 
 `E34-session-read` types two turns into a session in an invented repository: "run scripts/check",
 then a correction to run only the quick round. It passes when the reading finds both prompts in
-that order and the correction carries the command of the turn before. The machine starts no
-curation run by itself there. Two turns on Haiku, under a minute.
+that order and the correction carries the command of the turn before. Two turns on Haiku, under a
+minute.
 
 `E33-project-known` files a project kept with `m2b capture --project` through a real ingest step and
 checks the topic it becomes: a heading with two to five words, the repository's name among them, and
@@ -172,12 +180,11 @@ has an account for it.
 and checks that "remember that ..." about a person lands in m2b's inbox and not in Claude Code's
 memory.
 
-`E22-recall-across-projects` compares m2b with Claude Code's own memory, the alternative a user
-has without it. A fact is told in one project's session and asked for in another's. With m2b,
-the second project's session answers from m2b. With Claude Code alone, it does not know, and a
-second session in the first project does, which shows that Claude Code's memory kept the fact and
-keeps it to that project. A step's `cwd` gives each session its own project folder. Five sessions
-on Sonnet, a few minutes.
+`E22-recall-across-projects` tells a fact in one project's session and asks for it in another's;
+the second project's session answers from m2b. A step's `cwd` gives each session its own project
+folder. It holds three wordings, one in German, and is the case of a [promise](#promises) that is
+compared with Claude Code's own memory: there the second project does not know. Two sessions on
+Sonnet per run, under a minute.
 
 `E26-tick-a-task` puts two open tasks into the list and tells a session in a plain sentence that
 one of them is done. It passes when that task is ticked, the other is still open and no note
@@ -281,6 +288,25 @@ temporary folder every measurement is unproven, and the message names both folde
 
 The [weekly workflow](#checks) runs it with the newest Claude Code. Run it yourself after a change
 to how a step is started (`curate/model.py`).
+
+## Promises
+
+[Promises](docs/promises.md) lists what the README promises and the cases that prove each, and
+says when a promise holds: every case passes in three runs with m2b, each in another wording, one
+of them German, and a promise that is compared with Claude Code alone passes there at most once.
+`scripts/promises` runs them and prints per promise whether it holds, each run with `✓` or `✗`,
+what broke, and the versions it ran with:
+
+```bash
+scripts/promises        # every promise
+scripts/promises 1 7    # these two
+```
+
+It runs the scenarios at the model level, with the account and the folders described in
+[End-to-end scenarios](#end-to-end-scenarios), and the eval cases through `claude plugin eval` with
+a Claude Code folder of their own. It exits 0 when every promise it ran holds, 1 when one does not
+and 2 when it could not start: a catalog it cannot read, no account, or a session that is not
+logged in. `--max-minutes` bounds the whole run; a run it did not start does not pass.
 
 ## Evals
 

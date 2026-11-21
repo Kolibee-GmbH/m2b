@@ -856,6 +856,96 @@ class SessionTranscriptTest(unittest.TestCase):
         self.assertIn(str((self.root / "repo-a").resolve()), trusted)
 
 
+def _an_unforced_run(argv: list[str]) -> bool:
+    """``m2b curate`` with options only and without ``--force``; ``m2b curate model ...`` runs one step."""
+    options = argv[2:]
+    return argv[:2] == ["m2b", "curate"] and "--force" not in options and all(o.startswith("-") for o in options)
+
+
+class WordingAndArmTest(unittest.TestCase):
+    """A promise case runs in three wordings and, where it is compared, against Claude Code alone."""
+
+    SCRIPT: ClassVar[dict[str, Any]] = {
+        "wordings": [
+            {"say": "Remember the key is under the pot.", "answer": "pot"},
+            {"say": "Merk dir: der Schlüssel liegt unter dem Topf.", "answer": "Topf", "language": "de"},
+            {"say": "Note that the key lies below the pot.", "answer": "pot"},
+        ],
+        "steps": [
+            {"run": ["m2b", "curate", "--force"], "arm": "with"},
+            {
+                "run": ["claude", "-p", "{say}", "--plugin-dir", "{core_plugin}", "--model", "haiku"],
+                "stdout": "{answer}",
+            },
+            {"session": ["--plugin-dir", "{core_plugin}"], "turns": ["{say}"], "cwd": "repo"},
+        ],
+        "invariants": [
+            {"count": 1, "glob": "inbox/*.md", "arm": "with"},
+            {"matches": "{answer}", "path": "answer.md"},
+        ],
+    }
+
+    def test_a_wording_fills_the_arguments_the_turns_the_patterns_and_the_invariants(self) -> None:
+        script = e2e.for_run(self.SCRIPT, wording=1, arm=e2e.WITH)
+
+        self.assertEqual(script["steps"][1]["run"][2], "Merk dir: der Schlüssel liegt unter dem Topf.")
+        self.assertEqual(script["steps"][1]["stdout"], "Topf")
+        self.assertEqual(script["steps"][2]["turns"], ["Merk dir: der Schlüssel liegt unter dem Topf."])
+        self.assertEqual(script["invariants"][1]["matches"], "Topf")
+        self.assertIn("{core_plugin}", script["steps"][1]["run"])
+
+    def test_without_m2b_no_session_gets_the_plugin_and_what_needs_m2b_is_left_out(self) -> None:
+        script = e2e.for_run(self.SCRIPT, wording=0, arm=e2e.WITHOUT)
+
+        self.assertEqual(len(script["steps"]), 2)
+        self.assertEqual(
+            script["steps"][0]["run"], ["claude", "-p", "Remember the key is under the pot.", "--model", "haiku"]
+        )
+        self.assertEqual(script["steps"][1]["session"], [])
+        self.assertEqual(script["invariants"], [{"matches": "pot", "path": "answer.md"}])
+
+    def test_a_script_without_wordings_is_run_as_written(self) -> None:
+        plain = {"steps": [{"run": ["m2b", "status"], "stdout": "\\d{2}"}], "invariants": []}
+
+        self.assertEqual(e2e.for_run(plain, wording=2, arm=e2e.WITH), plain)
+
+    def test_a_case_that_starts_claude_code_needs_three_wordings_one_in_german(self) -> None:
+        self.assertEqual(e2e.wording_problem(self.SCRIPT), None)
+        two = {**self.SCRIPT, "wordings": self.SCRIPT["wordings"][:2]}
+        self.assertIn("three wordings", e2e.wording_problem(two) or "")
+        english = {**self.SCRIPT, "wordings": [{"say": "a"}, {"say": "b"}, {"say": "c"}]}
+        self.assertIn("German", e2e.wording_problem(english) or "")
+        no_session = {"steps": [{"run": ["m2b", "curate", "--force"]}], "invariants": []}
+        self.assertEqual(e2e.wording_problem(no_session), None)
+
+    def test_the_model_level_starts_no_curation_run_by_itself(self) -> None:
+        config = e2e.isolated_machine_config(Path("/tmp/sb-test-store"), level=e2e.MODEL)
+
+        self.assertTrue(parse_machine_config(config, Path("/tmp/sb-test-home")).curation.paused)
+
+    def test_a_model_scenario_that_asks_whether_a_run_is_due_turns_curation_on_first(self) -> None:
+        unpause = ["m2b", "settings", "set", "curation.paused", "false"]
+        for path in sorted(e2e.SCENARIO_ROOT.glob(f"*/{e2e.MODEL_FILE}")):
+            runs = [step.get("run", []) for step in json.loads(path.read_text(encoding="utf-8"))["steps"]]
+            unforced = [number for number, run in enumerate(runs) if _an_unforced_run(run)]
+            with self.subTest(scenario=path.parent.name):
+                if unforced:
+                    self.assertIn(unpause, runs[: unforced[0]])
+
+    def test_the_models_that_answered_are_read_from_the_transcripts(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            transcript = Path(folder) / "-x" / "one.jsonl"
+            transcript.parent.mkdir()
+            lines = [
+                {"type": "assistant", "message": {"model": "claude-haiku-5-5", "content": []}},
+                {"type": "assistant", "message": {"model": "<synthetic>", "content": []}},
+                {"type": "user", "message": {"content": "hi"}},
+            ]
+            transcript.write_text("".join(json.dumps(line) + "\n" for line in lines), encoding="utf-8")
+
+            self.assertEqual(e2e.models_in(Path(folder)), ["claude-haiku-5-5"])
+
+
 class AppleLevelTest(unittest.TestCase):
     def setUp(self) -> None:
         self._temp = tempfile.TemporaryDirectory()

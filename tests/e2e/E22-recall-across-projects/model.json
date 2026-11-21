@@ -1,18 +1,37 @@
 {
-  "description": "E22 at the model level: is a fact told in one project there when another project asks for it? With m2b, a session in project A is told where the spare shed key is, and a session in project B is asked: it answers from m2b. The capture is in the inbox or, when a curation run that a session started in the background has filed it by the end, in the archive. With only Claude Code's own memory, the same is told in project A: a session in project B does not know it, and a second session in project A does, which shows the memory worked and stayed in its project. The answers are the model's; run it after each Claude Code minor update, beside E18.",
+  "description": "E22 at the model level: is a fact told in one project there when another project asks for it? A session in project A is told where the spare key for the shed is, and a session in project B is asked: it answers from m2b. The capture is in the inbox or, when a curation run has filed it by the end, in the archive, and Claude Code's own memory of project A stays empty. Each of the three wordings says it differently, one in German. scripts/promises also runs it against Claude Code alone, its own memory on: there project B does not know, because Claude Code keeps its memory per project, and a session in project A asked first shows that Claude Code kept the fact; a run where it did not shows nothing. The answers are the model's; run it after each Claude Code minor update, beside E18.",
+  "wordings": [
+    {
+      "remember": "Remember that the spare key for the shed is under the blue pot by the back door.",
+      "ask": "Where is the spare key for the shed?",
+      "answer": "blue pot"
+    },
+    {
+      "remember": "Merk dir, dass der Ersatzschlüssel für den Schuppen unter dem blauen Topf bei der Hintertür liegt.",
+      "ask": "Wo liegt der Ersatzschlüssel für den Schuppen?",
+      "answer": "(?:blauen? Topf|blue pot)",
+      "language": "de"
+    },
+    {
+      "remember": "Keep in mind: the shed's spare key sits under the blue pot next to the back door.",
+      "ask": "Do you know where the shed's spare key is?",
+      "answer": "blue pot"
+    }
+  ],
   "steps": [
     {
       "run": [
         "m2b",
         "curate",
         "--force"
-      ]
+      ],
+      "arm": "with"
     },
     {
       "run": [
         "claude",
         "-p",
-        "Remember that the spare key for the shed is under the blue pot by the back door.",
+        "{remember}",
         "--setting-sources",
         "project",
         "--plugin-dir",
@@ -29,16 +48,16 @@
         "stream-json",
         "--verbose"
       ],
-      "cwd": "with-m2b-a",
+      "cwd": "project-a",
       "save": {
-        "memory_with_m2b": "\"auto\":\"([^\"]+)\""
+        "memory_of_project_a": "\"auto\":\"([^\"]+)\""
       }
     },
     {
       "run": [
         "claude",
         "-p",
-        "Where is the spare key for the shed?",
+        "{ask}",
         "--setting-sources",
         "project",
         "--plugin-dir",
@@ -54,16 +73,20 @@
         "--output-format",
         "json"
       ],
-      "cwd": "with-m2b-b",
-      "stdout": "\"result\":\"(?:[^\"\\\\]|\\\\.)*blue pot"
+      "cwd": "project-a",
+      "stdout": "\"result\":\"(?:[^\"\\\\]|\\\\.)*{answer}",
+      "arm": "without",
+      "control": true
     },
     {
       "run": [
         "claude",
         "-p",
-        "Remember that the spare key for the shed is under the blue pot by the back door.",
+        "{ask}",
         "--setting-sources",
         "project",
+        "--plugin-dir",
+        "{core_plugin}",
         "--permission-mode",
         "dontAsk",
         "--allowedTools",
@@ -75,59 +98,20 @@
         "--output-format",
         "json"
       ],
-      "cwd": "alone-a"
-    },
-    {
-      "run": [
-        "claude",
-        "-p",
-        "Where is the spare key for the shed?",
-        "--setting-sources",
-        "project",
-        "--permission-mode",
-        "dontAsk",
-        "--allowedTools",
-        "Skill,Read,Write,Edit,mcp__m2b__note,mcp__m2b__search",
-        "--max-turns",
-        "10",
-        "--model",
-        "sonnet",
-        "--output-format",
-        "json"
-      ],
-      "cwd": "alone-b",
-      "stdout": "^(?![\\s\\S]*blue pot)"
-    },
-    {
-      "run": [
-        "claude",
-        "-p",
-        "Where is the spare key for the shed?",
-        "--setting-sources",
-        "project",
-        "--permission-mode",
-        "dontAsk",
-        "--allowedTools",
-        "Skill,Read,Write,Edit,mcp__m2b__note,mcp__m2b__search",
-        "--max-turns",
-        "10",
-        "--model",
-        "sonnet",
-        "--output-format",
-        "json"
-      ],
-      "cwd": "alone-a",
-      "stdout": "\"result\":\"(?:[^\"\\\\]|\\\\.)*blue pot"
+      "cwd": "project-b",
+      "stdout": "\"result\":\"(?:[^\"\\\\]|\\\\.)*{answer}"
     }
   ],
   "invariants": [
     {
       "count": 1,
       "glob": "*-claude-*.md",
-      "content": "blue pot"
+      "content": "{answer}",
+      "arm": "with"
     },
     {
-      "empty_folder": "{memory_with_m2b}"
+      "empty_folder": "{memory_of_project_a}",
+      "arm": "with"
     }
   ]
 }

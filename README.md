@@ -402,6 +402,7 @@ and settings can still change before 1.0, and the [changelog](CHANGELOG.md) says
 | [Cost and privacy](docs/cost-and-privacy.md) | what a run costs and what each step hands the model |
 | [Add-ons](docs/addons.md) | the worklog |
 | [Evals](docs/evals.md) | what m2b does to Claude's answers, measured with it and without |
+| [Promises](docs/promises.md) | what this README promises, the cases that prove each and when a promise holds |
 | [SECURITY.md](SECURITY.md) | what a hostile note can do, how a model step is fenced, how to report |
 
 ## Develop
@@ -418,7 +419,8 @@ scripts/e2e --level stub    # end-to-end scenarios without a model
 backend](docs/writing-a-backend.md). What m2b promises to do, and which defects it must not have, is
 listed in [Behavior](docs/behavior.md). What it does to Claude's answers is measured:
 [Evals](docs/evals.md) has seventeen cases, each run with m2b and without, and the scores of the last
-run.
+run. Whether each promise of this README holds is checked end to end before a release:
+[Promises](docs/promises.md).
 
 ## License
 

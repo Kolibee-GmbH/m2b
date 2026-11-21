@@ -54,6 +54,16 @@ A step ``{"session": [claude arguments...], "turns": ["...", ...], "cwd": "<name
 interactively in a hidden terminal and types each turn once the one before has ended, because the
 reading of sessions passes over every transcript of a headless run. ``turn_seconds`` bounds a turn.
 
+A ``model.json`` can hold ``"wordings": [{"<name>": "<text>", ...}, ...]``: three ways to say what
+the owner says, one marked ``"language": "de"``. A run plays one of them, ``{name}`` put in for its
+text in every argument, turn, pattern and invariant (a pattern's part is a regular expression, so
+one wording can expect an answer in German). Without ``--wording`` the first is played. A step or an
+invariant marked ``"arm": "with"`` is left out of a run against Claude Code alone, which
+``scripts/promises`` makes: the same scenario without any ``--plugin-dir``. A step marked
+``"control": true`` shows that a run is fair, for instance that Claude Code alone did keep what it
+was told; when it or a step before it fails, the run shows nothing (``ScenarioResult.shows``) and
+does not count as Claude Code alone failing.
+
 ``--plugin`` names another folder that holds the plugin, in place of this checkout's: the proof
 that the core stands without its add-ons runs the scenarios against a copy without them. The stub
 is a tool of the repository and always this checkout's.
@@ -138,6 +148,14 @@ TURN_END_SUBTYPE = "turn_duration"
 HEADLESS_ENTRYPOINT = "sdk-cli"
 # How far back the sessions_read invariant reads: longer than any scenario runs.
 READ_BACK = datetime.timedelta(days=1)
+# The two arms of a promise case: with m2b, and against Claude Code alone.
+WITH = "with"
+WITHOUT = "without"
+GERMAN = "de"
+WORDINGS = 3  # at least one of them German
+PLUGIN_DIR_FLAG = "--plugin-dir"
+# What a transcript names as the model of a message Claude Code wrote itself, such as an error.
+SYNTHETIC_MODEL = "<synthetic>"
 
 EXIT_PASSED = 0
 EXIT_FAILED = 1
@@ -161,6 +179,10 @@ class NotLoggedInError(Exception):
 class ScenarioResult:
     name: str
     problems: list[str] = field(default_factory=list)
+    # At the model level, the models the scenario's sessions answered with.
+    models: list[str] = field(default_factory=list)
+    # False when a step marked as a control failed, or a step before it: the run shows nothing.
+    shows: bool = True
 
     @property
     def passed(self) -> bool:
@@ -211,7 +233,9 @@ def isolated_machine_config(store: Path, level: str = STUB, backend: str = "fold
         "store": {"backend": backend, "path": str(store)},
     }
     if level == MODEL:
-        config["curation"] = {"model_timeout_minutes": MODEL_TIMEOUT_MINUTES}
+        # Paused, so a run comes only from a step: a run the session start began would race the
+        # scenario's own and spend the model on what the scenario does not check.
+        config["curation"] = {"model_timeout_minutes": MODEL_TIMEOUT_MINUTES, "paused": True}
     return config
 
 
@@ -260,6 +284,101 @@ def compare_store(
         del remaining[matching[0]]
     problems += [f"unexpected in store: {name}" for name in sorted(remaining)]
     return problems
+
+
+def for_run(script: Mapping[str, Any], wording: int = 0, arm: str = WITH) -> dict[str, Any]:
+    """A ``model.json`` as one run of it plays: its wording number ``wording`` put in for each
+    ``{name}`` the wording has, in every text of the steps and invariants, and for the arm against
+    Claude Code alone every ``--plugin-dir`` taken out of a Claude Code command or session and what is
+    marked ``"arm": "with"`` left out. A script without wordings keeps its texts as written."""
+    wordings = script.get("wordings") or [{}]
+    chosen = {name: value for name, value in wordings[wording % len(wordings)].items() if name != "language"}
+    played = {key: value for key, value in script.items() if key != "wordings"}
+    played["steps"] = [_filled(step, chosen) for step in script["steps"] if _in_arm(step, arm)]
+    played["invariants"] = [_filled(item, chosen) for item in script.get("invariants", []) if _in_arm(item, arm)]
+    if arm == WITHOUT:
+        played["steps"] = [_without_plugin(step) for step in played["steps"]]
+    return played
+
+
+def _split_at_control(steps: Sequence[Mapping[str, Any]]) -> tuple[list[Mapping[str, Any]], list[Mapping[str, Any]]]:
+    """The steps up to the last one marked ``"control": true``, and the rest; no control, no first part."""
+    marked = [number for number, step in enumerate(steps) if step.get("control")]
+    end = marked[-1] + 1 if marked else 0
+    return list(steps[:end]), list(steps[end:])
+
+
+def wording_problem(script: Mapping[str, Any]) -> str | None:
+    """Why the script's wordings do not hold a promise, or None. A script that starts Claude Code types
+    what the owner says, which a promise must not rest on in one wording."""
+    starts_claude = any("session" in step or step.get("run", [""])[0] == "claude" for step in script["steps"])
+    if not starts_claude:
+        return None
+    wordings = script.get("wordings") or []
+    if len(wordings) != WORDINGS:
+        return f"a case that starts Claude Code needs three wordings, it has {len(wordings)}"
+    if not any(wording.get("language") == GERMAN for wording in wordings):
+        return "one of its three wordings must be German"
+    return None
+
+
+def _in_arm(item: Mapping[str, Any], arm: str) -> bool:
+    return bool(item.get("arm", arm) == arm)
+
+
+def _filled(item: Any, wording: Mapping[str, str]) -> Any:
+    if isinstance(item, str):
+        for name, value in wording.items():
+            item = item.replace(f"{{{name}}}", value)
+        return item
+    if isinstance(item, list):
+        return [_filled(part, wording) for part in item]
+    if isinstance(item, dict):
+        return {key: _filled(value, wording) for key, value in item.items() if key != "arm"}
+    return item
+
+
+def _without_plugin(step: Mapping[str, Any]) -> dict[str, Any]:
+    changed = dict(step)
+    if "session" in step:
+        changed["session"] = _without_plugin_dir(step["session"])
+    elif step.get("run", [""])[0] == "claude":
+        changed["run"] = _without_plugin_dir(step["run"])
+    return changed
+
+
+def _without_plugin_dir(argv: Sequence[str]) -> list[str]:
+    kept: list[str] = []
+    skip = False
+    for argument in argv:
+        if skip:
+            skip = False
+        elif argument == PLUGIN_DIR_FLAG:
+            skip = True
+        else:
+            kept.append(argument)
+    return kept
+
+
+def models_in(projects: Path) -> list[str]:
+    """The models Claude answered with in the transcripts under ``projects``, each once, in order."""
+    found: list[str] = []
+    for path in sorted(projects.glob("*/*.jsonl")) if projects.is_dir() else []:
+        with path.open(encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                if '"model"' not in line:
+                    continue
+                try:
+                    record = json.loads(line)
+                except ValueError:
+                    continue
+                message = record.get("message") if isinstance(record, dict) else None
+                model = message.get("model") if isinstance(message, dict) else None
+                if not isinstance(model, str) or record.get("type") != "assistant" or model == SYNTHETIC_MODEL:
+                    continue
+                if model not in found:
+                    found.append(model)
+    return found
 
 
 def keychain_token() -> str | None:
@@ -562,11 +681,13 @@ def run_scenario(
     sandbox_root: Path | None = None,
     plugin: Path = CORE_PLUGIN,
     account: Mapping[str, str] | None = None,
+    wording: int = 0,
+    arm: str = WITH,
 ) -> ScenarioResult:
     """At ``stub`` the scripted model and ``expect.json``; at ``model`` the real fenced ``claude`` and
     the invariants of ``model.json``, because a real model words things its own way, every session in
-    the scenario's own Claude Code folder with ``account``. The steps run the commands of the plugin in
-    ``plugin``."""
+    the scenario's own Claude Code folder with ``account``, in the wording and arm ``for_run`` plays.
+    The steps run the commands of the plugin in ``plugin``."""
     result = ScenarioResult(scenario.name)
     store: Path | None = None
     if sandbox_root is not None:
@@ -602,10 +723,15 @@ def run_scenario(
             prepare_claude_config(claude_config, account or {})
             environment = model_environment(environment, account or {}, claude_config)
             saved["claude_config"] = str(claude_config)
-            script = _read_json(scenario / MODEL_FILE)
-            result.problems += _run_steps(script["steps"], environment, work, MODEL_STEP_TIMEOUT_SECONDS, saved, plugin)
+            script = for_run(_read_json(scenario / MODEL_FILE), wording, arm)
+            controlled, rest = _split_at_control(script["steps"])
+            result.problems += _run_steps(controlled, environment, work, MODEL_STEP_TIMEOUT_SECONDS, saved, plugin)
+            result.shows = not (controlled and result.problems)
+            if not result.problems:
+                result.problems += _run_steps(rest, environment, work, MODEL_STEP_TIMEOUT_SECONDS, saved, plugin)
             if not result.problems:
                 result.problems += check_invariants(script["invariants"], visible_store_files(store), saved)
+            result.models = models_in(claude_config / "projects")
             leaked = leaked_transcripts(user_claude_folder(environ), sandbox)
             if leaked:
                 result.problems.append(f"transcripts of this run lie in the user's Claude Code folder: {leaked}")
@@ -778,6 +904,13 @@ def _parse_arguments(argv: Sequence[str]) -> argparse.Namespace:
     )
     parser.add_argument("--core-only", action="store_true", help="leave out the scenarios that turn an add-on on")
     parser.add_argument(
+        "--wording",
+        type=int,
+        choices=range(1, WORDINGS + 1),
+        default=1,
+        help="model level: which of a scenario's wordings to play (default: the first)",
+    )
+    parser.add_argument(
         "--use-api-key",
         action="store_true",
         help=f"model level: run with {API_KEY_VARIABLE}, billed per run, in place of the subscription's token",
@@ -824,6 +957,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 sandbox_root=arguments.sandbox_root,
                 plugin=arguments.plugin,
                 account=account,
+                wording=arguments.wording - 1,
             )
         except RealStoreError as error:
             print(f"e2e: {error}", file=sys.stderr)
