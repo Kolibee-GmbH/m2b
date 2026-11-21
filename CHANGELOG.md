@@ -36,6 +36,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Reading your sessions now sees, beside each prompt and never as your words, the last 500
+  characters of Claude's answer before it and the shell commands Claude ran in that turn, so a
+  correction can be told by what it corrects ([Curation](docs/curation.md#reading-your-sessions)).
 - The rule every session starts with sends a correction that holds in every project to
   `~/.claude/CLAUDE.md`, not into the memory of the project it was made in, and one that a
   `CLAUDE.md` says wrongly to a fix of that file.

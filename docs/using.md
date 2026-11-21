@@ -148,7 +148,8 @@ and `m2b proposals drop <id>`. Once you have answered every proposal in the pane
 one, a curation run starts in the background on the machine that curates and files what you kept,
 so the next session knows it; on another machine, or with `curation.run_after_answers` off, your
 answers wait for the next run. Only the prompts you typed are read, with what you pasted into them
-and with credentials redacted: no answer of Claude, no tool result, nothing a plugin or another
+and with credentials redacted, and beside each one the end of Claude's answer before it and the
+shell commands of that turn; nothing else of Claude's answers, no tool's output, nothing a plugin or another
 agent sent, and no session you left out by its folder or its git remote ([Reading your sessions](curation.md#reading-your-sessions)).
 
 A session can also hand in a proposal by itself, with words from what its agent read for you, a

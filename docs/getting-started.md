@@ -135,8 +135,9 @@ turn it on ([The band](band.md#handing-in-a-proposal-a-tool-you-turn-on)). The w
 
 Setup asked, on the machine that curates, whether curation runs may read your sessions. It is off
 until you say yes there, or later with `m2b config set curation.read_sessions true`. With a yes, a
-run reads what you typed and pasted in Claude Code since the last reading, and only that: no answer
-of Claude, no tool result, nothing a plugin or another agent sent. A model proposes from it what
+run reads what you typed and pasted in Claude Code since the last reading, and beside each prompt
+the end of Claude's answer before it and the shell commands of that turn: no other part of Claude's
+answers, no tool's output, nothing a plugin or another agent sent. A model proposes from it what
 belongs in your memory although you never said "remember this", each proposal with the words it
 stands on, said or pasted, and nothing is filed
 before you keep it: `/m2b-proposals` in a session, or from a terminal:

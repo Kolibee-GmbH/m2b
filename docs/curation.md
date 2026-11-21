@@ -301,9 +301,12 @@ curates, and `m2b config set curation.read_sessions true` or `false` changes the
 
 **What is read.** Claude Code's transcripts on this machine, and of them only the prompts Claude
 Code marks as typed by a human, in the terminal or the desktop app, also a message you send while
-Claude is working, with what you pasted into one kept apart from what you typed. Left out: Claude's
-answers and tool results, what a plugin, a finished task or another agent sent, a suggested prompt
-you only accepted, and the blocks Claude Code writes into a prompt. Credentials are redacted, and a
+Claude is working, with what you pasted into one kept apart from what you typed. Beside each prompt,
+never as your words, goes the turn it answers: the last 500 characters of what Claude wrote before
+it and the shell commands Claude ran in that turn, so a correction can be told by what it corrects.
+Left out: the rest of Claude's answers, what a tool printed, what a plugin, a finished task or
+another agent sent, a suggested prompt you only accepted, and the blocks Claude Code writes into a
+prompt. Credentials are redacted, and a
 prompt ends after 2,000 characters, what you typed first and what you pasted in the room that is
 left. A longer text you wrote elsewhere reaches a prompt as pasted text, and so does a mail or a
 piece of an agent's answer, so a proposal says which of the two it stands on (below). A session

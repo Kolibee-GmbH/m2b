@@ -20,8 +20,15 @@ words, so it never passes as typed, and whoever proposes from it says so. The bl
 writes into a prompt (``claude_code.PROMPT_BLOCK``: its reminders, the output of hooks) are left
 out. Credentials are redacted (``redaction``), white space is collapsed, and a prompt ends after
 ``PROMPT_LENGTH`` characters, which keeps nearly every typed prompt whole: the typed text comes
-first and the pasted texts get what is left, so a paste pushes out no typed word. No answer of
-Claude and no tool result is read: text from web pages, mails and documents stands there.
+first and the pasted texts get what is left, so a paste pushes out no typed word. No tool result is
+read: text from web pages, mails and documents stands there.
+
+Beside a prompt, never as the person's words, goes the turn it answers: the last
+``ANSWER_LENGTH`` characters of what Claude wrote since the message before (``Prompt.answer_before``)
+and the Bash commands Claude ran in that turn (``Prompt.commands``), so a correction can be told by
+what it corrects. Of an answer nothing else is read, and of a tool call only a Bash command, never
+what it printed. Both are redacted like a prompt, and a command ends after ``COMMAND_LENGTH``
+characters; a turn gives its last ``MAX_COMMANDS``.
 
 A slash command is only its name. Its record names no source and often no origin, so it is taken
 by its form, a record that starts with the command's tags, unless its origin is another sender.
@@ -42,10 +49,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from m2b.claude_code import HUMAN, PROMPT_BLOCK, as_prompt_record, sender_of
+from m2b.claude_code import BASH_TOOL, HUMAN, PROMPT_BLOCK, as_prompt_record, sender_of
 from m2b.redaction import REDACTED, is_removed_behind, redact
 
 PROMPT_LENGTH = 2000
+# What a reading sees of the turn a prompt answers: enough of the answer's end to tell what was
+# corrected, and the commands, which an action lesson needs the words of.
+ANSWER_LENGTH = 500
+COMMAND_LENGTH = 300
+MAX_COMMANDS = 10
 # The flags of a record Claude Code wrote itself or that belongs to a subagent's conversation.
 NOT_THE_MAIN_CONVERSATION = ("isMeta", "isCompactSummary", "isSidechain")
 
@@ -99,6 +111,10 @@ class Prompt:
     text: str
     # What they pasted into it, block by block: their own words written elsewhere, or anyone's.
     pasted: tuple[str, ...] = ()
+    # The end of what Claude wrote in the turn before, and the Bash commands it ran there: Claude's
+    # words and commands, never the person's.
+    answer_before: str = ""
+    commands: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -164,6 +180,22 @@ class _Reading:
     sent_by_others: int = 0
     suggested: int = 0
     unmarked: int = 0
+    # The turn since the message before: what Claude wrote, its end only, and the Bash commands it ran.
+    answer: str = ""
+    commands: list[str] = field(default_factory=list)
+
+    def follow(self, record: Mapping[str, Any]) -> None:
+        """Takes in a record of Claude's in the main conversation: its text and its Bash commands."""
+        message = record.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        text = _text_of(content)
+        if text is not None:
+            self.answer = _end_of(f"{self.answer} {text}", _REDACT_WINDOW)
+        for command in _bash_commands(content):
+            self.commands = [*self.commands, command][-MAX_COMMANDS:]
+
+    def new_turn(self) -> None:
+        self.answer, self.commands = "", []
 
     def session(self) -> Session:
         left_out = LeftOut(self.sent_by_others, self.suggested, self.unmarked)
@@ -189,15 +221,62 @@ def _read(path: Path, start: datetime.datetime, end: datetime.datetime) -> _Read
             # The first folder is where the session started; later records follow the Bash tool's `cd`.
             if folder is None and isinstance(record.get("cwd"), str):
                 folder = record["cwd"]
-            moment = _time(record.get("timestamp"))
-            if moment is None or not start <= moment < end or not _may_be_a_prompt(record):
+            if _is_claudes(record):
+                reading.follow(record)
                 continue
-            if _take(record, moment, reading):
+            starts_a_turn = _starts_a_turn(record)
+            moment = _time(record.get("timestamp"))
+            in_period = moment is not None and start <= moment < end
+            if moment is not None and in_period and _may_be_a_prompt(record) and _take(record, moment, reading):
                 reading.first = reading.first or moment
+            if starts_a_turn:
+                reading.new_turn()
     if reading.first is not None and folder is None:
         raise _NoFolder(path.name)
     reading.folder = folder or ""
     return reading
+
+
+def _is_claudes(record: Mapping[str, Any]) -> bool:
+    """A record of Claude's answer in the main conversation."""
+    return record.get("type") == "assistant" and not record.get("isSidechain")
+
+
+def _starts_a_turn(record: Mapping[str, Any]) -> bool:
+    """A record in the user's place that sends Claude a new message. Not one: a tool's result, a text
+    Claude Code writes in the middle of a turn for itself (a skill's text), and the note of a turn the
+    person stopped, after which the correction that follows is about that same turn."""
+    if record.get("type") != "user" or record.get("isSidechain"):
+        return False
+    # Another agent's message is flagged too, and it is a new message to Claude.
+    if record.get("isMeta") and sender_of(record) in (None, HUMAN):
+        return False
+    message = record.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    text = _text_of(content)
+    return text is not None and not _holds_a_tool_result(content) and not text.lstrip().startswith(_INTERRUPTED)
+
+
+def _bash_commands(content: object) -> list[str]:
+    """The commands of the Bash calls in an answer's content, redacted and cut like a prompt."""
+    parts = content if isinstance(content, list) else []
+    commands = []
+    for part in parts:
+        if not isinstance(part, dict) or part.get("type") != "tool_use" or part.get("name") != BASH_TOOL:
+            continue
+        given = part.get("input")
+        command = given.get("command") if isinstance(given, dict) else None
+        if isinstance(command, str) and command.strip():
+            commands.append(_shown(command)[:COMMAND_LENGTH])
+    return [command for command in commands if command]
+
+
+def _answer_shown(answer: str) -> str:
+    """The end of an answer as a reading sees it: redacted, white space collapsed, the last characters."""
+    # Redacted on a stretch several times as long, so a credential that ends in the kept part is
+    # seen whole; the word a cut went through is dropped at each cut.
+    text = _end_of(answer, 4 * ANSWER_LENGTH).encode("utf-8", errors="replace").decode("utf-8")
+    return _end_of(" ".join(redact(text).split()), ANSWER_LENGTH)
 
 
 def _may_be_a_prompt(record: Mapping[str, Any]) -> bool:
@@ -251,7 +330,8 @@ def _take(record: Mapping[str, Any], moment: datetime.datetime, reading: _Readin
         pasted = _as_far_as_fits(_pasted(text), PROMPT_LENGTH - len(shown))
         if not shown and not pasted:
             return False
-        reading.prompts.append(Prompt(moment, shown, pasted))
+        answered = _answer_shown(reading.answer)
+        reading.prompts.append(Prompt(moment, shown, pasted, answered, tuple(reading.commands)))
     return True
 
 

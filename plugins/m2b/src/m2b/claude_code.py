@@ -18,9 +18,14 @@ beyond that, each with what breaks when it changes:
 - Transcript files under ``~/.claude/projects/``, one JSON Lines file per session: ``sessions``
   reads what the person typed, and relies on the mark Claude Code puts on every prompt of who sent
   it (``origin``, ``promptSource``), and on the attachment of type ``queued_command`` for a message
-  sent while a turn ran (``as_prompt_record``); the worklog add-on reads prompts, answers and times
-  for the facts of a period (``m2b_worklog/sources/transcripts.py``) and leaves out a prompt the
-  mark gives to another sender. Both read the mark through ``sender_of`` and take out the blocks
+  sent while a turn ran (``as_prompt_record``); beside a prompt it reads the turn before from the
+  ``assistant`` records of the main conversation (not ``isSidechain``): their ``text`` parts and the
+  ``input.command`` of their ``tool_use`` parts named ``BASH_TOOL``, and it ends a turn at a ``user``
+  record with text that is no tool's result, no ``isMeta`` record of Claude Code's own and no note
+  of an interruption. When those change, a prompt comes without the turn before and nothing fails;
+  the worklog add-on reads prompts, answers and times for the facts of a period
+  (``m2b_worklog/sources/transcripts.py``) and leaves out a prompt the mark gives to another sender.
+  Both read the mark through ``sender_of`` and take out the blocks
   Claude Code writes into a prompt beside what was typed (``PROMPT_BLOCK``, the one list of their
   tags). ``sessions`` reports a transcript that cannot be opened or no longer names its folder as
   not read, the worklog one that cannot be opened. When the mark goes, ``sessions`` counts every
@@ -71,6 +76,9 @@ PROMPT_BLOCK_TAGS = (
     "task-notification",
 )
 PROMPT_BLOCK = re.compile(r"<(" + "|".join(PROMPT_BLOCK_TAGS) + r")\b[^>]*>.*?</\1>", re.S)
+
+# The name of Claude Code's shell tool in a ``tool_use`` part of an answer.
+BASH_TOOL = "Bash"
 
 # The sender Claude Code names for what the person sent: typed in the terminal or in the desktop
 # app, also while Claude was busy, or a suggested prompt they accepted.

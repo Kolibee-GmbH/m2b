@@ -172,6 +172,50 @@ class PastedInputTest(unittest.TestCase):
         )
 
 
+class TurnBeforeInputTest(unittest.TestCase):
+    def test_a_prompt_goes_in_with_the_end_of_the_answer_before_and_the_commands_of_that_turn(self) -> None:
+        """Covers: B269"""
+        prompts = (
+            Prompt(
+                MORNING,
+                "only the quick round",
+                answer_before="Running the whole proof now.",
+                commands=("scripts/check",),
+            ),
+            Prompt(MORNING, "thanks"),
+        )
+        turn = Session("turn", "/home/alex/projects/shed", prompts, NOTHING_LEFT_OUT)
+
+        given = json.loads(glean.step_input([turn], ""))
+
+        self.assertEqual(
+            given["sessions"][0]["prompts"],
+            [
+                {
+                    "typed": "only the quick round",
+                    "answer_before": "Running the whole proof now.",
+                    "commands": ["scripts/check"],
+                },
+                "thanks",
+            ],
+        )
+
+    def test_a_quote_from_the_answer_or_a_command_stands_on_no_words_of_the_person(self) -> None:
+        """Covers: B269"""
+        prompt = Prompt(
+            MORNING,
+            "no",
+            answer_before="Dana runs IT at Northwind, I noted.",
+            commands=("echo Dana runs IT at Northwind",),
+        )
+        turn = Session("shed", "/home/alex/projects/shed", (prompt,), NOTHING_LEFT_OUT)
+
+        checked = glean.check([proposal("Dana runs IT at Northwind")], [turn], [])
+
+        self.assertEqual(len(checked.not_quoted), 1)
+        self.assertEqual(checked.kept, ())
+
+
 class ParseAnswerTest(unittest.TestCase):
     def test_an_answer_gives_its_proposals_each_with_the_id_of_its_session(self) -> None:
         text = answer(

@@ -9,7 +9,8 @@ The input is one JSON document: the distillate, so the model can leave out what 
 the proposals of earlier readings the person kept and those they dropped (``Examples``), those
 that still wait for an answer (``waiting``), and per
 session its folder, its day and every prompt whole, what was pasted into one apart from what was
-typed. A session is named by a small number, its
+typed, and beside it the end of Claude's answer before it and the Bash commands of that turn, which
+are Claude's and never stand for the person's words. A session is named by a small number, its
 place in the sequence the caller passes; the model repeats a number more reliably than an id, and
 ``parse_answer`` turns it back with the same sequence. JSON keeps a prompt one string whatever it
 holds, so no typed text can pass as another session or as the memory, and no example as a session.
@@ -245,8 +246,18 @@ def _where_it_stands(quote: str, prompts: Sequence[tuple[datetime.datetime, str,
 
 
 def _as_shown(prompt: Prompt) -> str | dict[str, Any]:
-    """A prompt as the model reads it: its text, or what was typed and what was pasted, kept apart."""
-    return {"typed": prompt.text, "pasted": list(prompt.pasted)} if prompt.pasted else prompt.text
+    """A prompt as the model reads it: its text, or what was typed, what was pasted and the turn it
+    answers (the end of Claude's answer before it, the Bash commands of that turn), kept apart."""
+    if not (prompt.pasted or prompt.answer_before or prompt.commands):
+        return prompt.text
+    shown: dict[str, Any] = {"typed": prompt.text}
+    if prompt.pasted:
+        shown["pasted"] = list(prompt.pasted)
+    if prompt.answer_before:
+        shown["answer_before"] = prompt.answer_before
+    if prompt.commands:
+        shown["commands"] = list(prompt.commands)
+    return shown
 
 
 def _as_given(example: Example) -> dict[str, str]:
