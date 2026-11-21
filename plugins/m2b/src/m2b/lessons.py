@@ -47,7 +47,7 @@ BLOCK_HEADER = (
     "m2b lessons: the owner corrected Claude on each of these and kept the correction; they hold in "
     "every project, unless the owner says otherwise in this session:"
 )
-# The block takes room from the distillate, so it has a limit of its own: a quarter of the session start.
+# The block's own limit, in an output beside the distillate's: past it a new lesson replaces one.
 MAX_BLOCK_CHARACTERS = 2_400
 
 

@@ -16,6 +16,7 @@ from m2b import (
     glean,
     lesson_counts,
     lesson_sources,
+    lessons,
     project_proposals,
     proposal_answers,
     proposals,
@@ -876,6 +877,7 @@ class StartBudgetTest(GleanStepTest):
     }
 
     LONG = "# Memory\n\n## Facts\n\n" + "".join(f"- Fact number {n} about the shed (shed.md)\n" for n in range(80))
+    SHORT = "# Memory\n\n## Facts\n\n- Sam brings plywood (sam.md)\n"
     SECOND: ClassVar[dict[str, Any]] = {
         **NEW,
         "text": "Call the band the band.",
@@ -883,11 +885,15 @@ class StartBudgetTest(GleanStepTest):
         "lesson": {**NEW["lesson"], "quote": "again, the band, not the bar"},
     }
 
-    def proposed(self, distillate: str, counted: bool = True, *found: dict[str, Any]) -> list[dict[str, Any]]:
+    def proposed(
+        self, distillate: str, counted: bool = True, *found: dict[str, Any], full: bool = True
+    ) -> list[dict[str, Any]]:
         self.reading()
         self.write("memory/MEMORY.md", distillate)
         self.write("memory/lessons/old.md", self.KNOWN.format(kept="2026-10-01", name="Old", text="Say it once."))
         self.write("memory/lessons/weak.md", self.KNOWN.format(kept="2026-10-20", name="Weak", text="Keep it short."))
+        if full:
+            self.fill_the_block()
         if counted:
             self.write(
                 lesson_counts.COUNTS_FILE,
@@ -903,19 +909,34 @@ class StartBudgetTest(GleanStepTest):
         self.assertEqual(self.run_curate().state, SUCCEEDED)
         return [dict(entry["lesson"]) for entry in self.kept()["proposals"].values() if entry["state"] == "open"]
 
-    def test_past_the_start_target_a_new_lesson_names_the_weakest_it_would_replace(self) -> None:
+    def fill_the_block(self) -> None:
+        """Kept lessons until the block is ten characters short of its limit: no new lesson fits."""
+        for number in range(10):
+            text = f"Filler lesson {number} " + "about a careful way of working " * 6
+            self.write(
+                f"memory/lessons/f{number}.md", self.KNOWN.format(kept=f"2026-11-{number + 1:02d}", name="F", text=text)
+            )
+        size = len(lessons.block(lessons.read_all(self.store)))
+        self.assertLess(size, lessons.MAX_BLOCK_CHARACTERS - 10)
+        last = "Last filler lesson " + "x" * (
+            lessons.MAX_BLOCK_CHARACTERS - 10 - size - len("- Last filler lesson ") - 1
+        )
+        self.write("memory/lessons/g.md", self.KNOWN.format(kept="2026-11-10", name="G", text=last))
+        self.assertEqual(len(lessons.block(lessons.read_all(self.store))), lessons.MAX_BLOCK_CHARACTERS - 10)
+
+    def test_a_new_lesson_that_would_pass_the_blocks_limit_names_the_weakest_it_would_replace(self) -> None:
         """Covers: B284"""
-        (lesson,) = self.proposed(self.LONG)
+        (lesson,) = self.proposed(self.SHORT)
 
         self.assertEqual(lesson["replaces"], "weak.md")
 
     def test_without_counts_the_oldest_is_named_and_two_new_lessons_name_two(self) -> None:
         """Covers: B284"""
-        (lesson,) = self.proposed(self.LONG, False)
+        (lesson,) = self.proposed(self.SHORT, False)
         self.assertEqual(lesson["replaces"], "old.md")
 
         self.setUp()
-        both = self.proposed(self.LONG, True, self.NEW, self.SECOND)
+        both = self.proposed(self.SHORT, True, self.NEW, self.SECOND)
         self.assertEqual({each["replaces"] for each in both}, {"weak.md", "old.md"})
 
     def test_a_lesson_a_waiting_proposal_names_already_is_not_named_again(self) -> None:
@@ -930,15 +951,18 @@ class StartBudgetTest(GleanStepTest):
         added = proposals.add(proposals.Proposals({}), [proposals.Said(waiting, datetime.date(2026, 11, 6))], START)
         proposals.save(self.store, added.proposals)
 
-        (lesson,) = [each for each in self.proposed(self.LONG) if each["quote"] != "again a day"]
+        (lesson,) = [each for each in self.proposed(self.SHORT) if each["quote"] != "again a day"]
 
         self.assertEqual(lesson["replaces"], "old.md")
 
-    def test_within_the_start_target_a_new_lesson_replaces_none(self) -> None:
+    def test_a_block_with_room_replaces_none_however_long_the_distillate(self) -> None:
         """Covers: B284"""
-        (lesson,) = self.proposed("# Memory\n\n## Facts\n\n- Sam brings plywood (sam.md)\n")
+        for distillate in (self.SHORT, self.LONG):
+            with self.subTest(long=distillate is self.LONG):
+                self.setUp()
+                (lesson,) = self.proposed(distillate, full=False)
 
-        self.assertNotIn("replaces", lesson)
+                self.assertNotIn("replaces", lesson)
 
 
 class KeptFixTest(GleanStepTest):

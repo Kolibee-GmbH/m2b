@@ -65,13 +65,14 @@ every session.
 
 ## Lessons
 
-A correction you kept, such as "run only the checks the change touches", is a lesson. Every
-session starts with the lessons for every project in a block of their own, in m2b's second output
-beside the distillate, written as corrections you made and kept, not as notes. A lesson that `~/.claude/CLAUDE.md` or
-another source states now is left out, and `m2b status` says where it is kept. When distillate and
-lessons together pass the 2 KB target, lint says so with both sizes, and a new lesson the reading
-of your sessions proposes for every session names the kept lesson it would replace: the one you
-corrected Claude on again most often, then the oldest. Keep it, and that lesson goes.
+A correction you kept, such as "run only the checks the change touches", is a lesson. Every session
+starts with the lessons for every project in a block of their own, in m2b's second output beside the
+distillate, written as corrections you made and kept, not as notes. A lesson that
+`~/.claude/CLAUDE.md` or another source states now is left out, and `m2b status` says where it is
+kept. When distillate and lessons together pass the 2 KB target, lint says so with both sizes. Where
+the block is full, a new lesson the reading of your sessions proposes for every session names the
+kept lesson it would replace: the one you corrected Claude on again most often, then the oldest.
+Keep it, and that lesson goes.
 
 A lesson about a command, such as "run the whole proof only when the change gives a reason, when
 you start scripts/check", comes right before Claude runs that command: a hook adds it before each

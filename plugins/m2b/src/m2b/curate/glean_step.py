@@ -62,7 +62,6 @@ from m2b import (
     lesson_counts,
     lesson_sources,
     lessons,
-    lint,
     project_capture,
     project_files,
     project_proposals,
@@ -396,7 +395,9 @@ def _within_the_start(
     known: Mapping[str, proposals.Entry],
 ) -> list[tuple[glean.Proposal, datetime.datetime]]:
     """The proposals, each new lesson for every session's start with the kept lesson it would
-    replace where that start, with it, would be past its target (``lint.DISTILLATE_TARGET_BYTES``).
+    replace where the block of lessons, with the new ones, would pass its own limit
+    (``lessons.MAX_BLOCK_CHARACTERS``) and leave a lesson out. The block is an output of its own
+    beside the distillate, so how long the distillate is has no say in it.
 
     The lesson replaced is the weakest of those every session starts with: the one corrected again
     most often since it was kept, then the oldest; each is named for one new lesson at most, also
@@ -408,9 +409,13 @@ def _within_the_start(
     new = [proposal for proposal, _ in placed if _goes_into_the_start(proposal) and not _is_known(proposal, known)]
     if not new:
         return list(placed)
-    start, lessons_bytes = lint.start_bytes(_distillate(store), standing)
-    added = sum(len(f"- {proposal.text}\n".encode()) for proposal in new)
-    if start + lessons_bytes + added <= lint.DISTILLATE_TARGET_BYTES:
+    # A new lesson is kept after every standing one, so it comes last in the block.
+    with_new = [
+        *standing,
+        *(lessons.Lesson("", proposal.text, lessons.KNOWLEDGE, lessons.EVERY_PROJECT, "") for proposal in new),
+    ]
+    _, left_out = lessons.fitting(with_new)
+    if not left_out:
         return list(placed)
     try:
         again = lesson_counts.corrected_again(store, {lesson.name: lesson.kept for lesson in standing})

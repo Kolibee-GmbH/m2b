@@ -51,9 +51,9 @@ right before the command it is about.
   ([Using m2b](docs/using.md#lessons))
   ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - A lesson about a command that did not fire for 30 days is asked about in your task list,
-  `Still needed?`: a drop removes it, a tick keeps it for another 30 days. Past the 2 KB target of
-  what every session starts with, a proposed lesson names the kept lesson it would replace, the one
-  corrected again most often; keeping it removes that one ([Using m2b](docs/using.md#lessons))
+  `Still needed?`: a drop removes it, a tick keeps it for another 30 days. Where the block of
+  lessons is full, a proposed lesson names the kept lesson it would replace, the one corrected again
+  most often; keeping it removes that one ([Using m2b](docs/using.md#lessons))
   ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - A fix for a file Claude reads: say "keep this as a fix" with the file, what is wrong and the new
   wording, and `m2b fix add` keeps it. m2b never writes that file; the next session in a clone of
