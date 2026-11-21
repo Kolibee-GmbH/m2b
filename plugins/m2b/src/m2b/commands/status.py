@@ -21,7 +21,7 @@ import datetime
 import json
 from typing import Any
 
-from m2b import handed_in, proposal_answers, proposals
+from m2b import handed_in, lessons, proposal_answers, proposals
 from m2b.addons import ADDONS, is_on
 from m2b.atomic_file import replace_atomically
 from m2b.commands import Context
@@ -35,6 +35,7 @@ from m2b.config.store_settings import describe_format, format_state, load_store_
 from m2b.curate import machine_state
 from m2b.curate.due import PAUSED_NOTE, check_due
 from m2b.glean import AGENT, KINDS, PASTED, TOOL, TYPED
+from m2b.notes.characters import with_hidden_written_out
 from m2b.notes.layout import INBOX
 from m2b.paths import MachinePaths
 from m2b.run_record import RUNNING, RunRecordError, is_interrupted, load_run_record
@@ -91,7 +92,21 @@ def status_answer(config: MachineConfig, context: Context, tasks_check: Check | 
     if answers is not None:
         answer["proposal_answers"] = answers
     answer["handed_in"] = _handed_in(store)
+    answer["lessons"] = _lessons(store)
     return answer
+
+
+def _lessons(store: Store) -> dict[str, Any]:
+    """How many lessons every session starts with, and those left out because their source states
+    them now, by name and source (B258)."""
+    found = lessons.read_all(store)
+    return {
+        "in_every_session": len(lessons.fitting(found)[0]),
+        "kept_at_source": [
+            {"name": with_hidden_written_out(lesson.name), "source": with_hidden_written_out(lesson.kept_at or "")}
+            for lesson in lessons.kept_at_source(found)
+        ],
+    }
 
 
 def probe_backends(
@@ -262,6 +277,12 @@ def _print_text(answer: dict[str, Any]) -> None:
     elif handed["count"]:
         not_downloaded = f" ({handed['evicted']} not downloaded)" if handed["evicted"] else ""
         print(f"handed in: {handed['count']} waiting for the next curation run{not_downloaded}")
+    kept = answer["lessons"]
+    if kept["in_every_session"] or kept["kept_at_source"]:
+        at_source = "".join(
+            f"; {item['name']} is kept at its source, {item['source']}" for item in kept["kept_at_source"]
+        )
+        print(f"lessons: {kept['in_every_session']} in every session{at_source}")
     on = [name for name, is_addon_on in answer["addons"].items() if is_addon_on]
     print(f"add-ons on: {', '.join(on) if on else 'none'}")
 

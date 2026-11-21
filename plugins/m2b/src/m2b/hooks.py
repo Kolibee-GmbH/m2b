@@ -6,6 +6,8 @@ the distillate (B7): a failed run, an interrupted one, one whose run record coul
 (from this machine's run log), curation that has not run for three days. The routing rule is
 printed only together with a distillate (B9), and the distillate is cut at 8 KB on a character
 boundary, or shorter so the whole output stays under Claude Code's cap, with a line saying so (B8).
+After the routing rule comes the block of the lessons the owner kept (B257), whole: the distillate
+is cut earlier to make room for it.
 
 Facts and current items under a topic stay out of the session start (B44, B136): the session gets
 every other line of the distillate, one line naming the topics, and the blocks of the topics its
@@ -36,7 +38,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from m2b import fixes, launcher, repository_places, session_remotes, topic_state
+from m2b import fixes, launcher, lessons, repository_places, session_remotes, topic_state
 from m2b.atomic_file import write_text_atomically
 from m2b.config.errors import SETUP_COMMAND
 from m2b.config.machine import MachineConfig
@@ -146,7 +148,10 @@ def _print_distillate(
         return [], topic_state.NONE
     head = f"{DISTILLATE_HEADER}\n\n"
     rule = f"\n{ROUTING_RULE} {WORK_PEOPLE_RULE}\n"
-    room = OUTPUT_LIMIT - len(notices) - len(head) - len(rule) - len(CUT_LINE) - 2
+    # The lessons come whole and the distillate is cut earlier to make room for them (B259).
+    kept = lessons.block(lessons.read_all(store))
+    tail = f"\n{kept}" if kept else ""
+    room = OUTPUT_LIMIT - len(notices) - len(head) - len(rule) - len(tail) - len(CUT_LINE) - 2
     split = split_topics(text)
     notes = machine.state_dir / session_remotes.NOTES_FOLDER
     named = [
@@ -154,7 +159,7 @@ def _print_distillate(
         for block in _named_by_path(split.blocks, folder, environ)
     ]
     body, shown, cut = _session_view(split.general, split.blocks, named, room)
-    print(head + body + (f"{CUT_LINE}\n" if cut else "") + rule, end="")
+    print(head + body + (f"{CUT_LINE}\n" if cut else "") + rule + tail, end="")
     return shown, topic_state.CUT if cut else topic_state.WHOLE
 
 

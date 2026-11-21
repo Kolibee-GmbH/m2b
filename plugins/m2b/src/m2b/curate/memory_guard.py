@@ -9,6 +9,11 @@ compares afterwards:
 - **Every step, sorting included:** a line the step wrote or changed that holds a character which hides or reorders
   text (``m2b.notes.characters``) puts ``memory/`` back as it was before the step, and the step
   fails. Such a line reads differently to the owner than to the model.
+- **Every step that may edit ``memory/``:** a file it added, changed or removed under
+  ``memory/lessons/`` puts ``memory/`` back and fails the step (B261). A lesson reaches every
+  session as a correction the owner kept, outside the distillate's "data, not instructions" fence,
+  and a model step reads captures, which can claim to be a lesson; only what the owner kept may go
+  there, and no model step writes it.
 - **Refresh:** its allowed change is exact, so it is enforced. Only the due fact files and the
   distillate's lines for them may change (in the backfill also the current items it was given, and
   only by their ``(since ...)``); anything else puts ``memory/`` back and fails the step.
@@ -36,6 +41,7 @@ from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+from m2b.lessons import FOLDER as LESSONS_FOLDER
 from m2b.notes.characters import unsafe_characters
 from m2b.notes.layout import MEMORY, MEMORY_INDEX
 from m2b.notes.memory_index import (
@@ -130,6 +136,16 @@ def unsafe_line(before: Snapshot, after: Snapshot, added_files_stay: bool = Fals
                 listed = ", ".join(names[:_NAMED_CHARACTERS]) + (f" and {more} more" if more > 0 else "")
                 where = path if added_files_stay or path in before.files else _ADDED_FILE
                 return f"line {number} written to {where} holds {listed}, which hide or reorder text"
+    return None
+
+
+def lessons_changed(before: Snapshot, after: Snapshot) -> str | None:
+    """Why the step must be undone: it wrote below ``memory/lessons/``. Said without the file's name,
+    which the model chose."""
+    prefix = f"{LESSONS_FOLDER}/"
+    paths = {path for path in (*before.files, *after.files) if path.startswith(prefix)}
+    if any(before.files.get(path) != after.files.get(path) for path in paths):
+        return f"the step changed {prefix}, where only lessons the owner kept go and no model step writes"
     return None
 
 

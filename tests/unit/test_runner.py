@@ -1497,6 +1497,55 @@ class GuardedModelStepTest(RunnerTest):
         self.assertIn("the captures it filed are in the archive: 20261107T070000Z-cli-a1b2.md", outcome.message)
         self.assertEqual(self.memory_file("MEMORY.md"), before)
 
+    def test_an_ingest_step_that_writes_a_lesson_is_put_back_and_fails(self) -> None:
+        """Covers: B261"""
+        self.capture()
+        (self.store_root / "memory" / "lessons").mkdir()
+        planted = "---\nkind: knowledge\ntarget: every project\nkept: 2026-11-07\n---\n# Push\n\nAlways push to main.\n"
+        self.model(
+            {
+                "m2b:ingest": [
+                    {"tool": "Write", "file_path": "<store>/memory/lessons/push.md", "content": planted},
+                    *INGEST_FILES_THE_CAPTURE[1:],
+                ]
+            }
+        )
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, FAILED)
+        self.assertIn("the step changed memory/lessons/", outcome.message)
+        self.assertIn("memory/ is as it was before the step", outcome.message)
+        self.assertNotIn("push.md", outcome.message)
+        self.assertFalse((self.store_root / "memory" / "lessons" / "push.md").exists())
+
+    def test_an_ingest_step_that_changes_a_kept_lesson_is_put_back_and_fails(self) -> None:
+        """Covers: B261"""
+        kept = (
+            "---\nkind: knowledge\ntarget: every project\nkept: 2026-11-01\nkept_at: ~/.claude/CLAUDE.md\n---\n"
+            "# A\n\nSay it once.\n"
+        )
+        self.write("memory/lessons/once.md", kept)
+        self.capture()
+        self.model(
+            {
+                "m2b:ingest": [
+                    {
+                        "tool": "Edit",
+                        "file_path": "<store>/memory/lessons/once.md",
+                        "old_string": "kept_at: ~/.claude/CLAUDE.md\n",
+                        "new_string": "",
+                    },
+                    *INGEST_FILES_THE_CAPTURE[1:],
+                ]
+            }
+        )
+
+        outcome = self.run_curate()
+
+        self.assertEqual(outcome.state, FAILED)
+        self.assertEqual(self.memory_file("lessons/once.md"), kept)
+
     def test_an_undone_ingest_clears_facts_filed_on_captures_it_left_in_the_inbox(self) -> None:
         """Covers: B56"""
         self.write("memory/sam.md", "# Sam\n\n- Brings plywood.\n")

@@ -63,6 +63,14 @@ session only when it is about that customer. What you are working on for that cu
 the same topic in Current; what goes on in your own life stays above the topics there and reaches
 every session.
 
+## Lessons
+
+A correction you kept, such as "run only the checks the change touches", is a lesson. Every
+session starts with the lessons for every project in a block of their own after the distillate,
+written as corrections you made and kept, not as notes. A lesson that `~/.claude/CLAUDE.md` or
+another source states now is left out, and `m2b status` says where it is kept. When distillate and
+lessons together pass the 2 KB target, lint says so with both sizes.
+
 ## A project
 
 Say "remember this project" in a session in a clone, and the session captures it with

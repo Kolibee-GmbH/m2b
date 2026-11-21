@@ -970,7 +970,7 @@ class _Run:
     ) -> str | None:
         """Why ``memory/`` went back to ``before``, or None when the step's edits stay (and are reported)."""
         after = memory_guard.Snapshot.take(self.store)
-        problem = memory_guard.unsafe_line(before, after)
+        problem = memory_guard.unsafe_line(before, after) or memory_guard.lessons_changed(before, after)
         if problem is None and scope is not None:
             problem = memory_guard.refresh_problem(before, after, scope.files, scope.current)
         if problem is not None:

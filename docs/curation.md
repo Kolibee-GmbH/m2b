@@ -76,6 +76,9 @@ turn, so whatever a prompt says, the model can call nothing.
 After each model step that may edit `memory/`, code compares it with a copy taken just before the
 step:
 
+- **No step** may add, change or remove a file under `memory/lessons/`: a lesson reaches every
+  session as a correction you kept, and a model step reads captures, which can claim to be one. Such
+  a change puts `memory/` back and fails the step.
 - **Refresh** may change only the facts that are due: their fact files and their lines in
   `MEMORY.md`. Any other change puts `memory/` back and fails the step.
 - **Ingest and lint** keep their edits. Each facts line they removed or rewrote, and each fact file

@@ -145,6 +145,29 @@ clone does not hold, a pointer that leaves the repository, and, as information, 
 folder there was opened in for 30 days; a project topic is measured against the 4 KB with its place
 line.
 
+A lesson you kept is a file of its own under `memory/lessons/`, written by a curation run:
+
+```markdown
+---
+kind: knowledge
+target: every project
+kept: 2026-11-20
+---
+# The checks a change touches
+
+Run only the checks the change touches; the whole proof only when the change gives a reason.
+
+## Evidence
+
+- [[20261120T101500Z-claude-a1b2.md]]
+```
+
+`kind` is `knowledge` (how to name or judge a thing) or `action` (about a command), `target` is
+`every project` or a repository's address, and `kept_at` names the source that states it now,
+such as `~/.claude/CLAUDE.md`. Every session starts, after the distillate, with the knowledge
+lessons for every project that no source states; the distillate is cut earlier to make room for
+them.
+
 `## Current` holds topics under the same headings: a current item above its first `###` heading
 reaches every session, one under a topic comes in with that topic, below its facts under
 `#### Current`. Headings with the same name, in either section, are one topic, and a word of any of

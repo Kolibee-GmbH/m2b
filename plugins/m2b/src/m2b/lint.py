@@ -26,6 +26,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
+from m2b import lessons
 from m2b.atomic_file import HIDDEN_TEMP_PREFIX
 from m2b.curate.report import ACTION, INFO
 from m2b.notes import frontmatter as keys
@@ -307,7 +308,8 @@ def _index(
         report.add("no-distillate", ACTION, index_path, f"{index_path} is missing; every session starts without it")
     else:
         text = store.read_bytes(index_path).decode("utf-8", errors="replace")
-        _sizes(report, index_path, text, machine)
+        lessons_bytes = len(lessons.block(lessons.read_all(store)).encode("utf-8"))
+        _sizes(report, index_path, text, machine, lessons_bytes)
         if machine is not None:
             _projects(report, index_path, text, machine)
         index = MemoryIndex.parse(text)
@@ -335,16 +337,25 @@ def _index(
                 report.add("unindexed-fact", ACTION, relative, f"{relative} has no facts line in {index_path}")
 
 
-def _sizes(report: LintReport, index_path: str, text: str, machine: _Machine | None) -> None:
+def _sizes(report: LintReport, index_path: str, text: str, machine: _Machine | None, lessons_bytes: int = 0) -> None:
     """Each view against the target: what every session starts with, and each topic on its own.
 
     A topic larger than a prompt brings is an action, not a size to aim below: the prompt hook adds
     whole topics only, so no prompt that names such a topic adds its facts, and no session says so.
     A project topic is measured with the line that says where its repository lies on this machine.
+    The lessons every session starts with count into that part, and a finding names both sizes (B260).
     """
     split = split_topics(text)
     start = len((split.general + ", ".join(block.topic.name for block in split.blocks)).encode("utf-8"))
-    views = [("the part every session starts with", start)]
+    if lessons_bytes and start + lessons_bytes > DISTILLATE_TARGET_BYTES:
+        report.add(
+            "distillate-size",
+            INFO,
+            index_path,
+            f"in {index_path}, the part every session starts with is {start + lessons_bytes} bytes, {start} of the "
+            f"distillate and {lessons_bytes} of the lessons in {lessons.FOLDER}/, over its 2 KB target",
+        )
+    views = [] if lessons_bytes else [("the part every session starts with", start)]
     for block in split.blocks:
         size = len(block.text.encode("utf-8"))
         # The prompt hook measures a topic as it goes to the model, without the characters that draw nothing.

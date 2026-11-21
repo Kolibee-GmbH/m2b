@@ -13,6 +13,9 @@ All notable changes to this project are documented here. The format follows
   where the topic comes into a session, it says which folder that repository lies in on this
   machine, or that it is not cloned here, so a session reads the project's files itself
   ([Store format](docs/store-format.md)).
+- Every session starts with the lessons you kept for every project (`memory/lessons/`), as
+  corrections after the distillate; `m2b status` counts them and names those kept at their source
+  ([Using m2b](docs/using.md#lessons)).
 - "Remember this project" in a session keeps the project of its folder with the address of its git
   remote, and the next run makes it a topic with its `Repository:` line
   ([Using m2b](docs/using.md#a-project)).

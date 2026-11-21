@@ -42,6 +42,24 @@ class StatusTest(test_runner.RunnerTest):
         self.assertIn("handed in: 2 waiting for the next curation run\n", out)
         self.assertNotIn("words no check has seen", out)
 
+    def test_it_says_how_many_lessons_every_session_starts_with_and_which_are_kept_at_their_source(self) -> None:
+        """Covers: B258"""
+        self.curating()
+        lesson = (
+            "---\nkind: knowledge\ntarget: every project\nkept: 2026-11-20\n{more}---\n# A lesson\n\nSay it once.\n"
+        )
+        self.write("memory/lessons/once.md", lesson.format(more=""))
+        self.write("memory/lessons/checks.md", lesson.format(more="kept_at: ~/.claude/CLAUDE.md\n"))
+
+        self.assertEqual(
+            self.run_json("status")["lessons"],
+            {"in_every_session": 1, "kept_at_source": [{"name": "checks.md", "source": "~/.claude/CLAUDE.md"}]},
+        )
+        self.assertIn(
+            "lessons: 1 in every session; checks.md is kept at its source, ~/.claude/CLAUDE.md\n",
+            self.run_command("status")[1],
+        )
+
     def test_a_folder_of_handed_in_proposals_that_cannot_be_listed_is_said_and_the_other_parts_answer(self) -> None:
         """Covers: B240"""
         self.curating()
