@@ -33,7 +33,9 @@ right before the command it is about.
 - Every session starts with the lessons you kept for every project, corrections you made and kept,
   in a block of their own (`memory/lessons/`). They come with m2b's notices and the routing rule
   in a second output at the session start, so the distillate keeps its 8 KB beside them. A lesson
-  that `~/.claude/CLAUDE.md` or another source states now is left out ([Using m2b](docs/using.md#lessons))
+  that `~/.claude/CLAUDE.md` or another source states now is left out, and each reading of your
+  sessions checks the block again when the lessons or the files every session loads changed
+  ([Using m2b](docs/using.md#lessons))
   ([#41](https://github.com/Kolibee-GmbH/m2b/pull/41)).
 - A lesson about a command comes before Claude runs it: a hook before each Bash call stops the first
   call of a session whose command holds the lesson's words, with the lesson as the reason, and lets

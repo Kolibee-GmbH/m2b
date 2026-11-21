@@ -340,7 +340,12 @@ lesson for one project that no file states becomes a fix that adds it to that pr
 for a file under `~/.claude/` or in a repository. A fix you keep waits in the store until the next
 session where the file lies applies it with you ([Fixes](using.md#fixes-for-the-files-claude-reads)),
 and the reading goes on counting corrections of its lesson under the fix's name until you give the
-fix up; a pointer is kept as a lesson that names its file and stays out of the block every session gets. Code keeps a
+fix up; a pointer is kept as a lesson that names its file and stays out of the block every session gets.
+The files change after that, so every reading asks again, before it reads the sessions, whether a
+file every session on this machine loads (`~/.claude/CLAUDE.md`, its rules without `paths`, the
+output style chosen there) states a lesson of the block now. The model is asked only when those
+lessons or files changed since its last answer; a lesson it finds stated, at a line code finds in
+the file, keeps that file as its source and leaves the block, and the run says so. Code keeps a
 proposal only when those words stand in one prompt of the session it names, typed or pasted, with
 at least three words, and when you did not capture the same thing in that time. A proposal like one that
 waits, or like one you kept or dropped or that expired within 90 days, is not kept a second time,

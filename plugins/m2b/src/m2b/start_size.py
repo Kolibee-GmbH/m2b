@@ -173,6 +173,11 @@ def _files(
         yield _part(name, body, ONLY_WITH_A_MATCHING_FILE if "paths" in fields else None)
 
 
+def only_with_a_matching_file(text: str) -> bool:
+    """A rule with ``paths``: Claude Code loads it once a file it names is read, not at every start."""
+    return "paths" in _split_frontmatter(text)[0]
+
+
 def _split_frontmatter(text: str) -> tuple[dict[str, str], str]:
     """The top-level fields of a file's frontmatter and the text after it, which is what Claude Code
     passes on. Its keys may hold a hyphen (``force-for-plugin``), which a note's keys never do."""

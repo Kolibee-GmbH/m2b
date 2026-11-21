@@ -88,7 +88,7 @@ def read_all(store: Store) -> list[Lesson]:
         except FileNotFoundError:
             # Listed, then removed by a sync or a run elsewhere before it was read: it is gone.
             continue
-        lesson = _parsed(PurePosixPath(path).name, text)
+        lesson = parse(PurePosixPath(path).name, text)
         if lesson is not None:
             found.append(lesson)
     found.sort(key=lambda lesson: (lesson.kept, lesson.name))
@@ -99,7 +99,8 @@ def _is_lesson_file(path: str) -> bool:
     return PurePosixPath(path).parent.as_posix() == FOLDER and path.endswith(".md")
 
 
-def _parsed(name: str, text: str) -> Lesson | None:
+def parse(name: str, text: str) -> Lesson | None:
+    """The lesson a file of that name holds, None where it holds none."""
     note = Note.parse(text)
     fields = note.frontmatter
     if fields is None:

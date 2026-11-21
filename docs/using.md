@@ -69,7 +69,8 @@ A correction you kept, such as "run only the checks the change touches", is a le
 starts with the lessons for every project in a block of their own, in m2b's second output beside the
 distillate, written as corrections you made and kept, not as notes. A lesson that
 `~/.claude/CLAUDE.md` or another source states now is left out, and `m2b status` says where it is
-kept. When distillate and lessons together pass the 2 KB target, lint says so with both sizes. Where
+kept: where the reading of your sessions is on, each run checks the block again against the files
+every session loads, so a rule you write into `~/.claude/CLAUDE.md` takes the lesson's place. When distillate and lessons together pass the 2 KB target, lint says so with both sizes. Where
 the block is full, a new lesson the reading of your sessions proposes for every session names the
 kept lesson it would replace: the one you corrected Claude on again most often, then the oldest.
 Keep it, and that lesson goes.

@@ -26,6 +26,9 @@ per kind, what was added and what stood on no words of the person. The counts go
 information, never into the review: nothing here asks the person to act. What the reader left out of
 the sessions it read is among them, so a day's reading shows what it did not take.
 
+Before the reading, ``recheck_lessons`` asks whether a file every session loads now states a lesson
+of the block (``lesson_recheck``); a model is asked only when the lessons or those files changed.
+
 The model is also shown the lessons the person kept and asked which prompts correct Claude on one
 of them again; code keeps such a correction only where its words stand in what was typed on the
 day after the lesson was kept, and counts it under the lesson (``lesson_counts``).
@@ -61,6 +64,7 @@ from m2b import (
     glean,
     kept_lessons,
     lesson_counts,
+    lesson_recheck,
     lesson_sources,
     lessons,
     project_capture,
@@ -96,6 +100,34 @@ class Reading:
 
     skipped: str | None
     notes: tuple[str, ...]
+
+
+def recheck_lessons(
+    store: Store,
+    config: MachineConfig,
+    machine: MachinePaths,
+    environ: Mapping[str, str],
+    pass_fds: Sequence[int] = (),
+) -> list[str]:
+    """Whether a file every session loads now states a lesson of the block (``lesson_recheck``), as
+    the run's information. Whatever keeps it from an answer is said, and the reading goes on: the
+    lessons then stay in the block, as before."""
+
+    def ask(instruction: str, text: str) -> str:
+        run = model.text_step(config, machine, environ, instruction, text, pass_fds)
+        if run.answer is None:
+            raise lesson_recheck.RecheckError(run.failure())
+        return run.answer
+
+    try:
+        result = lesson_recheck.recheck(store, environ, machine.state_dir, ask)
+    # ``ValueError`` too: a lesson's frontmatter that cannot take the field must not cost the reading.
+    except (lesson_recheck.RecheckError, StoreError, OSError, ValueError) as error:
+        return [f"the kept lessons were not checked again against the files every session loads: {error}"]
+    return [
+        f"the lesson {name} is stated in {stated_in} now and left the block, kept at its source"
+        for name, stated_in in result.kept_at_source
+    ]
 
 
 def propose(

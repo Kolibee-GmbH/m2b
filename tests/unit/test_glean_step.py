@@ -298,7 +298,7 @@ class ReadingTest(GleanStepTest):
         self.assertEqual(self.calls(), [])
         self.assertEqual(self.kept()["read_until"], (START + HOUR).isoformat())
 
-    def test_the_deadline_of_the_run_counts_the_reading_as_one_more_model_step(self) -> None:
+    def test_the_deadline_of_the_run_counts_the_reading_as_three_more_model_steps(self) -> None:
         self.reading()
         seen = self.addon("worklog", "before_ingest")
 
@@ -306,7 +306,7 @@ class ReadingTest(GleanStepTest):
 
         (step,) = [json.loads(line) for line in seen.read_text(encoding="utf-8").splitlines()]
         deadline = datetime.datetime.fromisoformat(step["record"]["deadline_at"])
-        supervised = 5 * (datetime.timedelta(minutes=15) + datetime.timedelta(seconds=model.DEFAULT_GRACE_SECONDS))
+        supervised = 7 * (datetime.timedelta(minutes=15) + datetime.timedelta(seconds=model.DEFAULT_GRACE_SECONDS))
         fetch = 2 * datetime.timedelta(seconds=5)
         self.assertEqual(deadline - START, fetch + supervised + test_runner.runner.CODE_STEPS_MARGIN)
 
@@ -916,6 +916,63 @@ class CorrectedAgainTest(GleanStepTest):
         self.assertEqual(list(self.kept()["proposals"]), [DANA_ID])
         self.assertTrue(
             any(note.startswith("the corrections of kept lessons were not counted") for note in self.info())
+        )
+
+
+class LessonRecheckTest(GleanStepTest):
+    LESSON = (
+        "---\nkind: knowledge\ntarget: every project\nkept: 2026-11-01\n---\n# Quick\n\nRun only the quick checks.\n"
+    )
+
+    def stated_in_claude_md(self) -> None:
+        self.reading()
+        self.write("memory/lessons/quick.md", self.LESSON)
+        claude_md = self.claude_settings.parent / "CLAUDE.md"
+        claude_md.write_text("# Rules\n\nRun only the quick checks.\n", encoding="utf-8")
+        self.typed("the shed roof needs new felt", START - HOUR)
+
+    def test_a_reading_checks_the_block_again_and_keeps_a_stated_lesson_at_its_source(self) -> None:
+        """Covers: B291"""
+        self.stated_in_claude_md()
+        self.model({})
+        script = json.loads(self.actions.read_text(encoding="utf-8"))
+        verdict = {"verdicts": [{"lesson": 1, "verdict": "right", "source": 1, "line": 3}]}
+        script["text"] = [
+            {"answer": json.dumps(verdict), "outcome": "success"},
+            {"answer": json.dumps({"proposals": []}), "outcome": "success"},
+        ]
+        self.actions.write_text(json.dumps(script), encoding="utf-8")
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        recheck, reading = self.asked()
+        self.assertEqual(recheck["lessons"], [{"lesson": 1, "text": "Run only the quick checks."}])
+        self.assertIn("sessions", reading)
+        (lesson,) = lessons.read_all(self.store)
+        self.assertEqual(lesson.kept_at, "~/.claude/CLAUDE.md")
+        self.assertIn(
+            "the lesson quick.md is stated in ~/.claude/CLAUDE.md now and left the block, kept at its source",
+            self.info(),
+        )
+
+    def test_a_check_without_an_answer_is_said_and_the_reading_goes_on(self) -> None:
+        """Covers: B291"""
+        self.stated_in_claude_md()
+        self.model({})
+        script = json.loads(self.actions.read_text(encoding="utf-8"))
+        script["text"] = [
+            {"answer": "", "outcome": "error_max_budget_usd"},
+            {"answer": json.dumps({"proposals": []}), "outcome": "success"},
+        ]
+        self.actions.write_text(json.dumps(script), encoding="utf-8")
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        self.assertIn(("glean", "succeeded"), self.steps())
+        (lesson,) = lessons.read_all(self.store)
+        self.assertIsNone(lesson.kept_at)
+        self.assertTrue(
+            any(note.startswith("the kept lessons were not checked again against the files") for note in self.info())
         )
 
 

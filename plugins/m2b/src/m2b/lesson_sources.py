@@ -188,7 +188,7 @@ def apply(
 ) -> Verdicts:
     """The lessons with what the answer says of their sources, where code finds it holds; a verdict
     may name only a source the lesson's own sessions load."""
-    given = _verdicts(answer)
+    given = verdicts_of(answer)
     kept: list[Proposal] = []
     left_out = 0
     shown_whole = complete if complete is not None else [True] * len(found)
@@ -205,7 +205,7 @@ def apply(
     return Verdicts(tuple(kept), left_out)
 
 
-def _verdicts(answer: str) -> dict[int, Mapping[str, Any]]:
+def verdicts_of(answer: str) -> dict[int, Mapping[str, Any]]:
     """The verdicts of the first JSON object in the answer that has a list of them, by lesson number."""
     decoder = json.JSONDecoder()
     for start in (match.start() for match in re.finditer(r"\{", answer)):
@@ -234,7 +234,7 @@ def _placed(
         return _with_nothing_at_source(proposal)
     if said not in (WRONG, RIGHT):
         return None
-    source, line = _source_line(verdict, sources)
+    source, line = source_line(verdict, sources)
     if source is None or line is None or verdict.get("source") not in sources_of:
         return None
     if said == RIGHT:
@@ -260,7 +260,7 @@ def _with_nothing_at_source(proposal: Proposal) -> Proposal | None:
     )
 
 
-def _source_line(verdict: Mapping[str, Any], sources: Sequence[Source]) -> tuple[Source | None, str | None]:
+def source_line(verdict: Mapping[str, Any], sources: Sequence[Source]) -> tuple[Source | None, str | None]:
     number, line = verdict.get("source"), verdict.get("line")
     if not all(isinstance(value, int) and not isinstance(value, bool) for value in (number, line)):
         return None, None

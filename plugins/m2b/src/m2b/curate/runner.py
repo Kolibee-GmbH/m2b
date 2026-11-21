@@ -189,6 +189,9 @@ LINT_RULES = (
     "Edit(<store>/memory/**)",
 )
 MODEL_STEPS = 3
+# The reading of the sessions asks up to three models: the check of the block again, the reading,
+# the check of a new lesson's sources.
+READING_MODEL_STEPS = 3
 # Harvest, journal, the proposals task and review have no timeout of their own; they get this much
 # in the deadline. The journal's fetch of evicted month files is counted with the preflight fetch.
 CODE_STEPS_MARGIN = datetime.timedelta(minutes=10)
@@ -714,6 +717,9 @@ class _Run:
     def _glean(self) -> Skipped | None:
         """What the person typed since the last reading; the model only when a session has a prompt."""
         started = self.started or self.clock()
+        # Before the reading, so a lesson a source states now is out of the block when a new one is weighed.
+        rechecked = glean_step.recheck_lessons(self.store, self.config, self.machine, self.environ, self.lock.pass_fds)
+        self.findings += [report.Finding(GLEAN, report.INFO, note) for note in rechecked]
         try:
             reading = glean_step.propose(
                 self.store, self.config, self.machine, self.environ, started, self.lock.pass_fds
@@ -1156,7 +1162,7 @@ class _Run:
         # Preflight fetches once, the journal once more for older month files.
         fetch = 2 * datetime.timedelta(seconds=self.fetch_timeout_seconds)
         backfill = len(expiry.batches(self.undated, BACKFILL_BATCH)) - 1 if self.undated is not None else 0
-        optional = (1 if self.sort_facts else 0) + (1 if self.config.curation.read_sessions else 0)
+        optional = (1 if self.sort_facts else 0) + (READING_MODEL_STEPS if self.config.curation.read_sessions else 0)
         model_steps = MODEL_STEPS + max(backfill, 0) + addon_steps + optional
         return fetch + step * model_steps + CODE_STEPS_MARGIN
 
