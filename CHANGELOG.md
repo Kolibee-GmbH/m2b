@@ -5,12 +5,37 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/), with tags `vX.Y.Z`. How a release is made is in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
-## [Unreleased]
+## [0.13.0] - 2026-11-22
+
+What m2b promises is checked from start to end before a release: a page names each promise and
+the cases that prove it, and running them found that one "remind me" gave two tasks.
 
 ### Added
 
+- [Promises](docs/promises.md) lists what the README promises and the cases that prove each, with
+  real sessions and curation runs, and says when a promise holds
+  ([#43](https://github.com/Kolibee-GmbH/m2b/pull/43)).
+- `m2b curate --today <YYYY-MM-DD>` runs a curation run as on that day, for a test that lets days
+  pass: the facts past their day, the questions "Still current?" and "Still needed?" and the period
+  the reading of sessions covers all count from it ([Commands](docs/commands.md),
+  [#43](https://github.com/Kolibee-GmbH/m2b/pull/43)).
 - The plugin carries its icon at `plugins/m2b/.claude-plugin/icon.png`, the same 512 by 512
-  picture as `docs/images/icon.png`, so a plugin directory that lists m2b shows it.
+  picture as `docs/images/icon.png`, so a plugin directory that lists m2b shows it
+  ([#42](https://github.com/Kolibee-GmbH/m2b/pull/42)).
+
+### Changed
+
+- An install or an update gets the release's zip, checked by its SHA-256, and never what was merged
+  after the release ([#43](https://github.com/Kolibee-GmbH/m2b/pull/43)).
+- The refresh step counts from the day its run counts as today, which each model step of a run is
+  given, also where the date of the model's session is another
+  ([#43](https://github.com/Kolibee-GmbH/m2b/pull/43)).
+
+### Fixed
+
+- "Remind me to call the plumber on Friday" gives one task. The note tool makes it, and the
+  curation run no longer adds a second one for the same sentence, nor asks you to check its day
+  ([#43](https://github.com/Kolibee-GmbH/m2b/pull/43)).
 
 ## [0.12.0] - 2026-11-21
 

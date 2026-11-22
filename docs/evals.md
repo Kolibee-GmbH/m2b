@@ -14,10 +14,10 @@ yourself.
 | | |
 |---|---|
 | Day | 2026-11-21 |
-| m2b | 0.12.0 |
+| m2b | 0.13.0 |
 | Claude Code | 2.1.330 |
 | Model | `claude-opus-5-5` |
-| Runs | 102, of which 4 ended in an error and count as failed |
+| Runs | 102, of which 2 ended in an error and count as failed |
 
 | Case | With m2b | Without m2b |
 |---|---|---|
