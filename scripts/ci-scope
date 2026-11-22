@@ -1,0 +1,6 @@
+#!/bin/sh
+# Which checks a change needs, for CI: prints release or full. scripts/ci-scope BASE HEAD
+set -eu
+
+repo_root=$(cd "$(dirname "$0")/.." && pwd)
+PYTHONPATH="$repo_root/scripts${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m repo_tools.ci_scope "$@"

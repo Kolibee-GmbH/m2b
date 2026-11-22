@@ -76,6 +76,25 @@ class WorkflowCommandsTest(unittest.TestCase):
         self.assertIn(f'"{CLAUDE_CODE_PACKAGE}@${{CLAUDE_CODE_VERSION}}"', _text("ci.yml"))
 
 
+class CiScopeTest(unittest.TestCase):
+    """A release or a pin gets the short check; every other change, and an unknown scope, the full one."""
+
+    def setUp(self) -> None:
+        self.text = _text("ci.yml")
+
+    def test_the_scope_compares_the_change_with_where_it_starts(self) -> None:
+        self.assertIn("          fetch-depth: 0\n", self.text)
+        self.assertIn("BASE: ${{ github.event.pull_request.base.sha || github.event.before }}", self.text)
+        self.assertIn('run: echo "scope=$(scripts/ci-scope "$BASE" "$GITHUB_SHA")" >> "$GITHUB_OUTPUT"', self.text)
+
+    def test_only_the_scope_release_skips_the_full_proof(self) -> None:
+        self.assertIn("      - if: steps.scope.outputs.scope != 'release'\n        run: scripts/check\n", self.text)
+        self.assertIn(
+            "      - if: steps.scope.outputs.scope == 'release'\n        run: scripts/check --release\n", self.text
+        )
+        self.assertEqual(len(re.findall(r"(?m)^ +run: scripts/check", self.text)), 2)
+
+
 class PinnedActionsTest(unittest.TestCase):
     """A tag is moved by whoever controls an action's repository, a commit is not: the workflows
     hold an account's key and may write a release."""

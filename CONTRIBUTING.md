@@ -32,7 +32,12 @@ because Claude Code looks for them there: the band's in `plugins/m2b/tests/band/
 `tests/unit/locations.py`.
 
 Two workflows run `scripts/check` on GitHub. `.github/workflows/ci.yml` runs it for every pull
-request and on `main`, with the Claude Code version the README names as the minimum.
+request and on `main`, with the Claude Code version the README names as the minimum. A change that
+`scripts/ci-scope` calls a release gets `scripts/check --release` instead, the manifests and the
+docs tests in about two minutes: one that changes only the version line of `plugin.json`,
+`CHANGELOG.md`, `docs/evals.md` or `.claude-plugin/marketplace.json`, which is what a
+[release](#releasing) and its pin change. The code they release was proved by the runs before
+them. Any other change, a file added or removed, and a scope that cannot be told get the full run.
 `.github/workflows/weekly.yml` runs it every Monday, and whenever someone starts it by hand, with
 the newest Claude Code: m2b hangs on Claude Code's plugin interface, and the weekly run meets a new
 version before a user does. It also runs the [model-level scenarios](#end-to-end-scenarios), the
@@ -590,7 +595,8 @@ is a pull request of its own:
    gh pr create --title "m2b X.Y.Z" --body-file <notes> && gh pr merge --auto --squash
    ```
 
-   Its description says what the release changes for the user and which checks ran.
+   Its description says what the release changes for the user and which checks ran. Its CI runs
+   `scripts/check --release`, since it changes only release files (see [Checks](#checks)).
 5. Tag the release pull request's merge commit and push the tag. Name the commit: another pull
    request may have merged into `main` since, and the tag decides what goes into the zip:
 
