@@ -5,6 +5,21 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/), with tags `vX.Y.Z`. How a release is made is in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [0.13.1] - 2026-11-22
+
+A lesson about a command no longer stops the command you asked for, and a topic heading out of form
+is fixed while your notes are filed.
+
+### Fixed
+
+- A lesson the reading of your sessions proposes about a command keeps the words of a command that
+  already does what you asked for (`--quick`), so once kept it no longer stops
+  `scripts/check --quick` along with the whole proof
+  ([#46](https://github.com/Kolibee-GmbH/m2b/pull/46)).
+- The curation run fixes a topic heading it wrote out of form while it files, instead of leaving it
+  to a review task for you; a project topic gets its repository's name among its words, so a
+  prompt that names the project brings it in ([#46](https://github.com/Kolibee-GmbH/m2b/pull/46)).
+
 ## [0.13.0] - 2026-11-22
 
 What m2b promises is checked from start to end before a release: a page names each promise and
