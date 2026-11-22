@@ -5,13 +5,33 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/), with tags `vX.Y.Z`. How a release is made is in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
-## [Unreleased]
+## [0.13.2] - 2026-11-22
+
+The plugin carries a README of its own for plugin directories, and the README's pictures show m2b as
+it is now.
 
 ### Added
 
-- The plugin folder has a README of its own, `plugins/m2b/README.md`: what m2b is, one line per hook
-  and what reaches a model, with links to the repository. Plugin directories read the README of the
-  plugin folder, not the repository's.
+- The plugin folder has a README of its own, `plugins/m2b/README.md`: what m2b is, how to install
+  it, one line per hook and what reaches a model, with links to the repository. Plugin directories
+  read the README of the plugin folder, not the repository's
+  ([#51](https://github.com/Kolibee-GmbH/m2b/pull/51)).
+
+### Changed
+
+- The README's overview picture tells three stories, one after the other: a sentence said once that a
+  session in another project knows; a correction made while working, which m2b proposes as a lesson
+  and which then stops the command it is about; a sentence that becomes a task due on its day. The
+  folder in it shows `memory/lessons/`
+  ([#51](https://github.com/Kolibee-GmbH/m2b/pull/51)).
+
+### Fixed
+
+- The picture of the pane's settings said that the reading of your sessions never sees Claude's
+  answers; since 0.12.0 it reads the end of Claude's answer before each prompt, as the setting says.
+  The captions under the README's band pictures now say that in a terminal the band stands below
+  the prompt unless you set it
+  ([#51](https://github.com/Kolibee-GmbH/m2b/pull/51)).
 
 ## [0.13.1] - 2026-11-22
 
