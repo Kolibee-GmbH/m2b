@@ -33,9 +33,9 @@ The model is also shown the lessons the person kept and asked which prompts corr
 of them again; code keeps such a correction only where its words stand in what was typed on the
 day after the lesson was kept, and counts it under the lesson (``lesson_counts``).
 
-A correction of how Claude works that stands in one session only and holds beyond the task is no
-lesson yet: the model names it apart, and once the reading is saved code remembers it in machine
-state (``remembered_corrections``), so that the reading of a later period can pair it with its repeat.
+A correction of how Claude works that holds beyond the task is a lesson from the one session it
+stands in. One where the model cannot tell whether it holds beyond the task is named apart, and
+once the reading is saved code remembers it in machine state (``remembered_corrections``).
 
 A repository the person typed in on two days, in this reading or remembered from one before, and
 that no topic names, is proposed as a project by code (``project_proposals``), with no model and
@@ -260,7 +260,7 @@ def propose(
         counted = proposals.counted(counted, glean.LESSON, "not_quoted", without_repository)
         notes.append(
             f"{_count(without_repository, 'lesson')} for one project left out: "
-            "no repository is known that both its sessions worked in"
+            "no repository is known that its sessions worked in"
         )
     proposals.save(store, dataclasses.replace(counted, read_until=started))
     project_proposals.remember(machine.state_dir, worked, machine.temp_dir)
@@ -287,12 +287,12 @@ def _remember_single_corrections(
     notes: Path,
     started: datetime.datetime,
 ) -> list[str]:
-    """Remembers in machine state the corrections the answer found in one session only, once the
-    reading is saved, and says what became of them (``remembered_corrections``).
+    """Remembers in machine state the unsure corrections of the answer, those the model could not
+    tell hold beyond their task, once the reading is saved, and says what became of them
+    (``remembered_corrections``).
 
-    One for a single project is remembered only with the addresses of its session's repository: a
-    lesson of it is kept for the repository both its sessions worked in, and without addresses it
-    could never be placed.
+    One for a single project is remembered only with the addresses of its session's repository:
+    without them it names no project, and a lesson of it could never be placed.
     """
     zone = started.tzinfo or datetime.timezone.utc
     today = started.astimezone(zone).date()
@@ -321,13 +321,10 @@ def _remember_single_corrections(
     said = []
     not_used = refused + answer.singles_malformed
     if not_used:
-        said.append(
-            f"{_count(not_used, 'correction')} made in one session left out: "
-            "not in the form or not in what was typed in it"
-        )
+        said.append(f"{_count(not_used, 'unsure correction')} left out: not in the form or not in what was typed in it")
     if without_repository:
         said.append(
-            f"{_count(without_repository, 'correction')} for one project made in one session left out: "
+            f"{_count(without_repository, 'unsure correction')} for one project left out: "
             "no repository is known for its session"
         )
     if not new:
@@ -340,10 +337,11 @@ def _remember_single_corrections(
         machine.state_dir, remembered_corrections.joined(earlier.corrections, new), today, machine.temp_dir
     )
     if failure:
-        return [*said, f"the corrections made in one session could not be remembered: {failure}"]
+        return [*said, f"the unsure corrections could not be remembered: {failure}"]
     added = len({each.id for each in new} - known)
     if added:
-        said.append(f"{_count(added, 'correction')} made in one session remembered, for a lesson once it is made again")
+        holds, its = ("it holds", "its") if added == 1 else ("they hold", "their")
+        said.append(f"{_count(added, 'unsure correction')} remembered: unclear whether {holds} beyond {its} task")
     return said
 
 
@@ -351,10 +349,11 @@ def _for_their_project(
     checked: glean.Checked, read: Sequence[sessions.Session], notes: Path, now: datetime.datetime
 ) -> tuple[list[tuple[glean.Proposal, datetime.datetime]], int]:
     """The kept proposals with when their words were typed, each lesson for one project named by the
-    address of the repository both its sessions worked in, and how many such lessons have none.
+    address of the repository its sessions worked in, both where there are two, and how many such
+    lessons have none.
 
     The address comes from the remotes the session start noted for each session's folder; a lesson
-    for one project is kept only where both folders name the same repository, so it reaches the
+    for one project is kept only where its folders name the same repository, so it reaches the
     sessions of that repository on every machine.
     """
     folders = {session.session_id: session.folder for session in read}
@@ -365,7 +364,9 @@ def _for_their_project(
         if lesson is None or lesson.target != lessons.THIS_PROJECT:
             placed.append((proposal, typed_at))
             continue
-        first, second = (_addresses(notes, folders.get(key, ""), now) for key in (proposal.session, lesson.session))
+        first = _addresses(notes, folders.get(proposal.session, ""), now)
+        # A lesson on one correction is for the repository of its one session.
+        second = _addresses(notes, folders.get(lesson.session, ""), now) if lesson.session else first
         common = sorted(first & second)
         if not common:
             without += 1

@@ -1,20 +1,20 @@
-"""Corrections of how Claude works made in one session only, remembered for the readings after it.
+"""Corrections of how Claude works that may or may not hold beyond their task, remembered from reading to reading.
 
-A lesson stands on the same correction made in two different sessions (``glean``). A reading covers
-the time since the last one, a few hours where runs come often, so a correction and its repeat in
-another reading would never meet. A reading therefore also returns the corrections that stand in
-one session and hold beyond the task at hand (``glean.SingleCorrection``), and code keeps them here
-for ``REMEMBERED_FOR``.
+A correction that holds beyond the task at hand is proposed as a lesson from the one session it
+stands in (``glean``). Where the model cannot tell, the reading names it apart
+(``glean.SingleCorrection``), no lesson is proposed, and code keeps it here for ``REMEMBERED_FOR``:
+how many there are shows how often the reading was unsure, and a repeat of one in another session
+is what would tell.
 
 They are kept in machine state, beside the days a repository was worked in
 (``project_proposals``), and never in the synced store: the transcripts lie on this machine only,
-and so does what was read in them. An entry holds what a later reading needs to make a lesson of
-it: the person's typed words as code checked them, the Bash commands of the turn they answer (as
-``sessions`` redacted and bounded them), the addresses of the repository the session start noted
-for the session's folder, the matter in the model's words, and the lesson's kind and target as the
-model gave them. Its id comes from the session and the prompt the quote stands in, so a period read
-again adds no entry twice, whatever words of that prompt the model quotes then. At most ``MOST``
-entries are kept; the oldest go first.
+and so does what was read in them. An entry holds what a lesson of it would stand on: the person's
+typed words as code checked them, the Bash commands of the turn they answer (as ``sessions``
+redacted and bounded them), the addresses of the repository the session start noted for the
+session's folder, the matter in the model's words, and the lesson's kind and target as the model
+gave them. Its id comes from the session and the prompt the quote stands in, so a period read again
+adds no entry twice, whatever words of that prompt the model quotes then. At most ``MOST`` entries
+are kept; the oldest go first.
 """
 
 from __future__ import annotations

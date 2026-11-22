@@ -597,10 +597,23 @@ class LessonTest(unittest.TestCase):
             with self.subTest(broken=broken["lesson"]):
                 self.assertEqual(glean.parse_answer(answer(broken), [FIRST, SECOND]).malformed, 1)
 
-    def test_a_correction_in_one_session_only_is_no_lesson(self) -> None:
+    def test_one_correction_is_a_lesson_and_a_second_quote_comes_with_another_session(self) -> None:
         """Covers: B270"""
-        same_session = lesson_entry(lesson={"session": 1, "quote": "only the quick round"})
-        self.assertEqual(glean.parse_answer(answer(same_session), [FIRST, SECOND]).malformed, 1)
+        once = lesson_entry(lesson={"quote": None, "session": None})
+        (kept,) = self.check(once).kept
+        self.assertEqual(
+            (kept.session, kept.lesson),
+            ("first", glean.LessonPart("action", "every project", ("scripts/check",), "", "")),
+        )
+        without_both = {
+            **once,
+            "lesson": {key: value for key, value in once["lesson"].items() if key not in ("quote", "session")},
+        }
+        self.assertEqual(len(self.check(without_both).kept), 1)
+
+        for broken in ({"session": 1, "quote": "only the quick round"}, {"session": None}, {"quote": None}):
+            with self.subTest(broken=broken):
+                self.assertEqual(glean.parse_answer(answer(lesson_entry(lesson=broken)), [FIRST, SECOND]).malformed, 1)
 
         not_said_there = lesson_entry(lesson={"quote": "only the quick round, not the whole proof"})
         checked = self.check(not_said_there)
@@ -611,6 +624,20 @@ class LessonTest(unittest.TestCase):
         checked = self.check(lesson_entry(lesson={"words": ["git push"]}))
 
         self.assertEqual((checked.kept, len(checked.not_quoted)), ((), 1))
+        # On one correction, only the turn that correction answers counts: --all ran in the other.
+        once = self.check(lesson_entry(lesson={"quote": None, "session": None, "words": ["--all"]}))
+        self.assertEqual((once.kept, len(once.not_quoted)), ((), 1))
+
+    def test_an_action_lesson_on_one_correction_keeps_words_that_silence_it_from_its_session_only(self) -> None:
+        """Covers: B295"""
+        once = lesson_entry(lesson={"quote": None, "session": None, "unless": ["--quick", "--all"]})
+        first = turn("first", "only the quick round, not the whole proof: scripts/check --quick", "scripts/check")
+
+        read = glean.parse_answer(answer(once), [first, SECOND])
+        (kept,) = glean.check(read.proposals, [first, SECOND], []).kept
+
+        assert kept.lesson is not None
+        self.assertEqual(kept.lesson.unless, ("--quick",))
 
     def test_a_lesson_stands_only_on_typed_words_never_on_claudes(self) -> None:
         """Covers: B270"""
@@ -660,17 +687,23 @@ class LessonTest(unittest.TestCase):
         self.assertNotIn("lesson", glean.HANDED_IN_KINDS)
         self.assertIn("lesson", glean.KINDS)
 
-    def test_the_instruction_names_the_lesson_its_fields_and_what_is_only_about_the_task(self) -> None:
+    def test_the_instruction_names_the_lesson_from_one_correction_its_fields_and_what_is_only_about_the_task(
+        self,
+    ) -> None:
         """Covers: B271"""
         instruction = glean.instruction()
 
         for word in ("lesson", "knowledge", "action", "target", "every project", "this project", "words"):
             with self.subTest(word=word):
                 self.assertIn(f"`{word}`", instruction)
-        self.assertIn("two different sessions", instruction)
-        self.assertIn("One such correction in one session is no lesson", instruction)
+        self.assertIn("One correction is enough.", instruction)
+        self.assertIn("the lesson stands on both", instruction)
+        self.assertIn(
+            "Where you cannot tell whether a correction holds beyond the task at hand, it is no lesson", instruction
+        )
         self.assertIn("only about the task at hand", instruction)
         self.assertIn('"lesson": {"kind": "action"', instruction)
+        self.assertIn('adds its words and number to the lesson\'s object: `"quote": "...", "session": 2`', instruction)
 
 
 class InstructionTest(unittest.TestCase):
@@ -869,7 +902,7 @@ class SingleCorrectionTest(unittest.TestCase):
         self.assertIn("put it under `single_corrections`", instruction)
         self.assertIn('{"matter": "<what it is about', instruction)
         self.assertIn("only about the task at hand, one whose matter `memory`, a kept lesson", instruction)
-        self.assertIn("code remembers it only where that lesson is not kept", instruction)
+        self.assertIn("Leave out one a lesson or `corrected_again` of this answer stands on", instruction)
 
 
 if __name__ == "__main__":

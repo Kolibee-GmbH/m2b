@@ -71,7 +71,8 @@ PERSON = "person"
 AGREEMENT = "agreement"
 COMMITMENT = "commitment"
 PERSONAL = "personal"
-# A correction of Claude the person made in two sessions: kept, it becomes a lesson (``lessons``).
+# A correction of how Claude works that holds beyond the task, made in one session or the same in
+# two: kept, it becomes a lesson (``lessons``).
 LESSON = "lesson"
 # A decision, an agreement, a person or a deadline of a project a session wrote into a file of its
 # repository: kept, it becomes a line of the project's topic that points to that file.
@@ -82,11 +83,12 @@ READ_KINDS = (PERSON, AGREEMENT, COMMITMENT, PERSONAL, LESSON, POINTER)
 # the sessions worked (``project_proposals``), on no words, so no model is asked and none is shown it.
 PROJECT = "project"
 KINDS = (*READ_KINDS, PROJECT)
-# The kinds that become a fact or a task, and what a session may hand in by itself: a lesson stands
-# on a correction made in two sessions, which one session cannot show.
+# The kinds that become a fact or a task, and what a session may hand in by itself. A lesson is not
+# among them: before it is proposed, a reading checks it against the files every session loads and
+# shows it beside what the person kept and dropped, which a session handing it in cannot do.
 FACT_KINDS = (PERSON, AGREEMENT, COMMITMENT, PERSONAL)
 HANDED_IN_KINDS = FACT_KINDS
-# Whom a proposed lesson is for: every project, or the repository both sessions worked in, which the
+# Whom a proposed lesson is for: every project, or the repository its sessions worked in, which the
 # reading step names by its address (``curate.glean_step``).
 LESSON_TARGETS = (EVERY_PROJECT, THIS_PROJECT)
 # A word of a command an action lesson fires on, such as ``scripts/check`` or ``push``.
@@ -145,13 +147,13 @@ class AtSource:
 @dataclass(frozen=True)
 class LessonPart:
     """What a proposed lesson carries beside its text: its kind and target, the words of the command
-    for an action, and the same correction in a second session."""
+    for an action, and the same correction in a second session where it was made in two."""
 
     kind: str
     target: str
     words: tuple[str, ...]
     quote: str
-    # The id of the second session.
+    # The id of the second session; with ``quote`` empty where the lesson stands on one correction.
     session: str
     # What a source says of it, where one does; set by the reading step, never by the model's answer.
     at_source: AtSource | None = None
@@ -160,7 +162,7 @@ class LessonPart:
     replaces: str | None = None
     # For an action, the words of a command that already does what the person asked for, so the
     # lesson stays silent there (``--quick``): without them it would also stop the very command the
-    # correction asked for. Kept only where they stand in the two sessions (B295).
+    # correction asked for. Kept only where they stand in its sessions (B295).
     unless: tuple[str, ...] = ()
 
 
@@ -223,10 +225,10 @@ class Correction:
 
 @dataclass(frozen=True)
 class SingleCorrection:
-    """A correction of how Claude works that holds beyond the task at hand and stands in one session
-    only: what it is about in the model's words, the person's words, the id of their session, and
-    the kind and target a lesson of it would have. Code remembers it for a later reading
-    (``remembered_corrections``), where the same correction in another session makes a lesson."""
+    """A correction of how Claude works where the model cannot tell whether it holds beyond the task
+    at hand: what it is about in the model's words, the person's words, the id of their session,
+    and the kind and target a lesson of it would have. No lesson is proposed from it; code
+    remembers it (``remembered_corrections``)."""
 
     matter: str
     quote: str
@@ -344,9 +346,8 @@ def checked_single_corrections(
     typed in its session, each with the first prompt that holds it, and how many were refused.
 
     ``used`` are the session and the words of each correction a kept lesson or a counted correction
-    of a kept lesson stands on. A single correction among them is left out and not counted:
-    remembering it too would count it twice. One whose lesson code did not keep is remembered, so
-    a lesson refused in this reading does not lose its corrections.
+    of a kept lesson stands on. A single correction among them is left out and not counted: the
+    model judged it already, so it is no unsure correction.
     """
     by_id = {session.session_id: session for session in sessions}
     kept: list[tuple[SingleCorrection, Prompt]] = []
@@ -417,9 +418,10 @@ def check(proposals: Sequence[Proposal], sessions: Sequence[Session], captures: 
     """Sorts the proposals by the two checks; ``captures`` are the texts captured in the period.
 
     A kept proposal says where its quote stands (``Proposal.source``): in what was typed, or else
-    in what was pasted. A lesson is a correction of Claude, so both its quotes must stand in what
-    was typed, each in its own session, and for an action every word in a command of the turn one
-    of them answers (``Prompt.commands``); a lesson that fails is counted with ``not_quoted``.
+    in what was pasted. A lesson is a correction of Claude, so its quote must stand in what was
+    typed, and so must a second one in its own session where the lesson has one, and for an action
+    every word in a command of the turn one of them answers (``Prompt.commands``); a lesson that
+    fails is counted with ``not_quoted``.
     """
     said = {
         session.session_id: [
@@ -456,13 +458,15 @@ def check(proposals: Sequence[Proposal], sessions: Sequence[Session], captures: 
 
 
 def _lesson_stands(proposal: Proposal, source: str, sessions: Mapping[str, Session]) -> bool:
-    """Whether a lesson's two quotes stand typed in their two sessions and an action's words in a
-    command of a turn either of them answers."""
+    """Whether a lesson's quotes stand typed in their sessions, the second where there is one, and an
+    action's words in a command of a turn one of them answers."""
     lesson = proposal.lesson
     assert lesson is not None
     first = _typed_in(proposal.quote, sessions.get(proposal.session))
-    second = _typed_in(lesson.quote, sessions.get(lesson.session))
-    if source != TYPED or not first or not second or len(lesson.quote.split()) < QUOTE_WORDS:
+    second = _typed_in(lesson.quote, sessions.get(lesson.session)) if lesson.session else []
+    if source != TYPED or not first:
+        return False
+    if lesson.session and (not second or len(lesson.quote.split()) < QUOTE_WORDS):
         return False
     if lesson.kind != lessons.ACTION:
         return True
@@ -585,21 +589,30 @@ def _proposal(entry: object, sessions: Sequence[Session]) -> Proposal | None:
     if kind != LESSON:
         return Proposal(kind, text, quote, session_id, topic or None, due)
     lesson = _lesson_part(entry.get("lesson"), sessions)
-    if lesson is None or lesson.session == session_id or due is not None:
+    if lesson is None or (lesson.session and lesson.session == session_id) or due is not None:
         return None
     return Proposal(kind, text, quote, session_id, topic or None, None, lesson=lesson)
 
 
 def _lesson_part(value: object, sessions: Sequence[Session]) -> LessonPart | None:
-    """The part of a lesson's entry beside its text; None for one that is not in the form."""
+    """The part of a lesson's entry beside its text; None for one that is not in the form.
+
+    The second session's ``quote`` and ``session`` are given together or not at all: a lesson stands
+    on one correction or on the same correction in two sessions.
+    """
     if not isinstance(value, dict):
         return None
     kind, target, quote = value.get("kind"), value.get("target"), value.get("quote")
     number = _session_number(value.get("session"))
     words = value.get("words", [])
-    if kind not in lessons.KINDS or target not in LESSON_TARGETS or not isinstance(quote, str) or not quote.strip():
+    if kind not in lessons.KINDS or target not in LESSON_TARGETS:
         return None
-    if number is None or not 1 <= number <= len(sessions):
+    second = ""
+    if quote in (None, "") and value.get("session") is None:
+        quote = ""
+    elif isinstance(quote, str) and quote.strip() and number is not None and 1 <= number <= len(sessions):
+        second = sessions[number - 1].session_id
+    else:
         return None
     if not isinstance(words, list) or not all(isinstance(word, str) for word in words):
         return None
@@ -612,7 +625,7 @@ def _lesson_part(value: object, sessions: Sequence[Session]) -> LessonPart | Non
     if unsafe_characters(said) or not can_be_written(said):
         return None
     unless = _silencing_words(value.get("unless", [])) if kind == lessons.ACTION else ()
-    return LessonPart(kind, target, cleaned, quote, sessions[number - 1].session_id, unless=unless)
+    return LessonPart(kind, target, cleaned, quote, second, unless=unless)
 
 
 def _silencing_words(value: object) -> tuple[str, ...]:

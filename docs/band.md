@@ -717,7 +717,7 @@ each proposal with its text, below it keep and drop with what kind of thing it i
 taken from and their day: `said on` before words you
 typed, `pasted on` before words from text you pasted into a prompt, which may be someone else's.
 A lesson's proposal has three more lines: its kind, for what and, for a command, the words it fires
-on and the kept lesson it would replace; the words of the second session it was said in; and what
+on and the kept lesson it would replace; where you said it in a second session too, the words you said there; and what
 becomes of a file that already says it: `stated already in`, `adds to` or `fixes` that file.
 
 ![The pane after /m2b-proposals, under the tab Proposals 3: the part "Proposals from your sessions", framed in the warning color, with "keep all" and then each proposal as its text, keep and drop with its kind beside them, a due day for the commitment, and below them the words it was taken from with the day they were said. Under the pane the band is one row, "m2b 5 wait for you" with the button "open", and one task due today and one overdue below it](images/proposals.png)

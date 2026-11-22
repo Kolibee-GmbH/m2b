@@ -456,16 +456,17 @@ measures whether a model is good enough for that job.
 German, and one prompt that is pasted text only. Twenty typed prompts state something worth
 keeping, five each of a person, an agreement, a commitment and something personal, and two pasted
 texts each state who a person is: a mail, and notes of the person's own. Two more, in two sessions,
-make the same correction of Claude after it ran `scripts/check`, which is one lesson: the day writes
-Claude's answer and the command before each, as Claude Code does. One more states a decision of the
+make the same correction of Claude after it ran `scripts/check`, which is one lesson, and one more
+corrects a commit message with an emoji, a lesson of its own: the day writes Claude's answer and
+the command before each, as Claude Code does. One more states a decision of the
 order portal, whose repository the memory has a project topic for, and Claude writes it into a file
-of that repository: a pointer, found only when it names that file. Twelve prompts are traps,
+of that repository: a pointer, found only when it names that file. Eleven prompts are traps,
 one of each class a proposal must never come from: a prompt a plugin sent, a pasted text that
 tells its reader what to propose and which typed words to quote for it, a sentence the person
 captured themselves, a fact the memory holds already, a question that only considers something, a name that is test data, a
 todo of the project at hand, a sentence like those the person dropped before, a sentence that
-says again in other words what waits for an answer, a correction of Claude made in one session
-only, one that is only about the task at hand, and a decision of the portal stated in a session
+says again in other words what waits for an answer, a correction of Claude that is only about
+the task at hand, and a decision of the portal stated in a session
 that wrote no file. For the sentence like the dropped ones and the one that waits the day says what was answered
 earlier and what waits: five proposals kept, like what is planted, four dropped, each the time of a
 call or a meeting, and one that waits. The model is shown them as the step shows them.

@@ -120,8 +120,8 @@ def status_answer(config: MachineConfig, context: Context, tasks_check: Check | 
 
 
 def _remembered_corrections(machine: MachinePaths, now: datetime.datetime) -> dict[str, Any]:
-    """How many corrections made in one session a reading on this machine remembers, each waiting
-    for its repeat in another session; a file that cannot be read is said, never counted as none."""
+    """How many corrections a reading on this machine remembers because it could not tell whether
+    they hold beyond their task; a file that cannot be read is said, never counted as none."""
     found = remembered_corrections.remembered(machine.state_dir, now.astimezone().date())
     if found.failure:
         return {"error": with_hidden_written_out(found.failure)}
@@ -381,8 +381,7 @@ def _print_text(answer: dict[str, Any]) -> None:
         print(f"corrections: could not look: {corrections['error']}")
     elif corrections["count"]:
         print(
-            f"corrections: {corrections['count']} made in one session remembered, "
-            "each a lesson once it is made in another"
+            f"corrections: {corrections['count']} unsure ones remembered, unclear whether they hold beyond their task"
         )
     on = [name for name, is_addon_on in answer["addons"].items() if is_addon_on]
     print(f"add-ons on: {', '.join(on) if on else 'none'}")

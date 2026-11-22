@@ -116,6 +116,17 @@ class ListTest(ProposalsCommandTest):
         self.assertIn('  stated already in ~/.claude/CLAUDE.md: "- Run only the quick checks."\n', out)
         self.assertEqual(listed["lesson"]["at_source"]["verdict"], "stated")
 
+    def test_a_lesson_on_one_correction_is_listed_without_a_line_said_again(self) -> None:
+        """Covers: B273"""
+        once = dataclasses.replace(LESSON, lesson=dataclasses.replace(LESSON.lesson, quote="", session=""))
+        self.proposed(once)
+
+        out = self.run_command("proposals")[1]
+
+        self.assertIn(f'  said on 2026-03-04: "{LESSON.quote}"\n', out)
+        self.assertNotIn("and again", out)
+        self.assertEqual(self.run_json("proposals")["proposals"][0]["lesson"]["quote"], "")
+
     def test_a_lesson_is_listed_with_its_kind_target_words_and_the_correction_said_again(self) -> None:
         """Covers: B273"""
         self.proposed(LESSON)

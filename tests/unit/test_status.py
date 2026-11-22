@@ -121,7 +121,7 @@ class StatusTest(test_runner.RunnerTest):
 
         self.assertEqual(self.status()["remembered_corrections"], {"count": 2})
         self.assertIn(
-            "corrections: 2 made in one session remembered, each a lesson once it is made in another\n",
+            "corrections: 2 unsure ones remembered, unclear whether they hold beyond their task\n",
             self.run_command("status")[1],
         )
 

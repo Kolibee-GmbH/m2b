@@ -203,6 +203,19 @@ class KeptLessonTest(ProposalHarvestFixture):
                 self.assertEqual(report.fixes, [kept.fix.place])
                 self.assertEqual(self.state(LESSON_ID)[0], "kept")
 
+    def test_a_fix_kept_from_a_lesson_on_one_correction_says_only_what_was_said_once(self) -> None:
+        """Covers: B272"""
+        home = glean.AtSource(
+            glean.FIX, "~/.claude/CLAUDE.md", "- Run the whole proof.", "- Run the quick checks.", "~/.claude/CLAUDE.md"
+        )
+        part = dataclasses.replace(LESSON.lesson, quote="", session="", at_source=home)
+        self.answered(KEEP, dataclasses.replace(LESSON, lesson=part))
+
+        harvest.harvest(self.store, self.tasks, "Remember? ", LATER, machine_id="sb-test-m1")
+
+        (kept,) = fixes.read_all(self.store)
+        self.assertEqual(kept.fix.why, f'you said "{LESSON.quote}"')
+
     def test_a_knowledge_lesson_for_one_project_waits_with_its_answer_and_says_why(self) -> None:
         """Covers: B272"""
         for_one_project = dataclasses.replace(

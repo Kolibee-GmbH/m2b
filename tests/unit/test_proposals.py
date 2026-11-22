@@ -262,6 +262,15 @@ LESSON = Proposal(
 
 
 class LessonInFileTest(ProposalsFixture):
+    def test_a_lesson_on_one_correction_is_written_and_read_back_without_a_second_quote(self) -> None:
+        """Covers: B270"""
+        once = dataclasses.replace(LESSON, lesson=dataclasses.replace(LESSON.lesson, quote="", session=""))
+        self.kept(once)
+
+        (entry,) = proposals.load(self.store).entries.values()
+        assert entry.lesson is not None
+        self.assertEqual((entry.lesson.quote, entry.lesson.session, entry.lesson.words), ("", "", ("scripts/check",)))
+
     def test_a_lesson_is_written_with_its_kind_target_words_and_second_quote_and_read_back(self) -> None:
         """Covers: B270"""
         self.kept(LESSON)

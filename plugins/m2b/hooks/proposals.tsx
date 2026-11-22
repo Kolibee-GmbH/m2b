@@ -225,9 +225,12 @@ function sourceLine(source: BandAtSource): string {
   return `fixes ${file}: "${writtenOut(source.line)}" becomes "${writtenOut(source.wording ?? '')}"`
 }
 
-/** The lines under a lesson: the same correction said again, and what becomes of its source. */
+/**
+ * The lines under a lesson: the same correction said again, where it was made in two sessions, and
+ * what becomes of its source. A lesson on one correction has no second quote.
+ */
 function lessonLines(lesson: BandLesson): string[] {
-  return [againLine(lesson), ...(lesson.at_source ? [sourceLine(lesson.at_source)] : [])]
+  return [...(lesson.quote ? [againLine(lesson)] : []), ...(lesson.at_source ? [sourceLine(lesson.at_source)] : [])]
 }
 
 /** The line under a lesson with the same correction said in a second session. */

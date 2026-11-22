@@ -296,6 +296,20 @@ test('a proposed lesson shows its kind, whom it is for, the words it fires on an
   await ui.unmount()
 })
 
+test('a lesson on one correction shows no line said again', async ($, on) => {
+  // Covers: B273
+  const lesson = { kind: 'action', target: 'every project', words: ['scripts/check'], quote: '' }
+  const fake = new FakeM2b().proposal(DANA, 'Run only the quick checks.', 'only the quick round', { kind: 'lesson', lesson })
+  await start($, on, fake)
+  await typed($, 'm2b-proposals')
+
+  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  const drawn = await texts(ui)
+  expect(drawn).toContain('lesson, action for every project, on a command with scripts/check')
+  expect(drawn.some(line => line.includes('and again'))).toBe(false)
+  await ui.unmount()
+})
+
 test('a lesson that would take the place of a kept one names it in its heading', async ($, on) => {
   // Covers: B284
   const lesson = { kind: 'knowledge', target: 'every project', words: [], quote: 'again: herdr is an agent runtime', replaces: 'weak.md' }

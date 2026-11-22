@@ -272,7 +272,7 @@
         {
           "text": "please no emojis in the commit messages",
           "answer_before": "Committed as \":sparkles: Add the contact form\".",
-          "trap": "one-session",
+          "planted": "lesson",
           "statement": "no emojis in the commit messages",
           "commands": [
             "git commit -m \":sparkles: Add the contact form\""

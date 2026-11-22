@@ -67,7 +67,9 @@ def _list(store: Store, as_json: bool) -> int:
         print(f"{len(waiting.proposals)} {'proposal waits' if one else 'proposals wait'} for an answer:\n")
         for key, entry in waiting.proposals:
             said = proposals.said_line(entry, _shown(entry.quote))
-            again = f"  {proposals.again_line(_shown(entry.lesson.quote))}\n" if entry.lesson else ""
+            again = (
+                f"  {proposals.again_line(_shown(entry.lesson.quote))}\n" if entry.lesson and entry.lesson.quote else ""
+            )
             if entry.lesson is not None and entry.lesson.at_source is not None:
                 again += f"  {proposals.source_line(entry.lesson.at_source, _shown)}\n"
             print(f"{key}  {_heading(entry)}\n  {_shown(entry.text)}\n  {said}\n{again}")

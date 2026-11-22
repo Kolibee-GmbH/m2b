@@ -2,13 +2,13 @@
 
 ``tests/glean/day.json`` is an invented day: sessions with what the person typed and what they
 pasted into a prompt, some of it planted (a person, an agreement, a
-commitment, something personal, and a lesson: the same correction of Claude in two sessions, each
-after an answer of Claude's that ran ``scripts/check``) and some of it a trap, one of each class a
-proposal must never come from, among them a correction made in one session only and one about the
-task at hand, and a pointer: a decision stated in a session in a repository the memory has a
+commitment, something personal, and two lessons: the same correction of Claude in two sessions, each
+after an answer of Claude's that ran ``scripts/check``, and one made in one session after a commit
+with an emoji) and some of it a trap, one of each class a proposal must never come from, among them
+a correction about the task at hand, and a pointer: a decision stated in a session in a repository the memory has a
 project topic for, which Claude wrote into a file there, with the same sort of decision in a session
 that wrote nothing as a trap. A prompt that answers a turn has the answer and the commands before it in the
-transcript, as Claude Code writes them; a lesson stands on both its statements, one per quote. The
+transcript, as Claude Code writes them; a lesson stands on its statements, one per quote. The
 check of a lesson's sources against the files a session loads is not run here: the day has no
 such files, so every lesson would stay one. What the step leaves out in code before that check is
 left out here too: a lesson for this project, since no session of the day has noted git remotes,
@@ -102,8 +102,7 @@ TRAPS = (
     AUTOMATION,
     STEERED,
     WAITING,
-    # A correction of Claude made in one session only, and one about the task at hand: no lesson.
-    "one-session",
+    # A correction of Claude about the task at hand: no lesson.
     "task-correction",
     # A decision of a project stated in a session that wrote no file of the repository: no pointer.
     "unwritten",
@@ -423,14 +422,18 @@ def _sent(sessions: Sequence[Session]) -> dict[str, list[str]]:
 
 
 def _stands_on_any(proposal: glean.Proposal, statement: Statement, typed: Mapping[str, Sequence[str]]) -> bool:
-    """Like ``_stands_on``; a lesson stands on what each of its two quotes stands on, and a pointer
+    """Like ``_stands_on``; a lesson stands on what each of its quotes stands on, and a pointer
     stands on its statement only when it names the statement's file."""
     if statement.file and (proposal.pointer is None or proposal.pointer.path != statement.file):
         return False
     if _stands_on(proposal, statement, typed):
         return True
     lesson = proposal.lesson
-    again = None if lesson is None else dataclasses.replace(proposal, quote=lesson.quote, session=lesson.session)
+    again = (
+        None
+        if lesson is None or not lesson.session
+        else dataclasses.replace(proposal, quote=lesson.quote, session=lesson.session)
+    )
     return again is not None and _stands_on(again, statement, typed)
 
 

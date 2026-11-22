@@ -144,7 +144,8 @@ class Entry:
     tool: str | None = None
     # Who proposed where it was no reading: ``SESSION`` for a proposal a session handed in.
     by: str | None = None
-    # For a lesson: its kind, target, words and the same correction in a second session.
+    # For a lesson: its kind, target, words and, where it was made in two, the same correction in a
+    # second session.
     lesson: LessonPart | None = None
     # For a pointer: the file in its repository and the repository's addresses.
     pointer: PointerPart | None = None
@@ -622,7 +623,8 @@ def lesson_heading(lesson: LessonPart, shown: Callable[[str], str]) -> str:
 
 
 def again_line(quote: str) -> str:
-    """The line that shows a lesson's second quote, as the caller shows it: what was said again."""
+    """The line that shows a lesson's second quote, as the caller shows it: what was said again. A
+    lesson that stands on one correction has none, and the caller shows no such line."""
     return f'and again in another session: "{quote}"'
 
 

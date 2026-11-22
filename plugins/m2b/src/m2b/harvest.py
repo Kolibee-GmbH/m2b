@@ -263,7 +263,7 @@ def _keep_fix(
     the file lies; one for a file under ``~/.claude/`` is this machine's, where the sessions were read."""
     lesson = entry.lesson
     assert lesson is not None
-    why = f'you said "{entry.quote}" and again "{lesson.quote}"'
+    why = f'you said "{entry.quote}"' + (f' and again "{lesson.quote}"' if lesson.quote else "")
     try:
         fix = fixes.new_fix(
             at_source.path or "",

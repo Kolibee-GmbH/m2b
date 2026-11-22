@@ -330,12 +330,13 @@ lessons you kept, each with the day it was kept. Beside its proposals it names t
 correct Claude on a kept lesson again; code counts such a correction only where its words, at
 least three, stand in what you typed after that day. It answers with proposals of six kinds, a person, an
 agreement, a commitment, something personal, a lesson and a pointer, each with the words it stands on. A
-lesson is a correction of how Claude works that you made in two sessions, such as "only the quick
-round" after Claude ran the whole proof: code keeps it only when both of your sentences stand in
-what you typed, in two sessions, and for a command when its words stand in a command Claude ran
-there. One for a single project names that project's repository, where both sessions' folders
-name the same one by a git remote; without one it is left out. A correction you made in one
-session only, and that holds beyond the task at hand, is no lesson yet: the model names it apart,
+lesson is a correction of how Claude works that holds beyond the task at hand, such as "only the
+quick round" after Claude ran the whole proof. Once is enough; where you said the same in another
+session too, the lesson stands on both. Code keeps it only when your sentence stands in what you
+typed, a second one in its own session, and for a command when its words stand in a command Claude
+ran there. One for a single project names that project's repository, where the folders of its
+sessions name the same one by a git remote; without one it is left out. A correction where the
+model cannot tell whether it holds beyond the task at hand is no lesson: the model names it apart,
 with what it is about, and code remembers it on this machine for 30 days, at most 300 of them, in
 `~/.local/state/m2b/remembered-corrections.json`, with your words, the shell commands of the turn
 they answer and the repository's address, never in the store. Nothing is proposed from it; `m2b
