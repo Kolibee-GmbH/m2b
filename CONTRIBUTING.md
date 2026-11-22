@@ -710,7 +710,8 @@ plain text only, so watch each picture through as well, for example frame by fra
 2 MB; the script prints its size. With `--only`, `--cast <file>` also keeps the recording the
 picture is rendered from, in asciinema's format.
 
-The picture at the top of the README, how one sentence goes through m2b, is drawn, not recorded:
+The picture at the top of the README, three stories of what goes through m2b, is drawn, not
+recorded:
 `docs/images/overview-light.svg` and `overview-dark.svg`. Every label and line stands in
 `scripts/repo_tools/overview_picture.py`; change it there and write both files again:
 
@@ -723,9 +724,14 @@ JetBrains Mono (both under the SIL Open Font License; the script's docstring nam
 where they come from). The letters are drawn as outlines, because GitHub shows a picture without
 loading a font, so the picture looks the same on every machine; the script measures every text
 against the room it has and stops at one that does not fit. The picture says what m2b does, so
-hold each label against the code before changing it, and look at both files in a browser: there a
-dot travels the sentence's way, rests for a few seconds and sets out again, and with reduced motion
-asked for it stands still.
+hold each label against the code before changing it, and look at both files in a browser: there
+three stories play one after the other, a fact, a correction that becomes a lesson and a task, each
+typed and carried by a dot through the folder, and the picture rests on the first story's last frame,
+which is also all a reader who asked for reduced motion sees. `scripts/overview-picture <fonts>
+--stills <folder>` writes the picture frozen at each step, to look at one at a time; those files stay
+out of the repository. The seconds of every step stand in the script's tables, and
+`scripts/repo_tools/tests/test_overview_picture.py` checks that they add up, that the dot stays on
+the lines and that the README's alt text is the script's.
 
 The README shows the logo and this picture twice, a light and a dark file, and GitHub hides one of
 them by the theme chosen on GitHub: the address of each ends in `#gh-light-mode-only` or
