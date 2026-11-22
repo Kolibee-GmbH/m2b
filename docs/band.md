@@ -374,7 +374,7 @@ m2b: every setting of this machine, of the store and of the owner, the ones `m2b
 ([Configuration](configuration.md#every-setting-in-one-list)), in four parts by what you want
 from m2b: **What m2b shows**, **What m2b reads**, **Curation** and **About this setup**.
 
-![The pane beside the chat after /m2b-settings, under the tab Settings. The part "What m2b shows" holds "Where the band stands" with the values above, below and waiting, above marked as the one in force, "Tasks in the band" with off, count and list, list marked, and "Topics in the band" with on and off, off marked. The part "What m2b reads" begins with "Curation reads your sessions", on and off with off marked, and "Sessions hand in proposals", which the lower edge of the picture cuts. Below each title stands what the setting does](images/settings.png)
+![The pane beside the chat after /m2b-settings, under the tab Settings. The part "What m2b shows" holds "Where the band stands" with the values above, below and waiting, above marked as the one in force, "Tasks in the band" with off, count and list, list marked, and "Topics in the band" with on and off, off marked. The part "What m2b reads" begins with "Curation reads your sessions", on and off with off marked, where the lower edge of the picture ends. Below each title stands what the setting does](images/settings.png)
 
 In the first three parts a setting is its title, below it what it does, and below that its values
 side by side. The value in force is marked with `●` and is no button; every other value is a
