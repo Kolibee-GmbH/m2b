@@ -547,16 +547,7 @@ def _within_the_start(
     _, left_out = lessons.fitting(with_new)
     if not left_out:
         return list(placed)
-    try:
-        again = lesson_counts.corrected_again(store, {lesson.name: lesson.kept for lesson in standing})
-    except (lesson_counts.LessonCountsError, ConfigError, StoreError):
-        again = {}
-    weakest = iter(
-        sorted(
-            (lesson for lesson in standing if lesson.in_the_block and lesson.name not in named),
-            key=lambda lesson: (-again.get(lesson.name, 0), lesson.kept, lesson.name),
-        )
-    )
+    weakest = iter(lesson_counts.weakest_in_the_block(store, standing, named))
     result: list[tuple[glean.Proposal, datetime.datetime]] = []
     for proposal, typed_at in placed:
         replaced = next(weakest, None) if any(proposal is each for each in new) else None

@@ -12,6 +12,7 @@ import type {
   BandRun,
   BandSession,
   BandSettle,
+  KeepForEveryProject,
   BandShows,
   BandSnapshot,
   CurateRefusal,
@@ -1718,17 +1719,19 @@ function rowActions($: EngineInterface): RowActions {
  * answer where another one stands, from another session or machine, and what it says to that stays
  * as the notice. Whatever it answered, the band reads again, so the rows are those that still wait.
  */
-function proposalWrite($: EngineInterface, proposals: BandProposal[], action: BandSettle): PressWrite {
+function proposalWrite($: EngineInterface, proposals: BandProposal[], action: BandSettle | KeepForEveryProject): PressWrite {
   return async () => {
     const verb = verbOf(action)
+    const said = action === 'every-project' ? 'keep for every project' : verb
     try {
       const ids = proposals.map(proposal => proposal.id)
-      const outcome = await runM2b($, ['proposals', verb, ...ids], WRITE_TIMEOUT_MS)
+      const flags = action === 'every-project' ? ['--every-project'] : []
+      const outcome = await runM2b($, ['proposals', verb, ...flags, ...ids], WRITE_TIMEOUT_MS)
       if (!outcome.ok) {
-        await update($, proposalsNoticeAtom, () => refusedLine(proposals, verb, outcome.error))
+        await update($, proposalsNoticeAtom, () => refusedLine(proposals, said, outcome.error))
       }
     } catch (error) {
-      await update($, proposalsNoticeAtom, () => refusedLine(proposals, verb, String(error)))
+      await update($, proposalsNoticeAtom, () => refusedLine(proposals, said, String(error)))
     }
     return true
   }
@@ -1794,8 +1797,8 @@ async function placedOrWhyNot($: EngineInterface, staysOpen: boolean): Promise<s
   }
 }
 
-function verbOf(action: BandSettle): string {
-  return action === 'complete' ? 'keep' : 'drop'
+function verbOf(action: BandSettle | KeepForEveryProject): string {
+  return action === 'drop' ? 'drop' : 'keep'
 }
 
 /** The texts that say something, as one. */

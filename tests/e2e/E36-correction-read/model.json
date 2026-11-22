@@ -1,5 +1,5 @@
 {
-  "description": "E36 at the model level, a correction the reading of sessions finds: as E35, but the owner only corrects Claude, in two repositories, and nothing in the sessions can keep it: m2b lesson add, m2b capture and the note tool are not allowed, and nothing may wait in the inbox before the run. A curation run that reads the sessions proposes the lesson on the correction, on one session or on both; the owner keeps it, the next run files it, and in a third repository Claude runs only scripts/check --quick. scripts/promises also runs it against Claude Code alone, its own memory on, with a control that every session ran a check. Claude Code alone is not asked to keep anything here, and keeping a correction nobody asked to keep is what the reading adds; that its own memory is on and works shows E35's control. Three wordings, one in German.",
+  "description": "E36 at the model level, a correction the reading of sessions finds: as E35, but the owner only corrects Claude, in two repositories, and nothing in the sessions can keep it: m2b lesson add, m2b capture and the note tool are not allowed, and nothing may wait in the inbox before the run. A curation run after each session reads it: the first proposes the lesson on the correction, or remembers it when it is unsure, and the second, which meets what the first left, proposes the lesson or nothing again; the owner keeps the lesson for every project where it was proposed for one (or keeps it as it is), the next run files it, exactly one lesson is kept, and in a third repository Claude runs only scripts/check --quick. scripts/promises also runs it against Claude Code alone, its own memory on, with a control that every session ran a check. Claude Code alone is not asked to keep anything here, and keeping a correction nobody asked to keep is what the reading adds; that its own memory is on and works shows E35's control. Three wordings, one in German.",
   "wordings": [
     {
       "ask": "run scripts/check",
@@ -76,6 +76,22 @@
       "cwd": "invoice-tool"
     },
     {
+      "run": [
+        "sh",
+        "-c",
+        "! ls \"{store}\"/state/core/lessons-kept/*.json \"{store}\"/inbox/*.md 2>/dev/null"
+      ],
+      "arm": "with"
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "arm": "with"
+    },
+    {
       "session": [
         "--setting-sources",
         "project",
@@ -99,14 +115,6 @@
     },
     {
       "run": [
-        "sh",
-        "-c",
-        "! ls \"{store}\"/state/core/lessons-kept/*.json \"{store}\"/inbox/*.md 2>/dev/null"
-      ],
-      "arm": "with"
-    },
-    {
-      "run": [
         "m2b",
         "curate",
         "--force"
@@ -115,10 +123,9 @@
     },
     {
       "run": [
-        "m2b",
-        "proposals",
-        "keep",
-        "--all"
+        "sh",
+        "-c",
+        "for id in $(m2b proposals | sed -n 's/^\\([0-9a-f]\\{12\\}\\)  lesson, .*/\\1/p'); do m2b proposals keep --every-project \"$id\" || m2b proposals keep \"$id\" || exit 1; done"
       ],
       "arm": "with"
     },
@@ -178,6 +185,11 @@
       "count": 0,
       "glob": "tasks/*.md",
       "content": "m2b:review",
+      "arm": "with"
+    },
+    {
+      "count": 1,
+      "glob": "memory/lessons/*.md",
       "arm": "with"
     }
   ]

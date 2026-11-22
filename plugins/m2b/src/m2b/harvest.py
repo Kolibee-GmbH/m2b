@@ -28,13 +28,14 @@ cannot tell, so it captures nothing of that kind and drops no candidate this run
 from __future__ import annotations
 
 import datetime
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import PurePosixPath
 
 from m2b import (
     candidates,
     fixes,
     kept_lessons,
+    lesson_counts,
     lessons,
     project_capture,
     project_proposals,
@@ -207,7 +208,7 @@ def _settle_proposals(
     to_keep = [
         key
         for key, answer in answers.items()
-        if answer == proposal_answers.KEEP
+        if answer in proposal_answers.KEEPS
         and key in current.entries
         and _takes(current.entries[key], answer)
         # A lesson writes no capture, so none is looked for.
@@ -218,18 +219,30 @@ def _settle_proposals(
     report.problems += _uncertain(earlier, "proposal", "kept proposals")
     settled: list[str] = []
     lessons_kept = False
+    # The kept lessons a lesson widened in this run replaces, each for one at most.
+    replaced_now: set[str] = set()
     try:
         for key, answer in sorted(answers.items()):
             entry = current.entries.get(key)
             if entry is None or not _takes(entry, answer):
                 # Settled by an earlier run that could not remove the file, or never known: only the file goes.
+                if entry is not None and _widened_too_late(entry, answer):
+                    report.problems.append(
+                        f"the lesson you kept for every project was filed for its project before: {entry.text}; "
+                        "m2b lesson add keeps it for every project"
+                    )
                 settled.append(key)
             elif answer == proposal_answers.DROP:
                 current = proposals.settled(current, key, proposals.DROPPED, now)
                 report.dropped.append(entry.text)
                 settled.append(key)
             elif entry.lesson is not None:
-                if _keep_lesson(store, entry, report, machine_id):
+                widened = (
+                    _with_room(store, _for_every_project(entry), replaced_now)
+                    if answer == proposal_answers.EVERY_PROJECT
+                    else entry
+                )
+                if _keep_lesson(store, widened, report, machine_id):
                     current = proposals.settled(current, key, proposals.KEPT, now)
                     settled.append(key)
                     lessons_kept = True
@@ -242,7 +255,7 @@ def _settle_proposals(
         if current != kept:
             proposals.save(store, current)
     for key in settled:
-        proposal_answers.remove(store, key)
+        proposal_answers.remove(store, key, answers[key])
     if lessons_kept:
         # Filed in this run too; a file the first filing could not take is named once.
         filed = kept_lessons.file_kept(store)
@@ -331,6 +344,51 @@ def _keep_lesson(store: Store, entry: proposals.Entry, report: HarvestReport, ma
     return True
 
 
+def _with_room(store: Store, entry: proposals.Entry, named: set[str]) -> proposals.Entry:
+    """A lesson widened into what every session starts with, with the kept lesson it replaces where
+    the block would leave one out with it, as a reading names one for a new lesson for every
+    project. The reading named none for it, since it was proposed for one project."""
+    lesson = entry.lesson
+    assert lesson is not None
+    if lesson.kind != lessons.KNOWLEDGE or lesson.at_source is not None:
+        return entry
+    try:
+        standing = lessons.read_all(store)
+    # Lessons that cannot be read now are not replaced unseen.
+    except StoreError:
+        return entry
+    new = lessons.Lesson("", entry.text, lessons.KNOWLEDGE, lessons.EVERY_PROJECT, "")
+    if not lessons.fitting([*standing, new])[1]:
+        return entry
+    weakest = lesson_counts.weakest_in_the_block(store, standing, named)
+    if not weakest:
+        return entry
+    named.add(weakest[0].name)
+    return replace(entry, lesson=replace(lesson, replaces=weakest[0].name))
+
+
+def _widened_too_late(entry: proposals.Entry, answer: str) -> bool:
+    """Keep for every project on a lesson a run kept for its project already: it came in while that run
+    settled a keep, or from a machine that had not seen the run."""
+    return (
+        answer == proposal_answers.EVERY_PROJECT
+        and entry.state == proposals.KEPT
+        and proposal_answers.for_one_project(entry)
+    )
+
+
+def _for_every_project(entry: proposals.Entry) -> proposals.Entry:
+    """The lesson the person kept for every project. What a source of its project says of it is left
+    behind: a fix there would change one repository, and a line there states it for one project
+    only. A source under the home folder holds wherever they work, so its verdict stays."""
+    lesson = entry.lesson
+    assert lesson is not None
+    at_source = lesson.at_source
+    if at_source is not None and at_source.repositories:
+        at_source = None
+    return replace(entry, lesson=replace(lesson, target=lessons.EVERY_PROJECT, at_source=at_source))
+
+
 def _lesson_in(store: Store, path: str, name: str) -> lessons.Lesson | None:
     try:
         return lessons.parse(name, store.read_bytes(path).decode("utf-8", errors="replace"))
@@ -344,7 +402,7 @@ def _takes(entry: proposals.Entry, answer: str) -> bool:
     answer, and a keep that reached the store late, from a machine that had not seen it expire,
     must not be lost. A drop of it changes nothing."""
     if entry.state == proposals.EXPIRED:
-        return answer == proposal_answers.KEEP
+        return answer in proposal_answers.KEEPS
     return entry.state == proposals.OPEN
 
 

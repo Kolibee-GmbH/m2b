@@ -353,6 +353,40 @@ test('a lesson stated at its source or added to a project names that line or wha
   await ui.unmount()
 })
 
+test('a lesson for one project can be kept for every project, which is written once the undo window is over', async ($, on) => {
+  // Covers: B300
+  const forOne = { kind: 'action', target: 'github.com/acme/portal', words: ['scripts/check'], quote: '' }
+  const forEvery = { ...forOne, target: 'every project' }
+  const fake = new FakeM2b()
+    .proposal(DANA, 'Run only the quick checks.', 'only the quick round', { kind: 'lesson', lesson: forOne })
+    .proposal(LADDER, 'Answer in German.', 'answer me in German', { kind: 'lesson', lesson: forEvery })
+  const { clock } = await start($, on, fake)
+  await typed($, 'm2b-proposals')
+  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+
+  const shown = await buttons(ui)
+  expect(shown).toContain(`every-project:${DANA}`)
+  expect(shown).not.toContain(`every-project:${LADDER}`)
+  await ui.press({ key: `every-project:${DANA}` })
+  expect(await linesAt(ui, `row:${DANA}`)).toEqual(['Run only the quick checks.', '[undo] keeping for every project'])
+  await clock.advance(UNDO_MS)
+
+  expect(fake.answers()).toEqual([['proposals', 'keep', '--every-project', DANA]])
+  await ui.unmount()
+})
+
+test('the proposals as text name how a lesson for one project is kept for every project', async ($, on) => {
+  // Covers: B300
+  const forOne = { kind: 'knowledge', target: 'github.com/acme/portal', words: [], quote: '' }
+  const fake = new FakeM2b().proposal(DANA, 'Name releases after the version.', 'after the version please', { kind: 'lesson', lesson: forOne })
+  fake.paneWaits = 'no terminal is attached'
+  await start($, on, fake)
+
+  const answer = await typed($, 'm2b-proposals')
+
+  expect(answer.text?.split('\n')).toContain('a lesson for one project is kept for every project with: m2b proposals keep --every-project <id>...')
+})
+
 test('the proposals command opens the same pane, also while nothing waits', async ($, on) => {
   // Covers: B127
   const fake = new FakeM2b()

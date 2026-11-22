@@ -2,7 +2,8 @@
 
 The listing shows what still waits for an answer, and how many proposals sessions handed in
 wait for the next run to take them in; keep and drop add the answer as a file and leave the
-filing to the next curation run, like every client. A proposals file or an answers
+filing to the next curation run, like every client; ``keep --every-project`` keeps a lesson
+proposed for one project for every project. A proposals file or an answers
 folder that is not downloaded ends the command with the line that names what to fetch: could not
 look is never an empty list.
 
@@ -36,9 +37,12 @@ from m2b.store.base import Store, StoreError
 
 NONE_WAITS = "no proposal waits for an answer"
 HOW_TO_ANSWER = "keep with: m2b proposals keep <id>... (or keep --all); drop with: m2b proposals drop <id>..."
+HOW_TO_WIDEN = "a lesson for one project is kept for every project with: m2b proposals keep --every-project <id>..."
 ADD = "add"
 HANDED_IN = "handed in; go on with the task"
 HANDED_IN_BEFORE = "handed in before: this proposal of the session is there already; go on with the task"
+# How an answer is said where it is not its own word.
+_SAID = {proposal_answers.EVERY_PROJECT: "keep for every project"}
 # A proposal is a few hundred characters; more bytes than this are no proposal and are not read.
 INPUT_LENGTH = 64 * 1024
 
@@ -51,8 +55,14 @@ def proposals_command(arguments: argparse.Namespace, context: Context) -> int:
             return _list(store, arguments.json)
         if arguments.action == ADD:
             return _add(store, config, context)
-        return _answer(store, arguments.action, arguments.ids, arguments.all, arguments.json)
-    except (proposals.ProposalsError, proposal_answers.UnknownProposalError, handed_in.RefusedError) as error:
+        answer = proposal_answers.EVERY_PROJECT if arguments.every_project else arguments.action
+        return _answer(store, answer, arguments.ids, arguments.all, arguments.json)
+    except (
+        proposals.ProposalsError,
+        proposal_answers.UnknownProposalError,
+        proposal_answers.NotForOneProjectError,
+        handed_in.RefusedError,
+    ) as error:
         raise ProblemError(str(error)) from error
 
 
@@ -74,6 +84,8 @@ def _list(store: Store, as_json: bool) -> int:
                 again += f"  {proposals.source_line(entry.lesson.at_source, _shown)}\n"
             print(f"{key}  {_heading(entry)}\n  {_shown(entry.text)}\n  {said}\n{again}")
         print(HOW_TO_ANSWER)
+        if any(proposal_answers.for_one_project(entry) for _, entry in waiting.proposals):
+            print(HOW_TO_WIDEN)
     else:
         print(NONE_WAITS)
     if waiting.answered:
@@ -131,6 +143,8 @@ def _add(store: Store, config: MachineConfig, context: Context) -> int:
 
 
 def _answer(store: Store, answer: str, named: list[str], every: bool, as_json: bool) -> int:
+    if answer == proposal_answers.EVERY_PROJECT and (every or not named):
+        raise UsageError("m2b proposals keep --every-project takes the ids of lessons, never --all")
     if every == bool(named):
         raise UsageError(f"m2b proposals {answer} takes the ids of proposals" + (" or --all" if answer == KEEP else ""))
     require_store_writable(store)
@@ -152,9 +166,10 @@ def _answer(store: Store, answer: str, named: list[str], every: bool, as_json: b
 
 
 def _say(answer: str, given: Given, entries: Mapping[str, Entry], every: bool, left: int = 0) -> None:
+    said = _SAID.get(answer, answer)
     for key in given.given:
-        print(f"{answer} {key}: {_shown(entries[key].text)}")
-    if given.given and answer == KEEP:
+        print(f"{said} {key}: {_shown(entries[key].text)}")
+    if given.given and answer in proposal_answers.KEEPS:
         print("the next curation run files what is kept")
     if every and not given.given and not left:
         print(NONE_WAITS)

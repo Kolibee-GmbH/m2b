@@ -387,6 +387,10 @@ m2b proposals drop <id>...
 pasted can try to lead the model, also to a proposal that quotes words you typed, so read each
 proposal's text before you keep it.
 
+A lesson proposed for one project, `lesson, action for github.com/acme/portal`, you can also keep for
+every project: `m2b proposals keep --every-project <id>`, or `keep for every project` in the pane.
+A reading sees your correction in one repository; whether you make it wherever you work, you know.
+
 With the band, its row counts them among what waits for you, and
 `/m2b-proposals` or the tab `Proposals` shows them in the m2b pane, where keep, drop and keep all
 are buttons ([the band](band.md#the-proposals-from-your-sessions-in-the-pane));

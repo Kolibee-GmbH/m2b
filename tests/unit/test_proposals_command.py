@@ -13,7 +13,7 @@ from m2b import cli, handed_in, proposal_answers, proposals
 from m2b.glean import STATED, AtSource
 from m2b.store.base import StoreError
 from m2b.store.guard import DatalessGuard
-from test_proposal_answers import DANA_ID, LADDER_ID, NOBODYS_ID
+from test_proposal_answers import DANA_ID, LADDER_ID, LESSON_ID, NOBODYS_ID
 from test_proposals import DANA, DAY, LADDER, LESSON, NOW, Said
 
 
@@ -115,6 +115,18 @@ class ListTest(ProposalsCommandTest):
 
         self.assertIn('  stated already in ~/.claude/CLAUDE.md: "- Run only the quick checks."\n', out)
         self.assertEqual(listed["lesson"]["at_source"]["verdict"], "stated")
+
+    def test_a_lesson_for_one_project_comes_with_how_to_keep_it_for_every_project(self) -> None:
+        """Covers: B300"""
+        self.proposed(LESSON)
+        with_lesson = self.run_command("proposals")[1]
+        (self.store_root / proposals.PROPOSALS_FILE).unlink()
+        self.proposed(DANA)
+        without = self.run_command("proposals")[1]
+
+        hint = "a lesson for one project is kept for every project with: m2b proposals keep --every-project <id>..."
+        self.assertIn(hint, with_lesson)
+        self.assertNotIn(hint, without)
 
     def test_a_lesson_on_one_correction_is_listed_without_a_line_said_again(self) -> None:
         """Covers: B273"""
@@ -344,6 +356,32 @@ class AnswerTest(ProposalsCommandTest):
         )
         self.assertEqual(dropped, (cli.EXIT_OK, f"drop {LADDER_ID}: Call Sam about the ladder.\n", ""))
         self.assertEqual(self.answer_files(), sorted([f"{DANA_ID}.keep", f"{LADDER_ID}.drop"]))
+
+    def test_keep_for_every_project_answers_a_lesson_for_one_project_and_says_so(self) -> None:
+        """Covers: B300"""
+        self.proposed(LESSON, DANA)
+
+        widened = self.run_command("proposals", "keep", "--every-project", LESSON_ID)
+        refused = self.run_command("proposals", "keep", "--every-project", DANA_ID)
+
+        self.assertEqual(
+            widened,
+            (
+                cli.EXIT_OK,
+                f"keep for every project {LESSON_ID}: {LESSON.text}\nthe next curation run files what is kept\n",
+                "",
+            ),
+        )
+        self.assertEqual((refused[0], refused[1]), (cli.EXIT_PROBLEM, ""))
+        self.assertIn(f"only a lesson for one project can be kept for every project, not {DANA_ID}", refused[2])
+        self.assertEqual(self.answer_files(), [f"{LESSON_ID}.every-project"])
+
+    def test_keep_for_every_project_takes_ids_and_never_all(self) -> None:
+        self.proposed(LESSON)
+
+        code, _, _ = self.run_command("proposals", "keep", "--every-project", "--all")
+
+        self.assertEqual((code, self.answer_files()), (cli.EXIT_USAGE, []))
 
     def test_keep_all_answers_every_proposal_that_waits(self) -> None:
         """Covers: B122"""

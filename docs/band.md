@@ -753,7 +753,8 @@ the band runs `m2b proposals keep <id>` or `m2b proposals drop <id>`, which adds
 the store. `keep all` keeps the proposals the pane showed when you clicked it, without those a
 session handed in, which you keep or drop on their own, and without those you
 clicked on their own; one a curation run added a moment before is not kept unseen. The count in
-the band and the pane follow at once.
+the band and the pane follow at once. A lesson proposed for one project has a third button, `keep for every project`, which runs
+`m2b proposals keep --every-project <id>` once the 5 seconds are over.
 
 Nothing is filed by the click: a curation run writes a capture for each proposal you kept and
 files it. Once an answer is written and no proposal waits any more, with at least one keep among
