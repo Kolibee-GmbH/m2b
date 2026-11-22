@@ -634,7 +634,7 @@ class LessonTest(unittest.TestCase):
     def test_an_action_lesson_keeps_the_words_that_silence_it_where_they_were_typed(self) -> None:
         """Covers: B295"""
         first = turn("first", "only the quick round, not the whole proof: scripts/check --quick", "scripts/check")
-        entry = lesson_entry(lesson={"unless": ["--quick", "--fast"]})
+        entry = lesson_entry(lesson={"unless": ["--quick", "--fast", "check"]})
 
         read = glean.parse_answer(answer(entry), [first, SECOND])
         (kept,) = glean.check(read.proposals, [first, SECOND], []).kept
@@ -644,7 +644,7 @@ class LessonTest(unittest.TestCase):
 
     def test_words_that_silence_a_lesson_never_make_it_fail_and_knowledge_has_none(self) -> None:
         """Covers: B295"""
-        for unless in (["--nowhere"], "--quick", [3]):
+        for unless in (["--nowhere"], "--quick", [3], ["check"], ["--quick,"]):
             with self.subTest(unless=unless):
                 (kept,) = self.check(lesson_entry(lesson={"unless": unless})).kept
                 assert kept.lesson is not None

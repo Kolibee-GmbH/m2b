@@ -32,12 +32,14 @@ because Claude Code looks for them there: the band's in `plugins/m2b/tests/band/
 `tests/unit/locations.py`.
 
 Two workflows run `scripts/check` on GitHub. `.github/workflows/ci.yml` runs it for every pull
-request and on `main`, with the Claude Code version the README names as the minimum. A change that
-`scripts/ci-scope` calls a release gets `scripts/check --release` instead, the manifests and the
-docs tests in about two minutes: one that changes only the version line of `plugin.json`,
+request and on `main`, with the Claude Code version the README names as the minimum. A pull request
+that `scripts/ci-scope` calls a release gets `scripts/check --release` instead, the manifests and
+the docs tests in about two minutes: one that changes only the version line of `plugin.json`,
 `CHANGELOG.md`, `docs/evals.md` or `.claude-plugin/marketplace.json`, which is what a
 [release](#releasing) and its pin change. The code they release was proved by the runs before
-them. Any other change, a file added or removed, and a scope that cannot be told get the full run.
+them. Any other change, a file added or removed, a scope that cannot be told, and every run on
+`main` get the full run: a push to `main` may cancel the run of the merge before it, and the tree
+that is tagged needs one full run that finished.
 `.github/workflows/weekly.yml` runs it every Monday, and whenever someone starts it by hand, with
 the newest Claude Code: m2b hangs on Claude Code's plugin interface, and the weekly run meets a new
 version before a user does. It also runs the [model-level scenarios](#end-to-end-scenarios), the

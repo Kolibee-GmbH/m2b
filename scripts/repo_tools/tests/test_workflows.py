@@ -84,7 +84,8 @@ class CiScopeTest(unittest.TestCase):
 
     def test_the_scope_compares_the_change_with_where_it_starts(self) -> None:
         self.assertIn("          fetch-depth: 0\n", self.text)
-        self.assertIn("BASE: ${{ github.event.pull_request.base.sha || github.event.before }}", self.text)
+        # On main there is no base: every run there is full.
+        self.assertIn("BASE: ${{ github.event.pull_request.base.sha }}\n", self.text)
         self.assertIn('run: echo "scope=$(scripts/ci-scope "$BASE" "$GITHUB_SHA")" >> "$GITHUB_OUTPUT"', self.text)
 
     def test_only_the_scope_release_skips_the_full_proof(self) -> None:

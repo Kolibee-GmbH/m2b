@@ -399,7 +399,8 @@ def _lesson_stands(proposal: Proposal, source: str, sessions: Mapping[str, Sessi
 
 def _with_standing_unless(proposal: Proposal, sessions: Mapping[str, Session]) -> Proposal:
     """The proposal with only those of its lesson's ``unless`` words that stand in what the person
-    typed or in a command of either session: words the model made up would silence it elsewhere."""
+    typed or in a command of either session, and not inside the lesson's own words: words the model
+    made up would silence it elsewhere, and one of its own words would silence it everywhere."""
     lesson = proposal.lesson
     if lesson is None or not lesson.unless:
         return proposal
@@ -407,7 +408,12 @@ def _with_standing_unless(proposal: Proposal, sessions: Mapping[str, Session]) -
         prompt for session_id in (proposal.session, lesson.session) for prompt in _prompts_of(sessions, session_id)
     ]
     texts = [prompt.text for prompt in prompts] + [command for prompt in prompts for command in prompt.commands]
-    standing = tuple(word for word in lesson.unless if any(holds_word(text, word) for text in texts))
+    # A word inside the lesson's own words stands in every command it fires on and would silence it.
+    standing = tuple(
+        word
+        for word in lesson.unless
+        if any(holds_word(text, word) for text in texts) and not any(holds_word(own, word) for own in lesson.words)
+    )
     return dataclasses.replace(proposal, lesson=dataclasses.replace(lesson, unless=standing))
 
 
@@ -545,7 +551,8 @@ def _silencing_words(value: object) -> tuple[str, ...]:
     if len(cleaned) > kept_lessons.MAX_WORDS or any(len(word) > MAX_WORD for word in cleaned):
         return ()
     said = "".join(cleaned)
-    if unsafe_characters(said) or not can_be_written(said):
+    # A kept lesson refuses these in its words, and the lesson the person kept would wait forever.
+    if unsafe_characters(said) or not can_be_written(said) or any(mark in said for mark in ",[]"):
         return ()
     return cleaned
 

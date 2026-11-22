@@ -2,8 +2,9 @@
 
 A release pull request changes the version, the changelog and the eval page, and a pin pull request
 the marketplace; the code they release was proved by the pull requests before them and by the run
-on ``main`` after each merge. For such a change CI runs ``scripts/check --release``, which checks
-what these files can break, instead of the whole proof a third and fourth time. Anything else, and
+on ``main`` after each merge. For a pull request of such a change CI runs ``scripts/check
+--release``, which checks what these files can break, instead of the whole proof once more; a run
+on ``main`` has no base here and is always full. Anything else, and
 anything this cannot tell for sure (an unknown base, a file added or removed, a manifest change
 beyond its version, a git error), is ``full``.
 """
