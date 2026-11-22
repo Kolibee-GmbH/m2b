@@ -452,13 +452,17 @@ tasks from it, each with the words it stands on. The curation step `glean` runs 
 (`curate/glean_step.py`). `scripts/glean-eval`
 measures whether a model is good enough for that job.
 
-`tests/glean/day.json` is an invented day: twelve sessions with 128 typed prompts, in English and
+`tests/glean/day.json` is an invented day: twelve sessions with 131 typed prompts, in English and
 German, and one prompt that is pasted text only. Twenty typed prompts state something worth
 keeping, five each of a person, an agreement, a commitment and something personal, and two pasted
 texts each state who a person is: a mail, and notes of the person's own. Two more, in two sessions,
 make the same correction of Claude after it ran `scripts/check`, which is one lesson, and one more
 corrects a commit message with an emoji, a lesson of its own: the day writes Claude's answer and
-the command before each, as Claude Code does. One more states a decision of the
+the command before each, as Claude Code does. Two more are questions that object to what Claude
+did: why it deleted a failing test instead of fixing the code, at the end of its session, and why
+it pushed, which Claude answers by changing course. A question is found by a lesson, or by a single
+correction the step would remember, since a model may be unsure whether it holds beyond its task.
+One more states a decision of the
 order portal, whose repository the memory has a project topic for, and Claude writes it into a file
 of that repository: a pointer, found only when it names that file. Eleven prompts are traps,
 one of each class a proposal must never come from: a prompt a plugin sent, a pasted text that
@@ -485,7 +489,7 @@ scripts/glean-eval --without-examples       # the same day without what was kept
 A project is proposed by code from where the sessions worked, never by a model, so no eval covers
 it; its unit tests do.
 
-Per answer it prints how many of the twenty-five were found, how many proposals were right, and
+Per answer it prints how many of the twenty-eight were found, how many proposals were right, and
 each miss, wrong proposal and sprung trap by name. One more trap has no prompt of its own: a
 proposal whose source is wrong, pasted words kept as said or the other way round. A model meets the bar with 0.80 found and 0.80
 right on average and no trap sprung in any answer. Asked without the examples, a model has

@@ -4,7 +4,8 @@
 pasted into a prompt, some of it planted (a person, an agreement, a
 commitment, something personal, and two lessons: the same correction of Claude in two sessions, each
 after an answer of Claude's that ran ``scripts/check``, and one made in one session after a commit
-with an emoji) and some of it a trap, one of each class a proposal must never come from, among them
+with an emoji, and two questions that object to what Claude did: one Claude answers by changing
+course, one that ends its session) and some of it a trap, one of each class a proposal must never come from, among them
 a correction about the task at hand, and a pointer: a decision stated in a session in a repository the memory has a
 project topic for, which Claude wrote into a file there, with the same sort of decision in a session
 that wrote nothing as a trap. A prompt that answers a turn has the answer and the commands before it in the
@@ -25,7 +26,9 @@ is a sentence like the dropped ones. ``--without-examples`` asks without them, w
 they change: that trap is then nobody's to catch. It says what waits for an answer too
 (``waiting`` in the input), and a trap of the day says one of those again in other words.
 
-Counted per run: how many planted statements a kept proposal stands on (found), how many kept
+Counted per run: how many planted statements a kept proposal stands on (found; a question that
+objects is found too where a single correction the step would remember stands on it, since the
+model may be unsure whether it holds beyond its task), how many kept
 proposals are the first to stand on one (right; a second proposal for the same statement is not),
 and which traps were sprung. A proposal stands on a statement when its quote and the statement
 share at least half of the shorter one in a text of the statement's session, typed or pasted. One
@@ -83,6 +86,8 @@ RUN_TIMEOUT_SECONDS = 300
 BAR = 0.8
 
 AUTOMATION = "automation"
+# A planted question that objects to what Claude did: found by a lesson or by a single correction.
+CORRECTION = "correction"
 # Not a statement of the day: a kept proposal that stands on pasted words and says they were typed,
 # or on typed words and says they were pasted.
 WRONG_SOURCE = "wrong-source"
@@ -180,6 +185,8 @@ class Score:
     wrong: tuple[glean.Proposal, ...]
     sprung: tuple[str, ...]
     planted: int
+    # Single corrections the step would remember, whatever they stand on.
+    remembered: int = 0
 
     @property
     def found(self) -> int:
@@ -369,6 +376,14 @@ def score(case: Case, answer: str) -> Score:
     sprung = [trap.label for trap in case.day.traps if _sprung(trap, checked.kept, typed)]
     if any(item.pasted != (proposal.source == glean.PASTED) for item, proposal in first.items()):
         sprung.append(WRONG_SOURCE)
+    singles = _singles_the_step_keeps(read, checked, case.sessions)
+    found_by_single = [
+        item
+        for item in case.day.planted
+        if item.label == CORRECTION
+        and item not in first
+        and any(_quoted_on(single.session, single.quote, item, typed) for single in singles)
+    ]
     return Score(
         proposals=len(read.proposals),
         malformed=read.malformed,
@@ -376,12 +391,30 @@ def score(case: Case, answer: str) -> Score:
         already_captured=len(checked.already_captured),
         kept=len(checked.kept),
         right=len(checked.kept) - len(wrong),
-        right_kind=sum(item.label == proposal.kind for item, proposal in first.items()),
-        missed=tuple(item for item in case.day.planted if item not in first),
+        right_kind=sum(_kind_of(item) == proposal.kind for item, proposal in first.items()) + len(found_by_single),
+        missed=tuple(item for item in case.day.planted if item not in first and item not in found_by_single),
         wrong=tuple(wrong),
         sprung=tuple(sprung),
         planted=len(case.day.planted),
+        remembered=len(singles),
     )
+
+
+def _kind_of(statement: Statement) -> str:
+    """The kind a proposal on the statement has when it is right: a question that objects is a lesson."""
+    return glean.LESSON if statement.label == CORRECTION else statement.label
+
+
+def _singles_the_step_keeps(
+    read: glean.Answer, checked: glean.Checked, sessions: Sequence[Session]
+) -> list[glean.SingleCorrection]:
+    """The single corrections the step would remember: those its checks keep, without the words a kept
+    lesson stands on, and none for this project, since the day's sessions have no repository with
+    noted remotes."""
+    used = [(proposal.session, proposal.quote) for proposal in checked.kept if proposal.lesson is not None]
+    used += [(proposal.lesson.session, proposal.lesson.quote) for proposal in checked.kept if proposal.lesson]
+    kept, _ = glean.checked_single_corrections(read.single_corrections, used, sessions)
+    return [single for single, _ in kept if single.target != lessons.THIS_PROJECT]
 
 
 def _as_the_step_keeps(checked: glean.Checked) -> glean.Checked:
@@ -438,10 +471,14 @@ def _stands_on_any(proposal: glean.Proposal, statement: Statement, typed: Mappin
 
 
 def _stands_on(proposal: glean.Proposal, statement: Statement, typed: Mapping[str, Sequence[str]]) -> bool:
+    return _quoted_on(proposal.session, proposal.quote, statement, typed)
+
+
+def _quoted_on(session: str, quoted_words: str, statement: Statement, typed: Mapping[str, Sequence[str]]) -> bool:
     """Whether the quote and the statement share at least half of the shorter one in one prompt."""
-    if proposal.session != statement.session:
+    if session != statement.session:
         return False
-    quote = " ".join(proposal.quote.split())
+    quote = " ".join(quoted_words.split())
     for prompt in typed.get(statement.session, ()):
         stated = prompt.find(statement.text)
         quoted = prompt.find(quote) if stated >= 0 else -1
@@ -541,7 +578,7 @@ def _report_run(case: Case, name: str, outcome: Outcome) -> None:
         f"{name} ({outcome.run.model}, {outcome.run.seconds:.0f} s): found {result.found} of {result.planted}, "
         f"right {result.right} of {result.kept} proposals, kind right {result.right_kind} of {result.found}; "
         f"left out by code: {result.not_quoted} not quoted, {result.already_captured} already captured, "
-        f"{result.malformed} not in the form"
+        f"{result.malformed} not in the form; {result.remembered} single corrections remembered"
     )
     for item in result.missed:
         print(f"  missed {item.label} in {names[item.session]}: {item.text!r}")
