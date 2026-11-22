@@ -5,6 +5,34 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/), with tags `vX.Y.Z`. How a release is made is in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [0.14.0] - 2026-11-23
+
+A correction of how Claude works becomes a lesson from one session, and one made again after a
+later curation run still finds the first.
+
+### Added
+
+- A lesson proposed for one project can be kept for every project: `m2b proposals keep
+  --every-project <id>...`, or `keep for every project` in the pane
+  ([#54](https://github.com/Kolibee-GmbH/m2b/pull/54)).
+- `m2b status` shows the share of lessons you kept beside the share of all proposals, and how many
+  corrections are remembered for later readings
+  ([#54](https://github.com/Kolibee-GmbH/m2b/pull/54)).
+
+### Changed
+
+- One correction that holds beyond the task at hand is enough for a lesson; before, it had to be
+  made in two sessions of the same period. A correction where the reading cannot tell is
+  remembered for 30 days, and when a later reading sees the same correction again, in other words
+  or another language, the lesson stands on both. A question that objects to what Claude did
+  counts as a correction ([#54](https://github.com/Kolibee-GmbH/m2b/pull/54)).
+
+### Fixed
+
+- When you ask about someone your notes do not name, a session says so and no longer offers another
+  topic of your notes as a place to look ("if he is connected to Northwind, I can search it")
+  ([#55](https://github.com/Kolibee-GmbH/m2b/pull/55)).
+
 ## [0.13.2] - 2026-11-22
 
 The plugin carries a README of its own for plugin directories, and the README's pictures show m2b as

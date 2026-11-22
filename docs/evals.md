@@ -13,16 +13,16 @@ yourself.
 
 | | |
 |---|---|
-| Day | 2026-11-22 |
-| m2b | 0.13.1 |
+| Day | 2026-11-23 |
+| m2b | 0.14.0 |
 | Claude Code | 2.1.330 |
-| Model | `claude-opus-5-5` |
-| Runs | 102, of which 1 ended in an error and count as failed |
+| Model | `claude-sonnet-5-5` |
+| Runs | 102 |
 
 | Case | With m2b | Without m2b |
 |---|---|---|
 | `coding` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
-| `correction` | 1.00 (3 of 3 runs) | 0.58 (0 of 3 runs) |
+| `correction` | 1.00 (3 of 3 runs) | 0.50 (0 of 3 runs) |
 | `details` | 1.00 (3 of 3 runs) | 0.00 (0 of 3 runs) |
 | `no-false-lead` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
 | `no-invention` | 1.00 (3 of 3 runs) | 1.00 (3 of 3 runs) |
