@@ -322,10 +322,8 @@ def _index(
             report.add(
                 "topic-heading", ACTION, index_path, f"a heading is no topic '### <name> (<word>, <word>)': {heading}"
             )
-        for topic in index.topics:
-            problem = _topic_problem(topic)
-            if problem is not None:
-                report.add("topic-words", ACTION, index_path, f"in {index_path}, the topic {topic.name} {problem}")
+        for name, problem in _topic_word_problems(text):
+            report.add("topic-words", ACTION, index_path, f"in {index_path}, the topic {name} {problem}")
         names = {PurePosixPath(relative).name for relative in fact_files} | symlink_names
         for fact in index.facts:
             if fact.file_name not in names:
@@ -441,6 +439,36 @@ def _exists(path: Path) -> bool:
         return path.exists()
     except (OSError, ValueError):
         return True
+
+
+def topic_problems(text: str) -> list[str]:
+    """What is out of form in the distillate's topic headings, one sentence each: what lint reports
+    after a run, which ``m2b ingest topics`` shows the ingest step while it can still fix it (B296)."""
+    index = MemoryIndex.parse(text)
+    unparsed = [
+        f"a heading is no topic '### <name> (<word>, <word>)': {heading}" for heading in index.unparsed_topic_headings
+    ]
+    return unparsed + [f"the topic {name} {problem}" for name, problem in _topic_word_problems(text)]
+
+
+def _topic_word_problems(text: str) -> list[tuple[str, str]]:
+    """Each topic whose words are out of form, and why. A project topic needs its repository's name as
+    one of its words: a prompt or a folder's path that names the project by it would not bring it in."""
+    found = [(topic.name, problem) for topic in MemoryIndex.parse(text).topics if (problem := _topic_problem(topic))]
+    named = {name for name, _ in found}
+    for block in split_topics(without_hidden(text)).blocks:
+        topic = block.topic
+        if topic.name in named:
+            continue
+        lines = block.text.split("\n")
+        for found_line in filter(None, map(REPOSITORY_LINE.match, lines)):
+            repository = address_of(found_line.group("address")).rsplit("/", 1)[-1]
+            fits = MIN_TOPIC_WORD <= len(repository) <= MAX_TOPIC_WORD
+            if fits and repository.casefold() not in {word.casefold() for word in topic.words}:
+                found.append((topic.name, f"has not {repository}, the name of its repository, among its words"))
+                named.add(topic.name)
+                break
+    return found
 
 
 def _topic_problem(topic: Topic) -> str | None:

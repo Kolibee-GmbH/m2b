@@ -458,6 +458,13 @@ def _parser() -> argparse.ArgumentParser:
     )
     _command(
         ingest_group,
+        "topics",
+        ingest_commands.ingest_topics,
+        "name the distillate's topic headings out of form",
+        curator=True,
+    )
+    _command(
+        ingest_group,
         "facts-filed",
         ingest_commands.ingest_facts_filed,
         "mark the capture's facts as filed",

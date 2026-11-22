@@ -260,6 +260,11 @@ need it in any session, or only when one subject comes up?
 - When the last line under a heading in `## Current` goes because the work is over, remove that
   heading there too; the topic's heading under `## Facts` stays.
 
+**Topic headings.** After you changed `memory/MEMORY.md`, run `m2b ingest topics`. It names each
+topic heading that is out of form: too few or too many words, a word too short or too long, a
+project topic without its repository's name among its words. Fix each heading it names, then run it
+again, until it says every topic heading is in form.
+
 **Tasks.** Each thing to do becomes one task. The key is one word that tells it apart from the
 capture's other tasks:
 
