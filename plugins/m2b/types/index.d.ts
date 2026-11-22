@@ -80,6 +80,9 @@ export type LessonStanding = {
 /** What a press on keep or drop asks the task list for. */
 export type BandSettle = 'complete' | 'drop'
 
+/** What a press on `keep for every project` asks for: a lesson proposed for one project, kept for every project. */
+export type KeepForEveryProject = 'every-project'
+
 /** What a press on the pane's button for the session's folder asks: the distillate off there, or on again. */
 export type FolderSwitch = 'off' | 'on'
 
@@ -100,7 +103,7 @@ export type CurateRefusal = 'running' | 'not-curating' | 'not-downloaded' | 'fai
  * are the proposals a press on keep all stands for: those the pane showed when it was pressed.
  */
 export type BandPress = {
-  action: BandSettle | FolderSwitch | CurateNow
+  action: BandSettle | KeepForEveryProject | FolderSwitch | CurateNow
   phase: 'waiting' | 'writing'
   token: string
   deadlineMs?: number

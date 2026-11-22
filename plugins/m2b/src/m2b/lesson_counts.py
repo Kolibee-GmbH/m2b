@@ -20,13 +20,15 @@ from __future__ import annotations
 
 import datetime
 import hashlib
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 
+from m2b import lessons
+from m2b.config.errors import ConfigError
 from m2b.config.json_file import read_store_json_object, write_store_json_object
 from m2b.glean import Correction
 from m2b.notes.layout import STATE
-from m2b.store.base import Store
+from m2b.store.base import Store, StoreError
 
 COUNTS_FILE = f"{STATE}/core/lesson-counts.json"
 FORMAT = 1
@@ -40,6 +42,22 @@ class LessonCountsError(Exception):
 def corrected_again(store: Store, kept: Mapping[str, str]) -> dict[str, int]:
     """Per standing lesson (its name and the day it was kept) how often it was corrected again since."""
     return {name: len(entry.ids) for name, entry in _load(store, kept).items() if entry.ids}
+
+
+def weakest_in_the_block(
+    store: Store, standing: Sequence[lessons.Lesson], named: Collection[str | None] = ()
+) -> list[lessons.Lesson]:
+    """The lessons every session starts with, the weakest first: the one corrected again most often
+    since it was kept, then the oldest. Those ``named`` are left out: another new lesson replaces
+    them already. Counts that cannot be read count nothing."""
+    try:
+        again = corrected_again(store, {lesson.name: lesson.kept for lesson in standing})
+    except (LessonCountsError, ConfigError, StoreError):
+        again = {}
+    return sorted(
+        (lesson for lesson in standing if lesson.in_the_block and lesson.name not in named),
+        key=lambda lesson: (-again.get(lesson.name, 0), lesson.kept, lesson.name),
+    )
 
 
 def last_corrected(store: Store, kept: Mapping[str, str]) -> dict[str, str]:

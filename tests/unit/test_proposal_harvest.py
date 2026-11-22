@@ -12,7 +12,7 @@ from unittest import mock
 from m2b import fixes, glean, harvest, lessons, project_proposals, proposal_answers, proposals
 from m2b.glean import Proposal
 from m2b.notes.frontmatter import Note
-from m2b.proposal_answers import DROP, KEEP
+from m2b.proposal_answers import DROP, EVERY_PROJECT, KEEP
 from m2b.tasks.base import UnconfirmedTaskError
 from m2b.tasks.markdown import MarkdownTasks
 from test_proposal_answers import DANA_ID, LADDER_ID, NOBODYS_ID, AnswerFixture
@@ -203,6 +203,19 @@ class KeptLessonTest(ProposalHarvestFixture):
                 self.assertEqual(report.fixes, [kept.fix.place])
                 self.assertEqual(self.state(LESSON_ID)[0], "kept")
 
+    def test_a_fix_kept_from_a_lesson_on_one_correction_says_only_what_was_said_once(self) -> None:
+        """Covers: B272"""
+        home = glean.AtSource(
+            glean.FIX, "~/.claude/CLAUDE.md", "- Run the whole proof.", "- Run the quick checks.", "~/.claude/CLAUDE.md"
+        )
+        part = dataclasses.replace(LESSON.lesson, quote="", session="", at_source=home)
+        self.answered(KEEP, dataclasses.replace(LESSON, lesson=part))
+
+        harvest.harvest(self.store, self.tasks, "Remember? ", LATER, machine_id="sb-test-m1")
+
+        (kept,) = fixes.read_all(self.store)
+        self.assertEqual(kept.fix.why, f'you said "{LESSON.quote}"')
+
     def test_a_knowledge_lesson_for_one_project_waits_with_its_answer_and_says_why(self) -> None:
         """Covers: B272"""
         for_one_project = dataclasses.replace(
@@ -217,6 +230,117 @@ class KeptLessonTest(ProposalHarvestFixture):
         self.assertEqual(len(self.answer_files()), 1)
         (problem,) = report.problems
         self.assertTrue(problem.startswith(f"the lesson you kept waits: {LESSON.text}"))
+
+
+class KeptForEveryProjectTest(ProposalHarvestFixture):
+    def test_a_lesson_kept_for_every_project_is_filed_for_every_project_as_it_was_proposed_else(self) -> None:
+        """Covers: B300"""
+        silenced = dataclasses.replace(LESSON, lesson=dataclasses.replace(LESSON.lesson, unless=("--quick",)))
+        self.answered(EVERY_PROJECT, silenced)
+
+        report = self.harvest()
+
+        (filed,) = lessons.read_all(self.store)
+        self.assertEqual(
+            (filed.text, filed.kind, filed.target, filed.words, filed.unless),
+            (LESSON.text, "action", lessons.EVERY_PROJECT, ("scripts/check",), ("--quick",)),
+        )
+        self.assertEqual((self.state(LESSON_ID)[0], self.answer_files(), report.problems), ("kept", [], []))
+
+    def test_a_knowledge_lesson_for_one_project_kept_for_every_project_no_longer_waits(self) -> None:
+        """Covers: B300"""
+        knowledge = dataclasses.replace(LESSON, lesson=dataclasses.replace(LESSON.lesson, kind="knowledge", words=()))
+        self.answered(EVERY_PROJECT, knowledge)
+
+        report = self.harvest()
+
+        (filed,) = lessons.read_all(self.store)
+        self.assertEqual((filed.kind, filed.target, report.problems), ("knowledge", lessons.EVERY_PROJECT, []))
+
+    def test_a_source_of_the_project_is_left_behind_and_one_under_the_home_folder_stays(self) -> None:
+        """Covers: B300"""
+        of_the_project = glean.AtSource(
+            glean.FIX,
+            "CLAUDE.md in github.com/acme/portal",
+            None,
+            "Run the quick checks.",
+            "CLAUDE.md",
+            ("github.com/acme/portal",),
+        )
+        stated = dataclasses.replace(of_the_project, verdict=glean.STATED, line="Run the quick checks.", wording=None)
+        for at_source in (of_the_project, stated):
+            with self.subTest(verdict=at_source.verdict):
+                (self.root / proposals.PROPOSALS_FILE).unlink(missing_ok=True)
+                for leftover in (self.root / lessons.FOLDER).glob("*.md"):
+                    leftover.unlink()
+                part = dataclasses.replace(LESSON.lesson, at_source=at_source)
+                self.answered(EVERY_PROJECT, dataclasses.replace(LESSON, lesson=part))
+
+                self.harvest()
+
+                (filed,) = lessons.read_all(self.store)
+                self.assertEqual(
+                    (filed.target, filed.kept_at, fixes.read_all(self.store)), (lessons.EVERY_PROJECT, None, [])
+                )
+        home = glean.AtSource(
+            glean.FIX, "~/.claude/CLAUDE.md", "- Run the whole proof.", "- Run the quick checks.", "~/.claude/CLAUDE.md"
+        )
+        (self.root / proposals.PROPOSALS_FILE).unlink()
+        self.answered(
+            EVERY_PROJECT, dataclasses.replace(LESSON, lesson=dataclasses.replace(LESSON.lesson, at_source=home))
+        )
+
+        harvest.harvest(self.store, self.tasks, "Remember? ", LATER, machine_id="sb-test-m1")
+
+        (kept,) = fixes.read_all(self.store)
+        self.assertEqual((kept.fix.path, kept.fix.machine), ("~/.claude/CLAUDE.md", "sb-test-m1"))
+
+    def test_a_knowledge_lesson_widened_into_a_full_block_replaces_the_weakest_there(self) -> None:
+        """Covers: B300"""
+        folder = self.root / lessons.FOLDER
+        folder.mkdir(parents=True, exist_ok=True)
+        for number in range(40):
+            (folder / f"filler-{number:02d}.md").write_text(
+                f"---\nkind: knowledge\ntarget: every project\nkept: 2026-02-{number % 28 + 1:02d}\n---\n"
+                f"# Filler {number}\n\nFiller lesson number {number}, about something said once and kept since then.\n"
+            )
+        self.assertGreater(lessons.fitting(lessons.read_all(self.store))[1], 0)
+        knowledge = dataclasses.replace(LESSON, lesson=dataclasses.replace(LESSON.lesson, kind="knowledge", words=()))
+        self.answered(EVERY_PROJECT, knowledge)
+
+        report = self.harvest()
+
+        self.assertEqual(report.replaced, ["filler-00.md"])
+        self.assertFalse((folder / "filler-00.md").exists())
+
+    def test_keep_for_every_project_after_the_lesson_was_filed_for_its_project_is_said_for_the_review(self) -> None:
+        """Covers: B300"""
+        self.answered(KEEP, LESSON)
+        self.harvest()
+        (self.root / proposal_answers.FOLDER / f"{LESSON_ID}.every-project").write_bytes(b"")
+
+        report = self.harvest()
+
+        (filed,) = lessons.read_all(self.store)
+        self.assertEqual((filed.target, self.answer_files()), ("github.com/acme/portal", []))
+        self.assertEqual(
+            report.problems,
+            [
+                f"the lesson you kept for every project was filed for its project before: {LESSON.text}; "
+                "m2b lesson add keeps it for every project"
+            ],
+        )
+
+    def test_keep_for_every_project_on_a_proposal_that_is_no_lesson_is_a_keep(self) -> None:
+        """Covers: B300"""
+        self.kept(DANA)
+        folder = self.root / proposal_answers.FOLDER
+        folder.mkdir(parents=True)
+        (folder / f"{DANA_ID}.every-project").write_bytes(b"")
+
+        self.harvest()
+
+        self.assertEqual((self.state(DANA_ID)[0], len(self.captures()), self.answer_files()), ("kept", 1, []))
 
 
 class KeepTest(ProposalHarvestFixture):

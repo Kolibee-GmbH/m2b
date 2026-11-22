@@ -352,8 +352,12 @@ def _parser() -> argparse.ArgumentParser:
         given.add_argument("ids", nargs="*", metavar="id")
         given.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
         given.set_defaults(all=False)
+        given.set_defaults(every_project=False)
         if answer == "keep":
             given.add_argument("--all", action="store_true", help="every proposal that waits for an answer")
+            given.add_argument(
+                "--every-project", action="store_true", help="keep these lessons for one project for every project"
+            )
     add = answers.add_parser(proposals_commands.ADD, help="hand in a proposal of a session, as JSON on standard input")
     add.add_argument("input", nargs="?", choices=("-",), default="-", help="-: read standard input")
 

@@ -84,17 +84,43 @@ def entry(case: glean_eval.Case, statement: glean_eval.Statement, **changes: Any
     return proposal
 
 
-def answer(*entries: dict[str, Any]) -> str:
-    return json.dumps({"proposals": list(entries)})
+def answer(*entries: dict[str, Any], singles: tuple[dict[str, Any], ...] = ()) -> str:
+    return json.dumps({"proposals": list(entries), "single_corrections": list(singles)})
 
 
 def every_planted(case: glean_eval.Case) -> list[dict[str, Any]]:
-    """One proposal per planted statement; the planted lessons, a correction said in two sessions, as one."""
-    facts = [entry(case, statement) for statement in case.day.planted if statement.label != glean.LESSON]
-    first, second = (statement for statement in case.day.planted if statement.label == glean.LESSON)
+    """One proposal per planted statement; the lesson said in two sessions as one, the lesson made
+    in one session on its own and each question that objects as a lesson of its own."""
+    lesson_labels = (glean.LESSON, glean_eval.CORRECTION, glean_eval.ACROSS)
+    facts = [entry(case, statement) for statement in case.day.planted if statement.label not in lesson_labels]
+    first, second, once = (statement for statement in case.day.planted if statement.label == glean.LESSON)
+    deleted, pushed = questions(case)
     again = entry(case, second)
     part = {"kind": "action", "target": "every project", "words": ["scripts/check"], "quote": second.text}
-    return [*facts, entry(case, first, lesson={**part, "session": again["session"]})]
+    alone = {"kind": "knowledge", "target": "every project", "words": []}
+    push = {"kind": "action", "target": "every project", "words": ["git push"]}
+    (said_again,) = (statement for statement in case.day.planted if statement.label == glean_eval.ACROSS)
+    explain = {"kind": "knowledge", "target": "every project", "words": [], "earlier": 1}
+    return [
+        *facts,
+        entry(case, said_again, kind=glean.LESSON, text="Explain so it is understood at once.", lesson=explain),
+        entry(case, deleted, kind=glean.LESSON, text="Fix the code, never delete a failing test.", lesson=alone),
+        entry(case, pushed, kind=glean.LESSON, text="Push only when asked.", lesson=push),
+        entry(case, once, text="No emojis in commit messages.", lesson=alone),
+        entry(case, first, lesson={**part, "session": again["session"]}),
+    ]
+
+
+def questions(case: glean_eval.Case) -> list[glean_eval.Statement]:
+    """The planted questions that object, in the order of the day."""
+    return [statement for statement in case.day.planted if statement.label == glean_eval.CORRECTION]
+
+
+def single(case: glean_eval.Case, statement: glean_eval.Statement, **changes: Any) -> dict[str, Any]:
+    """A single correction that stands on the statement, as a model would write it."""
+    number = [each.session_id for each in case.sessions].index(statement.session) + 1
+    given = {"matter": "A matter.", "quote": statement.text, "session": number, "kind": "knowledge"}
+    return {**given, "target": "every project", **changes}
 
 
 def trap(case: glean_eval.Case, label: str) -> glean_eval.Statement:
@@ -103,24 +129,40 @@ def trap(case: glean_eval.Case, label: str) -> glean_eval.Statement:
 
 
 class InventedDayTest(Sandbox):
-    def test_the_day_plants_five_of_each_fact_kind_a_lesson_in_two_sessions_a_pointer_and_two_pasted(
+    def test_the_day_plants_five_of_each_fact_kind_three_lessons_two_questions_a_pointer_and_two_pasted(
         self,
     ) -> None:
         planted = self.case().day.planted
         typed = Counter(statement.label for statement in planted if not statement.pasted)
 
-        self.assertEqual(typed, {**dict.fromkeys(glean.FACT_KINDS, 5), glean.LESSON: 2, glean.POINTER: 1})
+        lessons = {glean.LESSON: 3, glean_eval.CORRECTION: 2, glean_eval.ACROSS: 1}
+        self.assertEqual(typed, {**dict.fromkeys(glean.FACT_KINDS, 5), **lessons, glean.POINTER: 1})
         self.assertEqual([statement.label for statement in planted if statement.pasted], [glean.PERSON, glean.PERSON])
+
+    def test_one_question_that_objects_is_answered_by_a_change_of_course_and_the_other_ends_its_session(
+        self,
+    ) -> None:
+        case = self.case()
+        by_id = {each.session_id: each for each in case.sessions}
+        deleted, pushed = questions(case)
+
+        export = by_id[deleted.session].prompts
+        self.assertIn(deleted.text, export[-1].text)
+        self.assertIn("git rm tests/test_export_last_row.py", export[-1].commands)
+        club = by_id[pushed.session].prompts
+        (index,) = [number for number, prompt in enumerate(club) if pushed.text in prompt.text]
+        self.assertIn("git push origin main", club[index].commands)
+        self.assertIn("Ab jetzt pushe ich nicht mehr", club[index + 1].answer_before)
 
     def test_the_day_holds_one_trap_of_each_class(self) -> None:
         self.assertEqual(sorted(each.label for each in self.case().day.traps), sorted(glean_eval.TRAPS))
 
-    def test_the_reader_gives_twelve_sessions_with_128_typed_prompts_and_one_that_is_pasted_whole(self) -> None:
+    def test_the_reader_gives_twelve_sessions_with_132_typed_prompts_and_one_that_is_pasted_whole(self) -> None:
         case = self.case()
         prompts = [prompt for each in case.sessions for prompt in each.prompts]
 
         self.assertEqual(len(case.sessions), 12)
-        self.assertEqual(sum(1 for prompt in prompts if prompt.text), 128)
+        self.assertEqual(sum(1 for prompt in prompts if prompt.text), 132)
         self.assertEqual([len(prompt.pasted) for prompt in prompts if not prompt.text], [1])
         self.assertEqual(sum(len(prompt.pasted) for prompt in prompts), 3)
 
@@ -313,13 +355,13 @@ class ScoreTest(Sandbox):
     def test_an_answer_with_every_planted_statement_and_nothing_else_is_all_found_and_all_right(self) -> None:
         result = self.score(*every_planted(self.given))
 
-        self.assertEqual((result.found, result.kept, result.right, result.right_kind), (25, 24, 24, 25))
+        self.assertEqual((result.found, result.kept, result.right, result.right_kind), (29, 28, 28, 29))
         self.assertEqual((result.recall, result.precision), (1.0, 1.0))
         self.assertEqual((result.missed, result.wrong, result.sprung), ((), (), ()))
 
-    def test_a_proposal_on_a_correction_of_one_session_or_of_the_task_springs_its_trap(self) -> None:
+    def test_a_proposal_on_a_correction_of_the_task_springs_its_trap(self) -> None:
         traps = {trap.label: trap for trap in self.given.day.traps}
-        for label in ("one-session", "task-correction"):
+        for label in ("task-correction",):
             with self.subTest(label=label):
                 taken = entry(self.given, traps[label], kind="personal")
 
@@ -343,7 +385,7 @@ class ScoreTest(Sandbox):
             with self.subTest(broken=broken):
                 result = self.score(*planted[:-1], {**lesson, "lesson": {**lesson["lesson"], **broken}})
 
-                self.assertEqual((result.found, result.not_quoted), (23, 1))
+                self.assertEqual((result.found, result.not_quoted), (27, 1))
 
     def test_a_prompt_that_answers_a_turn_comes_with_the_answer_and_the_command_before_it(self) -> None:
         lessons = [statement for statement in self.given.day.planted if statement.label == glean.LESSON]
@@ -354,20 +396,89 @@ class ScoreTest(Sandbox):
             if any(statement.text in prompt.text for statement in lessons)
         ]
 
-        self.assertEqual([prompt.commands for prompt in prompts], [("scripts/check",), ("./scripts/check --all",)])
+        self.assertEqual(
+            [prompt.commands for prompt in prompts],
+            [("scripts/check",), ('git commit -m ":sparkles: Add the contact form"',), ("./scripts/check --all",)],
+        )
         self.assertTrue(all(prompt.answer_before for prompt in prompts))
+
+    def test_a_single_correction_on_a_question_that_objects_finds_it_with_the_right_kind(self) -> None:
+        deleted, pushed = questions(self.given)
+        unsure = (single(self.given, deleted), single(self.given, pushed, kind="action"))
+
+        result = glean_eval.score(self.given, answer(singles=unsure))
+
+        self.assertEqual((result.found, result.right_kind, result.kept, result.remembered), (2, 2, 0, 2))
+        self.assertEqual(result.wrong, ())
+
+    def test_a_single_correction_the_step_would_not_remember_finds_nothing(self) -> None:
+        deleted, _ = questions(self.given)
+        for name, changes in (
+            ("for this project", {"target": "this project"}),
+            ("on words nobody typed", {"quote": "why did you remove the export test"}),
+            ("in the form of nothing", {"kind": "rule"}),
+        ):
+            with self.subTest(name):
+                result = glean_eval.score(self.given, answer(singles=(single(self.given, deleted, **changes),)))
+
+                self.assertEqual((result.found, result.remembered), (0, 0))
+
+    def test_a_single_correction_on_the_words_of_a_kept_lesson_is_not_remembered(self) -> None:
+        deleted, _ = questions(self.given)
+        alone = {"kind": "knowledge", "target": "every project", "words": []}
+        lesson = entry(self.given, deleted, kind=glean.LESSON, lesson=alone)
+
+        result = glean_eval.score(self.given, answer(lesson, singles=(single(self.given, deleted),)))
+
+        self.assertEqual((result.found, result.right_kind, result.remembered), (1, 1, 0))
+
+    def test_a_single_correction_finds_no_planted_lesson(self) -> None:
+        once = [statement for statement in self.given.day.planted if statement.label == glean.LESSON][-1]
+
+        result = glean_eval.score(self.given, answer(singles=(single(self.given, once),)))
+
+        self.assertEqual((result.found, result.remembered), (0, 1))
+
+    def said_again(self) -> glean_eval.Statement:
+        (found,) = (statement for statement in self.given.day.planted if statement.label == glean_eval.ACROSS)
+        return found
+
+    def test_a_correction_said_again_is_found_only_by_a_lesson_that_names_the_remembered_one(self) -> None:
+        alone: dict[str, Any] = {"kind": "knowledge", "target": "every project", "words": []}
+        for second, found in ((None, 0), (1, 1)):
+            with self.subTest(earlier=second):
+                lesson = alone if second is None else {**alone, "earlier": second}
+
+                result = self.score(entry(self.given, self.said_again(), kind=glean.LESSON, lesson=lesson))
+
+                self.assertEqual(result.found, found)
+
+    def test_a_lesson_on_the_unrelated_remembered_correction_springs_its_trap(self) -> None:
+        lesson = {"kind": "knowledge", "target": "every project", "words": [], "earlier": 2}
+
+        result = self.score(entry(self.given, self.said_again(), kind=glean.LESSON, lesson=lesson))
+
+        self.assertEqual((result.found, result.sprung), (0, (glean_eval.EARLIER_UNRELATED,)))
+
+    def test_a_lesson_on_a_remembered_correction_of_its_own_session_is_refused_by_code(self) -> None:
+        emoji = next(statement for statement in self.given.day.planted if "emojis" in statement.text)
+        lesson = {"kind": "knowledge", "target": "every project", "words": [], "earlier": 3}
+
+        result = self.score(entry(self.given, emoji, text="No emojis.", lesson=lesson))
+
+        self.assertEqual((result.found, result.kept, result.malformed, result.sprung), (0, 0, 1, ()))
 
     def test_an_answer_without_proposals_finds_nothing_and_is_right_about_nothing(self) -> None:
         result = self.score()
 
-        self.assertEqual((result.recall, result.precision, len(result.missed)), (0.0, 0.0, 25))
+        self.assertEqual((result.recall, result.precision, len(result.missed)), (0.0, 0.0, 29))
 
     def test_a_second_proposal_for_the_same_statement_is_not_right(self) -> None:
         first = self.given.day.planted[0]
 
         result = self.score(*every_planted(self.given), entry(self.given, first, text="The same again."))
 
-        self.assertEqual((result.found, result.right, result.kept), (25, 24, 25))
+        self.assertEqual((result.found, result.right, result.kept), (29, 28, 29))
         self.assertEqual([wrong.text for wrong in result.wrong], ["The same again."])
 
     def test_a_quote_that_shares_half_of_itself_with_the_statement_stands_on_it(self) -> None:
@@ -472,7 +583,7 @@ class MainTest(WithFakeClaude):
 
         self.assertEqual(code, glean_eval.EXIT_PASSED, out)
         self.assertIn("haiku run 2 (claude-haiku-test", out)
-        self.assertIn("found 25 of 25, right 24 of 24 proposals, kind right 25 of 25", out)
+        self.assertIn("found 29 of 29, right 28 of 28 proposals, kind right 29 of 29", out)
         self.assertIn("glean-eval: haiku: found 1.00, right 1.00 over 2 runs, traps sprung: none; meets", out)
 
     def test_without_a_model_named_every_curation_model_is_asked_three_times(self) -> None:
@@ -491,7 +602,7 @@ class MainTest(WithFakeClaude):
         code, out = self.run_main("--runs", "1")
 
         self.assertEqual(code, glean_eval.EXIT_FAILED, out)
-        self.assertIn("glean-eval: haiku: found 0.40, right 1.00 over 1 runs, traps sprung: none; misses", out)
+        self.assertIn("glean-eval: haiku: found 0.34, right 1.00 over 1 runs, traps sprung: none; misses", out)
         self.assertIn("missed person in portal-morning: 'Dana runs IT at Northwind and signs off every release'", out)
         self.assertIn("glean-eval: sonnet: found 1.00, right 1.00 over 1 runs, traps sprung: none; meets", out)
 
@@ -505,7 +616,7 @@ class MainTest(WithFakeClaude):
         self.assertEqual(code, glean_eval.EXIT_FAILED, out)
         self.assertIn("trap sprung: project-todo", out)
         self.assertIn("wrong commitment in portal-morning: 'we still need to add an index", out)
-        self.assertIn("found 1.00, right 0.96 over 2 runs, traps sprung: project-todo in 2; misses", out)
+        self.assertIn("found 1.00, right 0.97 over 2 runs, traps sprung: project-todo in 2; misses", out)
 
     def test_an_answer_that_cannot_be_read_is_an_error_not_a_run_that_found_nothing(self) -> None:
         self.answer_with(any="I found nothing worth keeping.")

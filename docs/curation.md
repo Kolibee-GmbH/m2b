@@ -330,11 +330,19 @@ lessons you kept, each with the day it was kept. Beside its proposals it names t
 correct Claude on a kept lesson again; code counts such a correction only where its words, at
 least three, stand in what you typed after that day. It answers with proposals of six kinds, a person, an
 agreement, a commitment, something personal, a lesson and a pointer, each with the words it stands on. A
-lesson is a correction of how Claude works that you made in two sessions, such as "only the quick
-round" after Claude ran the whole proof: code keeps it only when both of your sentences stand in
-what you typed, in two sessions, and for a command when its words stand in a command Claude ran
-there. One for a single project names that project's repository, where both sessions' folders
-name the same one by a git remote; without one it is left out. Before a lesson is proposed, a second
+lesson is a correction of how Claude works that holds beyond the task at hand, such as "only the
+quick round" after Claude ran the whole proof. Once is enough; where you said the same in another
+session too, the lesson stands on both. Code keeps it only when your sentence stands in what you
+typed, a second one in its own session, and for a command when its words stand in a command Claude
+ran there. One for a single project names that project's repository, where the folders of its
+sessions name the same one by a git remote; without one it is left out. A correction where the
+model cannot tell whether it holds beyond the task at hand is no lesson: the model names it apart,
+with what it is about, and code remembers it on this machine for 30 days, at most 300 of them, in
+`~/.local/state/m2b/remembered-corrections.json`, with your words, the shell commands of the turn
+they answer and the repository's address, never in the store. Nothing is proposed from it alone;
+the next readings show it to the model, and where you make the same correction in another session
+then, the lesson stands on both, and the remembered one leaves the list. `m2b status` says how many
+are remembered. Before a lesson is proposed, a second
 model run without tools reads it with the files a session in its folders loads (the `CLAUDE.md`
 files, the rules, the output style, Claude Code's memory, the list `m2b status` measures), each
 line numbered. Where a line says the matter wrongly, the lesson becomes a fix of that line, with
@@ -380,6 +388,10 @@ m2b proposals drop <id>...
 `keep --all` and the pane's keep all keep every proposal a reading found that waits, as it is written. Text you
 pasted can try to lead the model, also to a proposal that quotes words you typed, so read each
 proposal's text before you keep it.
+
+A lesson proposed for one project, `lesson, action for github.com/acme/portal`, you can also keep for
+every project: `m2b proposals keep --every-project <id>`, or `keep for every project` in the pane.
+A reading sees your correction in one repository; whether you make it wherever you work, you know.
 
 With the band, its row counts them among what waits for you, and
 `/m2b-proposals` or the tab `Proposals` shows them in the m2b pane, where keep, drop and keep all
@@ -431,7 +443,15 @@ proposals: kept 7 of 10 answered in the last 30 days (70%), 2 expired without an
 ```
 
 Expired proposals are not part of the share, and without an answer in the 30 days the line says
-so instead of 0%. `m2b status --json` holds the same under `proposal_answers`, and with it the
+so instead of 0%. A second line says the same of the lessons alone, once one was answered or
+expired in that time:
+
+```text
+proposals: lessons kept 3 of 4 answered in the last 30 days (75%)
+```
+
+A lesson is proposed from one correction on the model's judgement that it holds beyond its task;
+how many you keep shows whether that judgement holds. `m2b status --json` holds the same under `proposal_answers`, the lessons under its `lessons`, and with it the
 counts per kind since the first reading: how many were proposed, kept, dropped and expired, and how
 many were refused because the words they quote do not stand, with at least three words, in a
 prompt of the session they name. m2b does nothing with these numbers: they are there for you to

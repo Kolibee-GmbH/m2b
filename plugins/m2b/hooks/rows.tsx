@@ -34,6 +34,9 @@ export function curateButton($: EngineInterface, e: ResolveInput, pressed: BandP
     : said(ui, `${STARTING_A_RUN}…`, 'quiet')
 }
 
+/** What a row says it does once pressed, by what was pressed. */
+const DOING: Partial<Record<BandPress['action'], string>> = { drop: 'dropping', 'every-project': 'keeping for every project' }
+
 /** What a row's buttons do; every view of the pane shares one way of keeping and dropping. */
 export type RowActions = {
   press: (candidate: BandCandidate, action: BandSettle) => Promise<void>
@@ -83,12 +86,14 @@ export function candidateRow(
   pressed: BandPress | undefined,
   actions: RowActions,
   detail: string | null = null,
+  more: readonly ButtonSpec[] = [],
 ) {
   const buttons: ButtonSpec[] = [
     { key: `keep:${candidate.id}`, label: 'keep', kind: 'accent', onPress: () => actions.press(candidate, 'complete') },
     { key: `drop:${candidate.id}`, label: 'drop', kind: 'quiet', onPress: () => actions.press(candidate, 'drop') },
+    ...more,
   ]
-  const doing = pressed?.action === 'drop' ? 'dropping' : 'keeping'
+  const doing = DOING[pressed?.action ?? 'complete'] ?? 'keeping'
   const spec = { key: `row:${candidate.id}`, id: candidate.id, text: plainLine(candidate.title), detail, buttons, doing }
   return pressableRow($, e, spec, pressed, () => actions.undo(candidate.id))
 }

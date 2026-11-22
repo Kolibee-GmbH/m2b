@@ -22,7 +22,17 @@ import datetime
 import json
 from typing import Any
 
-from m2b import action_lessons, fixes, handed_in, lesson_counts, lessons, proposal_answers, proposals, start_size
+from m2b import (
+    action_lessons,
+    fixes,
+    handed_in,
+    lesson_counts,
+    lessons,
+    proposal_answers,
+    proposals,
+    remembered_corrections,
+    start_size,
+)
 from m2b.addons import ADDONS, is_on
 from m2b.atomic_file import replace_atomically
 from m2b.commands import Context
@@ -35,7 +45,7 @@ from m2b.config.machine import MachineConfig, load_machine_config
 from m2b.config.store_settings import describe_format, format_state, load_store_settings
 from m2b.curate import machine_state
 from m2b.curate.due import PAUSED_NOTE, check_due
-from m2b.glean import AGENT, KINDS, PASTED, TOOL, TYPED, WORKED
+from m2b.glean import AGENT, KINDS, LESSON, PASTED, TOOL, TYPED, WORKED
 from m2b.hook_input import project_folder
 from m2b.notes.characters import with_hidden_written_out
 from m2b.notes.layout import INBOX
@@ -56,6 +66,9 @@ def status_command(arguments: argparse.Namespace, context: Context) -> int:
     # it about a millisecond for Claude Code's files and one read of the distillate.
     folder = project_folder(context.environ)
     answer["session_start"] = start_size.measure(config, context.machine, context.environ, folder)
+    # Not in the band's answer either: the band draws no count of it, and the file may hold 300
+    # corrections with their commands.
+    answer["remembered_corrections"] = _remembered_corrections(context.machine, datetime.datetime.now().astimezone())
     if arguments.json:
         print_json(answer)
     else:
@@ -104,6 +117,15 @@ def status_answer(config: MachineConfig, context: Context, tasks_check: Check | 
     answer["handed_in"] = _handed_in(store)
     answer["lessons"] = _lessons(store, context.machine)
     return answer
+
+
+def _remembered_corrections(machine: MachinePaths, now: datetime.datetime) -> dict[str, Any]:
+    """How many corrections a reading on this machine remembers because it could not tell whether
+    they hold beyond their task; a file that cannot be read is said, never counted as none."""
+    found = remembered_corrections.remembered(machine.state_dir, now.astimezone().date())
+    if found.failure:
+        return {"error": with_hidden_written_out(found.failure)}
+    return {"count": len(found.corrections)}
 
 
 # The kind a lesson kept as a fix is listed with, beside ``knowledge`` and ``action``.
@@ -256,12 +278,22 @@ def _proposal_answers(store: Store, config: MachineConfig, now: datetime.datetim
     outcomes = proposals.outcomes_since(current, start)
     ways = proposals.by_way_and_source(current, start, answered)
     rate = outcomes.keep_rate
+    # Apart, since what a reading proposes as a lesson rests on its judgement that a correction holds
+    # beyond its task, and the person's answers show whether that judgement is good enough.
+    of_lessons = proposals.outcomes_since(current, start, LESSON)
+    lesson_rate = of_lessons.keep_rate
     return {
         "days": proposals.KEEP_RATE_PERIOD.days,
         "kept": outcomes.kept,
         "dropped": outcomes.dropped,
         "expired": outcomes.expired,
         "keep_rate": None if rate is None else round(rate, 2),
+        "lessons": {
+            "kept": of_lessons.kept,
+            "dropped": of_lessons.dropped,
+            "expired": of_lessons.expired,
+            "keep_rate": None if lesson_rate is None else round(lesson_rate, 2),
+        },
         "counts": {kind: dataclasses.asdict(current.tally(kind)) for kind in KINDS},
         "ways": {
             way: {source: dataclasses.asdict(counts) for source, counts in sorted(sources.items())}
@@ -336,6 +368,9 @@ def _print_text(answer: dict[str, Any]) -> None:
     answers = answer.get("proposal_answers")
     if answers is not None:
         print(f"proposals: {_proposal_answers_text(answers)}")
+        of_lessons = answers.get("lessons")
+        if of_lessons and (of_lessons["kept"] or of_lessons["dropped"] or of_lessons["expired"]):
+            print(f"proposals: lessons {_proposal_answers_text({**of_lessons, 'days': answers['days']})}")
         for line in _proposal_ways_lines(answers):
             print(line)
     handed = answer["handed_in"]
@@ -354,6 +389,13 @@ def _print_text(answer: dict[str, Any]) -> None:
         print(f"lessons: {kept['in_every_session']} in every session{at_source}")
     for each in kept.get("each", []):
         print(_lesson_line(each))
+    corrections = answer["remembered_corrections"]
+    if "error" in corrections:
+        print(f"corrections: could not look: {corrections['error']}")
+    elif corrections["count"]:
+        print(
+            f"corrections: {corrections['count']} unsure ones remembered, unclear whether they hold beyond their task"
+        )
     on = [name for name, is_addon_on in answer["addons"].items() if is_addon_on]
     print(f"add-ons on: {', '.join(on) if on else 'none'}")
 

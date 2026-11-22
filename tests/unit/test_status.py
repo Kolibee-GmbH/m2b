@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import json
 from pathlib import Path
@@ -9,7 +10,17 @@ from typing import Any
 from unittest import mock
 
 import test_runner
-from m2b import action_lessons, cli, fixes, handed_in, lesson_counts, proposal_answers, proposals
+from m2b import (
+    action_lessons,
+    cli,
+    fixes,
+    glean,
+    handed_in,
+    lesson_counts,
+    proposal_answers,
+    proposals,
+    remembered_corrections,
+)
 from m2b.curate import machine_state
 from m2b.run_record import RUN_RECORD
 from m2b.store.base import StoreError
@@ -91,6 +102,34 @@ class StatusTest(test_runner.RunnerTest):
 
         self.assertEqual(each, [{"name": fix.name, "kind": "fix", "kept": "2026-11-20", "corrected_again": 1}])
         self.assertIn(f"lesson {fix.name} (fix, kept 2026-11-20): corrected again 1 time: not working\n", out)
+
+    def test_it_says_how_many_corrections_made_in_one_session_are_remembered(self) -> None:
+        """Covers: B297"""
+        self.curating()
+        self.assertEqual(self.status()["remembered_corrections"], {"count": 0})
+        self.assertNotIn("corrections:", self.run_command("status")[1])
+        today = datetime.datetime.now().astimezone().date()
+        correction = remembered_corrections.Correction(
+            "a1", "s1", today, "only the quick round", (), (), "the whole proof", "knowledge", "every project"
+        )
+        outdated = dataclasses.replace(correction, id="a2", day=today - remembered_corrections.REMEMBERED_FOR)
+        remembered_corrections.remember(
+            self.machine.state_dir,
+            [correction, dataclasses.replace(correction, id="a3"), outdated],
+            today - datetime.timedelta(days=1),
+            self.machine.temp_dir,
+        )
+
+        self.assertEqual(self.status()["remembered_corrections"], {"count": 2})
+        self.assertIn(
+            "corrections: 2 unsure ones remembered, unclear whether they hold beyond their task\n",
+            self.run_command("status")[1],
+        )
+
+        (self.machine.state_dir / remembered_corrections.FILE).write_text("{not json", encoding="utf-8")
+        answer = self.status()["remembered_corrections"]
+        self.assertTrue(answer["error"].startswith("remembered-corrections.json could not be read"))
+        self.assertIn(f"corrections: could not look: {answer['error']}\n", self.run_command("status")[1])
 
     def test_lessons_that_are_not_downloaded_are_said_and_never_counted_as_none(self) -> None:
         """Covers: B258"""
@@ -401,6 +440,7 @@ class StatusTest(test_runner.RunnerTest):
                 "dropped": 1,
                 "expired": 1,
                 "keep_rate": 0.67,
+                "lessons": {"kept": 0, "dropped": 0, "expired": 0, "keep_rate": None},
                 "counts": {
                     "person": {"proposed": 9, "kept": 5, "dropped": 1, "expired": 1, "not_quoted": 2},
                     "agreement": nothing,
@@ -418,6 +458,42 @@ class StatusTest(test_runner.RunnerTest):
             "\nproposals a reading found in typed words: 1 waiting, 2 kept, 1 dropped, 1 expired in the last 30 days\n",
             out,
         )
+
+    def test_it_shows_the_share_kept_of_the_lessons_answered_in_the_last_thirty_days(self) -> None:
+        """Covers: B299"""
+        self.curating(curation={"read_sessions": True})
+        now = datetime.datetime.now().astimezone()
+
+        def lesson(number: int, state: str, days: float) -> proposals.Entry:
+            part = glean.LessonPart("knowledge", "every project", (), "", "")
+            since = now - datetime.timedelta(days=days)
+            return proposals.Entry(
+                "lesson", f"Rule {number}.", f"the words of rule {number}", now.date(), state, since, lesson=part
+            )
+
+        entries = {
+            "a00000000001": lesson(1, "kept", 2),
+            "a00000000002": lesson(2, "dropped", 3),
+            "a00000000003": lesson(3, "dropped", 31),
+            "a00000000004": lesson(4, "expired", 1),
+            "a00000000005": dataclasses.replace(lesson(5, "kept", 1), kind="person", lesson=None),
+        }
+        proposals.save(self.store, proposals.Proposals(entries))
+
+        answers = self.status()["proposal_answers"]
+        out = self.run_command("status")[1]
+
+        self.assertEqual(answers["lessons"], {"kept": 1, "dropped": 1, "expired": 1, "keep_rate": 0.5})
+        self.assertIn(
+            "\nproposals: lessons kept 1 of 2 answered in the last 30 days (50%), 1 expired without an answer\n", out
+        )
+
+    def test_without_a_lesson_answered_or_expired_there_is_no_line_for_lessons(self) -> None:
+        """Covers: B299"""
+        self.curating(curation={"read_sessions": True})
+        self.proposed(("kept", 1))
+
+        self.assertNotIn("proposals: lessons", self.run_command("status")[1])
 
     def test_it_counts_per_way_and_source_what_waits_and_how_the_thirty_days_ended(self) -> None:
         """Covers: B181"""

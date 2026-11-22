@@ -154,7 +154,9 @@ def step_input(found: Sequence[Proposal], sources: Sequence[Source], loaded: Seq
             {
                 "lesson": number,
                 "text": proposal.text,
-                "said": [proposal.quote, proposal.lesson.quote] if proposal.lesson else [proposal.quote],
+                "said": [proposal.quote, proposal.lesson.quote]
+                if proposal.lesson and proposal.lesson.quote
+                else [proposal.quote],
                 "sources": sorted(sources_of),
             }
             for number, (proposal, sources_of) in enumerate(zip(found, loaded), start=1)

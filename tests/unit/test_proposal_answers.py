@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import unittest
 from pathlib import Path
@@ -9,15 +10,23 @@ from unittest import mock
 
 from m2b import proposal_answers, proposals
 from m2b.glean import Proposal
-from m2b.proposal_answers import DROP, KEEP
+from m2b.proposal_answers import DROP, EVERY_PROJECT, KEEP
 from m2b.store.base import EvictedFileError
-from test_proposals import DANA, LADDER, NOW, ProposalsFixture, Said
+from test_proposals import DANA, LADDER, LESSON, NOW, ProposalsFixture, Said
 
 DANA_ID = proposals.proposal_id(DANA)
 LADDER_ID = proposals.proposal_id(LADDER)
 TEA = Proposal("personal", "Alex drinks green tea.", "I only drink green tea", "kitchen")
 TEA_ID = proposals.proposal_id(TEA)
 NOBODYS_ID = "0123456789ab"
+LESSON_ID = proposals.proposal_id(LESSON)
+EVERYWHERE = dataclasses.replace(
+    LESSON,
+    text="Answer in German in the chat.",
+    quote="answer me in German, always",
+    lesson=dataclasses.replace(LESSON.lesson, kind="knowledge", target="every project", words=()),
+)
+EVERYWHERE_ID = proposals.proposal_id(EVERYWHERE)
 
 
 class AnswerFixture(ProposalsFixture):
@@ -239,6 +248,77 @@ class ExpireTest(AnswerFixture):
         waiting = proposal_answers.waiting(self.store)
 
         self.assertEqual((waiting.proposals, waiting.answered), ((), 1))
+
+
+class EveryProjectTest(AnswerFixture):
+    def test_a_lesson_for_one_project_kept_for_every_project_is_one_more_empty_file(self) -> None:
+        """Covers: B300"""
+        self.kept(LESSON)
+
+        given = proposal_answers.give(self.store, [LESSON_ID], EVERY_PROJECT)
+
+        self.assertEqual((given.given, given.already), ((LESSON_ID,), {}))
+        self.assertEqual(self.answer_files(), [f"{LESSON_ID}.every-project"])
+        self.assertEqual((self.root / proposal_answers.FOLDER / f"{LESSON_ID}.every-project").read_bytes(), b"")
+        self.assertEqual(proposal_answers.read(self.store), {LESSON_ID: EVERY_PROJECT})
+
+    def test_only_a_lesson_for_one_project_can_be_kept_for_every_project_and_nothing_is_written_else(self) -> None:
+        """Covers: B300"""
+        self.kept(LESSON, DANA, EVERYWHERE)
+
+        for ids in ([DANA_ID], [EVERYWHERE_ID], [LESSON_ID, DANA_ID]):
+            with self.subTest(ids=ids):
+                with self.assertRaises(proposal_answers.NotForOneProjectError):
+                    proposal_answers.give(self.store, ids, EVERY_PROJECT)
+
+                self.assertEqual(self.answer_files(), [])
+
+    def test_keep_for_every_project_stands_where_it_meets_a_keep_or_a_drop(self) -> None:
+        """Covers: B300"""
+        self.kept(LESSON)
+        folder = self.root / proposal_answers.FOLDER
+        folder.mkdir(parents=True)
+        for other in (KEEP, DROP):
+            with self.subTest(other=other):
+                for name in (f"{LESSON_ID}.{other}", f"{LESSON_ID}.every-project"):
+                    (folder / name).write_bytes(b"")
+
+                self.assertEqual(proposal_answers.read(self.store), {LESSON_ID: EVERY_PROJECT})
+                for leftover in folder.iterdir():
+                    leftover.unlink()
+
+    def test_a_keep_given_first_stands_and_is_not_widened_on_the_same_machine(self) -> None:
+        """Covers: B300"""
+        self.kept(LESSON)
+        proposal_answers.give(self.store, [LESSON_ID], KEEP)
+
+        widened = proposal_answers.give(self.store, [LESSON_ID], EVERY_PROJECT)
+
+        self.assertEqual((widened.given, widened.already), ((), {LESSON_ID: KEEP}))
+        self.assertEqual(self.answer_files(), [f"{LESSON_ID}.keep"])
+
+    def test_a_run_that_settled_a_keep_leaves_a_wider_answer_that_came_in_meanwhile(self) -> None:
+        """Covers: B300"""
+        self.kept(LESSON)
+        folder = self.root / proposal_answers.FOLDER
+        folder.mkdir(parents=True)
+        for name in (f"{LESSON_ID}.keep", f"{LESSON_ID}.drop", f"{LESSON_ID}.every-project"):
+            (folder / name).write_bytes(b"")
+
+        proposal_answers.remove(self.store, LESSON_ID, KEEP)
+
+        self.assertEqual(self.answer_files(), [f"{LESSON_ID}.every-project"])
+
+    def test_keep_for_every_project_counts_as_a_keep_that_waits_and_goes_with_the_others(self) -> None:
+        """Covers: B300"""
+        self.kept(LESSON)
+        proposal_answers.give(self.store, [LESSON_ID], EVERY_PROJECT)
+
+        waiting = proposal_answers.waiting(self.store)
+        proposal_answers.remove(self.store, LESSON_ID)
+
+        self.assertEqual((waiting.answered, waiting.kept), (1, 1))
+        self.assertEqual(self.answer_files(), [])
 
 
 if __name__ == "__main__":

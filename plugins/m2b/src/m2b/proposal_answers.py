@@ -1,4 +1,4 @@
-"""What the person answers to a proposal: keep or drop, one empty file per answer.
+"""What the person answers to a proposal: keep, keep for every project or drop, one empty file per answer.
 
 A client only adds to the store, and the proposals file is the curation run's. So an answer is a
 new file beside it, ``state/core/proposal-answers/<id>.keep`` or ``<id>.drop``, created
@@ -11,6 +11,12 @@ still counts. An answers folder that is not downloaded cannot be listed, and the
 what is answered: that raises, it never reads as "no answer yet". Where a keep and a drop for the
 same proposal meet, from two machines that did not see each other, keep stands: a fact kept by
 mistake can be removed, one dropped by mistake is gone.
+
+A lesson proposed for one project can be kept for every project, ``<id>.every-project``: a reading
+sees one correction in one repository and cannot tell that the person makes it wherever they work,
+the person can. It is a keep, and the widest answer: it stands where it meets a keep or a drop from
+another machine. A run removes only the answer it settled and those below it, so one wider that
+came in meanwhile is still there for the next run to say.
 
 A proposal nobody answered for 14 days expires (``expire``, in every curation run) and waits no
 longer. It has no answer, so a keep by its id is still taken while the store remembers it.
@@ -25,23 +31,32 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 
-from m2b import proposals
+from m2b import lessons, proposals
 from m2b.notes.layout import STATE
 from m2b.proposals import Entry
 from m2b.store.base import EvictedFileError, Store
 
 FOLDER = f"{STATE}/core/proposal-answers"
 KEEP = "keep"
+EVERY_PROJECT = "every-project"
 DROP = "drop"
-ANSWERS = (KEEP, DROP)
+ANSWERS = (KEEP, EVERY_PROJECT, DROP)
+# The answers that keep a proposal.
+KEEPS = (KEEP, EVERY_PROJECT)
+# Where two answers for one proposal meet, the one that comes first here stands.
+_RANK = (EVERY_PROJECT, KEEP, DROP)
 
-_FILE = re.compile(rf"([0-9a-f]{{{proposals.ID_LENGTH}}})\.({KEEP}|{DROP})")
+_FILE = re.compile(rf"([0-9a-f]{{{proposals.ID_LENGTH}}})\.({KEEP}|{EVERY_PROJECT}|{DROP})")
 # What a settled proposal was answered with.
 _SETTLED = {proposals.KEPT: KEEP, proposals.DROPPED: DROP}
 
 
 class UnknownProposalError(Exception):
     """An answer names a proposal the store does not hold."""
+
+
+class NotForOneProjectError(Exception):
+    """Keep for every project names a proposal that is no lesson for one project."""
 
 
 @dataclass(frozen=True)
@@ -81,7 +96,8 @@ def read(store: Store) -> dict[str, str]:
         if named is None or str(name.parent) != FOLDER:
             continue
         proposal_id, answer = named.groups()
-        if answers.get(proposal_id) != KEEP:
+        standing = answers.get(proposal_id)
+        if standing is None or _RANK.index(answer) < _RANK.index(standing):
             answers[proposal_id] = answer
     return answers
 
@@ -94,7 +110,7 @@ def waiting(store: Store) -> Waiting:
     ]
     unanswered.sort(key=lambda item: (item[1].day, item[0]))
     awaiting = awaiting_a_run(entries, answers)
-    return Waiting(tuple(unanswered), len(awaiting), sum(answers[key] == KEEP for key in awaiting))
+    return Waiting(tuple(unanswered), len(awaiting), sum(answers[key] in KEEPS for key in awaiting))
 
 
 def awaiting_a_run(entries: Mapping[str, Entry], answers: Mapping[str, str]) -> frozenset[str]:
@@ -104,7 +120,7 @@ def awaiting_a_run(entries: Mapping[str, Entry], answers: Mapping[str, str]) -> 
         key
         for key, entry in entries.items()
         if (entry.state == proposals.OPEN and key in answers)
-        or (entry.state == proposals.EXPIRED and answers.get(key) == KEEP)
+        or (entry.state == proposals.EXPIRED and answers.get(key) in KEEPS)
     )
 
 
@@ -132,6 +148,8 @@ def give(store: Store, proposal_ids: Sequence[str], answer: str) -> Given:
             if len(unknown) == 1
             else f"no proposals have the ids {', '.join(unknown)}; m2b proposals lists those that wait"
         )
+    if answer == EVERY_PROJECT:
+        _require_for_one_project(entries, proposal_ids)
     answers = read(store)
     given: list[str] = []
     already: dict[str, str] = {}
@@ -150,8 +168,24 @@ def give(store: Store, proposal_ids: Sequence[str], answer: str) -> Given:
     return Given(tuple(given), already)
 
 
-def remove(store: Store, proposal_id: str) -> None:
-    """Removes the answer files of a proposal the run has settled; a file already gone is no error."""
-    for answer in ANSWERS:
+def _require_for_one_project(entries: Mapping[str, Entry], proposal_ids: Sequence[str]) -> None:
+    others = [key for key in proposal_ids if not for_one_project(entries[key])]
+    if others:
+        raise NotForOneProjectError(
+            f"only a lesson for one project can be kept for every project, not {', '.join(others)}; keep it with: "
+            "m2b proposals keep <id>"
+        )
+
+
+def for_one_project(entry: Entry) -> bool:
+    """Whether the proposal is a lesson for one project, which can be kept for every project."""
+    return entry.lesson is not None and entry.lesson.target != lessons.EVERY_PROJECT
+
+
+def remove(store: Store, proposal_id: str, settled: str = EVERY_PROJECT) -> None:
+    """Removes the answer files of a proposal the run has settled with ``settled``, and those of answers
+    below it; a file already gone is no error. A wider answer than the one the run read came in
+    after it read them, so it stays."""
+    for answer in _RANK[_RANK.index(settled) :]:
         with contextlib.suppress(FileNotFoundError):
             store.delete(file_name(proposal_id, answer))

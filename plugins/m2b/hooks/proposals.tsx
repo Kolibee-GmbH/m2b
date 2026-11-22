@@ -1,10 +1,11 @@
 import type { CommandSpec, EngineInterface, ResolveInput } from 'claude-code'
 
-import type { BandAtSource, BandHealth, BandLesson, BandPress, BandProposal, BandProposals, BandSettle } from '../types'
+import type { BandAtSource, BandHealth, BandLesson, BandPress, BandProposal, BandProposals, BandSettle, KeepForEveryProject } from '../types'
 import { plainLine, writtenOut } from './plain-text'
 import { NOT_LOOKED, button, part, pressLine, said, under } from './look'
 import { CURATE_ROW, candidateRow, curateButton } from './rows'
 import type { CurateActions } from './rows'
+import type { ButtonSpec } from './look'
 
 /*
  * What a reading of the sessions proposed for the memory and still waits for an answer: one row
@@ -32,6 +33,10 @@ const TYPED = 'typed'
 
 const OTHER_SHAPE = 'm2b answered something other than the proposals that wait'
 const NONE_WAITS = 'No proposal waits for an answer.'
+// A lesson's target where it holds wherever the person works, as m2b writes it.
+const EVERY_PROJECT = 'every project'
+// As `m2b proposals` says it while a lesson for one project waits.
+const HOW_TO_WIDEN = 'a lesson for one project is kept for every project with: m2b proposals keep --every-project <id>...'
 const FROM_YOUR_SESSIONS = 'Proposals from your sessions'
 // Until the band's first answer about proposals has landed: not known is never "none wait". For a text, which has no pane to wait in.
 const NOT_LOOKED_SAYS_HOW = 'm2b has not looked for proposals yet; m2b proposals lists them in a shell'
@@ -42,7 +47,7 @@ const ID = /^[0-9a-f]{12}$/
 
 /** What the pane's buttons do; a press waits for undo like a press on a candidate. */
 export type ProposalActions = {
-  answer: (proposal: BandProposal, action: BandSettle) => Promise<void>
+  answer: (proposal: BandProposal, action: BandSettle | KeepForEveryProject) => Promise<void>
   keepAll: (proposals: BandProposal[]) => Promise<void>
   undo: (key: string) => Promise<void>
 }
@@ -225,9 +230,12 @@ function sourceLine(source: BandAtSource): string {
   return `fixes ${file}: "${writtenOut(source.line)}" becomes "${writtenOut(source.wording ?? '')}"`
 }
 
-/** The lines under a lesson: the same correction said again, and what becomes of its source. */
+/**
+ * The lines under a lesson: the same correction said again, where it was made in two sessions, and
+ * what becomes of its source. A lesson on one correction has no second quote.
+ */
 function lessonLines(lesson: BandLesson): string[] {
-  return [againLine(lesson), ...(lesson.at_source ? [sourceLine(lesson.at_source)] : [])]
+  return [...(lesson.quote ? [againLine(lesson)] : []), ...(lesson.at_source ? [sourceLine(lesson.at_source)] : [])]
 }
 
 /** The line under a lesson with the same correction said in a second session. */
@@ -353,9 +361,11 @@ export function proposalLines(proposals: BandProposals | null): string[] {
   if (waiting.length === 0) {
     return [NONE_WAITS, ...waits]
   }
+  const widens = waiting.some(isForOneProject) ? [HOW_TO_WIDEN] : []
   return [
     countLine(waiting.length),
     LIST_AND_ANSWER,
+    ...widens,
     ...waits,
     ...waiting.flatMap(proposal => [
       `${proposal.id}  ${heading(proposal)}`,
@@ -414,6 +424,7 @@ export function proposalsPane(
             undo: () => actions.undo(pressKey(proposal.id)),
           },
           heading(proposal),
+          forEveryProject(proposal, actions),
         )}
         {under(ui, saidLine(proposal))}
         {proposal.lesson && lessonLines(proposal.lesson).map(line => under(ui, line))}
@@ -422,6 +433,21 @@ export function proposalsPane(
     error === null && waiting.length === 0 && said(ui, NONE_WAITS, 'quiet'),
     ...answersLines($, e, answered, curation),
   ])
+}
+
+/**
+ * `keep for every project` beside keep and drop, for a lesson proposed for one project: a reading
+ * sees a correction in one repository, the person knows whether they make it wherever they work.
+ */
+function forEveryProject(proposal: BandProposal, actions: ProposalActions): ButtonSpec[] {
+  if (!isForOneProject(proposal)) {
+    return []
+  }
+  return [{ key: `every-project:${proposal.id}`, label: 'keep for every project', kind: 'default', onPress: () => actions.answer(proposal, 'every-project') }]
+}
+
+function isForOneProject(proposal: BandProposal): boolean {
+  return proposal.lesson !== undefined && proposal.lesson !== null && proposal.lesson.target !== EVERY_PROJECT
 }
 
 /** Keep all while two or more can still be pressed; once pressed, what it will keep, with undo while it waits. */

@@ -205,13 +205,17 @@ the Bash commands of the turn before it.
 you keep you do not repeat. In two invented repositories the owner asks for the checks and corrects
 Claude to the quick round; each repository's `scripts/check` leaves a file for the round it ran. In
 E35 the owner asks to keep it, and Claude keeps it with `m2b lesson add`; in E36 `m2b lesson add` is
-not allowed, and a curation run that reads the sessions proposes the lesson, which the owner keeps.
+not allowed, and a curation run after each session reads it: the first proposes the lesson or, when
+it is unsure, remembers the correction, and the second meets what the first left and must not
+propose the same lesson again. Read alone, a correction in one repository is a lesson for that
+repository, so the owner keeps it for every project (`keep --every-project`), and exactly one lesson
+is kept.
 In both a run files the lesson, and in a third repository Claude, asked to check a small change,
 runs only the quick round. Against Claude Code alone the third repository runs the whole proof. The
 control of E35 is that Claude Code alone, asked to keep the correction, kept it in its own memory of
 the second repository; the control of E36 is that every session ran a check, since keeping a
 correction nobody asked to keep is what the reading adds. Two interactive sessions and a headless one
-on Sonnet, one or two curation runs, under a minute each.
+on Sonnet, one curation run in E35 and three in E36, under a minute each.
 
 `E37-fact-after-its-day` is the case of the promise that facts with an end date are rewritten: a
 session is told that Sam brings the plywood next Friday, a run files it with that Friday as its end,
@@ -452,20 +456,28 @@ tasks from it, each with the words it stands on. The curation step `glean` runs 
 (`curate/glean_step.py`). `scripts/glean-eval`
 measures whether a model is good enough for that job.
 
-`tests/glean/day.json` is an invented day: twelve sessions with 128 typed prompts, in English and
+`tests/glean/day.json` is an invented day: twelve sessions with 132 typed prompts, in English and
 German, and one prompt that is pasted text only. Twenty typed prompts state something worth
 keeping, five each of a person, an agreement, a commitment and something personal, and two pasted
 texts each state who a person is: a mail, and notes of the person's own. Two more, in two sessions,
-make the same correction of Claude after it ran `scripts/check`, which is one lesson: the day writes
-Claude's answer and the command before each, as Claude Code does. One more states a decision of the
+make the same correction of Claude after it ran `scripts/check`, which is one lesson, and one more
+corrects a commit message with an emoji, a lesson of its own: the day writes Claude's answer and
+the command before each, as Claude Code does. Two more are questions that object to what Claude
+did: why it deleted a failing test instead of fixing the code, at the end of its session, and why
+it pushed, which Claude answers by changing course. A question is found by a lesson, or by a single
+correction the step would remember, since a model may be unsure whether it holds beyond its task.
+The day also has three corrections an earlier reading remembered: one the day says again in other
+words and in English where it was German, found only by a lesson that names it; one about nothing
+of the day, and one of a session of the day, which a lesson must never name.
+One more states a decision of the
 order portal, whose repository the memory has a project topic for, and Claude writes it into a file
-of that repository: a pointer, found only when it names that file. Twelve prompts are traps,
+of that repository: a pointer, found only when it names that file. Eleven prompts are traps,
 one of each class a proposal must never come from: a prompt a plugin sent, a pasted text that
 tells its reader what to propose and which typed words to quote for it, a sentence the person
 captured themselves, a fact the memory holds already, a question that only considers something, a name that is test data, a
 todo of the project at hand, a sentence like those the person dropped before, a sentence that
-says again in other words what waits for an answer, a correction of Claude made in one session
-only, one that is only about the task at hand, and a decision of the portal stated in a session
+says again in other words what waits for an answer, a correction of Claude that is only about
+the task at hand, and a decision of the portal stated in a session
 that wrote no file. For the sentence like the dropped ones and the one that waits the day says what was answered
 earlier and what waits: five proposals kept, like what is planted, four dropped, each the time of a
 call or a meeting, and one that waits. The model is shown them as the step shows them.
@@ -484,7 +496,7 @@ scripts/glean-eval --without-examples       # the same day without what was kept
 A project is proposed by code from where the sessions worked, never by a model, so no eval covers
 it; its unit tests do.
 
-Per answer it prints how many of the twenty-five were found, how many proposals were right, and
+Per answer it prints how many of the twenty-nine were found, how many proposals were right, and
 each miss, wrong proposal and sprung trap by name. One more trap has no prompt of its own: a
 proposal whose source is wrong, pasted words kept as said or the other way round. A model meets the bar with 0.80 found and 0.80
 right on average and no trap sprung in any answer. Asked without the examples, a model has
