@@ -381,9 +381,10 @@ def models_in(projects: Path) -> list[str]:
     return found
 
 
-def keychain_token() -> str | None:
-    """The token kept in the macOS keychain under ``KEYCHAIN_SERVICE``; None elsewhere or without one."""
-    if sys.platform != "darwin":
+def keychain_token(platform: str = sys.platform) -> str | None:
+    """The token kept in the macOS keychain under ``KEYCHAIN_SERVICE``; None elsewhere or without one.
+    The platform is an argument so that a type check on Linux does not read the rest as unreachable."""
+    if platform != "darwin":
         return None
     try:
         found = subprocess.run(
