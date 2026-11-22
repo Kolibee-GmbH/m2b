@@ -582,6 +582,14 @@ class LessonTest(unittest.TestCase):
         )
         self.assertEqual((kept.session, kept.source), ("first", "typed"))
 
+    def test_earlier_given_as_null_is_no_remembered_correction(self) -> None:
+        """Covers: B301"""
+        checked = self.check(lesson_entry(lesson={"earlier": None}))
+
+        (kept,) = checked.kept
+        assert kept.lesson is not None
+        self.assertEqual(kept.lesson.session, "second")
+
     def test_a_knowledge_lesson_has_no_words_and_an_action_needs_them(self) -> None:
         """Covers: B270"""
         knowledge = lesson_entry(lesson={"kind": "knowledge", "words": []})
