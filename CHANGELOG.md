@@ -5,6 +5,14 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/), with tags `vX.Y.Z`. How a release is made is in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [Unreleased]
+
+### Added
+
+- The plugin folder has a README of its own, `plugins/m2b/README.md`: what m2b is, one line per hook
+  and what reaches a model, with links to the repository. Plugin directories read the README of the
+  plugin folder, not the repository's.
+
 ## [0.13.1] - 2026-11-22
 
 A lesson about a command no longer stops the command you asked for, and a topic heading out of form

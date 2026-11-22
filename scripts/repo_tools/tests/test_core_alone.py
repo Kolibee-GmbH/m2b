@@ -50,6 +50,7 @@ CORE_AT_THE_TOP = (
     "evals-wordings",
     "hooks",
     "locale",
+    "README.md",
     "schemas",
     "skills",
     "src",
