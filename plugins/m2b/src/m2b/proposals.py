@@ -534,7 +534,10 @@ def _lesson_of(value: object) -> LessonPart | None:
         or (isinstance(replaces, str) and _LESSON_FILE.fullmatch(replaces) and can_be_written(replaces))
     ):
         return None
-    return LessonPart(kind, target, tuple(words), quote, session, source, replaces)
+    unless = value.get("unless", [])
+    if not isinstance(unless, list) or not all(isinstance(word, str) and can_be_written(word) for word in unless):
+        return None
+    return LessonPart(kind, target, tuple(words), quote, session, source, replaces, tuple(unless))
 
 
 def _at_source_of(value: object) -> AtSource | None:
@@ -585,6 +588,8 @@ def _as_json(entry: Entry) -> dict[str, Any]:
             written["lesson"]["at_source"] = dataclasses.asdict(entry.lesson.at_source)
         if entry.lesson.replaces is not None:
             written["lesson"]["replaces"] = entry.lesson.replaces
+        if entry.lesson.unless:
+            written["lesson"]["unless"] = list(entry.lesson.unless)
     if entry.pointer is not None:
         written["pointer"] = {"path": entry.pointer.path, "repositories": list(entry.pointer.repositories)}
     return written

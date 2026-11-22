@@ -1,4 +1,5 @@
-"""``ingest normalize / list / task / ref / note / facts-filed / finish``: the curator's way to change captures.
+"""``ingest normalize / list / task / ref / note / topics / facts-filed / finish``: the curator's way
+to change captures.
 
 A file is named by its name in the inbox (``inbox/`` in front is accepted). Each command can run
 again: it finds what an earlier run did and does only the rest.
@@ -11,7 +12,7 @@ import sys
 from collections.abc import Callable
 from typing import TypeVar
 
-from m2b import ingest
+from m2b import ingest, lint
 from m2b.commands import Context, ProblemError, UsageError
 from m2b.commands.backends import configured_store, configured_tasks
 from m2b.commands.output import print_json
@@ -21,7 +22,8 @@ from m2b.config.profile import language_for_clients, load_profile
 from m2b.config.store_settings import require_store_writable
 from m2b.curate.model import CURATION_RUN_VARIABLE
 from m2b.notes.frontmatter import NoteFormatError
-from m2b.store.base import Store
+from m2b.notes.layout import MEMORY, MEMORY_INDEX
+from m2b.store.base import Store, StoreError
 from m2b.tasks.base import Tasks
 
 T = TypeVar("T")
@@ -132,6 +134,25 @@ def ingest_note(arguments: argparse.Namespace, context: Context) -> int:
         raise UsageError("the note is empty")
     store = _store(context)
     _guarded(lambda: ingest.add_note(store, arguments.file, text.strip()))
+    return 0
+
+
+MEMORY_INDEX_PATH = f"{MEMORY}/{MEMORY_INDEX}"
+
+
+def ingest_topics(arguments: argparse.Namespace, context: Context) -> int:
+    """The distillate's topic headings out of form, so the ingest step fixes them before it ends."""
+    store = _store(context)
+    try:
+        text = store.read_text(MEMORY_INDEX_PATH)
+    except (OSError, StoreError, UnicodeDecodeError) as error:
+        raise ProblemError(f"{MEMORY_INDEX_PATH} could not be read: {error}") from error
+    problems = lint.topic_problems(text)
+    for problem in problems:
+        print(problem)
+    if problems:
+        return 1
+    print("every topic heading is in form")
     return 0
 
 

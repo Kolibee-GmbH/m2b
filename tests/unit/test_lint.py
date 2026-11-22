@@ -305,6 +305,19 @@ class TopicTest(LintFixture):
         expected = "in memory/MEMORY.md, the topic Trip has 1 word in the brackets of its heading; it needs 2 to 5"
         self.assertEqual(finding.text, expected)
 
+    def test_a_project_topic_needs_its_repositorys_name_among_its_words(self) -> None:
+        """Covers: B296"""
+        project = "### Customer portal (customer portal, Acme)\n- Repository: github.com/acme/portal (acme-portal.md)\n"
+        self.write("memory/MEMORY.md", INDEX.replace("## Current", project + "\n## Current"))
+        self.write("memory/acme-portal.md", "# Customer portal\n\n- Repository: github.com/acme/portal\n")
+
+        (finding,) = [found for found in self.findings() if found.code == "topic-words"]
+
+        self.assertIn("the topic Customer portal has not portal, the name of its repository, among", finding.text)
+        self.assertEqual(lint.topic_problems(INDEX), [])
+        named = project.replace("(customer portal, Acme)", "(customer portal, Portal)")
+        self.assertEqual(lint.topic_problems(INDEX.replace("## Current", named + "\n## Current")), [])
+
     def test_the_size_of_a_topic_counts_its_current_items(self) -> None:
         """Covers: B48"""
         items = "".join(f"- Planning stage {number} of the trip to Porto and Lisbon\n" for number in range(60))

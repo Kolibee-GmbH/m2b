@@ -3,6 +3,7 @@ catalog, and links that lead somewhere."""
 
 from __future__ import annotations
 
+import json
 import re
 import unittest
 from pathlib import Path
@@ -145,6 +146,15 @@ class TestLevelsPageTest(unittest.TestCase):
 
         self.assertIn("\n## Test levels\n", contributing)
         self.assertIn("](docs/test-levels.md)", contributing)
+
+
+class ChangelogTest(unittest.TestCase):
+    def test_the_changelog_has_a_section_for_the_version_in_the_manifest(self) -> None:
+        """A release pull request that forgets its section fails before the tag finds no notes."""
+        manifest = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        changelog = (REPO / "CHANGELOG.md").read_text(encoding="utf-8")
+
+        self.assertRegex(changelog, rf"(?m)^## \[{re.escape(manifest['version'])}\] - \d{{4}}-\d{{2}}-\d{{2}}$")
 
 
 class LinkTest(unittest.TestCase):

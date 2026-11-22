@@ -3,6 +3,9 @@
 #
 #   scripts/check --quick <suite>    one suite with python3 on PATH: m2b (the core's Python), band
 #                                    (the core's mod, in Claude Code's test kit) or worklog
+#   scripts/check --release          what a release or a pin can break: the manifests and the
+#                                    docs tests (changelog, eval page, marketplace pin); CI runs it
+#                                    for a change scripts/ci-scope calls a release
 #   scripts/check                    everything; exits 1 when any stage fails
 #
 # The full run covers the unit tests of the core, of each add-on and of the repository tools (with
@@ -36,7 +39,7 @@ failed_stages=""
 # and give every variable they set a name no other function uses.
 
 usage() {
-    echo "usage: scripts/check [--quick m2b|worklog|band]" >&2
+    echo "usage: scripts/check [--quick m2b|worklog|band | --release]" >&2
     exit 2
 }
 
@@ -186,6 +189,30 @@ coverage_check() {
     PYTHONPATH="$repo_root/scripts" python3 -m repo_tools.coverage_check
 }
 
+release_docs_checks() {
+    PYTHONPATH="$repo_root/scripts:$repo_root/$PLUGIN/src" python3 -m unittest \
+        repo_tools.tests.test_docs repo_tools.tests.test_evals_page repo_tools.tests.test_pin_release
+}
+
+finish() {
+    if [ -n "$failed_stages" ]; then
+        echo "check: FAILED:$failed_stages"
+        exit 1
+    fi
+    echo "check: passed"
+}
+
+if [ "$#" -eq 1 ] && [ "$1" = --release ]; then
+    if [ "${CI:-}" = true ] && ! command -v claude >/dev/null 2>&1; then
+        echo "check: claude is not installed; CI needs it for the manifest checks" >&2
+        exit 1
+    fi
+    stage manifests manifest_checks
+    stage release-docs release_docs_checks
+    finish
+    exit 0
+fi
+
 if [ "$#" -gt 0 ]; then
     if [ "$1" != --quick ] || [ "$#" -ne 2 ]; then
         usage
@@ -222,9 +249,4 @@ stage manifests manifest_checks
 stage band band_tests
 stage coverage coverage_check
 stage e2e scripts/e2e --level stub
-
-if [ -n "$failed_stages" ]; then
-    echo "check: FAILED:$failed_stages"
-    exit 1
-fi
-echo "check: passed"
+finish

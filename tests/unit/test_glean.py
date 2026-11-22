@@ -631,6 +631,29 @@ class LessonTest(unittest.TestCase):
 
         self.assertEqual((checked.kept, len(checked.not_quoted)), ((), 1))
 
+    def test_an_action_lesson_keeps_the_words_that_silence_it_where_they_were_typed(self) -> None:
+        """Covers: B295"""
+        first = turn("first", "only the quick round, not the whole proof: scripts/check --quick", "scripts/check")
+        entry = lesson_entry(lesson={"unless": ["--quick", "--fast", "check"]})
+
+        read = glean.parse_answer(answer(entry), [first, SECOND])
+        (kept,) = glean.check(read.proposals, [first, SECOND], []).kept
+
+        assert kept.lesson is not None
+        self.assertEqual((kept.lesson.words, kept.lesson.unless), (("scripts/check",), ("--quick",)))
+
+    def test_words_that_silence_a_lesson_never_make_it_fail_and_knowledge_has_none(self) -> None:
+        """Covers: B295"""
+        for unless in (["--nowhere"], "--quick", [3], ["check"], ["--quick,"]):
+            with self.subTest(unless=unless):
+                (kept,) = self.check(lesson_entry(lesson={"unless": unless})).kept
+                assert kept.lesson is not None
+                self.assertEqual(kept.lesson.unless, ())
+        knowledge = lesson_entry(lesson={"kind": "knowledge", "words": [], "unless": ["quick"]})
+        (kept,) = self.check(knowledge).kept
+        assert kept.lesson is not None
+        self.assertEqual(kept.lesson.unless, ())
+
     def test_a_session_cannot_hand_in_a_lesson(self) -> None:
         """Covers: B270"""
         self.assertNotIn("lesson", glean.HANDED_IN_KINDS)

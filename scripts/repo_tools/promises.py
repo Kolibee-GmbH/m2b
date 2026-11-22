@@ -287,12 +287,23 @@ def scenario_runner(
     environ: Mapping[str, str], account: Mapping[str, str], sandbox_root: Path | None
 ) -> ScenarioRunner:
     def run(folder: Path, wording: int, arm: str) -> Run:
+        # A run with m2b that breaks keeps its sandbox: without it a failure that comes once in many
+        # runs leaves nothing to tell a defect of the product from one of the case.
         result = e2e.run_scenario(
-            folder, environ, level=e2e.MODEL, sandbox_root=sandbox_root, account=account, wording=wording, arm=arm
+            folder,
+            environ,
+            level=e2e.MODEL,
+            sandbox_root=sandbox_root,
+            account=account,
+            wording=wording,
+            arm=arm,
+            keep_failed=arm == e2e.WITH,
         )
         evidence = "; ".join(result.problems)
         if not result.shows:
             evidence = f"its control did not pass, so the run shows nothing: {evidence}"
+        if result.kept is not None:
+            evidence = f"{evidence}; kept in {result.kept}"
         return Run(result.passed, evidence, tuple(result.models), shows=result.shows)
 
     return run

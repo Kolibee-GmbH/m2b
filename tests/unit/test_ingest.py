@@ -1027,6 +1027,19 @@ class IngestCommandTest(test_commands.CommandTest):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8")
 
+    def test_topics_names_each_heading_out_of_form_and_passes_when_there_is_none(self) -> None:
+        """Covers: B296"""
+        self.write(
+            "memory/MEMORY.md", "# Memory\n\n## Facts\n\n### Corner bakery (bakery)\n- Opens at six (bakery.md)\n"
+        )
+
+        code, out, _ = self.run_command("ingest", "topics")
+
+        self.assertEqual(code, 1)
+        self.assertIn("Corner bakery has 1 word", out)
+        self.write("memory/MEMORY.md", "# Memory\n\n## Facts\n\n### Corner bakery (Corner bakery, bakery)\n")
+        self.assertEqual(self.run_command("ingest", "topics")[:2], (0, "every topic heading is in form\n"))
+
     def test_normalize_reports_what_it_renamed(self) -> None:
         self.write("inbox/Shopping list.txt", "milk\n")
 
