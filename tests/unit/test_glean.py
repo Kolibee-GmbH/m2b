@@ -5,6 +5,7 @@ import datetime
 import json
 import time
 import unittest
+from collections.abc import Sequence
 from typing import Any, ClassVar
 
 from m2b import glean
@@ -667,7 +668,7 @@ class LessonTest(unittest.TestCase):
             with self.subTest(word=word):
                 self.assertIn(f"`{word}`", instruction)
         self.assertIn("two different sessions", instruction)
-        self.assertIn("One such correction in one session is no lesson.", instruction)
+        self.assertIn("One such correction in one session is no lesson", instruction)
         self.assertIn("only about the task at hand", instruction)
         self.assertIn('"lesson": {"kind": "action"', instruction)
 
@@ -783,6 +784,92 @@ class CorrectedAgainTest(unittest.TestCase):
         self.assertEqual(
             glean.checked_corrections(read.corrections, [self.AGAIN], [same_day], datetime.timezone.utc), []
         )
+
+
+class SingleCorrectionTest(unittest.TestCase):
+    ONCE = session("once", "why the full check again, CI ran it")
+    SAID: ClassVar[dict[str, Any]] = {
+        "matter": "the whole proof is run again although CI ran it",
+        "quote": "why the full check again",
+        "session": 1,
+        "kind": "action",
+        "target": "every project",
+    }
+
+    def read(self, *singles: object, proposals: Sequence[object] = (), again: Sequence[object] = ()) -> glean.Answer:
+        given = {"proposals": list(proposals), "single_corrections": list(singles), "corrected_again": list(again)}
+        return glean.parse_answer(json.dumps(given), [self.ONCE])
+
+    def test_a_single_correction_is_read_with_its_matter_kind_and_target(self) -> None:
+        """Covers: B297"""
+        read = self.read(self.SAID)
+
+        self.assertEqual(
+            read.single_corrections,
+            (
+                glean.SingleCorrection(
+                    "the whole proof is run again although CI ran it",
+                    "why the full check again",
+                    "once",
+                    "action",
+                    "every project",
+                ),
+            ),
+        )
+        self.assertEqual((read.malformed, read.singles_malformed), (0, 0))
+        self.assertEqual(glean.parse_answer(answer(), [self.ONCE]).single_corrections, ())
+
+    def test_one_not_in_the_form_is_counted_apart_from_the_proposals(self) -> None:
+        """Covers: B297"""
+        broken = [
+            {**self.SAID, "matter": "x" * (glean.MATTER_LENGTH + 1)},
+            {**self.SAID, "matter": ""},
+            {**self.SAID, "kind": "habit"},
+            {**self.SAID, "target": "the shed"},
+            {**self.SAID, "session": 2},
+            {**self.SAID, "quote": " "},
+            {**self.SAID, "matter": "run \u202e it"},
+            "why the full check again",
+        ]
+
+        read = self.read(*broken)
+
+        self.assertEqual((read.single_corrections, read.singles_malformed, read.malformed), ((), len(broken), 0))
+
+    def test_only_one_whose_words_were_typed_in_its_session_is_kept(self) -> None:
+        """Covers: B297"""
+        read = self.read(
+            self.SAID, {**self.SAID, "quote": "never the full check"}, {**self.SAID, "quote": "full check"}
+        )
+
+        kept, refused = glean.checked_single_corrections(read.single_corrections, [], [self.ONCE])
+
+        self.assertEqual(
+            [(single.quote, prompt.text) for single, prompt in kept],
+            [("why the full check again", "why the full check again, CI ran it")],
+        )
+        self.assertEqual(refused, 2)
+
+    def test_one_whose_words_a_kept_lesson_or_counted_correction_stands_on_is_left_out_and_not_counted(self) -> None:
+        """Covers: B297"""
+        read = self.read(self.SAID)
+
+        for used in ([("once", "the full check again")], [("once", "why the full check again, CI ran it")]):
+            with self.subTest(used=used):
+                self.assertEqual(glean.checked_single_corrections(read.single_corrections, used, [self.ONCE]), ([], 0))
+        (kept,), _ = glean.checked_single_corrections(
+            read.single_corrections, [("other", "the full check")], [self.ONCE]
+        )
+        self.assertEqual(kept[0].session, "once")
+
+    def test_the_instruction_names_single_corrections_and_what_is_left_out_of_them(self) -> None:
+        """Covers: B297"""
+        instruction = glean.instruction()
+
+        self.assertIn("put it under `single_corrections`", instruction)
+        self.assertIn('{"matter": "<what it is about', instruction)
+        self.assertIn("only about the task at hand, one whose matter `memory`, a kept lesson", instruction)
+        self.assertIn("code remembers it only where that lesson is not kept", instruction)
 
 
 if __name__ == "__main__":

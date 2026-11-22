@@ -33,6 +33,10 @@ The model is also shown the lessons the person kept and asked which prompts corr
 of them again; code keeps such a correction only where its words stand in what was typed on the
 day after the lesson was kept, and counts it under the lesson (``lesson_counts``).
 
+A correction of how Claude works that stands in one session only and holds beyond the task is no
+lesson yet: the model names it apart, and once the reading is saved code remembers it in machine
+state (``remembered_corrections``), so that the reading of a later period can pair it with its repeat.
+
 A repository the person typed in on two days, in this reading or remembered from one before, and
 that no topic names, is proposed as a project by code (``project_proposals``), with no model and
 no words of the person; the days are remembered in machine state once the reading is saved.
@@ -71,6 +75,7 @@ from m2b import (
     project_files,
     project_proposals,
     proposals,
+    remembered_corrections,
     session_remotes,
     sessions,
 )
@@ -259,6 +264,10 @@ def propose(
         )
     proposals.save(store, dataclasses.replace(counted, read_until=started))
     project_proposals.remember(machine.state_dir, worked, machine.temp_dir)
+    used = [(proposal.session, proposal.quote) for proposal, _ in placed if proposal.lesson is not None]
+    used += [(proposal.lesson.session, proposal.lesson.quote) for proposal, _ in placed if proposal.lesson]
+    used += [(correction.session, correction.quote) for correction in corrections]
+    notes += _remember_single_corrections(answer, used, read, machine, notes_folder, started)
     sent = sum(len(session.prompts) for session in read)
     summary = (
         f"read {_count(len(read), 'session')} with {_count(sent, 'prompt')} since {start.strftime(_MOMENT)}: "
@@ -268,6 +277,74 @@ def propose(
         f"{len(checked.already_captured)} captured already, {answer.malformed} not in the form"
     )
     return Reading(None, (summary, *notes, *period_captures.capture_notes(captures)))
+
+
+def _remember_single_corrections(
+    answer: glean.Answer,
+    used: Sequence[tuple[str, str]],
+    read: Sequence[sessions.Session],
+    machine: MachinePaths,
+    notes: Path,
+    started: datetime.datetime,
+) -> list[str]:
+    """Remembers in machine state the corrections the answer found in one session only, once the
+    reading is saved, and says what became of them (``remembered_corrections``).
+
+    One for a single project is remembered only with the addresses of its session's repository: a
+    lesson of it is kept for the repository both its sessions worked in, and without addresses it
+    could never be placed.
+    """
+    zone = started.tzinfo or datetime.timezone.utc
+    today = started.astimezone(zone).date()
+    checked, refused = glean.checked_single_corrections(answer.single_corrections, used, read)
+    folders = {session.session_id: session.folder for session in read}
+    new = []
+    without_repository = 0
+    for single, prompt in checked:
+        addresses = tuple(sorted(_addresses(notes, folders.get(single.session, ""), started)))
+        if single.target == lessons.THIS_PROJECT and not addresses:
+            without_repository += 1
+            continue
+        new.append(
+            remembered_corrections.Correction(
+                remembered_corrections.correction_id(single.session, prompt.time),
+                single.session,
+                prompt.time.astimezone(zone).date(),
+                " ".join(single.quote.split()),
+                prompt.commands,
+                addresses,
+                single.matter,
+                single.kind,
+                single.target,
+            )
+        )
+    said = []
+    not_used = refused + answer.singles_malformed
+    if not_used:
+        said.append(
+            f"{_count(not_used, 'correction')} made in one session left out: "
+            "not in the form or not in what was typed in it"
+        )
+    if without_repository:
+        said.append(
+            f"{_count(without_repository, 'correction')} for one project made in one session left out: "
+            "no repository is known for its session"
+        )
+    if not new:
+        return said
+    earlier = remembered_corrections.remembered(machine.state_dir, today)
+    if earlier.failure:
+        said.append(f"the corrections remembered from earlier readings were lost: {earlier.failure}")
+    known = {each.id for each in earlier.corrections}
+    failure = remembered_corrections.remember(
+        machine.state_dir, remembered_corrections.joined(earlier.corrections, new), today, machine.temp_dir
+    )
+    if failure:
+        return [*said, f"the corrections made in one session could not be remembered: {failure}"]
+    added = len({each.id for each in new} - known)
+    if added:
+        said.append(f"{_count(added, 'correction')} made in one session remembered, for a lesson once it is made again")
+    return said
 
 
 def _for_their_project(

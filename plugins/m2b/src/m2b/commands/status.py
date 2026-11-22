@@ -22,7 +22,17 @@ import datetime
 import json
 from typing import Any
 
-from m2b import action_lessons, fixes, handed_in, lesson_counts, lessons, proposal_answers, proposals, start_size
+from m2b import (
+    action_lessons,
+    fixes,
+    handed_in,
+    lesson_counts,
+    lessons,
+    proposal_answers,
+    proposals,
+    remembered_corrections,
+    start_size,
+)
 from m2b.addons import ADDONS, is_on
 from m2b.atomic_file import replace_atomically
 from m2b.commands import Context
@@ -56,6 +66,9 @@ def status_command(arguments: argparse.Namespace, context: Context) -> int:
     # it about a millisecond for Claude Code's files and one read of the distillate.
     folder = project_folder(context.environ)
     answer["session_start"] = start_size.measure(config, context.machine, context.environ, folder)
+    # Not in the band's answer either: the band draws no count of it, and the file may hold 300
+    # corrections with their commands.
+    answer["remembered_corrections"] = _remembered_corrections(context.machine, datetime.datetime.now().astimezone())
     if arguments.json:
         print_json(answer)
     else:
@@ -104,6 +117,15 @@ def status_answer(config: MachineConfig, context: Context, tasks_check: Check | 
     answer["handed_in"] = _handed_in(store)
     answer["lessons"] = _lessons(store, context.machine)
     return answer
+
+
+def _remembered_corrections(machine: MachinePaths, now: datetime.datetime) -> dict[str, Any]:
+    """How many corrections made in one session a reading on this machine remembers, each waiting
+    for its repeat in another session; a file that cannot be read is said, never counted as none."""
+    found = remembered_corrections.remembered(machine.state_dir, now.astimezone().date())
+    if found.failure:
+        return {"error": with_hidden_written_out(found.failure)}
+    return {"count": len(found.corrections)}
 
 
 # The kind a lesson kept as a fix is listed with, beside ``knowledge`` and ``action``.
@@ -354,6 +376,14 @@ def _print_text(answer: dict[str, Any]) -> None:
         print(f"lessons: {kept['in_every_session']} in every session{at_source}")
     for each in kept.get("each", []):
         print(_lesson_line(each))
+    corrections = answer["remembered_corrections"]
+    if "error" in corrections:
+        print(f"corrections: could not look: {corrections['error']}")
+    elif corrections["count"]:
+        print(
+            f"corrections: {corrections['count']} made in one session remembered, "
+            "each a lesson once it is made in another"
+        )
     on = [name for name, is_addon_on in answer["addons"].items() if is_addon_on]
     print(f"add-ons on: {', '.join(on) if on else 'none'}")
 

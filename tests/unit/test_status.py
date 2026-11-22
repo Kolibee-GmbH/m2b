@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import json
 from pathlib import Path
@@ -9,7 +10,16 @@ from typing import Any
 from unittest import mock
 
 import test_runner
-from m2b import action_lessons, cli, fixes, handed_in, lesson_counts, proposal_answers, proposals
+from m2b import (
+    action_lessons,
+    cli,
+    fixes,
+    handed_in,
+    lesson_counts,
+    proposal_answers,
+    proposals,
+    remembered_corrections,
+)
 from m2b.curate import machine_state
 from m2b.run_record import RUN_RECORD
 from m2b.store.base import StoreError
@@ -91,6 +101,34 @@ class StatusTest(test_runner.RunnerTest):
 
         self.assertEqual(each, [{"name": fix.name, "kind": "fix", "kept": "2026-11-20", "corrected_again": 1}])
         self.assertIn(f"lesson {fix.name} (fix, kept 2026-11-20): corrected again 1 time: not working\n", out)
+
+    def test_it_says_how_many_corrections_made_in_one_session_are_remembered(self) -> None:
+        """Covers: B297"""
+        self.curating()
+        self.assertEqual(self.status()["remembered_corrections"], {"count": 0})
+        self.assertNotIn("corrections:", self.run_command("status")[1])
+        today = datetime.datetime.now().astimezone().date()
+        correction = remembered_corrections.Correction(
+            "a1", "s1", today, "only the quick round", (), (), "the whole proof", "knowledge", "every project"
+        )
+        outdated = dataclasses.replace(correction, id="a2", day=today - remembered_corrections.REMEMBERED_FOR)
+        remembered_corrections.remember(
+            self.machine.state_dir,
+            [correction, dataclasses.replace(correction, id="a3"), outdated],
+            today - datetime.timedelta(days=1),
+            self.machine.temp_dir,
+        )
+
+        self.assertEqual(self.status()["remembered_corrections"], {"count": 2})
+        self.assertIn(
+            "corrections: 2 made in one session remembered, each a lesson once it is made in another\n",
+            self.run_command("status")[1],
+        )
+
+        (self.machine.state_dir / remembered_corrections.FILE).write_text("{not json", encoding="utf-8")
+        answer = self.status()["remembered_corrections"]
+        self.assertTrue(answer["error"].startswith("remembered-corrections.json could not be read"))
+        self.assertIn(f"corrections: could not look: {answer['error']}\n", self.run_command("status")[1])
 
     def test_lessons_that_are_not_downloaded_are_said_and_never_counted_as_none(self) -> None:
         """Covers: B258"""

@@ -103,6 +103,8 @@ AGENT = "agent"
 WORKED = "worked"
 # A proposal is one fact or one task; a longer text is a summary, which nobody asked for.
 TEXT_LENGTH = 300
+# What a single correction is about, in the model's words: a matter, not a lesson's text.
+MATTER_LENGTH = 200
 QUOTE_WORDS = 3
 # The share of the shorter one's words a capture and a quote have in common when they say the same.
 SAME_STATEMENT = 0.8
@@ -220,6 +222,20 @@ class Correction:
 
 
 @dataclass(frozen=True)
+class SingleCorrection:
+    """A correction of how Claude works that holds beyond the task at hand and stands in one session
+    only: what it is about in the model's words, the person's words, the id of their session, and
+    the kind and target a lesson of it would have. Code remembers it for a later reading
+    (``remembered_corrections``), where the same correction in another session makes a lesson."""
+
+    matter: str
+    quote: str
+    session: str
+    kind: str
+    target: str
+
+
+@dataclass(frozen=True)
 class ShownLesson:
     """A lesson the person kept, as the model is shown it: its name, its text and the day it was kept."""
 
@@ -234,6 +250,9 @@ class Answer:
     # How many entries of the answer were not a proposal in the form.
     malformed: int
     corrections: tuple[Correction, ...] = ()
+    single_corrections: tuple[SingleCorrection, ...] = ()
+    # How many entries under ``single_corrections`` were not in the form.
+    singles_malformed: int = 0
 
 
 @dataclass(frozen=True)
@@ -307,7 +326,61 @@ def parse_answer(answer: str, sessions: Sequence[Session]) -> Answer:
             proposals.append(proposal)
     given = found.get("corrected_again")
     corrections = [_correction(entry, sessions) for entry in (given if isinstance(given, list) else [])]
-    return Answer(tuple(proposals), malformed, tuple(each for each in corrections if each is not None))
+    given = found.get("single_corrections")
+    singles = [_single_correction(entry, sessions) for entry in (given if isinstance(given, list) else [])]
+    return Answer(
+        tuple(proposals),
+        malformed,
+        tuple(each for each in corrections if each is not None),
+        tuple(each for each in singles if each is not None),
+        sum(each is None for each in singles),
+    )
+
+
+def checked_single_corrections(
+    singles: Sequence[SingleCorrection], used: Sequence[tuple[str, str]], sessions: Sequence[Session]
+) -> tuple[list[tuple[SingleCorrection, Prompt]], int]:
+    """The single corrections whose quote, at least ``QUOTE_WORDS`` words, stands in what the person
+    typed in its session, each with the first prompt that holds it, and how many were refused.
+
+    ``used`` are the session and the words of each correction a kept lesson or a counted correction
+    of a kept lesson stands on. A single correction among them is left out and not counted:
+    remembering it too would count it twice. One whose lesson code did not keep is remembered, so
+    a lesson refused in this reading does not lose its corrections.
+    """
+    by_id = {session.session_id: session for session in sessions}
+    kept: list[tuple[SingleCorrection, Prompt]] = []
+    refused = 0
+    for single in singles:
+        if any(session == single.session and _overlap(quote, single.quote) for session, quote in used):
+            continue
+        typed = _typed_in(single.quote, by_id.get(single.session))
+        if not typed or len(_collapsed(single.quote).split()) < QUOTE_WORDS:
+            refused += 1
+            continue
+        kept.append((single, typed[0]))
+    return kept, refused
+
+
+def _overlap(first: str, second: str) -> bool:
+    one, other = _collapsed(first), _collapsed(second)
+    return bool(one and other) and (one in other or other in one)
+
+
+def _single_correction(entry: object, sessions: Sequence[Session]) -> SingleCorrection | None:
+    if not isinstance(entry, dict):
+        return None
+    matter, quote = _one_line(entry.get("matter")), entry.get("quote")
+    kind, target, number = entry.get("kind"), entry.get("target"), _session_number(entry.get("session"))
+    if not matter or len(matter) > MATTER_LENGTH or not isinstance(quote, str) or not quote.strip():
+        return None
+    if kind not in lessons.KINDS or target not in LESSON_TARGETS:
+        return None
+    if number is None or not 1 <= number <= len(sessions):
+        return None
+    if unsafe_characters(matter + quote) or not can_be_written(matter + quote):
+        return None
+    return SingleCorrection(matter, quote, sessions[number - 1].session_id, str(kind), str(target))
 
 
 def checked_corrections(

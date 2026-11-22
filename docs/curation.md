@@ -334,7 +334,12 @@ lesson is a correction of how Claude works that you made in two sessions, such a
 round" after Claude ran the whole proof: code keeps it only when both of your sentences stand in
 what you typed, in two sessions, and for a command when its words stand in a command Claude ran
 there. One for a single project names that project's repository, where both sessions' folders
-name the same one by a git remote; without one it is left out. Before a lesson is proposed, a second
+name the same one by a git remote; without one it is left out. A correction you made in one
+session only, and that holds beyond the task at hand, is no lesson yet: the model names it apart,
+with what it is about, and code remembers it on this machine for 30 days, at most 300 of them, in
+`~/.local/state/m2b/remembered-corrections.json`, with your words, the shell commands of the turn
+they answer and the repository's address, never in the store. Nothing is proposed from it; `m2b
+status` says how many are remembered. Before a lesson is proposed, a second
 model run without tools reads it with the files a session in its folders loads (the `CLAUDE.md`
 files, the rules, the output style, Claude Code's memory, the list `m2b status` measures), each
 line numbered. Where a line says the matter wrongly, the lesson becomes a fix of that line, with
