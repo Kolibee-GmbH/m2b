@@ -437,7 +437,15 @@ proposals: kept 7 of 10 answered in the last 30 days (70%), 2 expired without an
 ```
 
 Expired proposals are not part of the share, and without an answer in the 30 days the line says
-so instead of 0%. `m2b status --json` holds the same under `proposal_answers`, and with it the
+so instead of 0%. A second line says the same of the lessons alone, once one was answered or
+expired in that time:
+
+```text
+proposals: lessons kept 3 of 4 answered in the last 30 days (75%)
+```
+
+A lesson is proposed from one correction on the model's judgement that it holds beyond its task;
+how many you keep shows whether that judgement holds. `m2b status --json` holds the same under `proposal_answers`, the lessons under its `lessons`, and with it the
 counts per kind since the first reading: how many were proposed, kept, dropped and expired, and how
 many were refused because the words they quote do not stand, with at least three words, in a
 prompt of the session they name. m2b does nothing with these numbers: they are there for you to

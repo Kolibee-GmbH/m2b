@@ -383,9 +383,14 @@ def aged(current: Proposals, answered: Collection[str], now: datetime.datetime) 
     return Aged(result, len(late), forgotten)
 
 
-def outcomes_since(current: Proposals, start: datetime.datetime) -> Outcomes:
-    """How the proposals settled at ``start`` or later ended; only as far back as a settled one is remembered."""
-    ended = [entry.state for entry in current.entries.values() if entry.state != OPEN and entry.since >= start]
+def outcomes_since(current: Proposals, start: datetime.datetime, kind: str | None = None) -> Outcomes:
+    """How the proposals settled at ``start`` or later ended, those of ``kind`` only where one is
+    given; only as far back as a settled one is remembered."""
+    ended = [
+        entry.state
+        for entry in current.entries.values()
+        if entry.state != OPEN and entry.since >= start and kind in (None, entry.kind)
+    ]
     return Outcomes(ended.count(KEPT), ended.count(DROPPED), ended.count(EXPIRED))
 
 

@@ -45,7 +45,7 @@ from m2b.config.machine import MachineConfig, load_machine_config
 from m2b.config.store_settings import describe_format, format_state, load_store_settings
 from m2b.curate import machine_state
 from m2b.curate.due import PAUSED_NOTE, check_due
-from m2b.glean import AGENT, KINDS, PASTED, TOOL, TYPED, WORKED
+from m2b.glean import AGENT, KINDS, LESSON, PASTED, TOOL, TYPED, WORKED
 from m2b.hook_input import project_folder
 from m2b.notes.characters import with_hidden_written_out
 from m2b.notes.layout import INBOX
@@ -278,12 +278,22 @@ def _proposal_answers(store: Store, config: MachineConfig, now: datetime.datetim
     outcomes = proposals.outcomes_since(current, start)
     ways = proposals.by_way_and_source(current, start, answered)
     rate = outcomes.keep_rate
+    # Apart, since what a reading proposes as a lesson rests on its judgement that a correction holds
+    # beyond its task, and the person's answers show whether that judgement is good enough.
+    of_lessons = proposals.outcomes_since(current, start, LESSON)
+    lesson_rate = of_lessons.keep_rate
     return {
         "days": proposals.KEEP_RATE_PERIOD.days,
         "kept": outcomes.kept,
         "dropped": outcomes.dropped,
         "expired": outcomes.expired,
         "keep_rate": None if rate is None else round(rate, 2),
+        "lessons": {
+            "kept": of_lessons.kept,
+            "dropped": of_lessons.dropped,
+            "expired": of_lessons.expired,
+            "keep_rate": None if lesson_rate is None else round(lesson_rate, 2),
+        },
         "counts": {kind: dataclasses.asdict(current.tally(kind)) for kind in KINDS},
         "ways": {
             way: {source: dataclasses.asdict(counts) for source, counts in sorted(sources.items())}
@@ -358,6 +368,9 @@ def _print_text(answer: dict[str, Any]) -> None:
     answers = answer.get("proposal_answers")
     if answers is not None:
         print(f"proposals: {_proposal_answers_text(answers)}")
+        of_lessons = answers.get("lessons")
+        if of_lessons and (of_lessons["kept"] or of_lessons["dropped"] or of_lessons["expired"]):
+            print(f"proposals: lessons {_proposal_answers_text({**of_lessons, 'days': answers['days']})}")
         for line in _proposal_ways_lines(answers):
             print(line)
     handed = answer["handed_in"]

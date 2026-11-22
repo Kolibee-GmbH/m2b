@@ -14,6 +14,7 @@ from m2b import (
     action_lessons,
     cli,
     fixes,
+    glean,
     handed_in,
     lesson_counts,
     proposal_answers,
@@ -439,6 +440,7 @@ class StatusTest(test_runner.RunnerTest):
                 "dropped": 1,
                 "expired": 1,
                 "keep_rate": 0.67,
+                "lessons": {"kept": 0, "dropped": 0, "expired": 0, "keep_rate": None},
                 "counts": {
                     "person": {"proposed": 9, "kept": 5, "dropped": 1, "expired": 1, "not_quoted": 2},
                     "agreement": nothing,
@@ -456,6 +458,42 @@ class StatusTest(test_runner.RunnerTest):
             "\nproposals a reading found in typed words: 1 waiting, 2 kept, 1 dropped, 1 expired in the last 30 days\n",
             out,
         )
+
+    def test_it_shows_the_share_kept_of_the_lessons_answered_in_the_last_thirty_days(self) -> None:
+        """Covers: B299"""
+        self.curating(curation={"read_sessions": True})
+        now = datetime.datetime.now().astimezone()
+
+        def lesson(number: int, state: str, days: float) -> proposals.Entry:
+            part = glean.LessonPart("knowledge", "every project", (), "", "")
+            since = now - datetime.timedelta(days=days)
+            return proposals.Entry(
+                "lesson", f"Rule {number}.", f"the words of rule {number}", now.date(), state, since, lesson=part
+            )
+
+        entries = {
+            "a00000000001": lesson(1, "kept", 2),
+            "a00000000002": lesson(2, "dropped", 3),
+            "a00000000003": lesson(3, "dropped", 31),
+            "a00000000004": lesson(4, "expired", 1),
+            "a00000000005": dataclasses.replace(lesson(5, "kept", 1), kind="person", lesson=None),
+        }
+        proposals.save(self.store, proposals.Proposals(entries))
+
+        answers = self.status()["proposal_answers"]
+        out = self.run_command("status")[1]
+
+        self.assertEqual(answers["lessons"], {"kept": 1, "dropped": 1, "expired": 1, "keep_rate": 0.5})
+        self.assertIn(
+            "\nproposals: lessons kept 1 of 2 answered in the last 30 days (50%), 1 expired without an answer\n", out
+        )
+
+    def test_without_a_lesson_answered_or_expired_there_is_no_line_for_lessons(self) -> None:
+        """Covers: B299"""
+        self.curating(curation={"read_sessions": True})
+        self.proposed(("kept", 1))
+
+        self.assertNotIn("proposals: lessons", self.run_command("status")[1])
 
     def test_it_counts_per_way_and_source_what_waits_and_how_the_thirty_days_ended(self) -> None:
         """Covers: B181"""

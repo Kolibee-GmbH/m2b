@@ -697,6 +697,13 @@ class LessonTest(unittest.TestCase):
             with self.subTest(word=word):
                 self.assertIn(f"`{word}`", instruction)
         self.assertIn("One correction is enough.", instruction)
+        self.assertIn("often a complaint or a question that objects to what Claude did", instruction)
+        self.assertIn("or about how it answers (how it explains, how long, in which language)", instruction)
+        self.assertIn("go through every prompt that answers a turn of Claude's", instruction)
+        self.assertIn(
+            "an entry of `single_corrections` or of `corrected_again`, or, as the rules below say, nothing", instruction
+        )
+        self.assertIn("A correction of Claude is an exception: in doubt whether it holds beyond", instruction)
         self.assertIn("the lesson stands on both", instruction)
         self.assertIn(
             "Where you cannot tell whether a correction holds beyond the task at hand, it is no lesson", instruction
