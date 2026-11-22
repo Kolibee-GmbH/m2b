@@ -34,7 +34,7 @@ A proposal has these fields:
 - `session`: the number of the session the quote is from.
 - `topic`: the name of the `###` heading in `memory` the proposal belongs under, or null.
 - `due`: for a commitment with a day, that day as YYYY-MM-DD, worked out from the session's `day`; otherwise null.
-- `lesson`: only for a lesson, an object: `kind` is `knowledge` for how to name, judge or describe a thing, `action` for a command Claude runs; `target` is `every project` when it holds wherever they work, `this project` when it holds only in the repository both sessions ran in; `words` lists for an action the words a command holds when the lesson applies, taken from `commands` (`scripts/check`, `push`), and is empty for knowledge; `quote` and `session` are the words and the number of the second session, as the fields above are of the first. Its `text` says what they want, as a rule Claude can follow: "Run only the quick checks unless the change gives a reason for the whole proof."
+- `lesson`: only for a lesson, an object: `kind` is `knowledge` for how to name, judge or describe a thing, `action` for a command Claude runs; `target` is `every project` when it holds wherever they work, `this project` when it holds only in the repository both sessions ran in; `words` lists for an action the words a command holds when the lesson applies, taken from `commands` (`scripts/check`, `push`), and is empty for knowledge; `unless` lists for an action the words of a command that already does what they asked for, so the lesson stays silent there, taken from what they typed or from `commands` (`--quick`), and is empty when there is none; `quote` and `session` are the words and the number of the second session, as the fields above are of the first. Its `text` says what they want, as a rule Claude can follow: "Run only the quick checks unless the change gives a reason for the whole proof."
 - `file`: only for a pointer, the path of the file it stands in, copied from the session's `written`. Its `text` is the decision as one sentence someone outside the repository would look for, without the path; its `topic` is null.
 
 One proposal for each person, agreement, commitment, personal matter, lesson or pointer. Both quotes of a lesson are what they typed, never `answer_before` or a command. A sentence that says several things about the same person or the same agreement is one proposal, whose `text` carries all of it: a role and a duty of one person are one proposal, not two. A prompt about two people gives two proposals. Never propose the same thing twice.
@@ -47,7 +47,7 @@ Answer with one JSON object and nothing else:
 
 A lesson adds its object:
 
-{"kind": "lesson", "text": "...", "quote": "...", "session": 1, "topic": null, "due": null, "lesson": {"kind": "action", "target": "every project", "words": ["scripts/check"], "quote": "...", "session": 2}}
+{"kind": "lesson", "text": "...", "quote": "...", "session": 1, "topic": null, "due": null, "lesson": {"kind": "action", "target": "every project", "words": ["scripts/check"], "unless": ["--quick"], "quote": "...", "session": 2}}
 
 A pointer adds its file:
 

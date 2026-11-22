@@ -282,6 +282,17 @@ class LessonInFileTest(ProposalsFixture):
         (loaded,) = proposals.load(self.store).entries.values()
         self.assertEqual(loaded.lesson, LESSON.lesson)
 
+    def test_the_words_that_silence_a_lesson_are_written_and_read_back(self) -> None:
+        """Covers: B295"""
+        silenced = dataclasses.replace(LESSON, lesson=dataclasses.replace(LESSON.lesson, unless=("--quick",)))
+        self.kept(silenced)
+
+        (entry,) = self.written()["proposals"].values()
+        self.assertEqual(entry["lesson"]["unless"], ["--quick"])
+        (loaded,) = proposals.load(self.store).entries.values()
+        assert loaded.lesson is not None
+        self.assertEqual(loaded.lesson.unless, ("--quick",))
+
     def test_an_m2b_before_lessons_refuses_a_file_with_one_and_one_without_keeps_the_earlier_format(self) -> None:
         """Covers: B270"""
         self.kept(DANA)

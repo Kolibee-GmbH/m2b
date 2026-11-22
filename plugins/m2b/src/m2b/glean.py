@@ -156,6 +156,10 @@ class LessonPart:
     # The kept lesson it would replace, where what every session starts with is past its target;
     # set by the reading step, never by the model's answer.
     replaces: str | None = None
+    # For an action, the words of a command that already does what the person asked for, so the
+    # lesson stays silent there (``--quick``): without them it would also stop the very command the
+    # correction asked for. Kept only where they stand in the two sessions (B295).
+    unless: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -373,7 +377,7 @@ def check(proposals: Sequence[Proposal], sessions: Sequence[Session], captures: 
         elif _is_captured(quote, stands_in.texts, captured):
             already_captured.append(proposal)
         else:
-            kept.append(dataclasses.replace(proposal, source=stands_in.source))
+            kept.append(dataclasses.replace(_with_standing_unless(proposal, by_id), source=stands_in.source))
             kept_at.append(stands_in.first_at)
     return Checked(tuple(kept), tuple(not_quoted), tuple(already_captured), tuple(kept_at))
 
@@ -391,6 +395,25 @@ def _lesson_stands(proposal: Proposal, source: str, sessions: Mapping[str, Sessi
         return True
     commands = [command for prompt in (*first, *second) for command in prompt.commands]
     return any(all(holds_word(command, word) for word in lesson.words) for command in commands)
+
+
+def _with_standing_unless(proposal: Proposal, sessions: Mapping[str, Session]) -> Proposal:
+    """The proposal with only those of its lesson's ``unless`` words that stand in what the person
+    typed or in a command of either session: words the model made up would silence it elsewhere."""
+    lesson = proposal.lesson
+    if lesson is None or not lesson.unless:
+        return proposal
+    prompts = [
+        prompt for session_id in (proposal.session, lesson.session) for prompt in _prompts_of(sessions, session_id)
+    ]
+    texts = [prompt.text for prompt in prompts] + [command for prompt in prompts for command in prompt.commands]
+    standing = tuple(word for word in lesson.unless if any(holds_word(text, word) for text in texts))
+    return dataclasses.replace(proposal, lesson=dataclasses.replace(lesson, unless=standing))
+
+
+def _prompts_of(sessions: Mapping[str, Session], session_id: str) -> tuple[Prompt, ...]:
+    session = sessions.get(session_id)
+    return session.prompts if session else ()
 
 
 def _typed_in(quote: str, session: Session | None) -> list[Prompt]:
@@ -509,7 +532,22 @@ def _lesson_part(value: object, sessions: Sequence[Session]) -> LessonPart | Non
     said = quote + "".join(cleaned)
     if unsafe_characters(said) or not can_be_written(said):
         return None
-    return LessonPart(kind, target, cleaned, quote, sessions[number - 1].session_id)
+    unless = _silencing_words(value.get("unless", [])) if kind == lessons.ACTION else ()
+    return LessonPart(kind, target, cleaned, quote, sessions[number - 1].session_id, unless=unless)
+
+
+def _silencing_words(value: object) -> tuple[str, ...]:
+    """A lesson's ``unless`` as the model wrote it, or none where it is not in the form: they only
+    narrow the lesson, so words the step cannot use leave it as it is instead of failing it."""
+    if not isinstance(value, list) or not all(isinstance(word, str) for word in value):
+        return ()
+    cleaned = tuple(dict.fromkeys(" ".join(word.split()) for word in value if word.strip()))
+    if len(cleaned) > kept_lessons.MAX_WORDS or any(len(word) > MAX_WORD for word in cleaned):
+        return ()
+    said = "".join(cleaned)
+    if unsafe_characters(said) or not can_be_written(said):
+        return ()
+    return cleaned
 
 
 def _one_line(value: object) -> str | None:

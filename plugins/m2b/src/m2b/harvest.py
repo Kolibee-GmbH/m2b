@@ -306,7 +306,14 @@ def _keep_lesson(store: Store, entry: proposals.Entry, report: HarvestReport, ma
     # fix, outside a repository and ~/.claude/, keeps the name this machine reads it by.
     kept_at = None if at_source is None else _pointer_to(at_source)
     given = kept_lessons.KeptLesson(
-        entry.text[:60], entry.text, lesson.kind, lesson.target, entry.day.isoformat(), lesson.words, kept_at=kept_at
+        entry.text[:60],
+        entry.text,
+        lesson.kind,
+        lesson.target,
+        entry.day.isoformat(),
+        lesson.words,
+        unless=lesson.unless,
+        kept_at=kept_at,
     )
     try:
         kept_lessons.keep(store, given)

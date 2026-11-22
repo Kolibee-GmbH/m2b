@@ -66,6 +66,16 @@ class KeptLessonTest(ProposalHarvestFixture):
         self.assertEqual(report.problems, [])
         self.assertEqual(len(report.lessons), 1)
 
+    def test_a_kept_lesson_keeps_the_words_that_silence_it(self) -> None:
+        """Covers: B295"""
+        silenced = dataclasses.replace(LESSON, lesson=dataclasses.replace(LESSON.lesson, unless=("--quick",)))
+        self.answered(KEEP, silenced)
+
+        self.harvest()
+
+        (filed,) = lessons.read_all(self.store)
+        self.assertEqual((filed.words, filed.unless), (("scripts/check",), ("--quick",)))
+
     def test_a_kept_lesson_that_replaces_another_removes_it(self) -> None:
         """Covers: B284"""
         weak = self.root / "memory" / "lessons" / "weak.md"
