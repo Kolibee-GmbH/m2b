@@ -304,6 +304,16 @@ class CleanRunTest(RunnerTest):
             "the lesson proof.md is removed: you said it no longer holds", [finding.text for finding in record.findings]
         )
 
+    def test_a_model_step_is_told_the_run_s_day_so_its_commands_count_from_it(self) -> None:
+        """Covers: B293"""
+        self.curating()
+        self.write("memory/sam.md", "---\nuntil: 2026-11-01\n---\n# Sam\n")
+
+        self.run_curate()
+
+        [call] = self.calls()
+        self.assertEqual(call["environment"]["M2B_TODAY"], START.date().isoformat())
+
     def test_refresh_all_runs_now_and_lets_the_refresh_step_date_the_undated_lines(self) -> None:
         """Covers: B43"""
         self.curating()

@@ -1,0 +1,154 @@
+{
+  "description": "E35 at the model level, a correction kept by the session: in two repositories the owner asks for the checks, Claude runs the whole proof, and the owner corrects it to the quick round and asks to keep that for every project. Claude keeps it with m2b lesson add, a curation run files the lesson, and in a third repository, asked to check a small change, Claude runs only scripts/check --quick, after the tool hook stopped the whole proof or without a stop. Each repository's scripts/check leaves a file for the round it ran. scripts/promises also runs it against Claude Code alone, its own memory on: there the third repository has nothing of the corrections, and the control shows that Claude Code alone kept the correction in its own memory of the second repository. Three wordings, one in German.",
+  "wordings": [
+    {
+      "ask": "run scripts/check",
+      "correct": "No, only the quick round: scripts/check --quick. That holds in all my projects, keep it as a lesson.",
+      "task": "I fixed a typo in README.md. Check that nothing broke."
+    },
+    {
+      "ask": "Lass scripts/check laufen.",
+      "correct": "Nein, nur die schnelle Runde: scripts/check --quick. Das gilt in all meinen Projekten, merk dir das als Lehre.",
+      "task": "Ich habe in README.md einen Tippfehler korrigiert. Prüf, ob noch alles läuft.",
+      "language": "de"
+    },
+    {
+      "ask": "Please run the checks with scripts/check.",
+      "correct": "Stop, the whole proof is too much here: just scripts/check --quick. Same rule in every project I have, so keep that as a lesson.",
+      "task": "I changed one word in README.md; make sure the checks still pass."
+    }
+  ],
+  "steps": [
+    {
+      "run": [
+        "sh",
+        "-c",
+        "git init -q && git remote add origin https://github.com/acme/invoice-tool.git && mkdir scripts && printf '#!/bin/sh\\nhere=$(dirname \"$0\")/..\\nif [ \"$1\" = --quick ]; then touch \"$here/quick.ran\"; echo \"quick round: passed\"; else touch \"$here/full.ran\"; echo \"check: passed\"; fi\\n' > scripts/check && chmod +x scripts/check && echo 'Leafpress builds static sites.' > README.md"
+      ],
+      "cwd": "invoice-tool"
+    },
+    {
+      "run": [
+        "sh",
+        "-c",
+        "git init -q && git remote add origin https://github.com/acme/garden-site.git && mkdir scripts && printf '#!/bin/sh\\nhere=$(dirname \"$0\")/..\\nif [ \"$1\" = --quick ]; then touch \"$here/quick.ran\"; echo \"quick round: passed\"; else touch \"$here/full.ran\"; echo \"check: passed\"; fi\\n' > scripts/check && chmod +x scripts/check && echo 'Leafpress builds static sites.' > README.md"
+      ],
+      "cwd": "garden-site"
+    },
+    {
+      "run": [
+        "sh",
+        "-c",
+        "git init -q && git remote add origin https://github.com/acme/pages.git && mkdir scripts && printf '#!/bin/sh\\nhere=$(dirname \"$0\")/..\\nif [ \"$1\" = --quick ]; then touch \"$here/quick.ran\"; echo \"quick round: passed\"; else touch \"$here/full.ran\"; echo \"check: passed\"; fi\\n' > scripts/check && chmod +x scripts/check && echo 'Leafpress builds static sites.' > README.md"
+      ],
+      "cwd": "pages"
+    },
+    {
+      "session": [
+        "--setting-sources",
+        "project",
+        "--plugin-dir",
+        "{core_plugin}",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Bash,Read,Skill,mcp__m2b__note,mcp__m2b__search,Write,Edit",
+        "--model",
+        "sonnet"
+      ],
+      "turns": [
+        "{ask}",
+        "{correct}"
+      ],
+      "turn_seconds": 300,
+      "cwd": "invoice-tool"
+    },
+    {
+      "session": [
+        "--setting-sources",
+        "project",
+        "--plugin-dir",
+        "{core_plugin}",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Bash,Read,Skill,mcp__m2b__note,mcp__m2b__search,Write,Edit",
+        "--model",
+        "sonnet"
+      ],
+      "turns": [
+        "{ask}",
+        "{correct}"
+      ],
+      "turn_seconds": 300,
+      "cwd": "garden-site"
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "arm": "with"
+    },
+    {
+      "run": [
+        "sh",
+        "-c",
+        "grep -qi quick \"$CLAUDE_CONFIG_DIR\"/projects/*garden-site/memory/*.md 2>/dev/null || { echo \"Claude Code alone kept no memory of the correction in garden-site\" >&2; exit 1; }"
+      ],
+      "arm": "without",
+      "control": true
+    },
+    {
+      "run": [
+        "claude",
+        "-p",
+        "{task}",
+        "--setting-sources",
+        "project",
+        "--plugin-dir",
+        "{core_plugin}",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Bash,Read,Edit",
+        "--max-turns",
+        "10",
+        "--max-budget-usd",
+        "1",
+        "--model",
+        "sonnet",
+        "--output-format",
+        "json"
+      ],
+      "cwd": "pages"
+    },
+    {
+      "run": [
+        "sh",
+        "-c",
+        "test -e quick.ran || test -e full.ran"
+      ],
+      "cwd": "pages",
+      "arm": "without",
+      "control": true
+    },
+    {
+      "run": [
+        "sh",
+        "-c",
+        "test -e quick.ran && test ! -e full.ran || { echo \"the third repository holds: $(ls)\" >&2; exit 1; }"
+      ],
+      "cwd": "pages"
+    }
+  ],
+  "invariants": [
+    {
+      "count": 0,
+      "glob": "tasks/*.md",
+      "content": "m2b:review",
+      "arm": "with"
+    }
+  ]
+}

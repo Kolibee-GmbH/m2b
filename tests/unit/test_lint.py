@@ -794,6 +794,21 @@ class LintCommandTest(test_commands.CommandTest):
             ],
         )
 
+    def test_scan_inside_a_run_counts_from_the_run_s_day_and_outside_one_from_now(self) -> None:
+        """Covers: B293"""
+        self.environ["M2B_TODAY"] = "2027-01-20"
+        with mock.patch("m2b.commands.lint.lint.scan", wraps=lint.scan) as scan:
+            self.run_command("lint", "scan", "--json")
+            del self.environ["M2B_CURATION_RUN"]
+            self.run_command("lint", "scan", "--json")
+
+        inside, outside = (
+            call.args[3] if len(call.args) > 3 else call.kwargs.get("now") for call in scan.call_args_list
+        )
+        assert inside is not None
+        self.assertEqual(inside.date(), test_commands.datetime.date(2027, 1, 20))
+        self.assertIsNone(outside)
+
     def test_scan_report_hands_every_finding_to_the_run(self) -> None:
         token = report.open_run(self.machine)
         self.environ[report.RUN_TOKEN_VARIABLE] = token

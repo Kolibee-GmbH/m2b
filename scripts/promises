@@ -1,0 +1,7 @@
+#!/bin/sh
+# Runs the cases of docs/promises.md against the real model and says per promise whether it holds.
+set -eu
+
+repo_root=$(cd "$(dirname "$0")/.." && pwd)
+PYTHONPATH="$repo_root/scripts:$repo_root/plugins/m2b/src${PYTHONPATH:+:$PYTHONPATH}" \
+    exec python3 -m repo_tools.promises "$@"

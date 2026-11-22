@@ -567,6 +567,56 @@ class TaskTest(IngestFixture):
         self.assertIsNone(note.frontmatter.get("follow_up"))
         self.assertEqual(note.frontmatter.get_list("tasks"), [task_id])
 
+    def test_a_capture_with_its_follow_up_task_gets_no_second_task(self) -> None:
+        """Covers: B294"""
+        self.write(
+            f"inbox/{CAPTURE}",
+            "---\ncreated: 2026-11-07T10:15:00+01:00\nsource: claude\nfollow_up: 2026-11-20\n---\n"
+            "I call the plumber on Friday.\n",
+        )
+        follow_up = ingest.add_follow_up_task(self.store, self.tasks, CAPTURE)
+
+        asked = ingest.add_task(
+            self.store, self.tasks, CAPTURE, "plumber", "Call the plumber", datetime.date(2026, 11, 20)
+        )
+
+        self.assertEqual(asked, follow_up)
+        (task,) = self.tasks.items()
+        self.assertEqual(task.title, "I call the plumber on Friday.")
+        note = Note.parse(self.read(f"inbox/{CAPTURE}"))
+        assert note.frontmatter is not None
+        self.assertEqual(note.frontmatter.get_list("tasks"), [follow_up])
+
+    def test_a_follow_up_task_the_capture_does_not_record_is_recorded_when_found(self) -> None:
+        """Covers: B294"""
+        unrecorded = self.tasks.add(
+            "Renew the passport", notes=markers.marker_line(markers.CAPTURE, CAPTURE, "follow-up")
+        )
+
+        asked = ingest.add_task(self.store, self.tasks, CAPTURE, "passport", "Renew passport", None)
+
+        self.assertEqual(asked, unrecorded)
+        self.assertEqual(len(self.tasks.items()), 1)
+        note = Note.parse(self.read(f"inbox/{CAPTURE}"))
+        assert note.frontmatter is not None
+        self.assertEqual(note.frontmatter.get_list("tasks"), [unrecorded])
+
+    def test_a_capture_whose_follow_up_waits_gets_that_task_for_any_key(self) -> None:
+        """Covers: B294"""
+        self.write(
+            f"inbox/{CAPTURE}",
+            "---\ncreated: 2026-11-07T10:15:00+01:00\nsource: claude\nfollow_up: 2026-11-20\n---\n"
+            "I call the plumber on Friday.\n",
+        )
+
+        asked = ingest.add_task(self.store, self.tasks, CAPTURE, "plumber", "Call the plumber", None)
+
+        (task,) = self.tasks.items()
+        self.assertEqual((task.id, task.due), (asked, datetime.date(2026, 11, 20)))
+        self.assertEqual(markers.marker_of(task.notes), (markers.CAPTURE, (CAPTURE, "follow-up")))
+        self.assertIsNone(ingest.add_follow_up_task(self.store, self.tasks, CAPTURE))
+        self.assertEqual(len(self.tasks.items()), 1)
+
     def test_a_capture_without_follow_up_has_no_follow_up_task(self) -> None:
         self.assertIsNone(ingest.add_follow_up_task(self.store, self.tasks, CAPTURE))
         self.assertEqual(self.tasks.items(), [])

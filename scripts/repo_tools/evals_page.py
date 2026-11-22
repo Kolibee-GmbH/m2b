@@ -194,7 +194,7 @@ def _asked_runs(case: str, arms: Mapping[str, Any], arm: str, suite: Mapping[str
 def _arm(case: str, score: float, runs: Sequence[Mapping[str, Any]], models: set[str]) -> Arm:
     errors = 0
     for run in runs:
-        model = _model(run)
+        model = model_of_run(run)
         if model is not None:
             models.add(model)
         elif run.get("error") is None:
@@ -206,7 +206,7 @@ def _arm(case: str, score: float, runs: Sequence[Mapping[str, Any]], models: set
     return Arm(score=score, passed=sum(run.get("passed") is True for run in runs), runs=len(runs), errors=errors)
 
 
-def _model(run: Mapping[str, Any]) -> str | None:
+def model_of_run(run: Mapping[str, Any]) -> str | None:
     """The model of the session a run started, from the trace Claude Code wrote for it."""
     trace = run.get("tracePath")
     if not isinstance(trace, str):

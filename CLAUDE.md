@@ -16,8 +16,9 @@ Calendar via JavaScript for Automation); Linux with the folder store and Markdow
 ## Current Status
 
 [CHANGELOG.md](CHANGELOG.md) names the current release and what each one changed; the version
-itself stands in `plugins/m2b/.claude-plugin/plugin.json`. New changes go under `## [Unreleased]`;
-how a release is made is in [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
+itself stands in `plugins/m2b/.claude-plugin/plugin.json`. A pull request leaves both alone and says
+what changes for the user in its description; a release pull request of its own writes them, as
+[CONTRIBUTING.md](CONTRIBUTING.md#releasing) says.
 
 ## Project Instructions
 

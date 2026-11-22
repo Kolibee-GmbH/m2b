@@ -1,6 +1,15 @@
 {
-  "description": "E6 at the model level: with claude unreachable both model steps fail, the review names it and the next attempt waits; with claude back a forced run succeeds and completes the review.",
+  "description": "E6 at the model level: with claude unreachable both model steps fail, the review names it and the next attempt waits; with claude back a forced run succeeds and completes the review. The model level pauses curation; this scenario turns it back on first, because its third step asks whether a run is due, which a paused machine never answers.",
   "steps": [
+    {
+      "run": [
+        "m2b",
+        "settings",
+        "set",
+        "curation.paused",
+        "false"
+      ]
+    },
     {
       "run": [
         "m2b",

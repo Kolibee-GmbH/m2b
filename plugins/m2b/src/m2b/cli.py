@@ -473,6 +473,9 @@ def _parser() -> argparse.ArgumentParser:
     curate_parser.add_argument("--detach", action="store_true", help="start the run in the background")
     curate_parser.add_argument("--json", action="store_true", help="with --detach: answer the start as JSON")
     curate_parser.add_argument(
+        "--today", help="YYYY-MM-DD: run as on that day, for a test that lets days pass; not with --detach"
+    )
+    curate_parser.add_argument(
         "--after-answers",
         action="store_true",
         help="with --detach: start the run only when every proposal is answered and one is kept",

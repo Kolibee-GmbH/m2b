@@ -1,0 +1,46 @@
+{
+  "description": "E34, the model level only: is an interactive session read as the owner would have typed it? Claude Code runs in a hidden terminal in an invented repository, in the scenario's own Claude Code folder, with m2b. Two turns are typed: a request to run the checks, then a correction to run only the quick round. The reading of sessions finds both prompts in that order, and the correction carries the Bash command of the turn before it. A headless session can never show this: the reading passes over every headless transcript. An interactive session takes no budget limit, which works only headless; each turn is bounded in time. Run it after each Claude Code minor update.",
+  "steps": [
+    {
+      "run": [
+        "sh",
+        "-c",
+        "git init -q && mkdir scripts && printf '#!/bin/sh\\nif [ \"$1\" = --quick ]; then echo \"quick round: passed\"; else echo \"check: passed\"; fi\\n' > scripts/check && chmod +x scripts/check"
+      ],
+      "cwd": "invoice-tool"
+    },
+    {
+      "session": [
+        "--setting-sources",
+        "project",
+        "--plugin-dir",
+        "{core_plugin}",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Bash",
+        "--model",
+        "haiku"
+      ],
+      "turns": [
+        "run scripts/check",
+        "No, only the quick round: run scripts/check --quick."
+      ],
+      "turn_seconds": 300,
+      "cwd": "invoice-tool"
+    }
+  ],
+  "invariants": [
+    {
+      "sessions_read": [
+        {
+          "prompt": "^run scripts/check$"
+        },
+        {
+          "prompt": "only the quick round",
+          "commands": "scripts/check"
+        }
+      ]
+    }
+  ]
+}

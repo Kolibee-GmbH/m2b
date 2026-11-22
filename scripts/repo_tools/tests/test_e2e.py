@@ -456,6 +456,11 @@ class InvariantTest(unittest.TestCase):
         self.assertEqual(self.check({"count": 1, "glob": "tasks/*.md", "content": "m2b:capture \\S+ call"}), [])
         self.assertEqual(len(self.check({"count": 2, "glob": "tasks/*.md"})), 1)
 
+    def test_at_least_counts_the_matching_files_as_a_lower_bound(self) -> None:
+        self.assertEqual(self.check({"at_least": 1, "glob": "memory/*.md", "content": "tea"}), [])
+        self.assertEqual(self.check({"at_least": 2, "glob": "memory/*.md", "content": "[Tt]ea"}), [])
+        self.assertEqual(len(self.check({"at_least": 3, "glob": "memory/*.md"})), 1)
+
     def test_once_counts_occurrences_across_the_files(self) -> None:
         link = "\\[\\[\\d{8}T\\d{6}Z-cli-[0-9a-f]{4}\\.md\\]\\]"
         self.assertEqual(self.check({"once": link, "glob": "memory/*.md"}), [])
@@ -486,11 +491,99 @@ class InvariantTest(unittest.TestCase):
             self.assertEqual(len(problems), 1)
             self.assertIn("kim.md", problems[0])
 
+    def test_a_saved_value_is_put_in_for_its_name_in_an_invariant(self) -> None:
+        invariant = {"count": 1, "glob": "tasks/*.md", "content": "Call {who}"}
+        self.assertEqual(e2e.check_invariants([invariant], self.FILES, {"who": "Dana"}), [])
+        self.assertEqual(len(e2e.check_invariants([invariant], self.FILES, {"who": "Sam"})), 1)
+
     def test_an_empty_folder_without_its_saved_value_is_a_problem(self) -> None:
         self.assertEqual(len(self.check({"empty_folder": "{auto_memory}"})), 1)
 
     def test_an_unknown_invariant_is_a_problem_not_a_pass(self) -> None:
         self.assertEqual(len(self.check({"whatever": 1})), 1)
+
+
+class FailedStepTest(unittest.TestCase):
+    def test_a_session_whose_answer_does_not_match_is_shown_by_its_answer(self) -> None:
+        output = json.dumps(
+            {"duration_api_ms": 5245, "usage": {"input_tokens": 6}, "result": "It is in ~/code/portal."}
+        )
+        self.assertEqual(e2e._answer_or_start(output), "answer: It is in ~/code/portal.")
+        self.assertEqual(e2e._answer_or_start("plain text"), "plain text")
+        self.assertEqual(e2e._answer_or_start("[1, 2]"), "[1, 2]")
+
+
+class SessionStartInvariantTest(unittest.TestCase):
+    """What a real session start handed the model, read from the outputs its transcript records."""
+
+    DISTILLATE = "m2b distillate header.\n\n# Memory\n- Alex keeps the tools in box 1\n[m2b: cut]"
+    NOTES = "m2b at session start.\n\nm2b lessons: kept\n- A plan is a record."
+
+    def start(self, temp: str, outputs: list[tuple[str, str, str]]) -> dict[str, str]:
+        """A transcript with one SessionStart output per (command, stdout, content); the saved values."""
+        claude_config = Path(temp) / "claude"
+        transcript = claude_config / "projects" / "-work-garden-site" / "0a1b2c3d.jsonl"
+        transcript.parent.mkdir(parents=True)
+        lines = [json.dumps({"type": "queue-operation"})]
+        for command, stdout, content in outputs:
+            attachment = {
+                "type": "hook_success",
+                "hookEvent": "SessionStart",
+                "command": f'"${{CLAUDE_PLUGIN_ROOT}}"/bin/{command}',
+                "stdout": stdout,
+                "content": content,
+            }
+            lines.append(json.dumps({"type": "attachment", "attachment": attachment}))
+        lines.append(json.dumps({"type": "attachment", "attachment": {"type": "date", "content": "x"}}))
+        transcript.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return {"claude_config": str(claude_config)}
+
+    def whole(self, temp: str) -> dict[str, str]:
+        return self.start(
+            temp,
+            [
+                ("m2b hook start-notes", self.NOTES + "\n", self.NOTES),
+                ("m2b hook distillate", self.DISTILLATE + "\n", self.DISTILLATE),
+            ],
+        )
+
+    def test_an_output_that_matches_lacks_and_measures_within_its_bytes_passes(self) -> None:
+        invariant = {
+            "session_start": "hook distillate$",
+            "matches": "box 1",
+            "lacks": "m2b lessons",
+            "measure": "\\n\\n([\\s\\S]*)\\n\\[m2b: cut",
+            "at_most_bytes": 40,
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            self.assertEqual(e2e.check_invariants([invariant], {}, self.whole(temp)), [])
+
+    def test_a_measured_part_over_its_bytes_fails_with_its_size(self) -> None:
+        invariant = {"session_start": "hook distillate$", "measure": "\\n\\n([\\s\\S]*)\\n\\[", "at_most_bytes": 20}
+        with tempfile.TemporaryDirectory() as temp:
+            problems = e2e.check_invariants([invariant], {}, self.whole(temp))
+        self.assertEqual(len(problems), 1)
+        self.assertIn("40 bytes", problems[0])
+
+    def test_text_it_must_lack_or_match_fails_it(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            saved = self.whole(temp)
+            lacking = e2e.check_invariants([{"session_start": "start-notes$", "lacks": "lessons"}], {}, saved)
+            matching = e2e.check_invariants([{"session_start": "start-notes$", "matches": "box 1"}], {}, saved)
+        self.assertEqual((len(lacking), len(matching)), (1, 1))
+
+    def test_an_output_claude_code_did_not_pass_whole_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            saved = self.start(temp, [("m2b hook distillate", self.DISTILLATE + "\n", self.DISTILLATE[:20])])
+            problems = e2e.check_invariants([{"session_start": "hook distillate$"}], {}, saved)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("not whole", problems[0])
+
+    def test_no_such_output_or_no_claude_code_folder_is_a_problem(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            saved = self.whole(temp)
+            self.assertEqual(len(e2e.check_invariants([{"session_start": "hook nudge$"}], {}, saved)), 1)
+        self.assertEqual(len(e2e.check_invariants([{"session_start": "hook distillate$"}], {}, {})), 1)
 
 
 class ModelLevelTest(unittest.TestCase):
@@ -511,7 +604,13 @@ class ModelLevelTest(unittest.TestCase):
                 probe = "import os; print(os.environ.get('M2B_MODEL_RUNNER', 'real'))"
                 steps = [{"run": [sys.executable, "-c", probe], "stdout": "real"}]
                 _write_json(folder / "model.json", {"steps": steps, "invariants": [{"count": 1, "glob": "note.md"}]})
-        self.environ = {"PATH": "/usr/bin:/bin", "M2B_HOME": str(root / "real-home"), "M2B_MODEL_RUNNER": "/tmp/stub"}
+        self.environ = {
+            "PATH": "/usr/bin:/bin",
+            "M2B_HOME": str(root / "real-home"),
+            "M2B_MODEL_RUNNER": "/tmp/stub",
+            "CLAUDE_CONFIG_DIR": str(root / "real-claude"),
+            e2e.TOKEN_VARIABLE: "sb-test-token",
+        }
 
     def test_the_model_level_runs_only_scenarios_with_a_model_file_without_the_stub_in_the_given_folder(self) -> None:
         out = io.StringIO()
@@ -586,6 +685,358 @@ class ModelLevelTest(unittest.TestCase):
         bound = fetch + step * runner.MODEL_STEPS + runner.CODE_STEPS_MARGIN
         self.assertLess(bound.total_seconds(), e2e.MODEL_STEP_TIMEOUT_SECONDS)
         self.assertNotIn("curation", e2e.isolated_machine_config(Path("/tmp/sb-test-store")))
+
+
+INTERACTIVE_CLAUDE = Path(__file__).resolve().parent / "claude_interactive.py"
+# A step's probe: prints "ok" when the environment the model level gives it is the one wanted.
+SANDBOX_PROBE = """
+import os, sys
+config = os.environ.get("CLAUDE_CONFIG_DIR", "")
+wanted = {
+    "config in the sandbox": "sb-test-e2e-" in config and os.path.isfile(os.path.join(config, ".claude.json")),
+    "account": os.environ.get(sys.argv[1]) == sys.argv[2],
+    "no other account": sys.argv[3] not in os.environ and "ANTHROPIC_AUTH_TOKEN" not in os.environ,
+    "no running session": not any(name.startswith("CLAUDE") and name not in (
+        "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_OAUTH_TOKEN") for name in os.environ),
+}
+print("ok" if all(wanted.values()) else wanted)
+"""
+
+
+class ModelSandboxTest(unittest.TestCase):
+    """At the model level every session runs in a Claude Code folder of the scenario's own, with the
+    subscription's token, so no transcript reaches the user's folder and nothing is billed per run."""
+
+    def setUp(self) -> None:
+        self._temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._temp.cleanup)
+        root = Path(self._temp.name)
+        self.root = root
+        self.scenarios = root / "scenarios"
+        self.scenario = self.scenarios / "sample"
+        self.scenario.mkdir(parents=True)
+        self.sandboxes = root / "sandboxes"
+        self.real_claude = root / "real-claude"
+        (self.real_claude / "projects").mkdir(parents=True)
+        bin_folder = root / "bin"
+        bin_folder.mkdir()
+        claude = bin_folder / "claude"
+        claude.write_text(f'#!/bin/sh\nexec {sys.executable} {INTERACTIVE_CLAUDE} "$@"\n', encoding="utf-8")
+        claude.chmod(0o755)
+        self.environ = {
+            "PATH": f"{bin_folder}:/usr/bin:/bin",
+            "M2B_HOME": str(root / "real-home"),
+            "CLAUDE_CONFIG_DIR": str(self.real_claude),
+            e2e.TOKEN_VARIABLE: "sb-test-token-value",
+        }
+
+    def given(self, steps: list[dict[str, Any]], invariants: list[dict[str, Any]] | None = None) -> None:
+        _write_json(self.scenario / "model.json", {"steps": steps, "invariants": invariants or []})
+
+    def run_model_level(self, *extra: str, keychain: str | None = None) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with (
+            contextlib.redirect_stdout(out),
+            contextlib.redirect_stderr(err),
+            mock.patch.dict("os.environ", self.environ, clear=True),
+            mock.patch.object(e2e, "keychain_token", return_value=keychain),
+        ):
+            code = e2e.main(
+                [
+                    "--level",
+                    "model",
+                    "--scenarios",
+                    str(self.scenarios),
+                    "--sandbox-root",
+                    str(self.sandboxes),
+                    *extra,
+                ]
+            )
+        return code, out.getvalue(), err.getvalue()
+
+    def probe(self, account: str, value: str, other: str) -> dict[str, Any]:
+        return {"run": [sys.executable, "-c", SANDBOX_PROBE, account, value, other], "stdout": "^ok$"}
+
+    def session(self, turns: list[str], **more: Any) -> dict[str, Any]:
+        return {"session": ["--plugin-dir", "{core_plugin}"], "turns": turns, "cwd": "repo-a", **more}
+
+    def test_a_step_runs_with_the_token_in_a_claude_code_folder_of_the_scenario_and_without_the_running_session(
+        self,
+    ) -> None:
+        self.environ.update(
+            {
+                "ANTHROPIC_API_KEY": "sb-test-key",
+                "ANTHROPIC_AUTH_TOKEN": "sb-test-bearer",
+                "CLAUDECODE": "1",
+                "CLAUDE_CODE_SESSION_ID": "x",
+            }
+        )
+        self.given([self.probe(e2e.TOKEN_VARIABLE, "sb-test-token-value", e2e.API_KEY_VARIABLE)])
+
+        code, out, _ = self.run_model_level()
+
+        self.assertEqual(code, e2e.EXIT_PASSED, out)
+        self.assertEqual(list(self.sandboxes.iterdir()), [])
+
+    def test_the_keychain_gives_the_token_when_the_environment_has_none(self) -> None:
+        del self.environ[e2e.TOKEN_VARIABLE]
+        self.given([self.probe(e2e.TOKEN_VARIABLE, "sb-test-from-keychain", e2e.API_KEY_VARIABLE)])
+
+        code, out, _ = self.run_model_level(keychain="sb-test-from-keychain")
+
+        self.assertEqual(code, e2e.EXIT_PASSED, out)
+
+    def test_without_a_token_the_model_level_stops_before_any_step_and_says_how_to_add_one(self) -> None:
+        del self.environ[e2e.TOKEN_VARIABLE]
+        self.environ["ANTHROPIC_API_KEY"] = "sb-test-key"
+        touched = self.root / "touched"
+        self.given([{"run": ["touch", str(touched)]}])
+
+        code, out, err = self.run_model_level()
+
+        self.assertEqual(code, e2e.EXIT_USAGE)
+        self.assertFalse(touched.exists())
+        self.assertIn("claude setup-token", err)
+        self.assertIn(e2e.KEYCHAIN_SERVICE, err)
+        self.assertIn("--use-api-key", err)
+        self.assertNotIn("sample", out)
+
+    def test_with_use_api_key_the_key_goes_through_and_no_token(self) -> None:
+        self.environ["ANTHROPIC_API_KEY"] = "sb-test-key"
+        self.given([self.probe(e2e.API_KEY_VARIABLE, "sb-test-key", e2e.TOKEN_VARIABLE)])
+
+        code, out, _ = self.run_model_level("--use-api-key")
+
+        self.assertEqual(code, e2e.EXIT_PASSED, out)
+
+    def test_with_use_api_key_an_interactive_session_finds_the_key_accepted(self) -> None:
+        config = Path(self._temp.name) / "claude-config"
+        e2e.prepare_claude_config(config, {e2e.API_KEY_VARIABLE: "sk-ant-sb-test-" + "k" * 30})
+
+        settings = json.loads((config / ".claude.json").read_text(encoding="utf-8"))
+        self.assertEqual(settings["customApiKeyResponses"], {"approved": ["k" * 20], "rejected": []})
+
+    def test_use_api_key_without_a_key_is_a_usage_error(self) -> None:
+        self.given([])
+
+        code, _, err = self.run_model_level("--use-api-key")
+
+        self.assertEqual(code, e2e.EXIT_USAGE)
+        self.assertIn("ANTHROPIC_API_KEY", err)
+
+    def test_an_interactive_session_types_each_turn_and_the_reading_sees_its_prompts_and_commands(self) -> None:
+        self.given(
+            [self.session(["run scripts/check", "No, only the quick round."])],
+            [
+                {
+                    "sessions_read": [
+                        {"prompt": "^run scripts/check$"},
+                        {"prompt": "only the quick round", "commands": "^scripts/check$"},
+                    ]
+                }
+            ],
+        )
+
+        code, out, _ = self.run_model_level()
+
+        self.assertEqual(code, e2e.EXIT_PASSED, out)
+        self.assertEqual(list((self.real_claude / "projects").iterdir()), [])
+
+    def test_a_prompt_the_reading_does_not_see_fails_and_names_what_it_read(self) -> None:
+        self.given([self.session(["run scripts/check"])], [{"sessions_read": [{"prompt": "quick round"}]}])
+
+        code, out, _ = self.run_model_level()
+
+        self.assertEqual(code, e2e.EXIT_FAILED)
+        self.assertIn("run scripts/check", out)
+
+    def test_a_turn_that_never_ends_fails_the_scenario_and_names_the_turn(self) -> None:
+        self.given([self.session(["run scripts/check"], env={"CLAUDE_INTERACTIVE_MODE": "silent"}, turn_seconds=1)])
+
+        code, out, _ = self.run_model_level()
+
+        self.assertEqual(code, e2e.EXIT_FAILED)
+        self.assertIn("end of turn 1", out)
+
+    def test_a_session_without_a_login_is_reported_as_a_missing_token_not_as_a_failed_scenario(self) -> None:
+        self.given([self.session(["run scripts/check"], env={"CLAUDE_INTERACTIVE_MODE": "logged-out"})])
+
+        code, out, err = self.run_model_level()
+
+        self.assertEqual(code, e2e.EXIT_REFUSED)
+        self.assertIn("not logged in", err)
+        self.assertIn("claude setup-token", err)
+        self.assertNotIn("FAILED", out)
+
+    def test_a_headless_step_without_a_login_is_reported_the_same_way(self) -> None:
+        refused = "print('Not logged in \\u00b7 Please run /login'); raise SystemExit(1)"
+        self.given([{"run": [sys.executable, "-c", refused]}])
+
+        code, _, err = self.run_model_level()
+
+        self.assertEqual(code, e2e.EXIT_REFUSED)
+        self.assertIn("not logged in", err)
+
+    def test_a_transcript_of_the_run_in_the_user_s_claude_code_folder_fails_the_scenario(self) -> None:
+        leak = (
+            "import os, pathlib, re; "
+            "(pathlib.Path(os.environ['REAL']) / 'projects' / re.sub('[^A-Za-z0-9]', '-', os.getcwd())).mkdir()"
+        )
+        self.given([{"run": [sys.executable, "-c", leak], "env": {"REAL": str(self.real_claude)}}])
+
+        code, out, _ = self.run_model_level()
+
+        self.assertEqual(code, e2e.EXIT_FAILED)
+        self.assertIn("the user's Claude Code folder", out)
+
+    def test_the_token_never_appears_in_the_report_even_where_the_output_is_cut(self) -> None:
+        self.environ[e2e.TOKEN_VARIABLE] = "sb-test-token-value-" + "x" * 40
+        across_the_cut = "import os, sys; sys.exit('y' * 390 + os.environ['CLAUDE_CODE_OAUTH_TOKEN'])"
+        self.given([{"run": [sys.executable, "-c", across_the_cut]}])
+
+        code, out, err = self.run_model_level()
+
+        self.assertEqual(code, e2e.EXIT_FAILED)
+        self.assertNotIn("sb-test-token-value", out + err)
+        self.assertIn("<token>", out)
+
+    def test_a_scenario_with_only_a_model_file_runs_at_the_model_level_and_is_left_out_below(self) -> None:
+        self.given([])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), mock.patch.dict("os.environ", self.environ, clear=True):
+            code = e2e.main(
+                ["--level", "stub", "--scenarios", str(self.scenarios), "--sandbox-root", str(self.sandboxes)]
+            )
+
+        self.assertEqual(code, e2e.EXIT_PASSED, out.getvalue())
+        self.assertIn("0 of 0", out.getvalue())
+        self.assertEqual(self.run_model_level()[0], e2e.EXIT_PASSED)
+
+
+class SessionTranscriptTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._temp.cleanup)
+        self.root = Path(self._temp.name)
+
+    def write(self, name: str, records: list[dict[str, Any]]) -> None:
+        path = self.root / "projects" / "-x" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("".join(json.dumps(record) + "\n" for record in records), encoding="utf-8")
+
+    def test_only_the_turn_ends_of_an_interactive_session_started_in_that_folder_count(self) -> None:
+        folder = self.root / "repo-a"
+        folder.mkdir()
+        end = {"type": "system", "subtype": "turn_duration", "entrypoint": "cli", "cwd": str(folder)}
+        after_a_cd = {**end, "cwd": str(folder / "scripts")}
+        self.write("one.jsonl", [{"type": "user", "cwd": str(folder)}, end, after_a_cd])
+        self.write("headless.jsonl", [{**end, "entrypoint": "sdk-cli"}])
+        self.write("elsewhere.jsonl", [{**end, "cwd": str(self.root / "repo-b")}, end])
+
+        self.assertEqual(e2e.turn_ends(self.root / "projects", folder), 2)
+        self.assertEqual(e2e.turn_ends(self.root / "nothing", folder), 0)
+
+    def test_the_scenario_s_claude_code_folder_skips_the_first_start_and_trusts_the_session_s_folder(self) -> None:
+        config = self.root / "claude-config"
+        e2e.prepare_claude_config(config, {e2e.TOKEN_VARIABLE: "sb-test-token"})
+        e2e.trust_folder(config, self.root / "repo-a")
+
+        settings = json.loads((config / ".claude.json").read_text(encoding="utf-8"))
+        self.assertTrue(settings["hasCompletedOnboarding"])
+        self.assertIn("theme", settings)
+        self.assertNotIn("customApiKeyResponses", settings)
+        trusted = {path for path, entry in settings["projects"].items() if entry["hasTrustDialogAccepted"]}
+        self.assertIn(str((self.root / "repo-a").resolve()), trusted)
+
+
+def _an_unforced_run(argv: list[str]) -> bool:
+    """``m2b curate`` with options only and without ``--force``; ``m2b curate model ...`` runs one step."""
+    options = argv[2:]
+    return argv[:2] == ["m2b", "curate"] and "--force" not in options and all(o.startswith("-") for o in options)
+
+
+class WordingAndArmTest(unittest.TestCase):
+    """A promise case runs in three wordings and, where it is compared, against Claude Code alone."""
+
+    SCRIPT: ClassVar[dict[str, Any]] = {
+        "wordings": [
+            {"say": "Remember the key is under the pot.", "answer": "pot"},
+            {"say": "Merk dir: der Schlüssel liegt unter dem Topf.", "answer": "Topf", "language": "de"},
+            {"say": "Note that the key lies below the pot.", "answer": "pot"},
+        ],
+        "steps": [
+            {"run": ["m2b", "curate", "--force"], "arm": "with"},
+            {
+                "run": ["claude", "-p", "{say}", "--plugin-dir", "{core_plugin}", "--model", "haiku"],
+                "stdout": "{answer}",
+            },
+            {"session": ["--plugin-dir", "{core_plugin}"], "turns": ["{say}"], "cwd": "repo"},
+        ],
+        "invariants": [
+            {"count": 1, "glob": "inbox/*.md", "arm": "with"},
+            {"matches": "{answer}", "path": "answer.md"},
+        ],
+    }
+
+    def test_a_wording_fills_the_arguments_the_turns_the_patterns_and_the_invariants(self) -> None:
+        script = e2e.for_run(self.SCRIPT, wording=1, arm=e2e.WITH)
+
+        self.assertEqual(script["steps"][1]["run"][2], "Merk dir: der Schlüssel liegt unter dem Topf.")
+        self.assertEqual(script["steps"][1]["stdout"], "Topf")
+        self.assertEqual(script["steps"][2]["turns"], ["Merk dir: der Schlüssel liegt unter dem Topf."])
+        self.assertEqual(script["invariants"][1]["matches"], "Topf")
+        self.assertIn("{core_plugin}", script["steps"][1]["run"])
+
+    def test_without_m2b_no_session_gets_the_plugin_and_what_needs_m2b_is_left_out(self) -> None:
+        script = e2e.for_run(self.SCRIPT, wording=0, arm=e2e.WITHOUT)
+
+        self.assertEqual(len(script["steps"]), 2)
+        self.assertEqual(
+            script["steps"][0]["run"], ["claude", "-p", "Remember the key is under the pot.", "--model", "haiku"]
+        )
+        self.assertEqual(script["steps"][1]["session"], [])
+        self.assertEqual(script["invariants"], [{"matches": "pot", "path": "answer.md"}])
+
+    def test_a_script_without_wordings_is_run_as_written(self) -> None:
+        plain = {"steps": [{"run": ["m2b", "status"], "stdout": "\\d{2}"}], "invariants": []}
+
+        self.assertEqual(e2e.for_run(plain, wording=2, arm=e2e.WITH), plain)
+
+    def test_a_case_that_starts_claude_code_needs_three_wordings_one_in_german(self) -> None:
+        self.assertEqual(e2e.wording_problem(self.SCRIPT), None)
+        two = {**self.SCRIPT, "wordings": self.SCRIPT["wordings"][:2]}
+        self.assertIn("three wordings", e2e.wording_problem(two) or "")
+        english = {**self.SCRIPT, "wordings": [{"say": "a"}, {"say": "b"}, {"say": "c"}]}
+        self.assertIn("German", e2e.wording_problem(english) or "")
+        no_session = {"steps": [{"run": ["m2b", "curate", "--force"]}], "invariants": []}
+        self.assertEqual(e2e.wording_problem(no_session), None)
+
+    def test_the_model_level_starts_no_curation_run_by_itself(self) -> None:
+        config = e2e.isolated_machine_config(Path("/tmp/sb-test-store"), level=e2e.MODEL)
+
+        self.assertTrue(parse_machine_config(config, Path("/tmp/sb-test-home")).curation.paused)
+
+    def test_a_model_scenario_that_asks_whether_a_run_is_due_turns_curation_on_first(self) -> None:
+        unpause = ["m2b", "settings", "set", "curation.paused", "false"]
+        for path in sorted(e2e.SCENARIO_ROOT.glob(f"*/{e2e.MODEL_FILE}")):
+            runs = [step.get("run", []) for step in json.loads(path.read_text(encoding="utf-8"))["steps"]]
+            unforced = [number for number, run in enumerate(runs) if _an_unforced_run(run)]
+            with self.subTest(scenario=path.parent.name):
+                if unforced:
+                    self.assertIn(unpause, runs[: unforced[0]])
+
+    def test_the_models_that_answered_are_read_from_the_transcripts(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            transcript = Path(folder) / "-x" / "one.jsonl"
+            transcript.parent.mkdir()
+            lines = [
+                {"type": "assistant", "message": {"model": "claude-haiku-5-5", "content": []}},
+                {"type": "assistant", "message": {"model": "<synthetic>", "content": []}},
+                {"type": "user", "message": {"content": "hi"}},
+            ]
+            transcript.write_text("".join(json.dumps(line) + "\n" for line in lines), encoding="utf-8")
+
+            self.assertEqual(e2e.models_in(Path(folder)), ["claude-haiku-5-5"])
 
 
 class AppleLevelTest(unittest.TestCase):

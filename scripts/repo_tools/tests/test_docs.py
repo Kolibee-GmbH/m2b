@@ -120,6 +120,33 @@ class EvalsPageTest(unittest.TestCase):
         self.assertTrue("](docs/evals.md)" in readme, "README.md does not link docs/evals.md")
 
 
+class TestLevelsPageTest(unittest.TestCase):
+    """The map of the costly checks names each one, so a new one cannot go without its level."""
+
+    def setUp(self) -> None:
+        self.page = (REPO / "docs" / "test-levels.md").read_text(encoding="utf-8")
+
+    def test_the_page_names_every_model_scenario(self) -> None:
+        scenarios = sorted(path.parent.name for path in (REPO / "tests" / "e2e").glob("*/model.json"))
+
+        self.assertTrue(scenarios)
+        self.assertEqual([name for name in scenarios if f"`{name}`" not in self.page], [])
+
+    def test_the_page_names_every_eval_case_and_every_wording(self) -> None:
+        cases = sorted(
+            path.parent.name for folder in ("evals", "evals-wordings") for path in (PLUGIN / folder).glob("*/case.yaml")
+        )
+
+        self.assertTrue(cases)
+        self.assertEqual([name for name in cases if f"`{name}`" not in self.page], [])
+
+    def test_contributing_states_the_levels_and_links_the_page(self) -> None:
+        contributing = (REPO / "CONTRIBUTING.md").read_text(encoding="utf-8")
+
+        self.assertIn("\n## Test levels\n", contributing)
+        self.assertIn("](docs/test-levels.md)", contributing)
+
+
 class LinkTest(unittest.TestCase):
     def test_every_relative_link_in_the_docs_names_a_file_that_exists(self) -> None:
         broken = [

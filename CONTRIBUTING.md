@@ -35,12 +35,14 @@ Two workflows run `scripts/check` on GitHub. `.github/workflows/ci.yml` runs it 
 request and on `main`, with the Claude Code version the README names as the minimum.
 `.github/workflows/weekly.yml` runs it every Monday, and whenever someone starts it by hand, with
 the newest Claude Code: m2b hangs on Claude Code's plugin interface, and the weekly run meets a new
-version before a user does. It also runs the [model-level scenarios](#end-to-end-scenarios) and
-the [fence probe](#whether-the-fence-still-holds), each in a job of its own, when
-the repository has one of two secrets: `ANTHROPIC_API_KEY`, an API key that is billed per run, or
-`CLAUDE_CODE_OAUTH_TOKEN`, the token `claude setup-token` gives for a subscription. Without either,
-both jobs are skipped and a notice on the run says so. Started by hand, the workflow takes the names
-of the scenarios to run. A scheduled run that fails opens an issue, or adds a comment to the one
+version before a user does. It also runs the [model-level scenarios](#end-to-end-scenarios), the
+[promises](#promises) and the [fence probe](#whether-the-fence-still-holds), each in a job of its
+own, when the repository has one of two secrets: `ANTHROPIC_API_KEY`, an API key that is billed per run, or
+`CLAUDE_CODE_OAUTH_TOKEN`, the token `claude setup-token` gives for a subscription; the scenarios
+take the key only where the token is missing. Without either, these jobs are skipped and a notice on
+the run says so. The job of the scenarios runs those no promise names (`scripts/promises
+--other-scenarios`), because the job of the promises runs the others three times each. Started by
+hand, the workflow takes the names of the scenarios to run, and then leaves the promises out. A scheduled run that fails opens an issue, or adds a comment to the one
 still open; a run started by hand does not. GitHub starts scheduled runs from `main` only, and
 in a public repository it stops them after sixty days without activity until someone turns the
 workflow on again.
@@ -65,6 +67,29 @@ top of the plugin's folder until it is named as the core's or as an add-on's. Wh
 to keep of the core's rules (its skills, its hook command, its step in the core's catalogue, what
 it imports from the core) is tested in its own suite, `tests/unit/addons/<add-on>/`, which
 may use the fixtures of the core's tests. The core's tests use nothing of an add-on.
+
+## Test levels
+
+Every check has one level, the lowest that can show it, and a higher level checks nothing a lower
+one checks already. A level is strong at some things and weak at others:
+
+| Level | Strong at | Not for |
+|---|---|---|
+| Unit tests (`tests/unit/`) | the rules of one module: edge cases, error paths, formats, state files; fast and exact | anything across processes, Claude Code, a model |
+| Stub scenarios (`scripts/e2e --level stub`) | the chain of commands, hooks and curation steps with a scripted model: which files a run leaves, in which order, under which config | what a model judges, what Claude Code does |
+| Model step measures (`scripts/ingest-eval`, `scripts/glean-eval`) | how well one model step judges a fixed input: found, right, traps, per model | the chain, a session |
+| Eval cases (`claude plugin eval`) | what one session answers or calls with m2b and without, for one prompt | curation, several sessions, time |
+| Model scenarios (`scripts/e2e --level model`) | the seams to Claude Code: real hooks, the transcript, an interactive session, a real model step in the chain | rules a lower level checks, quality numbers |
+| Promise cases ([Promises](#promises)) | the outcome the owner sees, from what they say to what a later session does | any step a lower level checks |
+
+A new check starts at the lowest level that can fail for the reason it is written for. A model
+scenario beside a stub scenario checks only what the real model or Claude Code adds; a promise
+case asserts the outcome and trusts the levels below for the steps, so a step it needs is a setup
+step without a pattern, and the run fails on the outcome when the step did not happen. Where the
+outcome can fail and no lower level checks the step that would explain it, the gap is closed at
+that lower level, not in the promise case. [Test levels](docs/test-levels.md) maps every model
+scenario and eval case to what it checks, and names the checks that look alike and why each is
+made once.
 
 ## Behavior coverage
 
@@ -110,9 +135,10 @@ A scenario is a folder in `tests/e2e/` with `given/` (the store before), `steps.
 runs each one with its own `M2B_HOME` and a test config, so it never touches
 your own setup.
 
-A scenario with a `model.json` also runs at the model level, with the real `claude` and your own
-login, and checks invariants instead of exact files, because a model words things its own way. It
-costs model runs, so it is not part of `scripts/check`; run it on purpose:
+A scenario with a `model.json` also runs at the model level, with the real `claude`, and checks
+invariants instead of exact files, because a model words things its own way. A scenario that is only
+a `model.json` runs at that level alone. It costs model runs, so it is not part of `scripts/check`;
+run it on purpose:
 
 ```bash
 scripts/e2e --level model                                   # every scenario with a model.json
@@ -125,7 +151,90 @@ scripts/e2e --level model E32-file-captured                 # the same
 scripts/e2e --level model E17-planted-capture               # and after a change to the ingest skill
 scripts/e2e --level model E14-topics                        # after a change to the ingest skill
 scripts/e2e --level model E33-project-known                 # the same
+scripts/e2e --level model E34-session-read                  # after each Claude Code minor update
+scripts/e2e --level model E35-correction-kept               # the same, and after a change to lessons
+scripts/e2e --level model E36-correction-read               # the same, and after a change to the reading
+scripts/e2e --level model E37-fact-after-its-day            # after a change to ingest or refresh
+scripts/e2e --level model E39-start-stays-small             # after a change to the session start
+scripts/e2e --level model E40-task-on-friday                # after a change to ingest or the note tool
+scripts/e2e --level model E41-project-elsewhere             # after a change to ingest or the topics
+scripts/e2e --level model E42-words-kept                    # after a change to ingest or the note tool
 ```
+
+Every session at this level runs in a Claude Code folder of the scenario's own, set as
+`CLAUDE_CONFIG_DIR`: its transcript stays out of yours, where your own curation reads, and Claude
+Code's own memory starts empty. A folder of its own has no login, so the sessions run with a token
+for your subscription. Make one once with `claude setup-token` and either set it as
+`CLAUDE_CODE_OAUTH_TOKEN` or, on macOS, keep it in the keychain, where the scenarios look when the
+variable is not set:
+
+```bash
+security add-generic-password -s m2b-journey-token -a "$USER" -w
+```
+
+The runs then count against the subscription's usage. `ANTHROPIC_API_KEY` would go before the token
+and bill each run, so the scenarios leave it out unless you pass `--use-api-key`. Without an account
+the model level stops before the first session and says how to add one; a session that says it is
+not logged in is reported as that, not as a failed scenario, and the run ends there. A token's value
+never shows in the report. After each scenario the runner looks in your Claude Code folder for
+transcripts of its sessions and fails the scenario when it finds one. The test config pauses
+curation, so a run comes only from a step that starts one, never from a session's start.
+
+A `model.json` can hold three `wordings` of what the owner says, one marked `"language": "de"`;
+a run plays one of them (`--wording 2`), its texts put in for `{name}` in the steps and invariants.
+A step or an invariant marked `"arm": "with"` is left out when the scenario runs against Claude Code
+alone, which [`scripts/promises`](#promises) does by taking every `--plugin-dir` out of it, and
+one marked `"arm": "without"` is left out of the runs with m2b. A step marked `"control": true`
+shows that such a run was fair; when it or a step before it fails, the run shows nothing.
+
+A step `{"session": [arguments...], "turns": ["...", ...]}` runs Claude Code interactively in a
+hidden terminal and types each turn once the one before has ended, which it tells by the record
+Claude Code writes into the transcript at a turn's end. The reading of sessions passes over every
+transcript of a headless run, so only such a session shows what a curation run reads from what the
+owner typed. The invariant `sessions_read` checks that: the prompts it finds, in order, each with
+the Bash commands of the turn before it.
+
+`E35-correction-kept` and `E36-correction-read` are the cases of the promise that a correction
+you keep you do not repeat. In two invented repositories the owner asks for the checks and corrects
+Claude to the quick round; each repository's `scripts/check` leaves a file for the round it ran. In
+E35 the owner asks to keep it, and Claude keeps it with `m2b lesson add`; in E36 `m2b lesson add` is
+not allowed, and a curation run that reads the sessions proposes the lesson, which the owner keeps.
+In both a run files the lesson, and in a third repository Claude, asked to check a small change,
+runs only the quick round. Against Claude Code alone the third repository runs the whole proof. The
+control of E35 is that Claude Code alone, asked to keep the correction, kept it in its own memory of
+the second repository; the control of E36 is that every session ran a check, since keeping a
+correction nobody asked to keep is what the reading adds. Two interactive sessions and a headless one
+on Sonnet, one or two curation runs, under a minute each.
+
+`E37-fact-after-its-day` is the case of the promise that facts with an end date are rewritten: a
+session is told that Sam brings the plywood next Friday, a run files it with that Friday as its end,
+and a run 30 days later on the test clock (`m2b curate --today`) rewrites it, so the distillate says
+the plywood was brought. One session on Sonnet and two curation runs, under a minute.
+
+`E40-task-on-friday` is the case of the promise that a sentence becomes a task: a session is told to
+remind the owner to call the plumber on Friday, and after a run the task list holds one task about
+it, due that Friday, and nothing for the owner to check. `E41-project-elsewhere` is the case of the
+promise that a project knows where it lies: in a clone the owner says to remember the project, a run
+files it, and a session in another repository, asked where the project lies, answers with the
+clone's folder; against Claude Code alone it does not, and the control is that Claude Code kept the
+project in its own memory of the clone. Neither session may use a tool that lists folders. Each is
+one or two sessions on Sonnet and one curation run, under a minute.
+
+`E42-words-kept` is the case of the promise that your words stay and every fact points to them: a
+session is told about Dana's canoe in a turn of phrase the curator rewrites, and after a run the
+fact file the distillate's line names, read with `m2b source`, lists the archived note that holds
+the owner's phrase as said. One session on Sonnet and one curation run, under a minute.
+
+`E39-start-stays-small` is the case of the promise that the start stays small. The store holds a
+distillate over 8 KB and a lesson; a session starts on Haiku and answers from a fact near the
+distillate's top. The invariant `session_start` reads what the session-start hooks handed the
+model, as the session's transcript records it: each output whole, the distillate's part at most
+8 KB with the line saying where the rest is, the lesson only in the second output. Under a minute.
+
+`E34-session-read` types two turns into a session in an invented repository: "run scripts/check",
+then a correction to run only the quick round. It passes when the reading finds both prompts in
+that order and the correction carries the command of the turn before. Two turns on Haiku, under a
+minute.
 
 `E33-project-known` files a project kept with `m2b capture --project` through a real ingest step and
 checks the topic it becomes: a heading with two to five words, the repository's name among them, and
@@ -139,12 +248,11 @@ has an account for it.
 and checks that "remember that ..." about a person lands in m2b's inbox and not in Claude Code's
 memory.
 
-`E22-recall-across-projects` compares m2b with Claude Code's own memory, the alternative a user
-has without it. A fact is told in one project's session and asked for in another's. With m2b,
-the second project's session answers from m2b. With Claude Code alone, it does not know, and a
-second session in the first project does, which shows that Claude Code's memory kept the fact and
-keeps it to that project. A step's `cwd` gives each session its own project folder. Five sessions
-on Sonnet, a few minutes.
+`E22-recall-across-projects` tells a fact in one project's session and asks for it in another's;
+the second project's session answers from m2b. A step's `cwd` gives each session its own project
+folder. It holds three wordings, one in German, and is the case of a [promise](#promises) that is
+compared with Claude Code's own memory: there the second project does not know. Two sessions on
+Sonnet per run, under a minute.
 
 `E26-tick-a-task` puts two open tasks into the list and tells a session in a plain sentence that
 one of them is done. It passes when that task is ticked, the other is still open and no note
@@ -249,12 +357,41 @@ temporary folder every measurement is unproven, and the message names both folde
 The [weekly workflow](#checks) runs it with the newest Claude Code. Run it yourself after a change
 to how a step is started (`curate/model.py`).
 
+## Promises
+
+[Promises](docs/promises.md) lists what the README promises and the cases that prove each, and
+says when a promise holds: every case passes in three runs with m2b, each in another wording, one
+of them German, and a promise that is compared with Claude Code alone passes there at most once.
+`scripts/promises` runs them and prints per promise whether it holds, each run with `✓` or `✗`,
+what broke, and the versions it ran with:
+
+```bash
+scripts/promises        # every promise
+scripts/promises 1 7    # these two
+```
+
+It runs the scenarios at the model level, with the account and the folders described in
+[End-to-end scenarios](#end-to-end-scenarios), and the eval cases through `claude plugin eval` with
+a Claude Code folder of their own. The account is a token for your subscription: make one with
+`claude setup-token` and set it as `CLAUDE_CODE_OAUTH_TOKEN`, or on macOS keep it in the keychain
+under the service `m2b-journey-token`; `--use-api-key` takes `ANTHROPIC_API_KEY` instead and bills
+each run. A run of every promise starts 72 headless sessions and curation steps, 24 interactive
+sessions and nine eval cases of three runs each. On 2026-11-21 it took 15 minutes, and Claude Code priced it at
+about 4 dollars as the API would bill it; with the token nothing is billed and the runs count
+against the plan's usage limits instead. It exits 0 when every promise it ran holds, 1 when one does not
+and 2 when it could not start: a catalog it cannot read, no account, or a session that is not
+logged in. `--max-minutes` bounds the whole run; a run it did not start does not pass.
+
 ## Evals
 
 The scenarios check that m2b does what it should. The evals in `plugins/m2b/evals/` check what it
 does to Claude's answers: each case runs the same prompt in a session with m2b and in one without,
 and `claude plugin eval` scores both. [Evals](docs/evals.md) lists what each case asks and when it
 passes, how to read the scores, and the scores of the last run.
+
+`plugins/m2b/evals-wordings/` holds a second and a third wording of some suite cases, one in German,
+for the [promises](#promises): each starts as its case does and checks the same. They are not part
+of the suite and not on that page, so a run of the suite stays the run the page reports.
 
 Every case starts from the same invented store, `evals/demo-store.sh`: it sets m2b up in the
 fresh `HOME` the eval gives each run, so your own store is never read. Its owner turned
@@ -418,33 +555,73 @@ run keep no session, so these runs leave nothing under `~/.claude/projects/`.
 
 Claude Code installs a plugin by its version number. `/plugin update` compares the installed
 version with the one in the marketplace and reports "already at the latest version" while they
-match, however many commits came since. A change reaches users only with a release:
+match, however many commits came since. A change reaches users only with a release, and a release
+is a pull request of its own:
 
-1. Pick the new version by [semantic versioning](https://semver.org/) and write it into
-   `version` in `plugins/m2b/.claude-plugin/plugin.json`.
-2. In `CHANGELOG.md`, turn the entries under `## [Unreleased]` into a section
-   `## [X.Y.Z] - YYYY-MM-DD` with the day of the release, and leave an empty `## [Unreleased]`
-   above it. Entries sit under `### Added`, `### Changed` or `### Fixed`, one sentence or two each
-   on what changes for the user, ending in the pull request that made it, as
-   `([#12](https://github.com/Kolibee-GmbH/m2b/pull/12))`.
+- **A pull request for a feature or a fix leaves `CHANGELOG.md` and the version alone.** It says what
+  changes for the user in the section "What changes for the user" of its description. Two pull
+  requests open at the same time then never conflict over the changelog.
+- **The release pull request writes both**, once the pull requests it releases are merged. Its
+  checks run on `main` with the new version, the state that is released.
+
+1. Branch `release-X.Y.Z` from `main`. Pick the version by [semantic
+   versioning](https://semver.org/) and write it into `version` in
+   `plugins/m2b/.claude-plugin/plugin.json`.
+2. In `CHANGELOG.md`, add a section `## [X.Y.Z] - YYYY-MM-DD` with the day of the release, above
+   the one before, written from "What changes for the user" of each pull request merged since the
+   last tag (`git log --oneline vA.B.C..main`). Entries sit under `### Added`, `### Changed` or
+   `### Fixed`, one sentence or two each on what changes for the user, ending in the pull request
+   that made it, as `([#12](https://github.com/Kolibee-GmbH/m2b/pull/12))`. A pull request that
+   changes nothing for the user gets no entry. Entries left under a heading `## [Unreleased]` move
+   into the new section, and the heading goes.
 3. Run `scripts/check`; it must end with `check: passed`. If the release changes what the model
-   sees, run the [evals](#evals) too and write their scores into `docs/evals.md` with
-   `scripts/evals-page`; every case must score 1.00 with m2b.
+   sees, such as a skill, a hook, a tool description, what a tool or command returns to a session,
+   the text a session starts with or the distillate's format, run the [evals](#evals) too and
+   write their scores into `docs/evals.md` with `scripts/evals-page`; every case must score 1.00
+   with m2b. Then run `scripts/promises`: every [promise](#promises) must hold. A promise that does
+   not hold blocks the release until it is fixed, in the product or in its case; it is never
+   released as open. Three eval cases run in both, because the page reports one run of the whole
+   suite and a promise counts only runs of its own; the second time costs about a minute.
 4. Commit both files, and the eval page if it was rewritten, as `chore(release): m2b X.Y.Z`, open
-   a pull request to `main` and merge it; a squash merge is fine. The marketplace reads
-   `plugins/m2b` from `main`, not from a tag, so until the merge `/plugin update` keeps reporting
-   the old version.
-5. On `main`, at the merged release, tag and push the tag:
+   a pull request to `main` and let it merge itself once CI is green; that needs "Allow auto-merge"
+   on in the repository's settings (`gh repo edit --enable-auto-merge`):
 
    ```bash
-   git switch main && git pull --ff-only
-   git tag vX.Y.Z && git push origin vX.Y.Z
+   gh pr create --title "m2b X.Y.Z" --body-file <notes> && gh pr merge --auto --squash
+   ```
+
+   Its description says what the release changes for the user and which checks ran.
+5. Tag the release pull request's merge commit and push the tag. Name the commit: another pull
+   request may have merged into `main` since, and the tag decides what goes into the zip:
+
+   ```bash
+   git fetch origin
+   git tag vX.Y.Z "$(gh pr view release-X.Y.Z --json mergeCommit --jq .mergeCommit.oid)"
+   git push origin vX.Y.Z
    ```
 
    The tag starts `.github/workflows/release.yml`. It checks that the tag names the version in
    `plugin.json` and sits on `main`, and publishes a GitHub release with that version's section
-   of the changelog as its notes. A link in the section to a file of the repository, such as
-   `(docs/curation.md#pausing)`, points to that file at the tag in the notes.
+   of the changelog as its notes and the plugin's folder at the tag as `m2b-plugin.zip`. A link in
+   the section to a file of the repository, such as `(docs/curation.md#pausing)`, points to that
+   file at the tag in the notes. Its job `install` then installs the zip through a marketplace
+   that names its address and SHA-256, with the oldest Claude Code m2b supports and the newest,
+   and checks that Claude Code reports the version of the tag.
+6. Once `install` passed, point the marketplace at the zip, in a pull request of its own:
+
+   ```bash
+   git switch -c pin-vX.Y.Z origin/main
+   scripts/pin-release vX.Y.Z
+   git commit -am "chore(release): pin installs to m2b X.Y.Z's plugin zip"
+   gh pr create --title "Pin installs to m2b X.Y.Z's plugin zip" --body "..." && gh pr merge --auto --squash
+   ```
+
+   `scripts/pin-release` fetches the zip, hashes it and writes its address, its SHA-256 and the
+   version into the plugin's entry in `.claude-plugin/marketplace.json`. From then on every install
+   and every `/plugin update` gets exactly the release, and Claude Code refuses a download that
+   does not match; what is merged on `main` after it reaches no one until the next release. Until
+   the pin merges, installs get what the entry named before: the release before this one or, before
+   the first pin, the plugin's folder on `main`.
 
 ## README images
 

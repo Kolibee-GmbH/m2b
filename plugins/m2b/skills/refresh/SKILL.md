@@ -43,7 +43,9 @@ Tell the owner exactly what it printed, and stop.
 
 ## 2. Each due fact
 
-`facts` lists each due fact file with its `path` (relative to `store`) and its `until`. For each:
+`facts` lists each due fact file with its `path` (relative to `store`) and its `until`. `today` is
+the day the run counts as today, the day each fact is past: count from it, also where the date your
+session states is another. For each:
 
 1. Read `<store>/memory/MEMORY.md` and the fact file, then the evidence it links: each
    `[[name]]` under `## Evidence` is an archive file, `<store>/corpus/YYYY/MM/<name>`, the year and

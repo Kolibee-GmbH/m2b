@@ -17,10 +17,10 @@ nor a model. Both end with a first capture, a curation run and a first search.
    ```
 
    A new version reaches you through `/plugin marketplace update m2b` and
-   `/plugin update m2b@m2b`, see [Updating](../README.md#updating). To install from a checkout
-   instead, for example to try a branch, add it as the marketplace:
-   `/plugin marketplace add <path to the checkout>`, then the same install; before an update run
-   `git pull` in it, because the marketplace is that folder and updating it fetches nothing.
+   `/plugin update m2b@m2b`, see [Updating](../README.md#updating). Each version comes from its
+   release, never from what is merged since. To try a branch, start Claude Code with the plugin of
+   a checkout: `claude --plugin-dir <path to the checkout>/plugins/m2b`. A checkout added as the
+   marketplace installs the release its marketplace names, not the branch.
 
    **You should see** the install end with `Plugin is now active.`, or with
    `Run /reload-plugins to apply.`, which Claude Code then runs by itself. Type `/`: `/m2b:m2b` is

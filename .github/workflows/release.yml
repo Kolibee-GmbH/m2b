@@ -4,6 +4,8 @@ name: release
 # manifest and sit on main, and the release notes are that version's section of the changelog.
 # A link in that section to a file of the repository, as `(docs/curation.md#pausing)`, is written
 # out to the file at the tag: release notes are not shown beside the files, so it would lead nowhere.
+# The release carries the plugin's folder at the tag as a zip, which the marketplace installs from
+# once scripts/pin-release pinned it, and the job install proves that Claude Code installs it.
 # Adapted from the release workflow of prismantis (MIT, Nahum Litvin).
 
 on:
@@ -32,6 +34,45 @@ jobs:
           awk -v v="${GITHUB_REF_NAME#v}" 'index($0, "## [" v "] - ") == 1 {f=1; next} /^## / {f=0} f' CHANGELOG.md > section.md
           sed -E "s|\]\(([^)#:][^):]*)\)|](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/\1)|g" section.md > notes.md
           test -s notes.md
-      - run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md
+      - name: Plugin zip
+        run: |
+          # A tree has no time of its own, so git archive would stamp the present one: with the
+          # commit's time the zip of a tag is the same each time it is built, and so is its SHA-256.
+          git archive --format=zip --mtime="$(git show -s --format=%cI "$GITHUB_SHA")" -o m2b-plugin.zip "$GITHUB_SHA:plugins/m2b"
+          echo "m2b-plugin.zip sha256: $(sha256sum m2b-plugin.zip | cut -d' ' -f1)" >> "$GITHUB_STEP_SUMMARY"
+      - run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md m2b-plugin.zip
         env:
           GH_TOKEN: ${{ github.token }}
+
+  # The zip installed as a user's machine will install it: through a marketplace that names its
+  # address and SHA-256, with the oldest Claude Code m2b supports (ci.yml) and the newest.
+  install:
+    needs: release
+    strategy:
+      fail-fast: false
+      matrix:
+        claude: ['2.1.319', latest]
+    name: install from the zip (claude ${{ matrix.claude }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: npm install --global "@anthropic-ai/claude-code@${{ matrix.claude }}"
+      - name: Install the release zip through a marketplace pinned to its sha256
+        env:
+          URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/m2b-plugin.zip
+        run: |
+          export CLAUDE_CONFIG_DIR="$RUNNER_TEMP/claude"
+          mkdir -p "$CLAUDE_CONFIG_DIR" "$RUNNER_TEMP/marketplace/.claude-plugin"
+          curl -fsSL --retry 6 --retry-all-errors --retry-delay 10 -o "$RUNNER_TEMP/m2b-plugin.zip" "$URL"
+          sha=$(sha256sum "$RUNNER_TEMP/m2b-plugin.zip" | cut -d' ' -f1)
+          jq -n --arg url "$URL" --arg sha "$sha" \
+            '{name: "release", owner: {name: "ci"}, plugins: [{name: "m2b", source: {source: "archive", url: $url, sha256: $sha}}]}' \
+            > "$RUNNER_TEMP/marketplace/.claude-plugin/marketplace.json"
+          claude plugin marketplace add "$RUNNER_TEMP/marketplace"
+          claude plugin install m2b@release
+          claude plugin list | tee installed.txt
+          grep -F "m2b@release" installed.txt
+          grep -F "Version: ${GITHUB_REF_NAME#v}" installed.txt

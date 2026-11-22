@@ -12,7 +12,7 @@ import textwrap
 import unittest
 from pathlib import Path
 
-from repo_tools import e2e
+from repo_tools import e2e, pin_release
 
 REPO = Path(__file__).resolve().parents[3]
 WORKFLOWS = REPO / ".github" / "workflows"
@@ -66,7 +66,7 @@ class WorkflowCommandsTest(unittest.TestCase):
     def test_every_level_a_workflow_asks_of_the_scenarios_is_one_the_runner_has(self) -> None:
         levels = re.findall(r"scripts/e2e --level (\S+)", _text("weekly.yml"))
 
-        self.assertEqual(levels, [e2e.MODEL])
+        self.assertEqual(set(levels), {e2e.MODEL})
 
     def test_ci_installs_the_claude_code_version_the_readme_names_as_the_minimum(self) -> None:
         versions = re.findall(r"(?m)^  CLAUDE_CODE_VERSION: (\S+)$", _text("ci.yml"))
@@ -126,7 +126,7 @@ class WeeklyRunTest(unittest.TestCase):
     def test_it_installs_the_newest_claude_code_and_holds_no_version(self) -> None:
         installs = [line for line in self.text.splitlines() if CLAUDE_CODE_PACKAGE in line]
 
-        self.assertEqual(len(installs), 3)
+        self.assertEqual(len(installs), 4)
         for line in installs:
             self.assertRegex(line, rf'^ +- run: npm install --global "{CLAUDE_CODE_PACKAGE}@latest"$')
         self.assertNotIn("CLAUDE_CODE_VERSION", self.text)
@@ -134,6 +134,34 @@ class WeeklyRunTest(unittest.TestCase):
     def test_it_runs_the_whole_proof_and_the_model_level_scenarios(self) -> None:
         self.assertRegex(self.text, r"(?m)^ +- run: scripts/check$")
         self.assertRegex(self.text, r"(?m)^ +scripts/e2e --level model \$SCENARIOS$")
+
+    def test_the_model_level_bills_the_api_key_only_where_the_repository_has_no_token(self) -> None:
+        self.assertIn(
+            'if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then\n'
+            "            scripts/e2e --level model $SCENARIOS\n"
+            "          else\n"
+            "            scripts/e2e --level model --use-api-key $SCENARIOS\n",
+            self.text,
+        )
+
+    def test_the_model_level_without_names_runs_the_scenarios_no_promise_names(self) -> None:
+        self.assertRegex(self.text, r"(?m)^ +SCENARIOS=\$\{SCENARIOS:-\$\(scripts/promises --other-scenarios\)\}$")
+        # An empty list would let scripts/e2e run every scenario.
+        self.assertRegex(self.text, r'(?m)^ +if \[ -z "\$SCENARIOS" \]; then\n(?: +echo [^\n]*\n)? +exit 0$')
+
+    def test_it_runs_the_promises_in_a_job_of_its_own_unless_started_with_scenario_names(self) -> None:
+        self.assertIn(
+            "\n  promises:\n    needs: access\n"
+            "    if: needs.access.outputs.granted == 'true' && inputs.scenarios == ''\n",
+            self.text,
+        )
+        self.assertIn(
+            'if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then\n'
+            "            scripts/promises --max-minutes 100\n"
+            "          else\n"
+            "            scripts/promises --max-minutes 100 --use-api-key\n",
+            self.text,
+        )
 
     def test_it_measures_the_fence_in_a_job_of_its_own(self) -> None:
         self.assertIn("\n  fence:\n    needs: access\n", self.text)
@@ -149,7 +177,7 @@ class WeeklyRunTest(unittest.TestCase):
     def test_an_account_reaches_single_steps_and_never_a_whole_job(self) -> None:
         with_secret = [line for line in self.text.splitlines() if "secrets." in line]
 
-        self.assertEqual(len(with_secret), 6)
+        self.assertEqual(len(with_secret), 8)
         for line in with_secret:
             self.assertEqual(len(line) - len(line.lstrip()), STEP_ENVIRONMENT_INDENT, line)
 
@@ -159,7 +187,8 @@ class WeeklyRunTest(unittest.TestCase):
 
     def test_only_a_failed_scheduled_run_reports_and_it_waits_for_every_other_job(self) -> None:
         self.assertIn(
-            "\n    needs: [check, model-scenarios, fence]\n    if: failure() && github.event_name == 'schedule'\n",
+            "\n    needs: [check, model-scenarios, promises, fence]\n"
+            "    if: failure() && github.event_name == 'schedule'\n",
             self.text,
         )
 
@@ -188,6 +217,7 @@ class WeeklyFailureReportTest(unittest.TestCase):
                     "CLAUDE_CODE": claude_code,
                     "CHECK": "failure",
                     "MODEL_SCENARIOS": "skipped",
+                    "PROMISES": "failure",
                     "FENCE": "success",
                 },
                 check=True,
@@ -208,6 +238,7 @@ class WeeklyFailureReportTest(unittest.TestCase):
         self.assertIn(f"Claude Code 9.8.7 (Claude Code): {self.RUN_URL}", body)
         self.assertIn("- scripts/check: failure", body)
         self.assertIn("- the model-level scenarios: skipped", body)
+        self.assertIn("- the promises: failure", body)
         self.assertIn("- the fence probe: success", body)
 
     def test_a_failure_while_the_issue_is_open_adds_a_comment_and_opens_no_second_issue(self) -> None:
@@ -293,6 +324,33 @@ class ReleaseNotesTest(unittest.TestCase):
 
         self.assertNotEqual(done.returncode, 0)
         self.assertEqual(done.stdout, "")
+
+
+class ReleaseZipTest(unittest.TestCase):
+    """The release carries the plugin as a zip, and installing it is proved before anyone pins it."""
+
+    def setUp(self) -> None:
+        self.text = _text("release.yml")
+
+    def test_the_release_attaches_the_plugin_folder_at_the_tag_as_its_zip(self) -> None:
+        self.assertIn(
+            'git archive --format=zip --mtime="$(git show -s --format=%cI "$GITHUB_SHA")" '
+            '-o m2b-plugin.zip "$GITHUB_SHA:plugins/m2b"',
+            self.text,
+        )
+        self.assertRegex(self.text, r"(?m)^ +- run: gh release create .* --notes-file notes\.md m2b-plugin\.zip$")
+        self.assertIn(f"/{pin_release.ZIP_NAME}", self.text)
+
+    def test_the_zip_is_installed_with_the_oldest_claude_code_ci_holds_and_the_newest(self) -> None:
+        (minimum,) = re.findall(r"(?m)^  CLAUDE_CODE_VERSION: (\S+)$", _text("ci.yml"))
+
+        self.assertIn(f"        claude: ['{minimum}', latest]\n", self.text)
+        self.assertIn("\n  install:\n    needs: release\n", self.text)
+
+    def test_the_install_goes_through_a_pinned_marketplace_and_checks_the_version_of_the_tag(self) -> None:
+        self.assertIn('source: {source: "archive", url: $url, sha256: $sha}', self.text)
+        self.assertIn("claude plugin install m2b@release", self.text)
+        self.assertIn('grep -F "Version: ${GITHUB_REF_NAME#v}" installed.txt', self.text)
 
 
 if __name__ == "__main__":

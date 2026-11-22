@@ -8,11 +8,7 @@
   "store_patterns": [
     {
       "path": "corpus/2026/11/20261107T091500Z-cli-a1b2.md",
-      "content": "---\ncreated: 2026-11-07T10:15:00\\+01:00\nsource: cli\ntasks: \\[[0-9a-f]{12}, [0-9a-f]{12}\\]\nrefs: \\[https://example.org/passport-office\\]\ncurated: true\nfacts_filed: true\n---\nRenew the passport before the trip to Porto\n<!-- m2b:curation -->\nfiled: passport task\n"
-    },
-    {
-      "path": "tasks/????????????.md",
-      "content": "---\nstatus: open\ndue: 2026-11-30\ncreated: [^\n]+\n---\nRenew passport\nm2b:capture 20261107T091500Z-cli-a1b2\\.md passport\n"
+      "content": "---\ncreated: 2026-11-07T10:15:00\\+01:00\nsource: cli\ntasks: \\[[0-9a-f]{12}\\]\nrefs: \\[https://example.org/passport-office\\]\ncurated: true\nfacts_filed: true\n---\nRenew the passport before the trip to Porto\n<!-- m2b:curation -->\nfiled: passport task\n"
     },
     {
       "path": "tasks/????????????.md",

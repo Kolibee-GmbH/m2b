@@ -1,13 +1,6 @@
 {
-  "description": "E2 at the model level: two real runs over a capture with a follow-up and one with a link; the second run creates no second task, ref or corpus file.",
+  "description": "E2 at the model level: a real run over a capture with a follow-up and one with a link gives the first its one task and the second its task and its ref, each once. That a rerun or a run after a crash doubles nothing is code, checked at the stub level.",
   "steps": [
-    {
-      "run": [
-        "m2b",
-        "curate",
-        "--force"
-      ]
-    },
     {
       "run": [
         "m2b",

@@ -1,0 +1,6 @@
+{
+  "format": 3,
+  "tasks": {"backend": "markdown"},
+  "curating_machine": "sb-test-e2e",
+  "journal_since": "2026-11-01"
+}
