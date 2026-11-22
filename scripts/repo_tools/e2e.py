@@ -183,6 +183,8 @@ class ScenarioResult:
     models: list[str] = field(default_factory=list)
     # False when a step marked as a control failed, or a step before it: the run shows nothing.
     shows: bool = True
+    # The sandbox of a run that broke, kept for its evidence when the caller asked for it.
+    kept: Path | None = None
 
     @property
     def passed(self) -> bool:
@@ -694,6 +696,7 @@ def run_scenario(
     account: Mapping[str, str] | None = None,
     wording: int = 0,
     arm: str = WITH,
+    keep_failed: bool = False,
 ) -> ScenarioResult:
     """At ``stub`` the scripted model and ``expect.json``; at ``model`` the real fenced ``claude`` and
     the invariants of ``model.json``, because a real model words things its own way, every session in
@@ -766,6 +769,9 @@ def run_scenario(
             print(f"e2e: kept {scenario.name} in {sandbox}")
             if level == APPLE and store is not None:
                 print(f"e2e: kept the store of {scenario.name} in {store}")
+        elif keep_failed and result.problems:
+            # The store, the transcripts and the outputs of a run that broke are its evidence.
+            result.kept = sandbox
         else:
             shutil.rmtree(sandbox, ignore_errors=True)
             if level == APPLE and store is not None:

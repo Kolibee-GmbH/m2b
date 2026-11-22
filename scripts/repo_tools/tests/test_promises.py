@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import re
 import sys
 import tempfile
 import unittest
@@ -305,6 +306,23 @@ class CommandTest(unittest.TestCase):
                 eval_runner=evals,
             )
         return code, out.getvalue(), err.getvalue()
+
+    def test_a_run_with_m2b_that_breaks_keeps_its_sandbox_and_the_report_names_it(self) -> None:
+        wordings = [{"say": "one"}, {"say": "zwei", "language": "de"}, {"say": "three"}]
+        breaks = {"run": [sys.executable, "-c", "import sys; sys.exit(1)"]}
+        self.given_scenario({"wordings": wordings, "steps": [{"run": ["claude", "-p", "{say}"]}, breaks]})
+        claude = self.root / "bin" / "claude"
+        claude.parent.mkdir()
+        claude.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        claude.chmod(0o755)
+        self.environ["PATH"] = f"{claude.parent}:/usr/bin:/bin"
+
+        _, out, _ = self.run_command("1")
+
+        kept = re.findall(r"kept in (\S+)", out)
+        self.assertEqual(len(kept), 3, out)
+        self.assertTrue(all(Path(folder).is_dir() for folder in kept))
+        self.assertEqual(sorted(Path(folder).parent.name for folder in kept), ["sandboxes"] * 3)
 
     def test_the_other_scenarios_are_the_model_scenarios_no_promise_names_and_need_no_account(self) -> None:
         _write_json(self.tree.scenarios / "E9-fence" / "model.json", {"steps": [], "invariants": []})

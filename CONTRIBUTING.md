@@ -385,7 +385,10 @@ sessions and nine eval cases of three runs each. On 2026-11-21 it took 15 minute
 about 4 dollars as the API would bill it; with the token nothing is billed and the runs count
 against the plan's usage limits instead. It exits 0 when every promise it ran holds, 1 when one does not
 and 2 when it could not start: a catalog it cannot read, no account, or a session that is not
-logged in. `--max-minutes` bounds the whole run; a run it did not start does not pass.
+logged in. `--max-minutes` bounds the whole run; a run it did not start does not pass. A run with
+m2b that breaks keeps its sandbox and the report names it: a failure that comes once in many runs
+is otherwise gone before anyone can tell a defect of the product from one of the case. Remove the
+folder once you read it.
 
 ## Evals
 

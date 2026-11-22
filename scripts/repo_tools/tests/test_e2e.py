@@ -642,6 +642,23 @@ class ModelLevelTest(unittest.TestCase):
         self.assertEqual(code, e2e.EXIT_FAILED, out.getvalue())
         self.assertIn("kim.md", out.getvalue())
 
+    def test_a_run_that_breaks_keeps_its_sandbox_when_asked_and_a_run_that_passes_never(self) -> None:
+        scenario = self.scenarios / "with-model"
+        with mock.patch.dict("os.environ", self.environ, clear=True):
+            passed = e2e.run_scenario(
+                scenario, self.environ, level=e2e.MODEL, sandbox_root=self.sandboxes, keep_failed=True
+            )
+            self.assertEqual((passed.passed, passed.kept, list(self.sandboxes.iterdir())), (True, None, []))
+            _write_json(scenario / "model.json", {"steps": [], "invariants": [{"count": 2, "glob": "note.md"}]})
+            broken = e2e.run_scenario(
+                scenario, self.environ, level=e2e.MODEL, sandbox_root=self.sandboxes, keep_failed=True
+            )
+
+        self.assertFalse(broken.passed)
+        assert broken.kept is not None
+        self.assertEqual(list(self.sandboxes.iterdir()), [broken.kept])
+        self.assertTrue((broken.kept / "store" / "note.md").is_file())
+
     def test_a_failed_invariant_fails_the_scenario(self) -> None:
         _write_json(
             self.scenarios / "with-model" / "model.json", {"steps": [], "invariants": [{"count": 2, "glob": "note.md"}]}

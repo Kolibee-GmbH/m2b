@@ -53,7 +53,8 @@ open promise does not hold either.
 `scripts/promises` prints one line per promise, held or why not, and under it each case with its
 runs: `✓` for a run that passed, `✗` for one that did not, `○` for one that shows nothing, first
 with m2b and, where compared, without. For a run with m2b that did not pass, and for a run without
-that shows nothing, it gives what broke. The report ends with the Claude Code
+that shows nothing, it gives what broke. A run with m2b that did not pass keeps its folder, with
+the store, the sessions' transcripts and what each step printed, and the report says where it is. The report ends with the Claude Code
 version, the models the sessions answered with and the m2b commit it ran on. An account the runs
 cannot use stops the command before the first run and is reported as that, never as a broken
 promise.
