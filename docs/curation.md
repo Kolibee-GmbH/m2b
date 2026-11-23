@@ -336,13 +336,10 @@ session too, the lesson stands on both. Code keeps it only when your sentence st
 typed, a second one in its own session, and for a command when its words stand in a command Claude
 ran there. One for a single project names that project's repository, where the folders of its
 sessions name the same one by a git remote; without one it is left out. A correction where the
-model cannot tell whether it holds beyond the task at hand is no lesson: the model names it apart,
-with what it is about, and code remembers it on this machine for 30 days, at most 300 of them, in
-`~/.local/state/m2b/remembered-corrections.json`, with your words, the shell commands of the turn
-they answer and the repository's address, never in the store. Nothing is proposed from it alone;
-the next readings show it to the model, and where you make the same correction in another session
-then, the lesson stands on both, and the remembered one leaves the list. `m2b status` says how many
-are remembered. Before a lesson is proposed, a second
+model cannot tell whether it holds beyond the task at hand is proposed all the same, marked unsure:
+you decide on it, and a correction left waiting for a second time is one you would have to make
+again. A correction whose turn ran no command is about how Claude works or answers, a lesson of the
+kind `knowledge`. Before a lesson is proposed, a second
 model run without tools reads it with the files a session in its folders loads (the `CLAUDE.md`
 files, the rules, the output style, Claude Code's memory, the list `m2b status` measures), each
 line numbered. Where a line says the matter wrongly, the lesson becomes a fix of that line, with

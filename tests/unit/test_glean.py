@@ -5,7 +5,6 @@ import datetime
 import json
 import time
 import unittest
-from collections.abc import Sequence
 from typing import Any, ClassVar
 
 from m2b import glean
@@ -582,14 +581,6 @@ class LessonTest(unittest.TestCase):
         )
         self.assertEqual((kept.session, kept.source), ("first", "typed"))
 
-    def test_earlier_given_as_null_is_no_remembered_correction(self) -> None:
-        """Covers: B301"""
-        checked = self.check(lesson_entry(lesson={"earlier": None}))
-
-        (kept,) = checked.kept
-        assert kept.lesson is not None
-        self.assertEqual(kept.lesson.session, "second")
-
     def test_a_knowledge_lesson_has_no_words_and_an_action_needs_them(self) -> None:
         """Covers: B270"""
         knowledge = lesson_entry(lesson={"kind": "knowledge", "words": []})
@@ -708,13 +699,13 @@ class LessonTest(unittest.TestCase):
         self.assertIn("often a complaint or a question that objects to what Claude did", instruction)
         self.assertIn("or about how it answers (how it explains, how long, in which language)", instruction)
         self.assertIn("go through every prompt that answers a turn of Claude's", instruction)
-        self.assertIn(
-            "an entry of `single_corrections` or of `corrected_again`, or, as the rules below say, nothing", instruction
-        )
+        self.assertIn("or an entry of `corrected_again`, or, as the rules below say, nothing", instruction)
         self.assertIn("A correction of Claude is an exception: in doubt whether it holds beyond", instruction)
         self.assertIn("the lesson stands on both", instruction)
         self.assertIn(
-            "Where you cannot tell whether a correction holds beyond the task at hand, it is no lesson", instruction
+            "Where you cannot tell whether a correction holds beyond the task at hand, "
+            'it is a lesson with `"unsure": true`',
+            instruction,
         )
         self.assertIn("only about the task at hand", instruction)
         self.assertIn('"lesson": {"kind": "action"', instruction)
@@ -834,90 +825,68 @@ class CorrectedAgainTest(unittest.TestCase):
         )
 
 
-class SingleCorrectionTest(unittest.TestCase):
+class UnsureLessonTest(unittest.TestCase):
     ONCE = session("once", "why the full check again, CI ran it")
-    SAID: ClassVar[dict[str, Any]] = {
-        "matter": "the whole proof is run again although CI ran it",
-        "quote": "why the full check again",
-        "session": 1,
-        "kind": "action",
-        "target": "every project",
-    }
 
-    def read(self, *singles: object, proposals: Sequence[object] = (), again: Sequence[object] = ()) -> glean.Answer:
-        given = {"proposals": list(proposals), "single_corrections": list(singles), "corrected_again": list(again)}
-        return glean.parse_answer(json.dumps(given), [self.ONCE])
+    def read(self, *entries: object) -> glean.Answer:
+        return glean.parse_answer(answer(*entries), [self.ONCE])
 
-    def test_a_single_correction_is_read_with_its_matter_kind_and_target(self) -> None:
-        """Covers: B297"""
-        read = self.read(self.SAID)
-
-        self.assertEqual(
-            read.single_corrections,
-            (
-                glean.SingleCorrection(
-                    "the whole proof is run again although CI ran it",
-                    "why the full check again",
-                    "once",
-                    "action",
-                    "every project",
-                ),
-            ),
+    def unsure(self, **lesson: Any) -> dict[str, Any]:
+        given = lesson_entry(
+            lesson={"kind": "knowledge", "words": [], "quote": None, "session": None, "unsure": True, **lesson}
         )
-        self.assertEqual((read.malformed, read.singles_malformed), (0, 0))
-        self.assertEqual(glean.parse_answer(answer(), [self.ONCE]).single_corrections, ())
+        return {**given, "quote": "why the full check again"}
 
-    def test_one_not_in_the_form_is_counted_apart_from_the_proposals(self) -> None:
+    def test_a_lesson_the_model_is_unsure_about_is_read_with_its_mark(self) -> None:
         """Covers: B297"""
-        broken = [
-            {**self.SAID, "matter": "x" * (glean.MATTER_LENGTH + 1)},
-            {**self.SAID, "matter": ""},
-            {**self.SAID, "kind": "habit"},
-            {**self.SAID, "target": "the shed"},
-            {**self.SAID, "session": 2},
-            {**self.SAID, "quote": " "},
-            {**self.SAID, "matter": "run \u202e it"},
-            "why the full check again",
-        ]
+        (read,) = self.read(self.unsure()).proposals
 
-        read = self.read(*broken)
+        assert read.lesson is not None
+        self.assertTrue(read.lesson.unsure)
+        self.assertEqual((read.lesson.kind, read.lesson.quote, read.lesson.session), ("knowledge", "", ""))
 
-        self.assertEqual((read.single_corrections, read.singles_malformed, read.malformed), ((), len(broken), 0))
-
-    def test_only_one_whose_words_were_typed_in_its_session_is_kept(self) -> None:
+    def test_a_lesson_without_the_mark_or_with_it_false_or_null_is_sure(self) -> None:
         """Covers: B297"""
-        read = self.read(
-            self.SAID, {**self.SAID, "quote": "never the full check"}, {**self.SAID, "quote": "full check"}
-        )
+        for given in ({}, {"unsure": False}, {"unsure": None}):
+            with self.subTest(given=given):
+                lesson = {key: value for key, value in self.unsure()["lesson"].items() if key != "unsure"}
+                (read,) = self.read({**self.unsure(), "lesson": {**lesson, **given}}).proposals
+                assert read.lesson is not None
+                self.assertFalse(read.lesson.unsure)
 
-        kept, refused = glean.checked_single_corrections(read.single_corrections, [], [self.ONCE])
-
-        self.assertEqual(
-            [(single.quote, prompt.text) for single, prompt in kept],
-            [("why the full check again", "why the full check again, CI ran it")],
-        )
-        self.assertEqual(refused, 2)
-
-    def test_one_whose_words_a_kept_lesson_or_counted_correction_stands_on_is_left_out_and_not_counted(self) -> None:
+    def test_a_mark_that_is_not_true_false_or_null_is_not_in_the_form(self) -> None:
         """Covers: B297"""
-        read = self.read(self.SAID)
+        for given in ("true", 1, "yes", []):
+            with self.subTest(given=given):
+                self.assertEqual(self.read(self.unsure(unsure=given)).malformed, 1)
 
-        for used in ([("once", "the full check again")], [("once", "why the full check again, CI ran it")]):
-            with self.subTest(used=used):
-                self.assertEqual(glean.checked_single_corrections(read.single_corrections, used, [self.ONCE]), ([], 0))
-        (kept,), _ = glean.checked_single_corrections(
-            read.single_corrections, [("other", "the full check")], [self.ONCE]
-        )
-        self.assertEqual(kept[0].session, "once")
+    def test_an_unsure_lesson_is_checked_as_any_lesson(self) -> None:
+        """Covers: B297"""
+        unsure_action = self.unsure(kind="action", words=["scripts/check"])
 
-    def test_the_instruction_names_single_corrections_and_what_is_left_out_of_them(self) -> None:
+        checked = glean.check(self.read(unsure_action).proposals, [self.ONCE], [])
+
+        self.assertEqual((checked.kept, len(checked.not_quoted)), ((), 1))
+
+    def test_a_list_of_single_corrections_in_the_answer_is_no_proposal(self) -> None:
+        """Covers: B297"""
+        given = {
+            "proposals": [],
+            "single_corrections": [{"matter": "x", "quote": "why the full check again", "session": 1}],
+        }
+
+        read = glean.parse_answer(json.dumps(given), [self.ONCE])
+
+        self.assertEqual((read.proposals, read.malformed), ((), 0))
+
+    def test_the_instruction_proposes_an_unsure_correction_and_makes_one_without_a_command_knowledge(self) -> None:
         """Covers: B297"""
         instruction = glean.instruction()
 
-        self.assertIn("put it under `single_corrections`", instruction)
-        self.assertIn('{"matter": "<what it is about', instruction)
-        self.assertIn("only about the task at hand, one whose matter `memory`, a kept lesson", instruction)
-        self.assertIn("Leave out one a lesson or `corrected_again` of this answer stands on", instruction)
+        self.assertIn("`unsure` is `true` where you cannot tell whether it holds beyond the task at hand", instruction)
+        self.assertIn("a correction whose turn ran no command is `knowledge`", instruction)
+        self.assertNotIn("single_corrections", instruction)
+        self.assertNotIn("earlier_corrections", instruction)
 
 
 if __name__ == "__main__":

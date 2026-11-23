@@ -27,8 +27,7 @@ they change: that trap is then nobody's to catch. It says what waits for an answ
 (``waiting`` in the input), and a trap of the day says one of those again in other words.
 
 Counted per run: how many planted statements a kept proposal stands on (found; a question that
-objects is found too where a single correction the step would remember stands on it, since the
-model may be unsure whether it holds beyond its task), how many kept
+objects is found by a lesson, also one marked unsure), how many kept
 proposals are the first to stand on one (right; a second proposal for the same statement is not),
 and which traps were sprung. A proposal stands on a statement when its quote and the statement
 share at least half of the shorter one in a text of the statement's session, typed or pasted. One
@@ -75,7 +74,6 @@ from m2b import (
     lessons,
     project_capture,
     project_files,
-    remembered_corrections,
 )
 from m2b.config.machine import CURATION_MODELS, DEFAULT_CURATION_MODEL
 from m2b.curate import model as model_run
@@ -95,15 +93,8 @@ RUN_TIMEOUT_SECONDS = 300
 BAR = 0.8
 
 AUTOMATION = "automation"
-# A planted question that objects to what Claude did: found by a lesson or by a single correction.
+# A planted question that objects to what Claude did: found by a lesson, sure or unsure.
 CORRECTION = "correction"
-# A planted correction that an earlier reading remembered once, said again in other words: found by
-# a lesson that stands on it and names that remembered correction.
-ACROSS = "across"
-# A remembered correction about nothing of the day, and one of a session of the day: a lesson that
-# names either is wrong, the second one is the code's to refuse.
-EARLIER_UNRELATED = "earlier-unrelated"
-EARLIER_SAME_SESSION = "earlier-same-session"
 # Not a statement of the day: a kept proposal that stands on pasted words and says they were typed,
 # or on typed words and says they were pasted.
 WRONG_SOURCE = "wrong-source"
@@ -127,8 +118,6 @@ TRAPS = (
     "task-correction",
     # A decision of a project stated in a session that wrote no file of the repository: no pointer.
     "unwritten",
-    EARLIER_UNRELATED,
-    EARLIER_SAME_SESSION,
 )
 # Their words must not be among the prompts the reader gives; no model is asked to resist them.
 TRAPS_OF_THE_READER = (AUTOMATION,)
@@ -161,8 +150,6 @@ class Statement:
     names: str = ""
     # For a pointer: the file it points to, by its path in the repository.
     file: str = ""
-    # For a correction said again: the name of the remembered correction a lesson on it names.
-    earlier: str = ""
 
 
 @dataclass(frozen=True)
@@ -181,8 +168,6 @@ class Day:
     traps: tuple[Statement, ...]
     # A session's folder to the project its repository is, as the step finds it from noted remotes.
     projects: Mapping[str, project_files.Project] = dataclasses.field(default_factory=dict)
-    # What earlier readings remembered, by the name the fixture gives each.
-    earlier: Mapping[str, remembered_corrections.Correction] = dataclasses.field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -207,8 +192,8 @@ class Score:
     wrong: tuple[glean.Proposal, ...]
     sprung: tuple[str, ...]
     planted: int
-    # Single corrections the step would remember, whatever they stand on.
-    remembered: int = 0
+    # Kept lessons the model marked unsure, whatever they stand on.
+    unsure: int = 0
 
     @property
     def found(self) -> int:
@@ -269,7 +254,6 @@ def load_day(path: Path) -> Day:
                         is_pasted,
                         entry.get("names", ""),
                         file,
-                        entry.get("earlier", ""),
                     )
                     into.append(statement)
     memory = "\n".join(raw["memory"]) + "\n"
@@ -277,12 +261,6 @@ def load_day(path: Path) -> Day:
     answered = raw.get("answered", {})
     examples = _examples(answered)
     waiting = _of(answered.get("waiting", ()))
-    earlier = _earlier(raw.get("earlier", ()), names, start)
-    traps += [
-        Statement(glean.earlier_session_id(earlier[item["name"]]), item["trap"], item["quote"])
-        for item in raw.get("earlier", ())
-        if "trap" in item
-    ]
     day = Day(
         start,
         memory,
@@ -294,36 +272,8 @@ def load_day(path: Path) -> Day:
         tuple(planted),
         tuple(traps),
         projects,
-        earlier,
     )
     return day
-
-
-def _earlier(
-    given: Sequence[Mapping[str, Any]], names: Mapping[str, str], start: datetime.datetime
-) -> dict[str, remembered_corrections.Correction]:
-    """The remembered corrections of the fixture: each in a session of its own before the day, or,
-    where it names one, in a session of the day that went on since."""
-    by_name = {name: session_id for session_id, name in names.items()}
-    found: dict[str, remembered_corrections.Correction] = {}
-    for item in given:
-        session = by_name.get(item.get("session", ""), str(uuid.uuid5(_SESSION_NAMESPACE, item["name"])))
-        day = datetime.date.fromisoformat(item["day"])
-        typed_at = datetime.datetime.combine(day, datetime.time(12), _UTC)
-        found[item["name"]] = remembered_corrections.Correction(
-            remembered_corrections.correction_id(session, typed_at),
-            session,
-            day,
-            item["quote"],
-            tuple(item.get("commands", ())),
-            tuple(item.get("addresses", ())),
-            item["matter"],
-            item["kind"],
-            item["target"],
-        )
-    if start.date() <= max((each.day for each in found.values()), default=datetime.date.min):
-        raise FixtureError("a remembered correction is from an earlier day, never from the day itself")
-    return found
 
 
 def _projects(repositories: Mapping[str, str], memory: str) -> dict[str, project_files.Project]:
@@ -414,50 +364,30 @@ def build_case(day: Day, projects: Path, with_examples: bool = True) -> Case:
         holding = [text for text in sent.get(statement.session, ()) if statement.text in text]
         if len(holding) != 1:
             raise FixtureError(f"{statement.text!r} stands in {len(holding)} texts the reader gives, not in one")
-    for remembered in day.earlier.values():
-        if any(remembered.quote in text for texts in sent.values() for text in texts):
-            raise FixtureError(f"the remembered {remembered.quote!r} is typed in the day; it is from before it")
     for example in (*day.examples.kept, *day.examples.dropped, *day.waiting):
         # Such a proposal would pass the quote check, and nothing counted could tell it from a find.
         if any(example.quote in text for texts in sent.values() for text in texts):
             raise FixtureError(f"the example {example.quote!r} is typed in the day; an example is from before it")
     examples = day.examples if with_examples else glean.NO_EXAMPLES
-    earlier = tuple(day.earlier.values())
-    given = glean.step_input(shown, day.memory, examples=examples, waiting=day.waiting, earlier=earlier)
+    given = glean.step_input(shown, day.memory, examples=examples, waiting=day.waiting)
     return Case(day, shown, given)
 
 
 def score(case: Case, answer: str) -> Score:
     """Counts the answer against the day; a ``glean.GleanError`` when the answer cannot be read."""
-    earlier = tuple(case.day.earlier.values())
-    read = glean.parse_answer(answer, case.sessions, earlier)
-    with_earlier = (*case.sessions, *glean.earlier_sessions(earlier))
-    checked = _as_the_step_keeps(glean.check(read.proposals, with_earlier, case.day.captures))
+    read = glean.parse_answer(answer, case.sessions)
+    checked = _as_the_step_keeps(glean.check(read.proposals, case.sessions, case.day.captures))
     typed = _sent(case.sessions)
     first: dict[Statement, glean.Proposal] = {}
     wrong: list[glean.Proposal] = []
     for proposal in checked.kept:
-        new = [
-            item
-            for item in case.day.planted
-            if item not in first
-            and _stands_on_any(proposal, item, typed)
-            and _names_its_earlier(proposal, item, case.day.earlier)
-        ]
+        new = [item for item in case.day.planted if item not in first and _stands_on_any(proposal, item, typed)]
         first.update((item, proposal) for item in new)
         if not new:
             wrong.append(proposal)
     sprung = [trap.label for trap in case.day.traps if _sprung(trap, checked.kept, typed)]
     if any(item.pasted != (proposal.source == glean.PASTED) for item, proposal in first.items()):
         sprung.append(WRONG_SOURCE)
-    singles = _singles_the_step_keeps(read, checked, case.sessions)
-    found_by_single = [
-        item
-        for item in case.day.planted
-        if item.label == CORRECTION
-        and item not in first
-        and any(_quoted_on(single.session, single.quote, item, typed) for single in singles)
-    ]
     return Score(
         proposals=len(read.proposals),
         malformed=read.malformed,
@@ -465,41 +395,18 @@ def score(case: Case, answer: str) -> Score:
         already_captured=len(checked.already_captured),
         kept=len(checked.kept),
         right=len(checked.kept) - len(wrong),
-        right_kind=sum(_kind_of(item) == proposal.kind for item, proposal in first.items()) + len(found_by_single),
-        missed=tuple(item for item in case.day.planted if item not in first and item not in found_by_single),
+        right_kind=sum(_kind_of(item) == proposal.kind for item, proposal in first.items()),
+        missed=tuple(item for item in case.day.planted if item not in first),
         wrong=tuple(wrong),
         sprung=tuple(sprung),
         planted=len(case.day.planted),
-        remembered=len(singles),
+        unsure=sum(proposal.lesson is not None and proposal.lesson.unsure for proposal in checked.kept),
     )
 
 
 def _kind_of(statement: Statement) -> str:
-    """The kind a proposal on the statement has when it is right: a question that objects and a
-    correction said again are lessons."""
-    return glean.LESSON if statement.label in (CORRECTION, ACROSS) else statement.label
-
-
-def _names_its_earlier(
-    proposal: glean.Proposal, statement: Statement, earlier: Mapping[str, remembered_corrections.Correction]
-) -> bool:
-    """A correction said again is found only by a lesson that names the remembered one as its second."""
-    if statement.label != ACROSS:
-        return True
-    lesson = proposal.lesson
-    return lesson is not None and lesson.session == glean.earlier_session_id(earlier[statement.earlier])
-
-
-def _singles_the_step_keeps(
-    read: glean.Answer, checked: glean.Checked, sessions: Sequence[Session]
-) -> list[glean.SingleCorrection]:
-    """The single corrections the step would remember: those its checks keep, without the words a kept
-    lesson stands on, and none for this project, since the day's sessions have no repository with
-    noted remotes."""
-    used = [(proposal.session, proposal.quote) for proposal in checked.kept if proposal.lesson is not None]
-    used += [(proposal.lesson.session, proposal.lesson.quote) for proposal in checked.kept if proposal.lesson]
-    kept, _ = glean.checked_single_corrections(read.single_corrections, used, sessions)
-    return [single for single, _ in kept if single.target != lessons.THIS_PROJECT]
+    """The kind a proposal on the statement has when it is right: a question that objects is a lesson."""
+    return glean.LESSON if statement.label == CORRECTION else statement.label
 
 
 def _as_the_step_keeps(checked: glean.Checked) -> glean.Checked:
@@ -576,8 +483,6 @@ def _quoted_on(session: str, quoted_words: str, statement: Statement, typed: Map
 
 
 def _sprung(trap: Statement, kept: Sequence[glean.Proposal], typed: Mapping[str, Sequence[str]]) -> bool:
-    if trap.label in (EARLIER_UNRELATED, EARLIER_SAME_SESSION):
-        return any(proposal.lesson is not None and proposal.lesson.session == trap.session for proposal in kept)
     if trap.label in TRAPS_OF_THE_READER:
         return any(trap.text in prompt for prompt in typed.get(trap.session, ()))
     # A steered proposal may quote any typed words, so it is known by what its text names.
@@ -665,7 +570,7 @@ def _report_run(case: Case, name: str, outcome: Outcome) -> None:
         f"{name} ({outcome.run.model}, {outcome.run.seconds:.0f} s): found {result.found} of {result.planted}, "
         f"right {result.right} of {result.kept} proposals, kind right {result.right_kind} of {result.found}; "
         f"left out by code: {result.not_quoted} not quoted, {result.already_captured} already captured, "
-        f"{result.malformed} not in the form; {result.remembered} single corrections remembered"
+        f"{result.malformed} not in the form; {result.unsure} lessons marked unsure"
     )
     for item in result.missed:
         print(f"  missed {item.label} in {names[item.session]}: {item.text!r}")

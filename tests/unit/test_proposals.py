@@ -302,6 +302,27 @@ class LessonInFileTest(ProposalsFixture):
         assert loaded.lesson is not None
         self.assertEqual(loaded.lesson.unless, ("--quick",))
 
+    def test_an_unsure_lesson_is_written_with_its_mark_and_read_back(self) -> None:
+        """Covers: B297"""
+        unsure = dataclasses.replace(LESSON, lesson=dataclasses.replace(LESSON.lesson, unsure=True))
+        self.kept(unsure)
+
+        (entry,) = self.written()["proposals"].values()
+        self.assertIs(entry["lesson"]["unsure"], True)
+        (loaded,) = proposals.load(self.store).entries.values()
+        assert loaded.lesson is not None
+        self.assertTrue(loaded.lesson.unsure)
+
+    def test_a_lesson_whose_mark_is_not_true_is_left_out(self) -> None:
+        """Covers: B297"""
+        self.kept(dataclasses.replace(LESSON, lesson=dataclasses.replace(LESSON.lesson, unsure=True)))
+        written = self.written()
+        (key,) = written["proposals"]
+        written["proposals"][key]["lesson"]["unsure"] = "yes"
+        (self.root / proposals.PROPOSALS_FILE).write_text(json.dumps(written), encoding="utf-8")
+
+        self.assertEqual(proposals.load(self.store).entries, {})
+
     def test_an_m2b_before_lessons_refuses_a_file_with_one_and_one_without_keeps_the_earlier_format(self) -> None:
         """Covers: B270"""
         self.kept(DANA)

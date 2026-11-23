@@ -444,9 +444,8 @@
         {
           "text": "I don't get it. Explain it so that I understand it on the first read, without the jargon.",
           "answer_before": "An aware datetime carries a tzinfo whose utcoffset() is not None; a naive one defers to the interpretation of the caller, which PEP 495 disambiguates via fold.",
-          "planted": "across",
-          "statement": "Explain it so that I understand it on the first read",
-          "earlier": "explain"
+          "planted": "lesson",
+          "statement": "Explain it so that I understand it on the first read"
         },
         "write a small script that prints the next five Mondays",
         "make it take a start date",
@@ -507,41 +506,6 @@
           "statement": "wrong file, I meant hero.css"
         }
       ]
-    }
-  ],
-  "earlier": [
-    {
-      "name": "explain",
-      "day": "2026-03-02",
-      "quote": "das verstehe ich nicht, erklär es mir so, dass ich es beim ersten Lesen verstehe",
-      "matter": "Claude explained in a way the person could not follow on the first read",
-      "kind": "knowledge",
-      "target": "every project",
-      "addresses": [
-        "github.com/northwind/portal"
-      ]
-    },
-    {
-      "name": "tabs",
-      "day": "2026-03-01",
-      "quote": "no tabs in the YAML files, two spaces",
-      "matter": "Claude indented YAML files with tabs",
-      "kind": "knowledge",
-      "target": "this project",
-      "addresses": [
-        "github.com/northwind/portal"
-      ],
-      "trap": "earlier-unrelated"
-    },
-    {
-      "name": "emoji-before",
-      "day": "2026-03-03",
-      "session": "website-contact",
-      "quote": "and again an emoji in the commit title",
-      "matter": "Claude put an emoji in a commit message",
-      "kind": "knowledge",
-      "target": "every project",
-      "trap": "earlier-same-session"
     }
   ]
 }

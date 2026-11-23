@@ -464,11 +464,10 @@ make the same correction of Claude after it ran `scripts/check`, which is one le
 corrects a commit message with an emoji, a lesson of its own: the day writes Claude's answer and
 the command before each, as Claude Code does. Two more are questions that object to what Claude
 did: why it deleted a failing test instead of fixing the code, at the end of its session, and why
-it pushed, which Claude answers by changing course. A question is found by a lesson, or by a single
-correction the step would remember, since a model may be unsure whether it holds beyond its task.
-The day also has three corrections an earlier reading remembered: one the day says again in other
-words and in English where it was German, found only by a lesson that names it; one about nothing
-of the day, and one of a session of the day, which a lesson must never name.
+it pushed, which Claude answers by changing course. A question is found by a lesson, also one the
+model marks unsure, and the run counts how many lessons it marked so. One more asks Claude to
+explain so that it is understood on the first read, a lesson about how Claude answers, with no
+command in its turn.
 One more states a decision of the
 order portal, whose repository the memory has a project topic for, and Claude writes it into a file
 of that repository: a pointer, found only when it names that file. Eleven prompts are traps,
