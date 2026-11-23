@@ -14,7 +14,7 @@ yourself.
 | | |
 |---|---|
 | Day | 2026-11-23 |
-| m2b | 0.14.0 |
+| m2b | 0.15.0 |
 | Claude Code | 2.1.330 |
 | Model | `claude-sonnet-5-5` |
 | Runs | 102 |
