@@ -20,7 +20,8 @@ own instruction (``m2b.glean.instruction``), through the core's run without tool
 the tool measures the form the product runs, with nothing of its own in between.
 
 The day also says what the person answered before: proposals of earlier readings they kept, like
-what is planted, and some they dropped, all of one sort (the time of a call or a meeting). The
+what is planted, and some they dropped: four of one sort (the time of a call or a meeting) and a
+lesson about the language of Claude's answers, which must not keep the model from other lessons. The
 model is shown them as the step shows them (``answered`` in its input), and one trap of the day
 is a sentence like the dropped ones. ``--without-examples`` asks without them, which shows what
 they change: that trap is then nobody's to catch. It says what waits for an answer too

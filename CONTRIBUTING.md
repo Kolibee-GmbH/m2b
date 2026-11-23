@@ -479,7 +479,8 @@ says again in other words what waits for an answer, a correction of Claude that 
 the task at hand, and a decision of the portal stated in a session
 that wrote no file. For the sentence like the dropped ones and the one that waits the day says what was answered
 earlier and what waits: five proposals kept, like what is planted, four dropped, each the time of a
-call or a meeting, and one that waits. The model is shown them as the step shows them.
+call or a meeting, a dropped lesson about the language of Claude's answers, which must not keep the
+model from the day's lessons, and one that waits. The model is shown them as the step shows them.
 The tool writes the day as transcripts in Claude Code's format, reads them back the way a
 curation step would, and asks the model with that instruction, through the core's own run without
 tools (`curate/model.py`), so it measures the form the product runs. Of a lesson it keeps what the

@@ -76,6 +76,11 @@
         "kind": "agreement",
         "text": "Die Probe mit dem Chor ist auf Mittwoch 19 Uhr verschoben.",
         "quote": "die Probe mit dem Chor ist auf Mittwoch 19 Uhr verschoben"
+      },
+      {
+        "kind": "lesson",
+        "text": "Always answer in English, whatever language the question is in.",
+        "quote": "answer me in English from now on, always"
       }
     ],
     "waiting": [

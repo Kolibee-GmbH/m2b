@@ -244,12 +244,13 @@ class InventedDayTest(Sandbox):
             with self.subTest(statement.text):
                 self.assertIn(statement.text, case.step_input)
 
-    def test_the_model_is_shown_five_proposals_the_person_kept_and_four_they_dropped(self) -> None:
+    def test_the_model_is_shown_five_proposals_the_person_kept_and_five_they_dropped_one_a_lesson(self) -> None:
         case = self.case()
         answered = json.loads(case.step_input)["answered"]
 
-        self.assertEqual((len(answered["kept"]), len(answered["dropped"])), (5, 4))
+        self.assertEqual((len(answered["kept"]), len(answered["dropped"])), (5, 5))
         self.assertEqual({each["kind"] for each in answered["kept"]}, set(glean.FACT_KINDS))
+        self.assertEqual([each["kind"] for each in answered["dropped"]].count(glean.LESSON), 1)
         self.assertEqual(case.day.examples.kept[0].quote, answered["kept"][0]["quote"])
 
     def test_asked_without_examples_the_model_is_shown_none_and_the_day_stays_the_same(self) -> None:
@@ -623,7 +624,7 @@ class MainTest(WithFakeClaude):
         self.run_main("--model", "haiku", "--runs", "1", "--without-examples")
 
         shown, not_shown = (json.loads(call["stdin"])["answered"] for call in self.calls())
-        self.assertEqual((len(shown["kept"]), len(shown["dropped"])), (5, 4))
+        self.assertEqual((len(shown["kept"]), len(shown["dropped"])), (5, 5))
         self.assertEqual(not_shown, {"kept": [], "dropped": []})
 
     def test_the_real_store_is_refused(self) -> None:
