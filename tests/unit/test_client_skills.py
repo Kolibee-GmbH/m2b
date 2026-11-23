@@ -44,7 +44,8 @@ SHARED_RULES = {
         "A hit about another person, place or topic does not answer a question about this one: leave it out, "
         "and do not offer it as possibly the same.",
         "Where the notes hold nothing about someone, say that, and name no other person, customer or topic of "
-        "the notes as a possible connection, not as a guess and not as an example.",
+        "the notes as a possible connection: not as a guess, not as an example, and not as an offer to search it "
+        "if they are connected. A topic the distillate lists is no lead either.",
         "say that you could not look, never that there is nothing",
         "so a file that lives only in the cloud is never downloaded or left hanging.",
         "A document itself is never read: answer from its note and outline, and where they do not hold the "

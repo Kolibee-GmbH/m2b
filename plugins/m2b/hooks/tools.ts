@@ -61,7 +61,7 @@ const SEARCH_RULES = [
   'Answer the question from the hits and name the note each fact comes from (the file name is enough). A hit in `memory/` is the curated distillate; a hit in `inbox/` is a fresh capture that is not curated yet.',
   'Never add facts the hits do not hold. If the hits do not answer the question, say so.',
   'A hit about another person, place or topic does not answer a question about this one: leave it out, and do not offer it as possibly the same.',
-  'Where the notes hold nothing about someone, say that, and name no other person, customer or topic of the notes as a possible connection, not as a guess and not as an example.',
+  'Where the notes hold nothing about someone, say that, and name no other person, customer or topic of the notes as a possible connection: not as a guess, not as an example, and not as an offer to search it if they are connected. A topic the distillate lists is no lead either.',
   'Files the result lists as not searched were not searched: say so, and give the user the command it names to download them; after that, search again.',
   'If the tool fails, say that you could not look, never that there is nothing.',
   "Called with source in place of terms, it reads one source whole: a fact file by the name a distillate line ends with (dana.md), or a note by its file name, from a hit's path or a fact file's evidence. A fact file answers its lines and its evidence, a document's note its original name and an outline of what stands on which page.",
