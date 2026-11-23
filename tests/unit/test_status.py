@@ -19,7 +19,6 @@ from m2b import (
     lesson_counts,
     proposal_answers,
     proposals,
-    remembered_corrections,
 )
 from m2b.curate import machine_state
 from m2b.run_record import RUN_RECORD
@@ -103,33 +102,14 @@ class StatusTest(test_runner.RunnerTest):
         self.assertEqual(each, [{"name": fix.name, "kind": "fix", "kept": "2026-11-20", "corrected_again": 1}])
         self.assertIn(f"lesson {fix.name} (fix, kept 2026-11-20): corrected again 1 time: not working\n", out)
 
-    def test_it_says_how_many_corrections_made_in_one_session_are_remembered(self) -> None:
+    def test_it_says_nothing_of_corrections_remembered_by_an_earlier_m2b(self) -> None:
         """Covers: B297"""
         self.curating()
-        self.assertEqual(self.status()["remembered_corrections"], {"count": 0})
+        self.machine.state_dir.mkdir(parents=True, exist_ok=True)
+        (self.machine.state_dir / "remembered-corrections.json").write_text('{"corrections": []}', encoding="utf-8")
+
+        self.assertNotIn("remembered_corrections", self.status())
         self.assertNotIn("corrections:", self.run_command("status")[1])
-        today = datetime.datetime.now().astimezone().date()
-        correction = remembered_corrections.Correction(
-            "a1", "s1", today, "only the quick round", (), (), "the whole proof", "knowledge", "every project"
-        )
-        outdated = dataclasses.replace(correction, id="a2", day=today - remembered_corrections.REMEMBERED_FOR)
-        remembered_corrections.remember(
-            self.machine.state_dir,
-            [correction, dataclasses.replace(correction, id="a3"), outdated],
-            today - datetime.timedelta(days=1),
-            self.machine.temp_dir,
-        )
-
-        self.assertEqual(self.status()["remembered_corrections"], {"count": 2})
-        self.assertIn(
-            "corrections: 2 unsure ones remembered, unclear whether they hold beyond their task\n",
-            self.run_command("status")[1],
-        )
-
-        (self.machine.state_dir / remembered_corrections.FILE).write_text("{not json", encoding="utf-8")
-        answer = self.status()["remembered_corrections"]
-        self.assertTrue(answer["error"].startswith("remembered-corrections.json could not be read"))
-        self.assertIn(f"corrections: could not look: {answer['error']}\n", self.run_command("status")[1])
 
     def test_lessons_that_are_not_downloaded_are_said_and_never_counted_as_none(self) -> None:
         """Covers: B258"""

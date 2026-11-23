@@ -21,7 +21,6 @@ from m2b import (
     project_proposals,
     proposal_answers,
     proposals,
-    remembered_corrections,
     session_remotes,
 )
 from m2b.config.profile import save_profile
@@ -94,14 +93,11 @@ class GleanStepTest(test_runner.RunnerTest):
         outcome: str = "success",
         skills: dict[str, list[dict[str, Any]]] | None = None,
         verdicts: list[dict[str, Any]] | None = None,
-        singles: list[dict[str, Any]] | None = None,
     ) -> None:
         """What the reading's model answers, and where it found a lesson, what the check of its sources answers."""
         self.model(skills or {})
         script = json.loads(self.actions.read_text(encoding="utf-8"))
         answer: dict[str, Any] = {"proposals": list(entries)}
-        if singles is not None:
-            answer["single_corrections"] = singles
         script["text"] = {"answer": json.dumps(answer), "outcome": outcome}
         if verdicts is not None:
             script["text"] = [script["text"], {"answer": json.dumps({"verdicts": verdicts}), "outcome": "success"}]
@@ -726,207 +722,6 @@ class ProjectProposalTest(InPortalTest):
         self.assertFalse((self.machine.state_dir / project_proposals.DAYS_FILE).exists())
 
 
-FULL_CHECK = {
-    "matter": "the whole proof is run again although CI ran it on the same code",
-    "quote": "why the full check again",
-    "session": 1,
-    "kind": "action",
-    "target": "every project",
-}
-
-
-class RememberingFixture(InPortalTest):
-    def corrections_file(self) -> Any:
-        return json.loads((self.machine.state_dir / remembered_corrections.FILE).read_text(encoding="utf-8"))
-
-
-class RememberedCorrectionTest(RememberingFixture):
-    def corrected(self, session: str = "one", hours_ago: int = 2) -> None:
-        before = (START - (hours_ago + 1) * HOUR).astimezone(datetime.timezone.utc)
-        self.record(test_sessions.answered("Running the proof.", before, "scripts/check"), session)
-        self.typed("why the full check again, CI ran it", START - hours_ago * HOUR, session, self.PORTAL)
-
-    def test_a_correction_in_one_session_is_remembered_in_machine_state_and_not_proposed(self) -> None:
-        """Covers: B297"""
-        self.reading()
-        self.portal_noted()
-        self.corrected()
-        self.answers(singles=[FULL_CHECK])
-
-        self.assertEqual(self.run_curate().state, SUCCEEDED)
-
-        self.assertEqual(self.kept()["proposals"], {})
-        (entry,) = self.corrections_file()["corrections"]
-        self.assertEqual(
-            {key: value for key, value in entry.items() if key != "id"},
-            {
-                "session": "one",
-                "day": "2026-11-07",
-                "quote": "why the full check again",
-                "commands": ["scripts/check"],
-                "addresses": ["github.com/acme/portal"],
-                "matter": "the whole proof is run again although CI ran it on the same code",
-                "kind": "action",
-                "target": "every project",
-            },
-        )
-        self.assertIn("1 unsure correction remembered: unclear whether it holds beyond its task", self.info())
-
-    def test_a_correction_a_lesson_of_the_same_answer_stands_on_is_not_remembered(self) -> None:
-        """Covers: B297"""
-        self.reading()
-        self.portal_noted()
-        self.corrected("one", 3)
-        self.typed("no full check without a reason", START - HOUR, "two", self.PORTAL)
-        lesson = {
-            "kind": "lesson",
-            "text": "Run the whole proof only with a reason.",
-            "quote": "why the full check again",
-            "session": 1,
-            "topic": None,
-            "due": None,
-            "lesson": {
-                "kind": "knowledge",
-                "target": "every project",
-                "words": [],
-                "quote": "no full check without a reason",
-                "session": 2,
-            },
-        }
-        self.answers(
-            lesson,
-            singles=[FULL_CHECK, {**FULL_CHECK, "quote": "no full check without a reason", "session": 2}],
-            verdicts=[{"lesson": 1, "verdict": "none"}],
-        )
-
-        self.assertEqual(self.run_curate().state, SUCCEEDED)
-
-        self.assertEqual(len(self.kept()["proposals"]), 1)
-        self.assertFalse((self.machine.state_dir / remembered_corrections.FILE).exists())
-
-    def test_a_correction_whose_words_were_not_typed_or_that_is_not_in_the_form_is_counted_apart(self) -> None:
-        """Covers: B297"""
-        self.reading()
-        self.portal_noted()
-        self.corrected()
-        self.answers(singles=[{**FULL_CHECK, "quote": "never run the full check"}, {**FULL_CHECK, "kind": "rule"}])
-
-        self.assertEqual(self.run_curate().state, SUCCEEDED)
-
-        self.assertFalse((self.machine.state_dir / remembered_corrections.FILE).exists())
-        self.assertIn("2 unsure corrections left out: not in the form or not in what was typed in it", self.info())
-        self.assertEqual(self.kept()["counts"]["lesson"]["not_quoted"], 0)
-
-    def test_a_correction_for_one_project_without_a_known_repository_is_not_remembered(self) -> None:
-        """Covers: B297"""
-        self.reading()
-        self.corrected()
-        self.answers(singles=[{**FULL_CHECK, "target": "this project"}])
-
-        self.assertEqual(self.run_curate().state, SUCCEEDED)
-
-        self.assertFalse((self.machine.state_dir / remembered_corrections.FILE).exists())
-        self.assertIn(
-            "1 unsure correction for one project left out: no repository is known for its session",
-            self.info(),
-        )
-
-    def test_corrections_older_than_30_days_and_beyond_300_are_forgotten_the_oldest_first(self) -> None:
-        """Covers: B297"""
-        self.reading()
-        self.portal_noted()
-        earlier = [
-            remembered_corrections.Correction(
-                f"old{number:03d}",
-                f"s{number}",
-                datetime.date(2026, 11, 6) - datetime.timedelta(days=number % 29),
-                "only the quick round",
-                (),
-                (),
-                "the whole proof",
-                "knowledge",
-                "every project",
-            )
-            for number in range(300)
-        ]
-        outdated = dataclasses.replace(earlier[0], id="outdated", day=datetime.date(2026, 10, 8))
-        written = remembered_corrections.remember(
-            self.machine.state_dir, [*earlier, outdated], datetime.date(2026, 10, 9), self.machine.temp_dir
-        )
-        self.assertIsNone(written)
-        self.corrected()
-        self.answers(singles=[FULL_CHECK])
-
-        self.run_curate()
-
-        ids = [entry["id"] for entry in self.corrections_file()["corrections"]]
-        self.assertEqual(len(ids), remembered_corrections.MOST)
-        self.assertNotIn("outdated", ids)
-        self.assertIn(remembered_corrections.correction_id("one", START - 2 * HOUR), ids)
-        oldest = min(earlier, key=lambda each: each.day)
-        self.assertEqual(
-            sum(each.day == oldest.day for each in earlier) - 1,
-            sum(entry["day"] == oldest.day.isoformat() for entry in self.corrections_file()["corrections"]),
-        )
-
-    def test_a_period_read_again_remembers_no_correction_twice_whatever_words_of_its_prompt_are_quoted(self) -> None:
-        """Covers: B297"""
-        self.reading()
-        self.portal_noted()
-        self.corrected()
-        self.answers(singles=[FULL_CHECK])
-        self.run_curate()
-        self.read_until(START - 2 * DAY)
-        self.answers(singles=[{**FULL_CHECK, "quote": "the full check again, CI ran it"}])
-
-        self.run_curate()
-
-        self.assertEqual(len(self.corrections_file()["corrections"]), 1)
-        self.assertFalse(any("unsure correction remembered" in note for note in self.info()))
-
-    def test_a_reading_that_fails_remembers_no_correction(self) -> None:
-        """Covers: B297"""
-        self.reading()
-        self.portal_noted()
-        self.corrected()
-        self.answers(singles=[FULL_CHECK], outcome="error")
-
-        self.run_curate()
-
-        self.assertFalse((self.machine.state_dir / remembered_corrections.FILE).exists())
-
-    def test_a_file_that_cannot_be_read_is_said_and_the_reading_goes_on(self) -> None:
-        """Covers: B297"""
-        self.reading()
-        self.portal_noted()
-        self.machine.state_dir.mkdir(parents=True, exist_ok=True)
-        (self.machine.state_dir / remembered_corrections.FILE).write_text("{not json", encoding="utf-8")
-        self.corrected()
-        self.answers(DANA, singles=[FULL_CHECK])
-        self.typed(DANA_SAID, START - HOUR, "one", self.PORTAL)
-
-        self.assertEqual(self.run_curate().state, SUCCEEDED)
-
-        self.assertEqual(len(self.kept()["proposals"]), 1)
-        self.assertEqual(len(self.corrections_file()["corrections"]), 1)
-        self.assertTrue(
-            any(note.startswith("the corrections remembered from earlier readings were lost:") for note in self.info())
-        )
-
-    def test_a_file_that_cannot_be_written_is_said_and_the_proposals_are_kept(self) -> None:
-        """Covers: B297"""
-        self.reading()
-        self.portal_noted()
-        self.corrected()
-        self.answers(singles=[FULL_CHECK])
-
-        with mock.patch.object(remembered_corrections, "write_text_atomically", side_effect=OSError("disk full")):
-            self.assertEqual(self.run_curate().state, SUCCEEDED)
-
-        self.assertIn("the unsure corrections could not be remembered: disk full", self.info())
-        self.assertEqual(self.kept()["read_until"], START.isoformat())
-
-
 ONE_CORRECTION = {
     "kind": "lesson",
     "text": "Run the whole proof only with a reason.",
@@ -959,7 +754,21 @@ class OneCorrectionLessonTest(InPortalTest):
         self.assertEqual(entry["lesson"]["words"], ["scripts/check"])
         _, check = self.asked()
         self.assertEqual(check["lessons"][0]["said"], ["why the full check again"])
-        self.assertFalse((self.machine.state_dir / remembered_corrections.FILE).exists())
+
+    def test_an_unsure_correction_is_proposed_at_once_with_its_mark(self) -> None:
+        """Covers: B297"""
+        self.reading()
+        self.portal_noted()
+        self.corrected()
+        unsure = {**ONE_CORRECTION, "lesson": {**ONE_CORRECTION["lesson"], "unsure": True}}
+        self.answers(unsure, verdicts=[{"lesson": 1, "verdict": "none"}])
+
+        self.assertEqual(self.run_curate().state, SUCCEEDED)
+
+        (entry,) = self.kept()["proposals"].values()
+        self.assertEqual((entry["kind"], entry["lesson"]["unsure"]), ("lesson", True))
+        given, _ = self.asked()
+        self.assertNotIn("earlier_corrections", given)
 
     def test_a_lesson_for_one_project_on_one_correction_is_for_its_sessions_repository(self) -> None:
         """Covers: B270"""
@@ -988,125 +797,6 @@ class OneCorrectionLessonTest(InPortalTest):
         self.assertIn(
             "1 lesson for one project left out: no repository is known that its sessions worked in", self.info()
         )
-
-
-EARLIER_LESSON = {
-    "kind": "lesson",
-    "text": "Run the whole proof only with a reason.",
-    "quote": "no full check without a reason",
-    "session": 1,
-    "topic": None,
-    "due": None,
-    "lesson": {"kind": "action", "target": "every project", "words": ["scripts/check"], "earlier": 1},
-}
-
-
-class AcrossReadingsTest(RememberingFixture):
-    def remembered(self, **changes: Any) -> list[remembered_corrections.Correction]:
-        """The one correction an earlier reading remembered, of a session "zero" on 4 November unless
-        ``changes`` say otherwise; its id is made from its session, as a reading makes it."""
-        session = changes.get("session", "zero")
-        first = remembered_corrections.Correction(
-            remembered_corrections.correction_id(session, START - 3 * DAY),
-            session,
-            (START - 3 * DAY).date(),
-            "why the full check again",
-            ("scripts/check",),
-            ("github.com/acme/portal",),
-            "the whole proof is run again although CI ran it",
-            "action",
-            "every project",
-        )
-        given = [dataclasses.replace(first, **changes)]
-        self.machine.state_dir.mkdir(parents=True, exist_ok=True)
-        self.assertIsNone(
-            remembered_corrections.remember(self.machine.state_dir, given, START.date(), self.machine.temp_dir)
-        )
-        return given
-
-    def corrected_again_in(self, session: str = "two") -> None:
-        before = (START - 2 * HOUR).astimezone(datetime.timezone.utc)
-        self.record(test_sessions.answered("Running the proof.", before, "scripts/check"), session)
-        self.typed("no full check without a reason", START - HOUR, session, self.PORTAL)
-
-    def test_a_remembered_correction_and_its_repeat_in_another_session_make_one_lesson(self) -> None:
-        """Covers: B301"""
-        self.reading()
-        self.portal_noted()
-        self.remembered()
-        self.corrected_again_in()
-        self.answers(EARLIER_LESSON, verdicts=[{"lesson": 1, "verdict": "none"}])
-
-        self.assertEqual(self.run_curate().state, SUCCEEDED)
-
-        given = self.asked()[0]["earlier_corrections"]
-        self.assertEqual(
-            given,
-            [
-                {
-                    "number": 1,
-                    "matter": "the whole proof is run again although CI ran it",
-                    "quote": "why the full check again",
-                    "day": "Wednesday 2026-11-04",
-                    "repository": "portal",
-                }
-            ],
-        )
-        (entry,) = self.kept()["proposals"].values()
-        self.assertEqual((entry["kind"], entry["quote"]), ("lesson", "no full check without a reason"))
-        self.assertEqual((entry["lesson"]["quote"], entry["lesson"]["session"]), ("why the full check again", "zero"))
-        self.assertEqual(self.corrections_file()["corrections"], [])
-        self.assertIn("1 lesson stands on a correction remembered from an earlier reading", self.info())
-
-    def test_the_repeat_in_the_session_of_the_remembered_correction_is_no_second_one(self) -> None:
-        """Covers: B301"""
-        self.reading()
-        self.portal_noted()
-        self.remembered(session="two")
-        self.corrected_again_in("two")
-        self.answers(EARLIER_LESSON, verdicts=[{"lesson": 1, "verdict": "none"}])
-
-        self.assertEqual(self.run_curate().state, SUCCEEDED)
-
-        self.assertEqual(self.kept()["proposals"], {})
-        self.assertTrue(any(line.endswith("1 not in the form") for line in self.info()))
-        (entry,) = self.corrections_file()["corrections"]
-        self.assertEqual(entry["quote"], "why the full check again")
-
-    def for_the_project(self, remembered_at: tuple[str, ...]) -> list[str]:
-        self.reading()
-        self.portal_noted()
-        self.remembered(addresses=remembered_at)
-        self.corrected_again_in()
-        for_the_project = {**EARLIER_LESSON, "lesson": {**EARLIER_LESSON["lesson"], "target": "this project"}}
-        self.answers(for_the_project, verdicts=[{"lesson": 1, "verdict": "none"}])
-        self.assertEqual(self.run_curate().state, SUCCEEDED)
-        return [entry["lesson"]["target"] for entry in self.kept()["proposals"].values()]
-
-    def test_a_lesson_for_one_project_across_readings_is_placed_by_the_addresses_remembered(self) -> None:
-        """Covers: B301"""
-        self.assertEqual(self.for_the_project(("github.com/acme/portal",)), ["github.com/acme/portal"])
-        self.assertEqual(self.corrections_file()["corrections"], [])
-
-    def test_a_lesson_for_two_repositories_across_readings_is_left_out_and_both_are_remembered(self) -> None:
-        """Covers: B301"""
-        self.assertEqual(self.for_the_project(("github.com/acme/other",)), [])
-        self.assertEqual(len(self.corrections_file()["corrections"]), 2)
-
-    def test_an_action_lesson_across_readings_needs_its_words_in_a_command_of_one_of_its_turns(self) -> None:
-        """Covers: B301"""
-        self.reading()
-        self.portal_noted()
-        self.remembered(commands=("git push",))
-        self.corrected_again_in()
-        on_tests = {**EARLIER_LESSON, "lesson": {**EARLIER_LESSON["lesson"], "words": ["npm test"]}}
-        self.answers(on_tests, verdicts=[{"lesson": 1, "verdict": "none"}])
-
-        self.assertEqual(self.run_curate().state, SUCCEEDED)
-
-        self.assertEqual(self.kept()["proposals"], {})
-        quotes = sorted(entry["quote"] for entry in self.corrections_file()["corrections"])
-        self.assertEqual(quotes, ["no full check without a reason", "why the full check again"])
 
 
 POINTER = {

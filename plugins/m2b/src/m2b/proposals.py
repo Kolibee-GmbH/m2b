@@ -43,6 +43,8 @@ would show a proposal from pasted text as said and write it back without the fie
 before a session could hand in would show a handed-in proposal as said or under a source it does
 not know and write it back without who proposed it and without the tool; one before a lesson or a
 project could be proposed would leave such a proposal out and write the file back without it.
+Fields added to a lesson since (``unless``, ``unsure``) raise no format: an m2b before them shows
+the lesson and writes it back without them, which loses a hint, never a proposal.
 
 A project is proposed by code, not by a model (``project_proposals``): a repository the person
 worked in on two days that has no topic. Its quote is the repository's addresses, its source
@@ -543,7 +545,10 @@ def _lesson_of(value: object) -> LessonPart | None:
     unless = value.get("unless", [])
     if not isinstance(unless, list) or not all(isinstance(word, str) and can_be_written(word) for word in unless):
         return None
-    return LessonPart(kind, target, tuple(words), quote, session, source, replaces, tuple(unless))
+    unsure = value.get("unsure", False)
+    if not isinstance(unsure, bool):
+        return None
+    return LessonPart(kind, target, tuple(words), quote, session, source, replaces, tuple(unless), unsure)
 
 
 def _at_source_of(value: object) -> AtSource | None:
@@ -596,6 +601,8 @@ def _as_json(entry: Entry) -> dict[str, Any]:
             written["lesson"]["replaces"] = entry.lesson.replaces
         if entry.lesson.unless:
             written["lesson"]["unless"] = list(entry.lesson.unless)
+        if entry.lesson.unsure:
+            written["lesson"]["unsure"] = True
     if entry.pointer is not None:
         written["pointer"] = {"path": entry.pointer.path, "repositories": list(entry.pointer.repositories)}
     return written
@@ -619,12 +626,17 @@ def said_line(entry: Entry, quote: str) -> str:
     return f'{lead} {entry.day.isoformat()}: "{quote}"'
 
 
+# How a lesson the reading could not tell holds beyond its task is named where it is listed.
+UNSURE_MARK = "unsure: may hold for its task only"
+
+
 def lesson_heading(lesson: LessonPart, shown: Callable[[str], str]) -> str:
     """What a proposed lesson is, beside its kind in a listing: ``action for every project, on a
     command with scripts/check``; ``shown`` is how the caller shows text."""
     words = f", on a command with {' '.join(shown(word) for word in lesson.words)}" if lesson.words else ""
     replaces = f", replaces {shown(lesson.replaces)}" if lesson.replaces else ""
-    return f"{lesson.kind} for {shown(lesson.target)}{words}{replaces}"
+    unsure = f", {UNSURE_MARK}" if lesson.unsure else ""
+    return f"{lesson.kind} for {shown(lesson.target)}{words}{replaces}{unsure}"
 
 
 def again_line(quote: str) -> str:

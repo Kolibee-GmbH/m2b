@@ -50,10 +50,7 @@ no curation model. The folder it names is printed into a session that gets the p
 repository, and a remote's address can reach the store: as a project the reading of your sessions
 proposes, and as the repository a lesson or a fix is kept for. The folder itself never reaches the
 store. The days a repository was worked in are kept on this machine, in
-`~/.local/state/m2b/project-days.json`. A correction of Claude where the reading cannot tell whether it
-holds beyond its task is kept on this machine too, for 30 days, in
-`~/.local/state/m2b/remembered-corrections.json`: your words, the shell commands Claude ran in that
-turn, the address of the repository and what it is about. For leaving work out a note counts for 30 days after it was last
+`~/.local/state/m2b/project-days.json`. For leaving work out a note counts for 30 days after it was last
 renewed; the note itself stays while its folder is there and is removed at a session start once
 the folder is gone and no session start renewed it for 30 days.
 

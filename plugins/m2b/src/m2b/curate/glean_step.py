@@ -33,9 +33,9 @@ The model is also shown the lessons the person kept and asked which prompts corr
 of them again; code keeps such a correction only where its words stand in what was typed on the
 day after the lesson was kept, and counts it under the lesson (``lesson_counts``).
 
-A correction of how Claude works that holds beyond the task is a lesson from the one session it
-stands in. One where the model cannot tell whether it holds beyond the task is named apart, and
-once the reading is saved code remembers it in machine state (``remembered_corrections``).
+A correction of how Claude works is a lesson from the one session it stands in, also one where the
+model cannot tell whether it holds beyond the task: that one is marked unsure, and the person
+decides on it as on any lesson.
 
 A repository the person typed in on two days, in this reading or remembered from one before, and
 that no topic names, is proposed as a project by code (``project_proposals``), with no model and
@@ -75,7 +75,6 @@ from m2b import (
     project_files,
     project_proposals,
     proposals,
-    remembered_corrections,
     session_remotes,
     sessions,
 )
@@ -198,23 +197,17 @@ def propose(
         *(glean.ShownLesson(lesson.name, lesson.text, lesson.kept) for lesson in standing),
         *(as_fixes or ()),
     ]
-    remembered = remembered_corrections.remembered(machine.state_dir, started.astimezone(zone).date())
-    if remembered.failure:
-        notes.append(f"the corrections remembered from earlier readings were not shown: {remembered.failure}")
-    earlier = remembered.corrections
-    given = glean.step_input(read, _distillate(store), zone, examples, waiting, shown_lessons, earlier)
+    given = glean.step_input(read, _distillate(store), zone, examples, waiting, shown_lessons)
     run = model.text_step(config, machine, environ, glean.instruction(), given, pass_fds)
     if run.answer is None:
         raise GleanStepError(run.failure())
-    answer = glean.parse_answer(run.answer, read, earlier)
-    # A remembered correction is checked as a session of one prompt beside those of the period.
-    checked = glean.check(answer.proposals, (*read, *glean.earlier_sessions(earlier)), captures.texts)
-    from_earlier = {glean.earlier_session_id(correction): correction for correction in earlier}
-    placed, without_repository = _for_their_project(checked, read, notes_folder, started, from_earlier)
+    answer = glean.parse_answer(run.answer, read)
+    checked = glean.check(answer.proposals, read, captures.texts)
+    placed, without_repository = _for_their_project(checked, read, notes_folder, started)
     placed = project_files.pointed(placed, read, projects)
     placed, not_keepable, known = _new_lessons(placed, standing, zone)
     placed, unchecked = _at_their_sources(
-        placed, read, config, machine, environ, notes_folder, started, pass_fds, kept.entries, from_earlier
+        placed, read, config, machine, environ, notes_folder, started, pass_fds, kept.entries
     )
     # Before the weakest lesson is chosen, so this reading's corrections count in that choice.
     corrections = glean.checked_corrections(answer.corrections, read, shown_lessons, zone)
@@ -233,15 +226,6 @@ def propose(
         if again:
             notes.append(f"{_count(again, 'correction')} of a kept lesson counted: Claude was corrected on it again")
     placed = _within_the_start(placed, standing, store, kept.entries)
-    paired = [
-        from_earlier[proposal.lesson.session]
-        for proposal, _ in placed
-        if proposal.lesson is not None and proposal.lesson.session in from_earlier
-    ]
-    if paired:
-        stands = "stands" if len(paired) == 1 else "stand"
-        notes.append(f"{_count(len(paired), 'lesson')} {stands} on a correction remembered from an earlier reading")
-    placed = [(_in_its_session(proposal, from_earlier), typed_at) for proposal, typed_at in placed]
     said = [proposals.Said(proposal, typed_at.astimezone(zone).date()) for proposal, typed_at in placed]
     repositories = {
         session.folder: tuple(sorted(_addresses(notes_folder, session.folder, started))) for session in read
@@ -279,15 +263,6 @@ def propose(
         )
     proposals.save(store, dataclasses.replace(counted, read_until=started))
     project_proposals.remember(machine.state_dir, worked, machine.temp_dir)
-    used = [(proposal.session, proposal.quote) for proposal, _ in placed if proposal.lesson is not None]
-    used += [(proposal.lesson.session, proposal.lesson.quote) for proposal, _ in placed if proposal.lesson]
-    used += [(correction.session, correction.quote) for correction in corrections]
-    # A remembered correction a lesson of this reading stands on leaves the list, also where the
-    # lesson was refused as one that waits or was answered: it is proposed, or was.
-    forget = frozenset(correction.id for correction in paired)
-    unpaired = _unpaired(answer.proposals, from_earlier, paired)
-    with_unpaired = dataclasses.replace(answer, single_corrections=(*answer.single_corrections, *unpaired))
-    notes += _remember_single_corrections(with_unpaired, used, read, machine, notes_folder, started, forget)
     sent = sum(len(session.prompts) for session in read)
     summary = (
         f"read {_count(len(read), 'session')} with {_count(sent, 'prompt')} since {start.strftime(_MOMENT)}: "
@@ -299,80 +274,11 @@ def propose(
     return Reading(None, (summary, *notes, *period_captures.capture_notes(captures)))
 
 
-def _remember_single_corrections(
-    answer: glean.Answer,
-    used: Sequence[tuple[str, str]],
-    read: Sequence[sessions.Session],
-    machine: MachinePaths,
-    notes: Path,
-    started: datetime.datetime,
-    forget: frozenset[str] = frozenset(),
-) -> list[str]:
-    """Remembers in machine state the unsure corrections of the answer, those the model could not
-    tell hold beyond their task, once the reading is saved, and says what became of them
-    (``remembered_corrections``).
-
-    One for a single project is remembered only with the addresses of its session's repository:
-    without them it names no project, and a lesson of it could never be placed.
-    """
-    zone = started.tzinfo or datetime.timezone.utc
-    today = started.astimezone(zone).date()
-    checked, refused = glean.checked_single_corrections(answer.single_corrections, used, read)
-    folders = {session.session_id: session.folder for session in read}
-    new = []
-    without_repository = 0
-    for single, prompt in checked:
-        addresses = tuple(sorted(_addresses(notes, folders.get(single.session, ""), started)))
-        if single.target == lessons.THIS_PROJECT and not addresses:
-            without_repository += 1
-            continue
-        new.append(
-            remembered_corrections.Correction(
-                remembered_corrections.correction_id(single.session, prompt.time),
-                single.session,
-                prompt.time.astimezone(zone).date(),
-                " ".join(single.quote.split()),
-                prompt.commands,
-                addresses,
-                single.matter,
-                single.kind,
-                single.target,
-            )
-        )
-    said = []
-    not_used = refused + answer.singles_malformed
-    if not_used:
-        said.append(f"{_count(not_used, 'unsure correction')} left out: not in the form or not in what was typed in it")
-    if without_repository:
-        said.append(
-            f"{_count(without_repository, 'unsure correction')} for one project left out: "
-            "no repository is known for its session"
-        )
-    if not new and not forget:
-        return said
-    earlier = remembered_corrections.remembered(machine.state_dir, today)
-    if earlier.failure:
-        said.append(f"the corrections remembered from earlier readings were lost: {earlier.failure}")
-    known = {each.id for each in earlier.corrections}
-    staying = [each for each in earlier.corrections if each.id not in forget]
-    failure = remembered_corrections.remember(
-        machine.state_dir, remembered_corrections.joined(staying, new), today, machine.temp_dir
-    )
-    if failure:
-        return [*said, f"the unsure corrections could not be remembered: {failure}"]
-    added = len({each.id for each in new} - known)
-    if added:
-        holds, its = ("it holds", "its") if added == 1 else ("they hold", "their")
-        said.append(f"{_count(added, 'unsure correction')} remembered: unclear whether {holds} beyond {its} task")
-    return said
-
-
 def _for_their_project(
     checked: glean.Checked,
     read: Sequence[sessions.Session],
     notes: Path,
     now: datetime.datetime,
-    from_earlier: Mapping[str, remembered_corrections.Correction] = {},
 ) -> tuple[list[tuple[glean.Proposal, datetime.datetime]], int]:
     """The kept proposals with when their words were typed, each lesson for one project named by the
     address of the repository its sessions worked in, both where there are two, and how many such
@@ -391,55 +297,14 @@ def _for_their_project(
             placed.append((proposal, typed_at))
             continue
         first = _addresses(notes, folders.get(proposal.session, ""), now)
-        # A lesson on one correction is for the repository of its one session; a remembered
-        # correction brings the addresses its session start noted.
-        if lesson.session in from_earlier:
-            second = frozenset(from_earlier[lesson.session].addresses)
-        else:
-            second = _addresses(notes, folders.get(lesson.session, ""), now) if lesson.session else first
+        # A lesson on one correction is for the repository of its one session.
+        second = _addresses(notes, folders.get(lesson.session, ""), now) if lesson.session else first
         common = sorted(first & second)
         if not common:
             without += 1
             continue
         placed.append((dataclasses.replace(proposal, lesson=dataclasses.replace(lesson, target=common[0])), typed_at))
     return placed, without
-
-
-def _unpaired(
-    proposed: Sequence[glean.Proposal],
-    from_earlier: Mapping[str, remembered_corrections.Correction],
-    paired: Sequence[remembered_corrections.Correction],
-) -> list[glean.SingleCorrection]:
-    """The corrections of this period a lesson on a remembered one stood on that was not added: code
-    refused it, or its sources could not be checked. Each is remembered as a single correction, and
-    the remembered one stays, so the two can still meet in a later reading."""
-    used = {correction.id for correction in paired}
-    return [
-        glean.SingleCorrection(
-            proposal.text[: glean.MATTER_LENGTH],
-            proposal.quote,
-            proposal.session,
-            proposal.lesson.kind,
-            proposal.lesson.target,
-        )
-        for proposal in proposed
-        if proposal.lesson is not None
-        and proposal.lesson.session in from_earlier
-        and from_earlier[proposal.lesson.session].id not in used
-    ]
-
-
-def _in_its_session(
-    proposal: glean.Proposal, from_earlier: Mapping[str, remembered_corrections.Correction]
-) -> glean.Proposal:
-    """A lesson on a remembered correction names the session that correction was made in, as a
-    lesson on two sessions of the period names its second one."""
-    lesson = proposal.lesson
-    if lesson is None or lesson.session not in from_earlier:
-        return proposal
-    return dataclasses.replace(
-        proposal, lesson=dataclasses.replace(lesson, session=from_earlier[lesson.session].session)
-    )
 
 
 def _projects_of(
@@ -479,7 +344,6 @@ def _at_their_sources(
     now: datetime.datetime,
     pass_fds: Sequence[int],
     known: Mapping[str, proposals.Entry],
-    from_earlier: Mapping[str, remembered_corrections.Correction] = {},
 ) -> tuple[list[tuple[glean.Proposal, datetime.datetime]], _Unchecked]:
     """The proposals, each lesson with what the files its sessions load say of it (``lesson_sources``).
 
@@ -498,8 +362,6 @@ def _at_their_sources(
     if not found:
         return list(placed), _Unchecked()
     folders = {session.session_id: session.folder for session in read}
-    # A remembered correction whose session goes on in the period has that session's folder.
-    folders.update((key, folders.get(correction.session, "")) for key, correction in from_earlier.items())
     wanted: list[lesson_sources.Folder] = []
     for proposal in found:
         assert proposal.lesson is not None

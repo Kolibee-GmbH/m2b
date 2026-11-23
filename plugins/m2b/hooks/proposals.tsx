@@ -108,7 +108,8 @@ function isLesson(value: unknown): value is BandLesson {
     Array.isArray(value['words']) &&
     value['words'].every(word => typeof word === 'string') &&
     (value['at_source'] === undefined || value['at_source'] === null || isAtSource(value['at_source'])) &&
-    (value['replaces'] === undefined || value['replaces'] === null || typeof value['replaces'] === 'string')
+    (value['replaces'] === undefined || value['replaces'] === null || typeof value['replaces'] === 'string') &&
+    (value['unsure'] === undefined || typeof value['unsure'] === 'boolean')
   )
 }
 
@@ -211,11 +212,15 @@ function heading(proposal: BandProposal): string {
   return parts.join(', ')
 }
 
+// A lesson the reading could not tell holds beyond its task, as `m2b proposals` marks it.
+const UNSURE_MARK = 'unsure: may hold for its task only'
+
 /** `action for every project, on a command with scripts/check`, as `m2b proposals` says it. */
 function lessonHeading(lesson: BandLesson): string {
   const words = lesson.words.length > 0 ? `, on a command with ${lesson.words.map(word => writtenOut(word)).join(' ')}` : ''
   const replaces = lesson.replaces ? `, replaces ${writtenOut(lesson.replaces)}` : ''
-  return `${writtenOut(lesson.kind)} for ${writtenOut(lesson.target)}${words}${replaces}`
+  const unsure = lesson.unsure ? `, ${UNSURE_MARK}` : ''
+  return `${writtenOut(lesson.kind)} for ${writtenOut(lesson.target)}${words}${replaces}${unsure}`
 }
 
 /** What becomes of the source a lesson is kept at, as `m2b proposals` says it. */
@@ -406,8 +411,9 @@ export function proposalsPane(
   const inAll = new Set(all?.ids ?? [])
   const pressOf = (proposal: BandProposal): BandPress | undefined =>
     presses[pressKey(proposal.id)] ?? (all !== undefined && inAll.has(proposal.id) ? { ...all, phase: 'writing' } : undefined)
-  // What no reading proposed is answered one by one: keep all leaves it, as `m2b proposals keep --all` does.
-  const unpressed = waiting.filter(proposal => pressOf(proposal) === undefined && !proposal.by)
+  // What no reading proposed, and a lesson the reading was unsure of, is answered one by one: keep
+  // all leaves it, as `m2b proposals keep --all` does.
+  const unpressed = waiting.filter(proposal => pressOf(proposal) === undefined && !proposal.by && !proposal.lesson?.unsure)
   return part(ui, spec, [
     error !== null && said(ui, couldNotLookLine(error), 'trouble'),
     notice !== null && said(ui, plainLine(notice), 'trouble'),

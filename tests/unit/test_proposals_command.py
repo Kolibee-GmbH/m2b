@@ -163,8 +163,19 @@ class ListTest(ProposalsCommandTest):
                 "quote": "no full check without a reason",
                 "at_source": None,
                 "replaces": None,
+                "unsure": False,
             },
         )
+
+    def test_an_unsure_lesson_is_listed_with_a_mark_that_it_may_hold_for_its_task_only(self) -> None:
+        """Covers: B302"""
+        self.proposed(dataclasses.replace(LESSON, lesson=dataclasses.replace(LESSON.lesson, unsure=True)))
+
+        out = self.run_command("proposals")[1]
+        listed = self.run_json("proposals")["proposals"][0]
+
+        self.assertIn(", on a command with scripts/check, unsure: may hold for its task only\n", out)
+        self.assertIs(listed["lesson"]["unsure"], True)
 
     def test_it_lists_each_waiting_proposal_with_its_kind_text_words_day_and_id(self) -> None:
         """Covers: B122"""
@@ -415,6 +426,25 @@ class AnswerTest(ProposalsCommandTest):
         self.assertEqual(again, {"given": [], "already": {}, "left": [LADDER_ID]})
         self.assertEqual(by_id, {"given": [LADDER_ID], "already": {}})
         self.assertEqual(self.answer_files(), sorted([f"{DANA_ID}.keep", f"{LADDER_ID}.keep"]))
+
+    def test_keep_all_leaves_an_unsure_lesson_and_says_how_many(self) -> None:
+        """Covers: B302"""
+        unsure = dataclasses.replace(LESSON, lesson=dataclasses.replace(LESSON.lesson, unsure=True))
+        self.proposed(DANA, unsure)
+        unsure_id = proposals.proposal_id(unsure)
+
+        code, out, err = self.run_command("proposals", "keep", "--all")
+        again = self.run_json("proposals", "keep", "--all")
+
+        self.assertEqual((code, err), (cli.EXIT_OK, ""))
+        self.assertEqual(
+            out,
+            f"keep {DANA_ID}: Dana runs IT at Northwind.\n"
+            "the next curation run files what is kept\n"
+            "1 lesson marked unsure waits: --all leaves it, keep or drop by id\n",
+        )
+        self.assertEqual(again, {"given": [], "already": {}, "left": [unsure_id]})
+        self.assertEqual(self.answer_files(), [f"{DANA_ID}.keep"])
 
     def test_the_same_answer_twice_is_said_and_no_problem(self) -> None:
         """Covers: B122"""

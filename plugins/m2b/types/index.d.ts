@@ -141,6 +141,8 @@ export type BandLesson = {
   at_source?: BandAtSource | null
   // The kept lesson this one takes the place of, where every session's start is past its target.
   replaces?: string | null
+  // The reading could not tell whether the correction holds beyond its task; absent from an older core.
+  unsure?: boolean
 }
 
 /** What a source a lesson is kept at says: `fix` replaces `line` (or adds, without one) with `wording`; `stated` names the line that says it. */

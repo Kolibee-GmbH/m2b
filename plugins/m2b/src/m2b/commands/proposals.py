@@ -150,8 +150,11 @@ def _answer(store: Store, answer: str, named: list[str], every: bool, as_json: b
     require_store_writable(store)
     waiting = dict(proposal_answers.waiting(store).proposals) if every else {}
     # What a session handed in is kept one by one: an agent worded it from what it read, and
-    # `--all` answers without a look at each.
-    left = [key for key, entry in waiting.items() if proposals.proposer_of(entry) is not None]
+    # `--all` answers without a look at each. So is a lesson the reading was unsure of: kept unseen
+    # it would also count as one the person judged, in the share of lessons kept.
+    handed_in = [key for key, entry in waiting.items() if proposals.proposer_of(entry) is not None]
+    unsure = [key for key, entry in waiting.items() if entry.lesson is not None and entry.lesson.unsure]
+    left = [*handed_in, *(key for key in unsure if key not in handed_in)]
     entries = (
         {key: entry for key, entry in waiting.items() if key not in left} if every else proposals.load(store).entries
     )
@@ -161,23 +164,29 @@ def _answer(store: Store, answer: str, named: list[str], every: bool, as_json: b
         answered = {"given": list(given.given), "already": dict(given.already)}
         print_json({**answered, "left": left} if every else answered)
     else:
-        _say(answer, given, entries, every, len(left))
+        _say(answer, given, entries, every, len(handed_in), len(left) - len(handed_in))
     return 1 if other else 0
 
 
-def _say(answer: str, given: Given, entries: Mapping[str, Entry], every: bool, left: int = 0) -> None:
+def _say(answer: str, given: Given, entries: Mapping[str, Entry], every: bool, left: int = 0, unsure: int = 0) -> None:
     said = _SAID.get(answer, answer)
     for key in given.given:
         print(f"{said} {key}: {_shown(entries[key].text)}")
     if given.given and answer in proposal_answers.KEEPS:
         print("the next curation run files what is kept")
-    if every and not given.given and not left:
+    if every and not given.given and not left and not unsure:
         print(NONE_WAITS)
     if left:
         one = left == 1
         print(
             f"{left} {'proposal' if one else 'proposals'} a session handed in "
             f"{'waits' if one else 'wait'}: --all leaves {'it' if one else 'them'}, keep or drop by id"
+        )
+    if unsure:
+        one = unsure == 1
+        print(
+            f"{unsure} {'lesson' if one else 'lessons'} marked unsure {'waits' if one else 'wait'}: "
+            f"--all leaves {'it' if one else 'them'}, keep or drop by id"
         )
     for key, stands in given.already.items():
         if stands == answer:
@@ -232,5 +241,6 @@ def _as_json(key: str, entry: Entry) -> dict[str, Any]:
             "quote": entry.lesson.quote,
             "at_source": None if entry.lesson.at_source is None else dataclasses.asdict(entry.lesson.at_source),
             "replaces": entry.lesson.replaces,
+            "unsure": entry.lesson.unsure,
         },
     }
