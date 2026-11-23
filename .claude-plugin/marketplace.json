@@ -9,11 +9,11 @@
       "name": "m2b",
       "source": {
         "source": "archive",
-        "url": "https://github.com/Kolibee-GmbH/m2b/releases/download/v0.14.0/m2b-plugin.zip",
-        "sha256": "e33fc684075ab0a6ea60af6fc15a877832c38b35184c435cf9eb235faf716bfc"
+        "url": "https://github.com/Kolibee-GmbH/m2b/releases/download/v0.15.0/m2b-plugin.zip",
+        "sha256": "0be7de260c1d79d85e5997cd5f37aa7237da840d74b512591f2ee87af78120c3"
       },
       "description": "Your second brain for Claude Code, one store across all your projects and machines: capture notes, search them, see your tasks, get a small curated distillate in every session, see in a band above the prompt what waits for your answer, and keep or drop what curation proposes in the m2b pane. One add-on, off until set up: a worklog of your agent sessions in herdr.",
-      "version": "0.14.0"
+      "version": "0.15.0"
     }
   ]
 }
