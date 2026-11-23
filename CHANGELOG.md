@@ -5,6 +5,28 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/), with tags `vX.Y.Z`. How a release is made is in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [0.15.0] - 2026-11-23
+
+A correction of how Claude works is proposed as a lesson the first time, also where the reading
+cannot tell whether it holds beyond its task; you decide on it.
+
+### Changed
+
+- A correction the reading is unsure about is proposed at once as a lesson marked
+  `unsure: may hold for its task only` in `m2b proposals` and the pane, instead of being remembered
+  until you make it a second time. You keep it, keep it for every project or drop it as any lesson;
+  a correction whose turn ran no command is a lesson about how Claude works or answers
+  ([#58](https://github.com/Kolibee-GmbH/m2b/pull/58)).
+- `m2b proposals keep --all` and the pane's keep all leave a lesson marked unsure, which you answer
+  on its own, and the command says how many wait
+  ([#58](https://github.com/Kolibee-GmbH/m2b/pull/58)).
+
+### Removed
+
+- Corrections are no longer remembered on the machine: `remembered-corrections.json` is neither
+  read nor written, and `m2b status` has no line for it
+  ([#58](https://github.com/Kolibee-GmbH/m2b/pull/58)).
+
 ## [0.14.0] - 2026-11-23
 
 A correction of how Claude works becomes a lesson from one session, and one made again after a
