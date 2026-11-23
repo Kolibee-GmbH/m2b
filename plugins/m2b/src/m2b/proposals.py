@@ -626,12 +626,17 @@ def said_line(entry: Entry, quote: str) -> str:
     return f'{lead} {entry.day.isoformat()}: "{quote}"'
 
 
+# How a lesson the reading could not tell holds beyond its task is named where it is listed.
+UNSURE_MARK = "unsure: may hold for its task only"
+
+
 def lesson_heading(lesson: LessonPart, shown: Callable[[str], str]) -> str:
     """What a proposed lesson is, beside its kind in a listing: ``action for every project, on a
     command with scripts/check``; ``shown`` is how the caller shows text."""
     words = f", on a command with {' '.join(shown(word) for word in lesson.words)}" if lesson.words else ""
     replaces = f", replaces {shown(lesson.replaces)}" if lesson.replaces else ""
-    return f"{lesson.kind} for {shown(lesson.target)}{words}{replaces}"
+    unsure = f", {UNSURE_MARK}" if lesson.unsure else ""
+    return f"{lesson.kind} for {shown(lesson.target)}{words}{replaces}{unsure}"
 
 
 def again_line(quote: str) -> str:

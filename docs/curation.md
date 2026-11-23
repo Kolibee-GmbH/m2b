@@ -382,7 +382,9 @@ m2b proposals keep <id>...    # or: m2b proposals keep --all
 m2b proposals drop <id>...
 ```
 
-`keep --all` and the pane's keep all keep every proposal a reading found that waits, as it is written. Text you
+`keep --all` and the pane's keep all keep every proposal a reading found that waits, as it is written,
+except a lesson marked `unsure: may hold for its task only`: the reading could not tell whether
+the correction holds beyond its task, so you keep, widen or drop it by its id. Text you
 pasted can try to lead the model, also to a proposal that quotes words you typed, so read each
 proposal's text before you keep it.
 

@@ -591,6 +591,26 @@ test('keep all leaves what a session handed in, which is kept or dropped on its 
   await ui.unmount()
 })
 
+test('keep all leaves a lesson marked unsure, which says so in its heading and is kept or dropped on its own', async ($, on) => {
+  // Covers: B302
+  const lesson = { kind: 'knowledge', target: 'every project', words: [], quote: '', unsure: true }
+  const fake = new FakeM2b()
+    .proposal(DANA, 'Dana is head of IT at Northwind.')
+    .proposal(LADDER, 'Call Sam about the ladder.')
+    .proposal(SHED, 'Take one step at a time.', 'one step at a time', { kind: 'lesson', lesson })
+  const { clock } = await start($, on, fake)
+  await typed($, 'm2b-proposals')
+
+  const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
+  expect(await texts(ui)).toContain('lesson, knowledge for every project, unsure: may hold for its task only')
+  await ui.press({ key: 'keep-all' })
+  await clock.advance(6_000)
+
+  expect(fake.answers()).toEqual([['proposals', 'keep', DANA, LADDER]])
+  expect((fake.proposals ?? []).map(proposal => proposal.answer)).toEqual(['keep', 'keep', undefined])
+  await ui.unmount()
+})
+
 test('keep all leaves out a proposal pressed on its own, which keeps its own answer', async ($, on) => {
   // Covers: B127
   const fake = proposedFake()
