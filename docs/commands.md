@@ -62,7 +62,7 @@ do not do their work there. The first three start a curation run in the backgrou
 | Command | What it does |
 |---|---|
 | `/m2b-pane` | shows in the m2b pane its overview: what waits for you, what is due today, what m2b gave this session and how m2b itself stands; there a press shows a topic's lines, turns m2b off in the session's folder or, on the machine that curates, starts a curation run (`curate now`), and the tabs above lead to the other views, of which `Tasks` (every open task, with a mark `○` to tick it) and `Facts` (what m2b knows, each fact a row that opens its file) have no command of their own; under the fullscreen layout that pane opens by itself |
-| `/m2b-note <text>` | writes the text into the inbox at once, through `m2b capture` |
+| `/m2b-note [--due <day>] <text>` | writes the text into the inbox at once, through `m2b capture`; `--due today`, `tomorrow` or `YYYY-MM-DD` also makes a task due that day |
 | `/m2b-search [--word] <text>` | shows the hits of `m2b search` in the m2b pane; `--word` matches whole words only |
 | `/m2b-review` | shows the last curation run in the m2b pane: every finding, candidate and question |
 | `/m2b-proposals` | shows what your sessions proposed for your memory, each to keep or drop |

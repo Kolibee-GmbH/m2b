@@ -1,5 +1,6 @@
 import type { EngineEventOf, EngineInterface, EngineResultOf, ToolSpec } from 'claude-code'
 
+import { CAPTURED_BUT_TASK_UNCONFIRMED, notices, parseCapture } from './capture'
 import { machineConfigPath, runM2b } from './m2b'
 import { plainLine, withoutHidden } from './plain-text'
 
@@ -235,10 +236,7 @@ export async function noteTool($: EngineInterface, input: Record<string, unknown
   } else if (saved.followUp !== null) {
     lines.push(`The task due on ${forTheModel(saved.followUp)} waits for the next curation run.`)
   }
-  const reported = outcome.stderr
-    .split('\n')
-    .map(line => forTheModel(line.replace(/^m2b: /, '')).trim())
-    .filter(line => line !== '')
+  const reported = notices(outcome.stderr, forTheModel)
   lines.push(...reported.map(line => `m2b also said: ${line}`))
   return { text: lines.join('\n') }
 }
@@ -251,31 +249,13 @@ const UNKNOWN = 'unknown whether the note was saved'
  * have written its file, and a second call would note it twice.
  */
 function captureFailure(reason: string, exitCode: number | undefined): string {
-  if (reason.includes('the capture was not saved') || reason.includes(' was captured, but its follow-up task')) {
+  if (reason.includes('the capture was not saved') || reason.includes(CAPTURED_BUT_TASK_UNCONFIRMED)) {
     return reason
   }
   if (exitCode === 2 || exitCode === 3) {
     return `nothing written: ${reason}`
   }
   return `${UNKNOWN}: ${reason}`
-}
-
-/** `followUp` is a follow-up that waits for ingest; once its task is made, the day is not in it. */
-type Saved = { path: string; taskId: string | null; followUp: string | null }
-
-function parseCapture(stdout: string): Saved | undefined {
-  let answer: unknown
-  try {
-    answer = JSON.parse(stdout)
-  } catch {
-    return undefined
-  }
-  if (!isObject(answer) || typeof answer['path'] !== 'string') {
-    return undefined
-  }
-  const taskId = typeof answer['task_id'] === 'string' ? answer['task_id'] : null
-  const followUp = typeof answer['follow_up'] === 'string' ? answer['follow_up'] : null
-  return { path: answer['path'], taskId, followUp }
 }
 
 export async function searchTool($: EngineInterface, input: Record<string, unknown>): Promise<ToolAnswer> {

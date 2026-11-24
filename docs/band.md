@@ -175,8 +175,21 @@ command also while a turn is working. The text goes in as typed, quotes and dash
 source `claude`, as a capture through the skill would; the next curation run files it. Without
 text it writes nothing and says what it needs; when `m2b` fails, the line says why, starting with
 `not noted:`. The confirmation stays in the conversation, where the model reads it in its next
-request. To note with the model's help, for instance with a follow-up date, ask the model: it uses
-the tool below, or the skill `/m2b:capture` where the mod does not run.
+request.
+
+`--due` before the text also makes a task due that day, as a follow-up of `m2b capture` does:
+`today`, `tomorrow` (on your machine's clock) or a day as `YYYY-MM-DD`.
+
+```text
+> /m2b-note --due tomorrow Call Sam about the long boards
+  noted: Call Sam about the long boards; a task is due 26 Nov
+```
+
+Where the task list does not answer, the note is written all the same, and the line says in m2b's
+words that the task follows with the next curation run. A day that is none of these forms writes
+nothing and names them. To note with the model's help, for instance with a day said in words
+("next Friday"), ask the model: it uses the tool below, or the skill `/m2b:capture` where the mod
+does not run.
 
 ## This session, what waits and today, in the pane
 
