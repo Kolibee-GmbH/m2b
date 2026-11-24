@@ -33,6 +33,8 @@ import {
   startView,
   texts,
   viewButtons,
+  isTheOverview,
+  NOTHING_AT_ALL,
 } from './harness'
 import type { Files } from './harness'
 
@@ -130,7 +132,8 @@ test('with no proposal waiting the band counts none, the pane has no line for th
   await band.unmount()
 
   const ui = await startView($)
-  expect(await texts(ui)).toContain('Nothing waits for you.')
+  // Nothing waits and nothing is due: both are one quiet line.
+  expect(await texts(ui)).toContain(NOTHING_AT_ALL)
   // Nothing of the proposals to press: curate now is the view's one button.
   expect(await buttons(ui)).toEqual([CURATE_NOW])
   expect((await shownTabs(ui)).map(tab => tab.label)).toEqual(['Overview', 'Proposals', 'Review', 'Tasks', 'Facts', 'Settings'])
@@ -183,7 +186,7 @@ test('open in the band, then the tab Proposals, lead to every proposal: its kind
 
   expect(opened.map(one => one.id)).toEqual([PANE])
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
-  expect(await texts(ui)).toContain('Waits for you')
+  expect(isTheOverview(await texts(ui))).toBe(true)
   await pressTab(ui, 'proposals')
   expect(await shownParts(ui)).toEqual(
     oneProposalsPart('3', [

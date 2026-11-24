@@ -7,7 +7,9 @@ import {
   curationLine,
   healthOf,
   isLessonStanding,
-  lessonLine,
+  lessonSentencesOf,
+  lessonStanding,
+  lessonTitle,
   noRunStarted,
   parseRunStart,
   statusLine,
@@ -357,13 +359,32 @@ describe('what m2b knows of curation on this machine, for the button that starts
     expect('lessons' in healthOf(answer({ lessons: { each: [] } }), NOW)).toBe(false)
     // A share that ends in a half is rounded to the even number, as `m2b status` rounds it.
     const action = { name: 'proof.md', kind: 'action', kept: '2026-11-20', correctedAgain: 0 }
-    expect(lessonLine({ ...action, fired: 1, calls: 40 })).toContain('in 40 Bash calls (2%)')
-    expect(lessonLine({ ...action, fired: 3, calls: 40 })).toContain('in 40 Bash calls (8%)')
+    expect(lessonStanding({ ...action, fired: 1, calls: 40 }, NOW)).toBe('kept 20 Nov, fired 1 time in 40 Bash calls (2%), not corrected again')
+    expect(lessonStanding({ ...action, fired: 3, calls: 40 }, NOW)).toContain('in 40 Bash calls (8%)')
     expect(isLessonStanding({ ...action, fired: 'x', calls: 'y' })).toBe(false)
     expect(isLessonStanding({ ...action, fired: 1, calls: 40 })).toBe(true)
-    expect(lessonLine({ name: 'a\u001b[2Jb.md', kind: 'knowledge', kept: '2026-11-20', correctedAgain: 0 })).toBe(
-      'lesson ab.md (knowledge, kept 2026-11-20): corrected again 0 times',
-    )
+    // Without a sentence this session read, the lesson is said by its file's name, drawn plain.
+    expect(lessonTitle({ name: 'a\u001b[2Jb.md', kind: 'knowledge', kept: '2026-11-20', correctedAgain: 0 }, new Map())).toBe('ab.md')
+  })
+
+  test("a lesson is its sentence, read from this session's own answer, and below it the day it was kept and how it does", () => {
+    // Covers: B282, B281
+    const once = { name: 'once.md', kind: 'knowledge', kept: '2026-11-20', correctedAgain: 0 }
+    const sentences = lessonSentencesOf(answer({ lessons: { each: [{ name: 'once.md', kind: 'knowledge', kept: '2026-11-20', corrected_again: 0, sentence: 'Say it\u001b[2J once.' }] } }))
+
+    expect(sentences).toEqual(new Map([['once.md', 'Say it\u001b[2J once.']]))
+    expect(lessonTitle(once, sentences ?? new Map())).toBe('Say it once.')
+    expect(lessonStanding(once, NOW)).toBe('kept 20 Nov, not corrected again')
+    expect(lessonStanding({ ...once, correctedAgain: 2 }, NOW)).toBe('kept 20 Nov, corrected again 2 times: not working')
+    expect(lessonStanding({ ...once, correctedAgain: null }, NOW)).toBe('kept 20 Nov, corrections not counted')
+    // A day of another year bears its year, and a day m2b wrote in no known form stands as written.
+    expect(lessonStanding({ ...once, kept: '2025-12-01' }, NOW)).toBe('kept 1 Dec 2025, not corrected again')
+    expect(lessonStanding({ ...once, kept: 'soon' }, NOW)).toBe('kept soon, not corrected again')
+    // The counts a session shares hold no sentence: the standing has none of it.
+    expect(healthOf(answer({ lessons: { each: [{ name: 'once.md', kind: 'knowledge', kept: '2026-11-20', corrected_again: 0, sentence: 'Say it once.' }] } }), NOW).lessons).toEqual([once])
+    // An answer without the part says nothing of the lessons; one with the part and none, that there are none.
+    expect(lessonSentencesOf(answer({}))).toBeNull()
+    expect(lessonSentencesOf(answer({ lessons: { each: [] } }))).toEqual(new Map())
   })
 
   test('a lesson kept as a fix is read and said with its counts like any other', () => {
@@ -373,7 +394,7 @@ describe('what m2b knows of curation on this machine, for the button that starts
     const [lesson] = healthOf(answer({ lessons: { each } }), NOW).lessons ?? []
 
     expect(lesson).toEqual({ name: 'fix-3f9c2a71b0de', kind: 'fix', kept: '2026-11-20', correctedAgain: 1 })
-    expect(lessonLine(lesson!)).toBe('lesson fix-3f9c2a71b0de (fix, kept 2026-11-20): corrected again 1 time: not working')
+    expect(lessonStanding(lesson!, NOW)).toBe('kept 20 Nov, corrected again 1 time: not working')
   })
 
   test('where m2b gave no answer about itself nothing is known of curation and nothing is said', () => {

@@ -42,3 +42,17 @@ function offsetMinutes(offset: string): number {
   const [hours = 0, minutes = 0] = offset.slice(1).split(':').map(Number)
   return sign * (hours * 60 + minutes)
 }
+
+/**
+ * A day as m2b writes it (`2026-11-24`) in words: `24 Nov`, with the year where it is not the year
+ * of `nowMs` on the owner's clock (`1 Dec 2025`). A text that is no day comes back as one plain line.
+ */
+export function dayInWords(day: string, nowMs: number): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day)
+  const month = match === null ? undefined : MONTHS[Number(match[2]) - 1]
+  if (match === null || month === undefined) {
+    return plainLine(day)
+  }
+  const thisYear = new Date(nowMs + ownersOffsetAt(nowMs) * 60_000).getUTCFullYear()
+  return `${Number(match[3])} ${month}${Number(match[1]) === thisYear ? '' : ` ${match[1]}`}`
+}

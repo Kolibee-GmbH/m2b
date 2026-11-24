@@ -212,7 +212,7 @@ As text, another session:
 │ │ This session                                             │ │
 │ │ [ Northwind ] 3 facts, 1 current                         │ │
 │ │ [ Acme Ltd ] 1 fact                                      │ │
-│ │ The distillate was printed whole at the start.           │ │
+│ │ This session started with all your facts.                │ │
 │ │ m2b is on in this folder.                                │ │
 │ │ /home/alex/code/lumen                                    │ │
 │ │ [ turn off here ]                                        │ │
@@ -231,7 +231,9 @@ As text, another session:
 The parts stand in this order, what needs you first. The frame and title of **Waits for you** are
 in the warning color while something waits, with the number that waits beside the title; a part
 with nothing in it is one dim line, a count of none is not said, and in a pane narrower than 36
-columns a bar down the left stands in for each frame. A row is its text and, on the line below,
+columns a bar down the left stands in for each frame. Where nothing waits and nothing is due,
+**Waits for you** and **Today** are one dim line without a frame:
+`Nothing waits for you, nothing due today.` A row is its text and, on the line below,
 what you can press.
 
 - **Waits for you** holds what the band counts: one row for the proposals from your sessions,
@@ -271,8 +273,9 @@ what you can press.
 - **This session** says what m2b put into this session: each topic whose facts it got, at its
   start because the project path names it or before a prompt that named it, as a button that
   bears the topic's name and leads to [its lines](#a-topics-lines), with the facts lines and
-  current items the topic held at that moment beside it; how the start printed the distillate
-  (whole, cut to fit, or none because there was none to read); whether m2b is on in the session's
+  current items the topic held at that moment beside it; how the session started, in one
+  sentence: `This session started with all your facts.`, `... with your facts, cut to fit.`, or
+  `... without facts: the distillate is empty.`; whether m2b is on in the session's
   folder, with the button that [turns it off there](#turning-m2b-off-in-a-folder) or on again;
   and how many notes the session wrote through `/m2b-note` and the note tool. A note written with
   `m2b capture` in a shell is not counted. `/clear` and a compaction begin the list of topics
@@ -285,8 +288,9 @@ what you can press.
   stands above it in the error color, each with its reason: a curation run that failed, a
   calendar m2b could not reach, an inbox it could not read. A session that still runs an older
   m2b than the installed one says so here and names `/reload-plugins`. Below it stands each lesson
-  you kept with how it does since you kept it, as `m2b status` says it; a lesson you corrected
-  Claude on again is marked `not working` and stands out in the color of what waits.
+  you kept, as its sentence, and below that, dim, the day you kept it and how it does since, as
+  `m2b status` counts it (`kept 20 Nov, not corrected again`); a lesson you corrected Claude on
+  again says `corrected again 2 times: not working` in the color of what waits.
 
   On the machine that curates the store, the button `curate now` stands below the line about
   curation. A press writes nothing for five seconds: the row offers `undo` beside

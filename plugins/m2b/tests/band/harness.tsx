@@ -1349,6 +1349,13 @@ export async function linesAt(ui: Drawn, key: string): Promise<string[] | null> 
 
 /** The title of each part of the overview, by the key the part is drawn under. */
 export const PARTS = { waits: 'Waits for you', today: 'Today', session: 'This session', m2b: 'm2b' } as const
+/** The line the overview draws in place of "Waits for you" and "Today" where neither has a row. */
+export const NOTHING_AT_ALL = 'Nothing waits for you, nothing due today.'
+
+/** Whether the lines drawn begin as the overview does: with what waits, or with the quiet line in its place. */
+export function isTheOverview(lines: readonly string[]): boolean {
+  return lines.includes(PARTS.waits) || lines.includes(NOTHING_AT_ALL)
+}
 /**
  * The key a part is drawn under, in whichever view: the overview's four, the one part of the
  * proposals, of a search and of a topic, the review's `run` beside its own `waits`, the

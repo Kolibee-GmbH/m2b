@@ -11,11 +11,16 @@ import {
   CURATE_NOW_LINE,
   ENGINES_OWN_DRAWING,
   FakeM2b,
+  HOME,
+  NOTHING_AT_ALL,
+  NOW,
   PARTS,
+  SHOWN_WITHOUT_ENTRY,
   STATUS,
   buttonsAt,
   everyText,
   inView,
+  insetsAt,
   linesAt,
   lookOf,
   pane,
@@ -27,6 +32,7 @@ import {
   startView,
   texts,
 } from './harness'
+import type { Files } from './harness'
 
 // The overview is tested twice over: as the mod draws it for a session, from what a fake m2b
 // answers, and as `sessionPane` draws a model a test builds, through a render hook of the test's
@@ -44,7 +50,7 @@ const NOT_KNOWN = 'm2b holds no note of what it gave this session; that does not
 const KEEPS = 'This session keeps what it was given and gets no more topics.'
 const NOTHING_WAITS = 'Nothing waits for you.'
 const NOTHING_DUE = 'Nothing due today.'
-const PRINTED_WHOLE = 'The distillate was printed whole at the start.'
+const PRINTED_WHOLE = 'This session started with all your facts.'
 const REVIEW = 'Review of the last curation run'
 const WHOLE_REVIEW = 'The whole review is in the tab Review.'
 const CURATED = '2 in inbox · curated 18:02'
@@ -101,6 +107,8 @@ function modelWith(parts: Partial<SessionModel>): SessionModel {
     health: null,
     curatingMachine: null,
     versionLine: null,
+    lessonSentences: new Map(),
+    nowMs: NOW,
     ...parts,
   }
 }
@@ -384,25 +392,50 @@ test('a count of none is not said: no 0 beside a title, no "0 facts" beside a to
   await ui.unmount()
 
   const empty = await draw(EMPTY)
-  expect((await shownParts(empty)).map(shown => shown.count)).toEqual([null, null, null])
+  // Nothing waits and nothing is due: one quiet line, and the part of the session alone.
+  expect((await shownParts(empty)).map(shown => shown.count)).toEqual([null])
   expect((await texts(empty)).filter(text => /\d/.test(text))).toEqual([])
   await empty.unmount()
 })
 
-test('a part with nothing in it is one line that steps back, and the part about m2b is left out where there is nothing to say', async ($, on) => {
+test('where nothing waits and nothing is due both are one quiet line without a frame, and the part about m2b is left out where there is nothing to say', async ($, on) => {
   // Covers: B205
   const draw = ownOverview($, on)
 
   const ui = await draw(EMPTY)
 
-  expect(await shownParts(ui)).toEqual([
-    { key: 'waits', title: 'Waits for you', count: null, lines: [NOTHING_WAITS] },
-    { key: 'today', title: 'Today', count: null, lines: [NOTHING_DUE] },
-    { key: 'session', title: 'This session', count: null, lines: [PRINTED_WHOLE] },
-  ])
-  expect(await lookOf(ui, NOTHING_WAITS)).toEqual(DIM)
-  expect(await lookOf(ui, NOTHING_DUE)).toEqual(DIM)
+  expect((await texts(ui))[0]).toBe(NOTHING_AT_ALL)
+  expect(await lookOf(ui, NOTHING_AT_ALL)).toEqual(DIM)
+  expect(await shownParts(ui)).toEqual([{ key: 'session', title: 'This session', count: null, lines: [PRINTED_WHOLE] }])
+  expect(await texts(ui)).not.toContain(NOTHING_WAITS)
+  expect(await texts(ui)).not.toContain(NOTHING_DUE)
   await ui.unmount()
+})
+
+test('where one of the two has a row, both parts stand, and the other says it has none in one line that steps back', async ($, on) => {
+  // Covers: B205
+  const draw = ownOverview($, on)
+
+  const due = await draw({ ...EMPTY, snapshot: { ...QUIET, due: [{ id: 't1', title: 'Return the ladder', overdue: false }] } })
+  expect((await shownParts(due)).map(shown => [shown.key, shown.lines])).toEqual([
+    ['waits', [NOTHING_WAITS]],
+    ['today', ['due today Return the ladder']],
+    ['session', [PRINTED_WHOLE]],
+  ])
+  expect(await lookOf(due, NOTHING_WAITS)).toEqual(DIM)
+  expect(await texts(due)).not.toContain(NOTHING_AT_ALL)
+  await due.unmount()
+
+  const waits = await draw({ ...EMPTY, snapshot: { ...QUIET, candidates: [{ id: 'c1', title: 'Remember? Dana prefers tea' }] } })
+  expect((await shownParts(waits)).map(shown => shown.key)).toEqual(['waits', 'today', 'session'])
+  expect(await partLines(waits, 'today')).toEqual([NOTHING_DUE])
+  expect(await lookOf(waits, NOTHING_DUE)).toEqual(DIM)
+  await waits.unmount()
+
+  // What m2b said to a press that wrote nothing stands where it was pressed, so the part stays.
+  const said = await draw({ ...EMPTY, rowNotice: SETTLED })
+  expect(await partLines(said, 'waits')).toEqual([SETTLED, NOTHING_WAITS])
+  await said.unmount()
 })
 
 test('no part is drawn as its title alone', async ($, on) => {
@@ -430,11 +463,8 @@ test('that m2b has not looked yet stands once in the view: in the first part whi
 
   // The band was read and the session was not: its own part says so, alone.
   const half = await draw({ ...EMPTY, given: null })
-  expect((await shownParts(half)).map(shown => [shown.key, shown.lines])).toEqual([
-    ['waits', [NOTHING_WAITS]],
-    ['today', [NOTHING_DUE]],
-    ['session', [NOT_LOOKED]],
-  ])
+  expect((await texts(half))[0]).toBe(NOTHING_AT_ALL)
+  expect((await shownParts(half)).map(shown => [shown.key, shown.lines])).toEqual([['session', [NOT_LOOKED]]])
   expect(await lookOf(half, NOT_LOOKED)).toEqual(DIM)
   expect(await said(half)).toBe(1)
   await half.unmount()
@@ -516,7 +546,10 @@ test('the part about m2b says each thing that is wrong as a sentence with its re
   await ui.unmount()
 })
 
-test('the part about m2b lists each lesson with its counts, one corrected again as not working in the color of what asks', async ($, on) => {
+const PROOF = 'Run the whole proof only with a reason.'
+const ONCE = 'Say it once.'
+
+test("the part about m2b lists each lesson as its sentence, and below it the day it was kept and how it does, one corrected again as not working in the color of what asks", async ($, on) => {
   // Covers: B282
   const fake = new FakeM2b()
   fake.status = {
@@ -527,23 +560,81 @@ test('the part about m2b lists each lesson with its counts, one corrected again 
       in_every_session: 1,
       kept_at_source: [],
       each: [
-        { name: 'proof.md', kind: 'action', kept: '2026-11-20', corrected_again: 1, fired: 3, calls: 40 },
-        { name: 'once.md', kind: 'knowledge', kept: '2026-11-20', corrected_again: 0 },
+        { name: 'proof.md', kind: 'action', kept: '2026-11-20', corrected_again: 1, fired: 3, calls: 40, sentence: PROOF },
+        { name: 'once.md', kind: 'knowledge', kept: '2026-11-20', corrected_again: 0, sentence: ONCE },
+        // An m2b before the sentences names none: the lesson is said by its file's name.
         { name: 'quiet.md', kind: 'action', kept: '2026-11-21', corrected_again: null, fired: 0, calls: 0 },
       ],
     },
   }
+  const writes: string[] = []
+  on('state.set', (_, e, next) => {
+    writes.push(JSON.stringify(e))
+    return next(e)
+  })
   await start($, on, fake)
 
   const ui = await startView($)
 
-  const notWorking = 'lesson proof.md (action, kept 2026-11-20): fired 3 times in 40 Bash calls (8%), corrected again 1 time: not working'
-  const once = 'lesson once.md (knowledge, kept 2026-11-20): corrected again 0 times'
-  const quiet = 'lesson quiet.md (action, kept 2026-11-21): fired 0 times in 0 Bash calls, corrections not counted'
-  expect(await partLines(ui, 'm2b')).toEqual([notWorking, once, quiet])
+  const notWorking = 'kept 20 Nov, fired 3 times in 40 Bash calls (8%), corrected again 1 time: not working'
+  const once = 'kept 20 Nov, not corrected again'
+  const quiet = 'kept 21 Nov, fired 0 times in 0 Bash calls, corrections not counted'
+  expect(await partLines(ui, 'm2b')).toEqual([PROOF, notWorking, ONCE, once, 'quiet.md', quiet])
+  // The sentence is the owner's, at full strength; how it does steps back below it, or asks where it is not working.
+  expect(await lookOf(ui, PROOF)).toEqual(PLAIN)
   expect(await lookOf(ui, notWorking)).toEqual(ASKS)
   expect(await lookOf(ui, once)).toEqual(DIM)
+  expect((await insetsAt(ui, 'part:m2b')).length).toBe(3)
+  // The sentences are the module's: the session's state, which every plugin can read, holds the counts alone.
+  expect(writes.join('\n')).toContain('"name":"proof.md"')
+  expect(writes.join('\n')).not.toContain(PROOF)
+  expect(writes.join('\n')).not.toContain(ONCE)
   await ui.unmount()
+})
+
+test('where no pane can be shown, the part about m2b says each lesson and below it, indented, how it does', () => {
+  // Covers: B282
+  const once = { name: 'once.md', kind: 'knowledge', kept: '2026-11-20', correctedAgain: 2 }
+  const lines = sessionLines(modelWith({ health: healthWith({ lessons: [once] }), lessonSentences: new Map([['once.md', ONCE]]) }))
+
+  expect(lines.slice(lines.indexOf('m2b'))).toEqual(['m2b', `  ${ONCE}`, '    kept 20 Nov, corrected again 2 times: not working'])
+  // Without a sentence this session read, the file's name stands.
+  const unread = sessionLines(modelWith({ health: healthWith({ lessons: [once] }) }))
+  expect(unread.slice(unread.indexOf('m2b') + 1, unread.indexOf('m2b') + 2)).toEqual(['  once.md'])
+})
+
+const SHARED_ANSWER = `${HOME}/.local/state/m2b/band-answer.json`
+
+test("the answer the sessions share holds a lesson's counts and never its sentence, and a session drawing another's answer names the lesson by its file", async ($, on) => {
+  // Covers: B282
+  const fake = new FakeM2b()
+  fake.status = { ...STATUS, lessons: { in_every_session: 1, kept_at_source: [], each: [{ name: 'once.md', kind: 'knowledge', kept: '2026-11-20', corrected_again: 0, sentence: ONCE }] } }
+  const files: Files = new Map()
+  await start($, on, fake, {}, files)
+  const ui = await startView($)
+
+  // This session read the answer itself: the sentence is drawn, and the shared file holds the counts alone.
+  expect(await partLines(ui, 'm2b')).toContain(ONCE)
+  const written = files.get(SHARED_ANSWER) ?? ''
+  expect(written).toContain('"name":"once.md"')
+  expect(written).not.toContain(ONCE)
+  await ui.unmount()
+})
+
+test("a session that takes another session's fresh answer draws the lesson by its file's name", async ($, on) => {
+  // Covers: B282
+  const lessons = [{ name: 'once.md', kind: 'knowledge', kept: '2026-11-20', correctedAgain: 0 }]
+  const health = { curation: null, troubles: [], curates: true, isCurating: false, lessons }
+  const shared = { snapshot: { ...QUIET, shows: SHOWN_WITHOUT_ENTRY }, status: null, version: '0.3.0', health, curatingMachine: 'tower-1', proposals: { waiting: [], answered: 0, handedIn: 0, error: null } }
+  const files: Files = new Map([[SHARED_ANSWER, JSON.stringify({ writtenAtMs: NOW - 1_000, value: shared })]])
+  const fake = new FakeM2b()
+  await start($, on, fake, {}, files)
+
+  const ui = await startView($)
+
+  // m2b was not asked: the answer is the other session's, which carries the counts alone.
+  expect(fake.calls.filter(call => call[0] === 'band' && !call.includes('--session-only'))).toEqual([])
+  expect(await partLines(ui, 'm2b')).toEqual([CURATE_NOW_LINE, 'once.md', 'kept 20 Nov, not corrected again'])
 })
 
 test('a trouble the answer gives no reason for is a sentence that ends with a full stop', async ($, on) => {
@@ -567,7 +658,7 @@ test('the part about m2b is left out where m2b has nothing wrong and nothing to 
   const { clock } = await start($, on, fake)
   const ui = await startView($)
   expect(await partLines(ui, 'm2b')).toBeNull()
-  expect((await shownParts(ui)).map(shown => shown.key)).toEqual(['waits', 'today', 'session'])
+  expect((await shownParts(ui)).map(shown => shown.key)).toEqual(['session'])
 
   fake.version = '0.4.0'
   await clock.advance(60_000)
@@ -707,18 +798,15 @@ test('the text for a surface without panes has the same parts in the same order 
   await ui.unmount()
 })
 
-test('the pane, the text and the small form of a session with nothing in any part: each part says so in one line, and the small form that nothing waits', async ($, on) => {
+test('the pane, the text and the small form of a session with nothing in any part: the first two are one quiet line, and the small form says that nothing waits', async ($, on) => {
   // Covers: B205, B193
   const draw = ownOverview($, on)
 
   const ui = await draw(EMPTY)
 
-  expect((await shownParts(ui)).map(shown => [shown.title, ...shown.lines])).toEqual([
-    ['Waits for you', NOTHING_WAITS],
-    ['Today', NOTHING_DUE],
-    ['This session', PRINTED_WHOLE],
-  ])
-  expect(sessionLines(EMPTY)).toEqual(['Waits for you', `  ${NOTHING_WAITS}`, 'Today', `  ${NOTHING_DUE}`, 'This session', `  ${PRINTED_WHOLE}`])
+  expect((await texts(ui))[0]).toBe(NOTHING_AT_ALL)
+  expect((await shownParts(ui)).map(shown => [shown.title, ...shown.lines])).toEqual([['This session', PRINTED_WHOLE]])
+  expect(sessionLines(EMPTY)).toEqual([NOTHING_AT_ALL, 'This session', `  ${PRINTED_WHOLE}`])
   expect(glanceLines(EMPTY)).toEqual([NOTHING_WAITS])
   await ui.unmount()
 })
@@ -737,12 +825,8 @@ test('the pane, the text and the small form of a session m2b has not looked at s
 
   // Where only the session was not looked at, its part says so in all three.
   const besideTheBand = await draw(half)
-  expect((await shownParts(besideTheBand)).map(shown => [shown.title, ...shown.lines])).toEqual([
-    ['Waits for you', NOTHING_WAITS],
-    ['Today', NOTHING_DUE],
-    ['This session', NOT_LOOKED],
-  ])
-  expect(sessionLines(half)).toEqual(['Waits for you', `  ${NOTHING_WAITS}`, 'Today', `  ${NOTHING_DUE}`, 'This session', `  ${NOT_LOOKED}`])
+  expect((await shownParts(besideTheBand)).map(shown => [shown.title, ...shown.lines])).toEqual([['This session', NOT_LOOKED]])
+  expect(sessionLines(half)).toEqual([NOTHING_AT_ALL, 'This session', `  ${NOT_LOOKED}`])
   expect(glanceLines(half)).toEqual([NOTHING_WAITS, NOT_LOOKED])
   await besideTheBand.unmount()
 })

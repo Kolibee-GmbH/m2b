@@ -20,6 +20,7 @@ import {
   start,
   texts,
   viewButtons,
+  NOTHING_AT_ALL,
 } from './harness'
 import type { Files } from './harness'
 
@@ -28,7 +29,7 @@ const UNDO_MS = 5_000
 const LOOK = ['band', '--json', '--session', SESSION_ID, '--session-only']
 const NOTE = 'mcp__m2b__note'
 const PLACED = 'what waits for you and this session are in the m2b pane'
-const PRINTED_WHOLE = 'The distillate was printed whole at the start.'
+const PRINTED_WHOLE = 'This session started with all your facts.'
 const NOT_LOOKED = 'm2b has not looked yet.'
 const NOT_KNOWN = 'm2b holds no note of what it gave this session; that does not say it gave nothing.'
 const DANA = 'a1a1a1a1a1a1'
@@ -209,9 +210,10 @@ test('a session given no topic lists none and says no word on topics, apart from
   await start($, on, fake)
 
   const ui = await startView($)
-  expect(await given(ui)).toEqual(['The distillate was printed at the start, cut to fit.'])
-  expect(await partLines(ui, 'waits')).toEqual(['Nothing waits for you.'])
-  expect(await partLines(ui, 'today')).toEqual(['Nothing due today.'])
+  expect(await given(ui)).toEqual(['This session started with your facts, cut to fit.'])
+  // Nothing waits and nothing is due: both are one quiet line.
+  expect(await texts(ui)).toContain(NOTHING_AT_ALL)
+  expect(await partLines(ui, 'today')).toBeNull()
   expect((await texts(ui)).some(line => /topic/i.test(line))).toBe(false)
   await ui.unmount()
 })
@@ -224,7 +226,7 @@ test('a start without a distillate and a folder m2b is off under are named', asy
 
   const ui = await startView($)
   expect(await given(ui)).toEqual([
-    'There was no distillate to print at the start.',
+    'This session started without facts: the distillate is empty.',
     'm2b is off under this folder.',
     '/home/alex/code/acme',
     '[turn on here]',
@@ -741,7 +743,7 @@ test('where the pane cannot be shown, /m2b-pane answers with the same parts in t
     'This session',
     '  Northwind: 3 facts, 1 current',
     '  Acme Ltd: 1 fact',
-    '  The distillate was printed whole at the start.',
+    '  This session started with all your facts.',
     'm2b',
     '  2 in inbox · curated 18:02',
   ])

@@ -60,6 +60,7 @@ import {
   valueKeys,
   valuesLine,
   viewButtons,
+  isTheOverview,
 } from './harness'
 import type { FakeSetting } from './harness'
 
@@ -218,7 +219,7 @@ test('the tab Settings opens the view too, as a dialog, and the tab Overview lea
   expect(fake.settingCalls()).toEqual([LIST])
   expect(await settingLines(ui, PAUSED)).toEqual(['Curation paused', 'What curation.paused does.', '[on] ● off'])
   await pressTab(ui, 'overview')
-  expect(await texts(ui)).toContain('Waits for you')
+  expect(isTheOverview(await texts(ui))).toBe(true)
   await ui.unmount()
 })
 
@@ -900,7 +901,7 @@ test('leaving the settings within the five seconds takes the press back', async 
   await pressTab(ui, 'overview')
   await clock.advance(10_000)
 
-  expect(await texts(ui)).toContain('Waits for you')
+  expect(isTheOverview(await texts(ui))).toBe(true)
   expect(fake.settingCalls()).toEqual([LIST])
   await ui.unmount()
 })
@@ -1240,7 +1241,7 @@ test('a reload of the mod, which starts the session again, leaves the pane on it
   await clock.advance(1)
 
   const shown = await texts(ui)
-  expect(shown).toContain('Waits for you')
+  expect(isTheOverview(shown)).toBe(true)
   expect(shown).not.toContain(`Store folder: ${NOTES}`)
   expect(await shownTab(ui)).toBe('overview')
   await ui.unmount()

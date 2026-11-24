@@ -32,6 +32,7 @@ import {
   valueKeys,
   valuesLine,
   viewButtons,
+  isTheOverview,
 } from './harness'
 import type { PartKey } from './harness'
 
@@ -644,7 +645,7 @@ test('the tab Settings above a folded group leads back to the choices by a new o
   await ui.press({ key: ABOUT_ROW })
   await pressTab(ui, 'overview')
   expect(await shownTab(ui)).toBe('overview')
-  expect(await texts(ui)).toContain('Waits for you')
+  expect(isTheOverview(await texts(ui))).toBe(true)
   expect(await texts(ui)).not.toContain(ABOUT_TITLE)
   await pressTab(ui, 'settings')
   await clock.advance(1)

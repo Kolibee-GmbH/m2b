@@ -881,6 +881,8 @@ test('the text form says where curation runs below the line about curation, on a
       health: null,
       curatingMachine: null,
       versionLine: null,
+      lessonSentences: new Map(),
+      nowMs: NOW,
       ...fields,
     })
     return all.includes('m2b') ? all.slice(all.indexOf('m2b')) : []

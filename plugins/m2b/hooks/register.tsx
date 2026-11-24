@@ -93,6 +93,7 @@ import {
   curatingMachineOf,
   healthOf,
   isLessonStanding,
+  lessonSentencesOf,
   noRunStarted,
   parseRunAfterAnswers,
   parseRunStart,
@@ -246,6 +247,11 @@ type BandView = {
 // The machine that curates the store, from the last answer. A setting's value: it is drawn, and
 // never put into the session's state, which every plugin can read.
 let curatingMachine: string | null = null
+// Each lesson's sentence by its name, held as `curatingMachine` is: from the answer this session
+// read itself, never in its state nor in the answer the sessions share. `readSentences` are those
+// of the last read, taken once the read is known to be for a store that is set up.
+let lessonSentences: ReadonlyMap<string, string> = new Map()
+let readSentences: ReadonlyMap<string, string> | null = null
 
 /** Runs jobs one after another, in the order they were queued. */
 function serialQueue(): <T>(job: () => Promise<T>) => Promise<T> {
@@ -273,6 +279,9 @@ async function loadView($: EngineInterface, answer: readonly string[] = BAND_ANS
     return { snapshot: failed('m2b band answered something that is not JSON'), status: COULD_NOT_LOOK, version: null, health: NO_HEALTH }
   }
   const fields = isObject(parsed) ? parsed : {}
+  // The lessons' sentences stay in this module: the view goes to the session's state and to the
+  // other sessions, and carries the lessons' counts alone. `loadNow` takes them once m2b is set up.
+  readSentences = lessonSentencesOf(fields['status']) ?? readSentences
   return {
     snapshot: snapshotOf(fields['tasks'], parseBandShows(fields['band'])),
     status: statusLine(fields['status']),
@@ -351,6 +360,9 @@ async function loadNow($: EngineInterface, isForced: boolean): Promise<void> {
   await update($, proposalsAtom, current => view.proposals ?? current)
   await update($, healthAtom, current => view.health ?? current)
   curatingMachine = view.health === undefined ? curatingMachine : (view.curatingMachine ?? null)
+  // Another session's answer, which this session did not read, leaves the sentences as they were.
+  lessonSentences = readSentences ?? lessonSentences
+  readSentences = null
   $.ui.status(view.status === null ? undefined : plainLine(view.status))
   await toastFailedRun($, view.run ?? null)
 }
@@ -531,6 +543,8 @@ async function clearBand($: EngineInterface): Promise<void> {
   await update($, versionNoticeAtom, () => null)
   await update($, healthAtom, () => null)
   curatingMachine = null
+  lessonSentences = new Map()
+  readSentences = null
   await update($, runAtom, () => null)
   await update($, proposalsAtom, () => null)
   await update($, proposalsNoticeAtom, () => null)
@@ -646,10 +660,12 @@ async function sessionModel($: EngineInterface): Promise<SessionModel> {
     curateNotice: curateNoticeOf(await read($, curateNoticeAtom)),
     health: await read($, healthAtom),
     curatingMachine,
+    lessonSentences,
     versionLine: await read($, versionNoticeAtom),
     snapshot: await read($, snapshotAtom),
     proposals: await read($, proposalsAtom),
     presses: await read($, pressesAtom),
+    nowMs: await $.clock.now(),
   }
 }
 

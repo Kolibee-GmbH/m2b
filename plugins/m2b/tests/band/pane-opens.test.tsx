@@ -5,7 +5,7 @@ import type { Engine } from 'claude-code/testing'
 import { closeAnswer, docksFor, staysBesideChat } from '../../hooks/pane-seat'
 import { shownOf } from '../../hooks/pane-tabs'
 import type { PaneView } from '../../types'
-import { BAND, FakeM2b, SESSION_ID, pane, partLines, pressTab, shownTab, shownTabs, start, texts } from './harness'
+import { BAND, FakeM2b, SESSION_ID, pane, partLines, pressTab, shownTab, shownTabs, start, texts, isTheOverview } from './harness'
 
 const PANE = 'm2b'
 const CLOSED_BY_HAND = 'paneClosedByHand'
@@ -48,7 +48,7 @@ test('under the fullscreen layout the pane opens by itself with the band, withou
   expect(opened).toEqual([BY_ITSELF])
   expect(openPanes.has(PANE)).toBe(true)
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
-  expect(await texts(ui)).toContain('Waits for you')
+  expect(isTheOverview(await texts(ui))).toBe(true)
   expect(await partLines(ui, 'session')).toContain('[Northwind] 3 facts')
   await ui.unmount()
   await band.unmount()
@@ -253,7 +253,7 @@ test('a pane the mod closed itself opens again in the next session, in the view 
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
   // The review has a part "Waits for you" too: the tab tells the two views apart.
   expect(await shownTab(ui)).toBe('overview')
-  expect(await texts(ui)).toContain('Waits for you')
+  expect(isTheOverview(await texts(ui))).toBe(true)
   await ui.unmount()
   await band.unmount()
 })
@@ -293,7 +293,7 @@ for (const [command, shows] of [
 
     expect(openPanes.has(PANE)).toBe(true)
     expect(await shownTab(ui)).toBe('overview')
-    expect(await texts(ui)).toContain('Waits for you')
+    expect(isTheOverview(await texts(ui))).toBe(true)
     expect(await texts(ui)).not.toContain(shows)
     await ui.unmount()
   })
@@ -406,7 +406,7 @@ for (const [to, label, shows] of [
 
     await pressTab(ui, 'overview')
     expect(await shownTab(ui)).toBe('overview')
-    expect(await texts(ui)).toContain('Waits for you')
+    expect(isTheOverview(await texts(ui))).toBe(true)
     expect(opened).toEqual([BY_ITSELF, AS_A_DIALOG, BY_ITSELF])
     await ui.unmount()
     await band.unmount()

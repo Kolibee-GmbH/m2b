@@ -99,7 +99,19 @@ class StatusTest(test_runner.RunnerTest):
         each = self.run_json("status")["lessons"]["each"]
         out = self.run_command("status")[1]
 
-        self.assertEqual(each, [{"name": fix.name, "kind": "fix", "kept": "2026-11-20", "corrected_again": 1}])
+        # The sentence is the lesson's the fix was kept from, which the pane draws.
+        self.assertEqual(
+            each,
+            [
+                {
+                    "name": fix.name,
+                    "kind": "fix",
+                    "kept": "2026-11-20",
+                    "corrected_again": 1,
+                    "sentence": "Run only the quick checks.",
+                }
+            ],
+        )
         self.assertIn(f"lesson {fix.name} (fix, kept 2026-11-20): corrected again 1 time: not working\n", out)
 
     def test_it_says_nothing_of_corrections_remembered_by_an_earlier_m2b(self) -> None:
@@ -159,7 +171,13 @@ class StatusTest(test_runner.RunnerTest):
         self.assertEqual(
             sorted(each, key=lambda item: item["name"]),
             [
-                {"name": "once.md", "kind": "knowledge", "kept": "2026-11-20", "corrected_again": 0},
+                {
+                    "name": "once.md",
+                    "kind": "knowledge",
+                    "kept": "2026-11-20",
+                    "corrected_again": 0,
+                    "sentence": "Say it once.",
+                },
                 {
                     "name": "proof.md",
                     "kind": "action",
@@ -167,6 +185,7 @@ class StatusTest(test_runner.RunnerTest):
                     "corrected_again": 1,
                     "fired": 1,
                     "calls": 40,
+                    "sentence": "Run the whole proof only with a reason.",
                 },
             ],
         )
@@ -181,6 +200,18 @@ class StatusTest(test_runner.RunnerTest):
         self.assertIn(
             "lesson once.md (knowledge, kept 2026-11-20): corrections not counted\n", self.run_command("status")[1]
         )
+
+    def test_a_lessons_sentence_is_answered_with_a_character_that_hides_text_written_out(self) -> None:
+        """Covers: B281"""
+        self.curating()
+        self.write(
+            "memory/lessons/once.md",
+            "---\nkind: knowledge\ntarget: every project\nkept: 2026-11-20\n---\n# Once\n\nSay it\u200b once.\n",
+        )
+
+        (once,) = self.run_json("status")["lessons"]["each"]
+
+        self.assertEqual(once["sentence"], "Say it<U+200B> once.")
 
     def test_a_folder_of_handed_in_proposals_that_cannot_be_listed_is_said_and_the_other_parts_answer(self) -> None:
         """Covers: B240"""

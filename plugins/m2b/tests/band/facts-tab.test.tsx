@@ -19,7 +19,7 @@ import {
 } from '../../hooks/facts-tab'
 import type { FactFileLook, FactsLook } from '../../hooks/facts-tab'
 import { backTabKey } from '../../hooks/pane-tabs'
-import { FakeM2b, everyText, inView, lookOf, pane, piecesAt, pressTab, shownParts, shownTab, shownTabs, start, texts, viewButtons } from './harness'
+import { FakeM2b, everyText, inView, lookOf, pane, piecesAt, pressTab, shownParts, shownTab, shownTabs, start, texts, viewButtons, isTheOverview } from './harness'
 import type { ShownPiece } from './harness'
 
 const PANE = 'm2b'
@@ -799,7 +799,7 @@ for (const view of ['facts', 'fact'] as const) {
 
     expect(await shownTab(ui)).toBe('overview')
     const shown = await everyText(ui)
-    expect(shown).toContain('Waits for you')
+    expect(isTheOverview(shown)).toBe(true)
     for (const line of [SISTER, PORTO, ...FACT_LINES, READING, READING_FILE]) {
       expect(shown).not.toContain(line)
     }

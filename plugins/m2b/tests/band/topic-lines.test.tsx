@@ -23,6 +23,7 @@ import {
   start,
   texts,
   viewButtons,
+  isTheOverview,
 } from './harness'
 import type { Files, ShownPiece } from './harness'
 
@@ -137,7 +138,7 @@ test('a reload of the mod, which starts the session again, leaves the pane on it
   await clock.advance(1)
 
   const shown = await texts(ui)
-  expect(shown).toContain('Waits for you')
+  expect(isTheOverview(shown)).toBe(true)
   expect(shown).not.toContain(KIM)
   await ui.unmount()
 })
@@ -165,7 +166,7 @@ test('the tab Overview forgets the lines, and the next press reads them again', 
   await pressTab(ui, 'overview')
 
   const shown = await texts(ui)
-  expect(shown).toContain('Waits for you')
+  expect(isTheOverview(shown)).toBe(true)
   expect(await partLines(ui, 'session')).toContain('[Acme Ltd] 2 facts, 1 current')
   expect(shown).not.toContain(KIM)
 
@@ -248,7 +249,7 @@ test('a command that turns the pane to another view leaves no line of the topic 
 
   await pressTab(ui, 'overview')
   expect(await shownTab(ui)).toBe('overview')
-  expect(await texts(ui)).toContain('Waits for you')
+  expect(isTheOverview(await texts(ui))).toBe(true)
   expect(await texts(ui)).not.toContain(KIM)
   await ui.unmount()
 })
@@ -267,7 +268,7 @@ test('after /clear the topic of the conversation that ended is no longer shown',
   await clock.advance(1_000)
 
   const shown = await texts(ui)
-  expect(shown).toContain('Waits for you')
+  expect(isTheOverview(shown)).toBe(true)
   expect(shown).not.toContain(KIM)
   await ui.unmount()
 })
@@ -288,7 +289,7 @@ test('while m2b reads, the view says so, and an answer that comes after the tab 
   await pressed
 
   const shown = await texts(ui)
-  expect(shown).toContain('Waits for you')
+  expect(isTheOverview(shown)).toBe(true)
   expect(shown).not.toContain(KIM)
   await ui.unmount()
 })

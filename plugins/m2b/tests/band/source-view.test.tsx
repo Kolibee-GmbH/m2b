@@ -21,7 +21,7 @@ import {
   sourceTabLabel,
 } from '../../hooks/source-view'
 import type { SourceLook } from '../../hooks/source-view'
-import { FakeM2b, buttonsAt, everyText, fail, inView, linesAt, lookOf, ok, pane, piecesAt, pressTab, shownParts, shownTab, shownTabs, start, texts, viewButtons } from './harness'
+import { FakeM2b, buttonsAt, everyText, fail, inView, linesAt, lookOf, ok, pane, piecesAt, pressTab, shownParts, shownTab, shownTabs, start, texts, viewButtons, isTheOverview } from './harness'
 import type { ShownPiece, ShownTab } from './harness'
 
 const PANE = 'm2b'
@@ -826,7 +826,7 @@ test('a reload of the mod, which starts the session again, turns the pane from a
 
   expect(await shownTab(ui)).toBe('overview')
   const shown = await everyText(ui)
-  expect(shown).toContain('Waits for you')
+  expect(isTheOverview(shown)).toBe(true)
   for (const line of [DOCUMENT_WORDS, ...DOCUMENT_OUTLINE, ...DOCUMENT_ADDED, ...FACT_LINES, 'handbook.', 'dana', READING]) {
     expect(shown).not.toContain(line)
   }

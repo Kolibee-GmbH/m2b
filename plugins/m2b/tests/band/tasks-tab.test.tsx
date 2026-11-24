@@ -19,6 +19,7 @@ import {
   start,
   texts,
   viewButtons,
+  isTheOverview,
 } from './harness'
 import type { ShownPiece } from './harness'
 
@@ -494,7 +495,7 @@ test('a reload of the mod, which starts the session again, leaves the pane on it
   await clock.advance(1)
 
   const shown = await texts(ui)
-  expect(shown).toContain('Waits for you')
+  expect(isTheOverview(shown)).toBe(true)
   expect(shown).not.toContain(LADDER)
   expect(shown).not.toContain(READING)
   await ui.unmount()
