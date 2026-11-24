@@ -4,6 +4,7 @@ import type { BandPress, PaneView } from '../types'
 import { DUE_TODAY, OVERDUE, part, pressLine, said, styleOf, tickMark, under } from './look'
 import type { Tone } from './look'
 import { runM2b } from './m2b'
+import { MONTHS } from './moment'
 import { plainLine } from './plain-text'
 import { undoKey } from './rows'
 
@@ -190,7 +191,6 @@ function dayOf(due: string): string {
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const
 const DAY = /^(\d{4})-(\d{2})-(\d{2})/
 const TIME = /T(\d{2}:\d{2})/
 

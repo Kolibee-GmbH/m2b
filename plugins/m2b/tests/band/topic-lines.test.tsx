@@ -3,10 +3,11 @@ import type { CommandRunResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
 import { beginTopic, fillTopic, forgetTopicUnless, heldTopic, holdsTopic, parseTopic, topicPane } from '../../hooks/topic'
-import type { TopicLook } from '../../hooks/topic'
+import type { TopicFact, TopicLook } from '../../hooks/topic'
 import {
   FakeM2b,
   HOME,
+  NOW,
   SESSION_ID,
   inView,
   insetsAt,
@@ -36,6 +37,12 @@ const KIM = "Kim Lee leads Acme's IT"
 const PAYS = 'Acme pays within 30 days'
 const AUDIT = 'Export audit under way (since 2026-11-02)'
 const READ_ACME = ['distillate', 'topic', '--json', '--', 'Acme Ltd']
+const NO_PRESSES = { details: async () => {}, showNote: async () => {} }
+
+/** Facts of a topic whose lines name no fact file. */
+function plainFacts(...statements: string[]): TopicFact[] {
+  return statements.map(statement => ({ statement, file: null }))
+}
 
 function typed($: Engine, command: string, args = ''): Promise<CommandRunResult> {
   return $.command.run({ command, args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
@@ -447,7 +454,7 @@ test('a launcher that cannot be started says could not read', async ($, on) => {
 // above hold what it comes to in the pane and in the session's state.
 test('the lines are kept for the press that asked, and turning the pane away drops them', () => {
   // Covers: B190
-  const lines: TopicLook = { state: 'read', facts: [KIM], current: [] }
+  const lines: TopicLook = { state: 'read', facts: plainFacts(KIM), current: [] }
   beginTopic('p1', 'Acme Ltd')
   expect(heldTopic('p1')).toEqual({ state: 'reading' })
   expect(fillTopic('p1', lines)).toBe(true)
@@ -477,7 +484,7 @@ test('the lines are kept for the press that asked, and turning the pane away dro
 
 test('an answer for a press the pane turned away from is not kept', () => {
   // Covers: B190
-  const lines: TopicLook = { state: 'read', facts: [KIM], current: [] }
+  const lines: TopicLook = { state: 'read', facts: plainFacts(KIM), current: [] }
   beginTopic('p1', 'Acme Ltd')
   forgetTopicUnless(null)
   expect(fillTopic('p1', lines)).toBe(false)
@@ -505,10 +512,10 @@ const LOOKS: [what: string, look: TopicLook, below: ShownPiece[]][] = [
   ['while m2b reads', { state: 'reading' }, [piece(READING, DIM)]],
   [
     'a topic with facts and current items',
-    { state: 'read', facts: [KIM, PAYS], current: [AUDIT] },
+    { state: 'read', facts: plainFacts(KIM, PAYS), current: [AUDIT] },
     [piece(KIM), piece(PAYS), piece('Current', { weight: 'bold' }), piece(AUDIT)],
   ],
-  ['a topic without current items', { state: 'read', facts: [KIM], current: [] }, [piece(KIM)]],
+  ['a topic without current items', { state: 'read', facts: plainFacts(KIM), current: [] }, [piece(KIM)]],
   ['a topic with current items alone', { state: 'read', facts: [], current: [AUDIT] }, [piece('Current', { weight: 'bold' }), piece(AUDIT)]],
   ['a topic without lines', { state: 'read', facts: [], current: [] }, [piece(NO_LINES, DIM)]],
   ['a topic the distillate no longer holds', { state: 'missing' }, [piece(NO_TOPIC, DIM)]],
@@ -523,7 +530,7 @@ for (const [what, look, below] of LOOKS) {
   test(`the view of a topic is one part under the topic's name, whole: ${what}`, async ($, on) => {
     // Covers: B190, B208
     const name = 'Riverside Community Choir'
-    on('ui.render', { component: 'Pane', requestId: 'topic-alone' }, (engine, e) => topicPane(engine, e, name, look, async () => {}, e.props.bodyColumns))
+    on('ui.render', { component: 'Pane', requestId: 'topic-alone' }, (engine, e) => topicPane(engine, e, name, look, NO_PRESSES, e.props.bodyColumns, NOW))
 
     const ui = await $.ui.mount({ ...pane('topic-alone'), plugin: 'test', surface: 'terminal' })
 

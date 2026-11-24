@@ -217,7 +217,7 @@ on the machine that curates, which starts a curation run in the background. A ro
 every view leads to the others: `Proposals`, `Review`, `Tasks` with every open task of yours and
 a mark `○` to tick one, `Facts` with what every session starts with and every topic, and
 `Settings`. In `Facts`, a press on a fact shows its file with the notes and documents it rests on,
-a press on one of those shows it, `show` the note a current item rests on, and `open the file` a PDF or a picture in the
+a press on one of those shows it, a current item leads to the note it rests on, and `open the file` a PDF or a picture in the
 system's viewer
 ([What m2b knows](docs/band.md#what-m2b-knows)). Under Claude Code's fullscreen layout the
 pane sits beside the conversation, where it opens by itself in a wide terminal, and

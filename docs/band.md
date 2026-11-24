@@ -333,9 +333,11 @@ without one the text says that m2b has not looked yet.
 A topic's button turns the pane to that topic: its facts and its current items, read with
 `m2b distillate topic` at the press. m2b keeps the names and counts of what it gave a session and
 not the lines, so these are the lines the distillate holds now; a curation run since the session
-got the topic may have changed them, and the view says so. A current item is its words and since
-when it holds, with `show` below it for the note it rests on
-([What m2b knows](#what-m2b-knows)). The topic stands under a seventh tab
+got the topic may have changed them, and the view says so. A fact whose line names its fact file
+is a row you press, ending in `›`, that opens the file as a fact in the tab `Facts` does, under a
+tab beside the topic's; the topic's tab leads back to the lines as they were drawn, with the focus
+on that fact. A current item is its words and since when it holds, and a row that opens the note
+it rests on ([What m2b knows](#what-m2b-knows)). The topic stands under a seventh tab
 that bears its name while the pane shows it; the tab `Overview`, Escape or `/m2b-pane` lead
 [back](#back-to-the-start-view).
 
@@ -591,15 +593,20 @@ stands on which page** holds a document's outline, and **What the curation run a
 the run wrote below your words. The tab of the fact's file leads back to the file as it was drawn,
 with the focus on the row you pressed.
 
-A current item has a button for its note, here and in a topic's lines: `show` below it where it rests
-on a note, `show 1` and `show 2` where it rests on several, in the order the distillate names
-them, and none where it names no note. The note's file name is not drawn in the line.
+A current item leads to the notes it rests on, here and in a topic's lines. Where it rests on one
+note, the item itself is a row you press, ending in `›`. Where it rests on several, a button for
+each stands below it, in the order the distillate names them, bearing the day the note was
+captured in your time zone (`17 Nov`, the year where it is not this one), and the time as well
+where two fall on one day (`17 Nov 11:45`). An item that names no note has none. The note's file
+name is not drawn in the line.
 
 ```text
  Current
  Alex builds the shed with Sam, the roof is next (since
- 2026-11-17)
- [ show ]
+ 2026-11-17) ›
+ The offer for Acme is out, an answer is due in December
+ (since 2026-11-02)
+ [ 2 Nov ] [ 17 Nov ]
  Sorting the old photos for the family album (since
  2026-11-10)
 ```
@@ -640,9 +647,10 @@ With the keyboard in the pane, the band asks Claude Code to put the focus where 
 writes nothing: after a press on a tab, on the tab that leads back to the view you left, so Enter
 pressed again returns there; after a press on a topic's button on `Overview`, and from there back
 on that topic's button; after a fact's row or a topic's button in the tab `Facts` on that tab; after
-an evidence entry's row on the tab of the fact's file, and from there back on that row; after `show` below a
-current item on the tab `Facts`, or for an item in a topic's lines on the tab the topic was
-opened from; after keep, drop, `ok`,
+an evidence entry's row on the tab of the fact's file, and from there back on that row; after a
+fact's row in a topic's lines on the topic's tab, and from there back on that row; after a current
+item's row or a note's button below it on the tab `Facts`, or for an item in a topic's lines on
+the tab the topic was opened from; after keep, drop, `ok`,
 a task's mark, `turn off here` or `curate now` on the row's `undo`. After `open the file` it stays on
 that button, which writes nothing. Once an answer is written its
 row is gone, and the focus stands on the row that moved up.
@@ -986,7 +994,7 @@ background; once an answer to a proposal is written and none waits any more, the
 `m2b curate --detach --after-answers --json`, which starts one only where a kept proposal waits
 for a run. What that run reads and writes is in [The curation run](curation.md).
 A topic's button calls `m2b distillate topic --json`, which reads `memory/MEMORY.md`, and so does
-`m2b distillate topics --json` for the tab `Facts`. A fact's row, an evidence entry's row and `show`
+`m2b distillate topics --json` for the tab `Facts`. A fact's row, an evidence entry's row and a current item's way to its note
 call `m2b source --json`,
 which reads one fact file in `memory/` or one note in `corpus/`, and `open the file` calls
 `m2b store open`, which starts the system's viewer on a PDF or a picture of the archive. The tab

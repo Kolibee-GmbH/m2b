@@ -2,8 +2,20 @@ import { plainLine } from './plain-text'
 
 /*
  * The one way a moment is said to a person: the time of day when it lies on today's date, else
- * the date.
+ * the date. And the owner's time zone, for a moment written in UTC.
  */
+
+/** The months as a day is said to a person: `20 Nov`. */
+export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const
+
+/**
+ * How many minutes the owner's clock is ahead of UTC at the moment `ms`. The mod runs on the
+ * owner's machine, in the time zone the core says its local times in, and the offset is asked for
+ * that moment, so a day in summer time is said in summer time.
+ */
+export function ownersOffsetAt(ms: number): number {
+  return -new Date(ms).getTimezoneOffset()
+}
 
 /**
  * `18:02` for a moment of today, `2026-03-14` for one before; a text that is no moment as m2b

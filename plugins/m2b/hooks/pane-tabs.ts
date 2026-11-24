@@ -1,5 +1,5 @@
 import type { PaneView } from '../types'
-import { factFileNameOf, factTabLabel } from './facts-tab'
+import { factFileNameOf, factTabLabel, topicOfFactFile } from './facts-tab'
 import { sourceLabelOf } from './source-view'
 import { topicLabel } from './look'
 import type { Tab } from './look'
@@ -11,8 +11,9 @@ import type { SessionModel } from './session-view'
  * The tabs above every view of the m2b pane: six that stay, always in one order, and a seventh for
  * a topic's lines, a fact's file, a note a current item names, a search or the settings that only
  * inform, which stands there only while it is shown. A source a fact rests on stands under an
- * eighth, beside the seventh that bears its fact file and leads back to it. A tab is the one way from a view to another, so no view has a button
- * that leads back.
+ * eighth, beside the seventh that bears its fact file and leads back to it; so does a fact file
+ * opened from a topic, beside the seventh that bears the topic's name. A tab is the one way from a
+ * view to another, so no view has a button that leads back.
  */
 
 /** A tab that stays, named like the view it turns the pane to. */
@@ -96,22 +97,36 @@ function asideLabel(view: PaneView | null): string | null {
 /** The key of the tab that leads from a source back to the fact file it was shown from; no other view draws it. */
 export const BACK_TO_THE_FACT_FILE_KEY = 'tab:fact:in:source'
 
+/** The key of the tab that leads from a fact file back to the topic it was opened from; no other view draws it. */
+export const BACK_TO_THE_TOPIC_KEY = 'tab:topic:in:fact'
+
+/** The presses on a tab that leads back beside the six: to the fact file a source was shown from, to the topic a fact file was opened from. */
+export type BackTabs = { toFactFile: (from: string) => void; toTopic: (fact: string) => void }
+
 /**
  * The pane's tabs above `view`. `waiting` is how many proposals wait: the tab counts them, and a
- * zero is not said. `onTurn` is the press on a tab, `onBack` the press on the tab of the fact file
- * a source was shown from.
+ * zero is not said. `onTurn` is the press on a tab, `back` the presses on a tab that leads back.
  */
-export function paneTabs(view: PaneView | null, waiting: number, onTurn: (to: TabId) => void, onBack: (from: string) => void): Tab[] {
+export function paneTabs(view: PaneView | null, waiting: number, onTurn: (to: TabId) => void, back: BackTabs): Tab[] {
   const shown = shownOf(view)
   const staying = TAB_IDS.map(id => ({
     label: id === 'proposals' && waiting > 0 ? `${LABELS[id]} ${waiting}` : LABELS[id],
     turn: id === shown ? null : { key: tabKey(id, shown), onPress: () => onTurn(id) },
   }))
+  const topic = view?.kind === 'fact' ? topicOfFactFile(view.press) : null
+  if (view?.kind === 'fact' && topic !== null) {
+    const fact = view.press
+    return [
+      ...staying,
+      { label: topicLabel(topicNameOf(topic.press)), turn: { key: BACK_TO_THE_TOPIC_KEY, onPress: () => back.toTopic(fact) } },
+      { label: factTabLabel(factFileNameOf(fact)), turn: null },
+    ]
+  }
   if (view?.kind === 'source' && view.from !== null) {
     const from = view.from
     return [
       ...staying,
-      { label: factTabLabel(factFileNameOf(from)), turn: { key: BACK_TO_THE_FACT_FILE_KEY, onPress: () => onBack(from) } },
+      { label: factTabLabel(factFileNameOf(from)), turn: { key: BACK_TO_THE_FACT_FILE_KEY, onPress: () => back.toFactFile(from) } },
       { label: sourceLabelOf(view.press), turn: null },
     ]
   }

@@ -232,7 +232,13 @@ def item_counts(block: TopicBlock) -> tuple[int, int]:
 def topic_items(block: TopicBlock) -> tuple[list[str], list[str]]:
     """The list items of a topic's block, its facts and then its current items, each as what it
     states: a fact without its dash and its fact file, a current item without its dash."""
-    facts: list[str] = []
+    facts, current = topic_fact_files(block)
+    return [statement for statement, _ in facts], current
+
+
+def topic_fact_files(block: TopicBlock) -> tuple[list[tuple[str, str | None]], list[str]]:
+    """As ``topic_items``, each fact with the fact file its line names, or None for a line that names none."""
+    facts: list[tuple[str, str | None]] = []
     current: list[str] = []
     under_current = False
     for line in (line.rstrip("\r") for line in block.text.split("\n")):
@@ -242,7 +248,7 @@ def topic_items(block: TopicBlock) -> tuple[list[str], list[str]]:
             current.append(line[2:].strip())
         elif line.startswith("- "):
             parsed = parse_fact_line(line)
-            facts.append(parsed.statement if parsed is not None else line[2:].strip())
+            facts.append((parsed.statement, parsed.file_name) if parsed is not None else (line[2:].strip(), None))
     return facts, current
 
 

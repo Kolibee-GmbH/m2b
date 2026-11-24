@@ -139,8 +139,8 @@ export type FakeTopic = { name: string; facts: number | null; current: number | 
  */
 export type FakeGiven = { topics: FakeTopic[]; atStart: string | null; offUnder: string | null; folder?: string }
 
-/** A topic's lines as `m2b distillate topic --json` answers them. */
-export type FakeTopicLines = { facts: string[]; current: string[] }
+/** A topic's lines as `m2b distillate topic --json` answers them; `files` the fact file each fact names, none where not given. */
+export type FakeTopicLines = { facts: string[]; current: string[]; files?: (string | null)[] }
 
 /** A fact every session starts with, as `m2b distillate topics --json` names it: its line, and the fact file it names or null. */
 export type FakeStartFact = { statement: string; file: string | null }
@@ -181,6 +181,8 @@ export class FakeM2b {
   topicFails: string | null = null
   /** Unset, the installed core is one from before `distillate topic`: it refuses the action. */
   knowsTopics = true
+  /** Unset, `m2b distillate topic --json` answers as a core from before `facts_with_files`, without that key. */
+  namesFactFiles = true
   /** What `m2b distillate topics --json` answers. */
   distillate: FakeDistillate = { facts: [], current: [], topics: [] }
   /** When set, `m2b distillate topics --json` prints this in place of its answer, whatever its shape. */
@@ -527,7 +529,10 @@ export class FakeM2b {
       return { ...fail(this.topicFails), exitCode: 3 }
     }
     const held = this.topicLines[name]
-    return ok(JSON.stringify({ name, found: held !== undefined, facts: held?.facts ?? [], current: held?.current ?? [] }))
+    const facts = held?.facts ?? []
+    const answer = { name, found: held !== undefined, facts, current: held?.current ?? [] }
+    const withFiles = facts.map((statement, at) => ({ statement, file: held?.files?.[at] ?? null }))
+    return ok(JSON.stringify(this.namesFactFiles ? { ...answer, facts_with_files: withFiles } : answer))
   }
 
   /** As `m2b distillate topics --json` answers: what every session starts with, and each topic with its counts. */

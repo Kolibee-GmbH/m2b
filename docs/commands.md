@@ -158,7 +158,7 @@ To pause the runs on a machine: `m2b config set curation.paused true`
 | `m2b profile merge <json>` | merges a JSON object into the profile |
 | `m2b distillate off [<folder>]` | no distillate, no m2b notices, routing rule or lessons at session start, and no lesson before a Bash call, in sessions in this folder and below, on this machine |
 | `m2b distillate on [<folder>]` | the distillate again in this folder |
-| `m2b distillate topic [--json] <name>` | the facts and current items of one topic, as the distillate holds them now; the m2b pane reads a topic's lines with it |
+| `m2b distillate topic [--json] <name>` | the facts and current items of one topic, as the distillate holds them now, with `--json` each fact's file under `facts_with_files`; the m2b pane reads a topic's lines with it |
 | `m2b distillate topics [--json]` | what every session starts with (the facts outside any topic, each with its fact file, and the current items) and each topic with its counts; the m2b pane's tab `Facts` reads it |
 | `m2b addons list [--json]` | each add-on and whether it is on |
 | `m2b addons on <addon>` | turns an add-on on; its setup skill does this once the add-on is set up |

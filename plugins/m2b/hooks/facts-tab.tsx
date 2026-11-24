@@ -43,9 +43,13 @@ export type FactFileLook =
   | { state: 'read'; title: string; until: string | null; lines: string[]; earlier: string[]; evidence: Evidence[] }
   | { state: 'failed'; error: string }
 
+/** The topic a fact file was opened from: the press that opened the topic, and the place of the fact in it. */
+export type FromTopic = { press: string; index: number }
+
 let heldFacts: { press: string; look: FactsLook } | null = null
 // The file's name too: it may name a customer, and the view in the session's state names only the press.
-let heldFile: { press: string; file: string; look: FactFileLook } | null = null
+// `topic` is the topic's view its tab leads back to, null for a file opened from the tab Facts.
+let heldFile: { press: string; file: string; topic: FromTopic | null; look: FactFileLook } | null = null
 
 export function beginFacts(press: string): void {
   heldFacts = { press, look: { state: 'reading' } }
@@ -63,16 +67,21 @@ export function factsOf(press: string): FactsLook {
   return heldFacts !== null && heldFacts.press === press ? heldFacts.look : { state: 'reading' }
 }
 
-export function beginFactFile(press: string, file: string): void {
-  heldFile = { press, file, look: { state: 'reading' } }
+export function beginFactFile(press: string, file: string, topic: FromTopic | null = null): void {
+  heldFile = { press, file, topic, look: { state: 'reading' } }
 }
 
 export function fillFactFile(press: string, look: FactFileLook): boolean {
   if (heldFile === null || heldFile.press !== press) {
     return false
   }
-  heldFile = { press, file: heldFile.file, look }
+  heldFile = { ...heldFile, look }
   return true
+}
+
+/** The topic the fact file the press opened was opened from; null for one opened from the tab Facts, or where nothing is kept. */
+export function topicOfFactFile(press: string): FromTopic | null {
+  return heldFile !== null && heldFile.press === press ? heldFile.topic : null
 }
 
 /** The name of the fact file the press opened; empty where nothing is kept for it, as after a reload of the mod. */
@@ -265,8 +274,11 @@ function counts(topic: TopicCount): string {
   return topic.current === 0 ? facts : `${facts}, ${topic.current} current`
 }
 
-/** The tab's view: what every session starts with, then the topics, each part under when a session gets it. */
-export function factsPane($: EngineInterface, e: ResolveInput, look: FactsLook, actions: FactsActions, columns: number) {
+/**
+ * The tab's view: what every session starts with, then the topics, each part under when a session
+ * gets it. `nowMs` is the moment a note's day is said against.
+ */
+export function factsPane($: EngineInterface, e: ResolveInput, look: FactsLook, actions: FactsActions, columns: number, nowMs: number) {
   const ui = $.ui.resolve(e)
   if (look.state !== 'read') {
     const line =
@@ -287,7 +299,7 @@ export function factsPane($: EngineInterface, e: ResolveInput, look: FactsLook, 
       )
     }),
     look.current.length > 0 && said(ui, CURRENT, 'strong'),
-    ...look.current.map((item, index) => currentItemRow($, e, index, item, actions.showNote)),
+    ...look.current.map((item, index) => currentItemRow($, e, index, item, actions.showNote, nowMs)),
   ]
   const topics = look.topics.length === 0
     ? [said(ui, NO_TOPICS, 'quiet')]

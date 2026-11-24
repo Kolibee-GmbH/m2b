@@ -4,8 +4,9 @@
 pane's tab of what m2b knows.
 
 ``distillate topic <name>`` prints one topic's facts and current items as the distillate holds them
-at the call: the owner asks what stands behind a topic a session was given, and what the session
-got at its moment of giving is kept nowhere. A name the distillate holds no topic of is said, also
+at the call, and with ``--json`` each fact's file in a key of its own: the owner asks what stands
+behind a topic a session was given, and what the session got at its moment of giving is kept
+nowhere. A name the distillate holds no topic of is said, also
 where there is no distillate yet; a distillate that cannot be read ends the command like any store
 that cannot be reached, never as a topic without lines. No line is printed with a character that
 draws nothing (``notes.characters``); the name is the caller's own and is answered as given.
@@ -30,7 +31,7 @@ from m2b.notes.memory_index import (
     item_counts,
     parse_fact_line,
     split_topics,
-    topic_items,
+    topic_fact_files,
 )
 from m2b.paths import expand
 from m2b.store.base import Store
@@ -68,16 +69,26 @@ def distillate_topic(arguments: argparse.Namespace, context: Context) -> int:
     name: str = arguments.name
     text = _distillate(configured_store(load_machine_config(context.machine), context.machine))
     block = next((block for block in split_topics(text).blocks if block.topic.name == name), None)
-    facts, current = topic_items(block) if block is not None else ([], [])
+    with_files, current = topic_fact_files(block) if block is not None else ([], [])
     if arguments.json:
-        print_json({"name": name, "found": block is not None, "facts": facts, "current": current})
+        # `facts` stays a list of strings, as a band of an earlier release reads it; the fact file
+        # of each fact is a key of its own, which such a band does not read.
+        print_json(
+            {
+                "name": name,
+                "found": block is not None,
+                "facts": [statement for statement, _ in with_files],
+                "current": current,
+                "facts_with_files": [{"statement": statement, "file": file} for statement, file in with_files],
+            }
+        )
         return 0
     if block is None:
         print(f"the distillate holds no topic named {name} now")
         return 0
     print(f"{name}, as the distillate holds it now")
-    for fact in facts:
-        print(f"- {fact}")
+    for statement, _ in with_files:
+        print(f"- {statement}")
     if current:
         print("Current")
     for item in current:

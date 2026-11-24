@@ -78,7 +78,28 @@ class DistillateTopicTest(test_commands.CommandTest):
                 "found": True,
                 "facts": ["Kim Lee leads Acme's IT", "Acme pays within 30 days"],
                 "current": ["Export audit under way (since 2026-11-02)"],
+                "facts_with_files": [
+                    {"statement": "Kim Lee leads Acme's IT", "file": "kim-lee.md"},
+                    {"statement": "Acme pays within 30 days", "file": "acme.md"},
+                ],
             },
+        )
+
+    def test_each_fact_names_its_fact_file_in_a_key_of_its_own_and_one_without_a_file_names_none(self) -> None:
+        """Covers: B313"""
+        without_file = MEMORY.replace("- Acme pays within 30 days (acme.md)", "- Acme pays within 30 days")
+        self.index.write_text(without_file, encoding="utf-8")
+
+        answer = self.topic("Acme Ltd")
+
+        # The strings a band of an earlier release reads stay as they were.
+        self.assertEqual(answer["facts"], ["Kim Lee leads Acme's IT", "Acme pays within 30 days"])
+        self.assertEqual(
+            answer["facts_with_files"],
+            [
+                {"statement": "Kim Lee leads Acme's IT", "file": "kim-lee.md"},
+                {"statement": "Acme pays within 30 days", "file": None},
+            ],
         )
 
     def test_the_lines_are_those_of_the_call_not_of_an_earlier_one(self) -> None:
@@ -92,13 +113,18 @@ class DistillateTopicTest(test_commands.CommandTest):
         """Covers: B188"""
         for name in ("Globex", "acme ltd", "Dana likes old maps", "Facts"):
             with self.subTest(name=name):
-                self.assertEqual(self.topic(name), {"name": name, "found": False, "facts": [], "current": []})
+                self.assertEqual(
+                    self.topic(name), {"name": name, "found": False, "facts": [], "current": [], "facts_with_files": []}
+                )
 
     def test_a_store_without_a_distillate_holds_no_topic(self) -> None:
         """Covers: B188"""
         self.index.unlink()
 
-        self.assertEqual(self.topic("Acme Ltd"), {"name": "Acme Ltd", "found": False, "facts": [], "current": []})
+        self.assertEqual(
+            self.topic("Acme Ltd"),
+            {"name": "Acme Ltd", "found": False, "facts": [], "current": [], "facts_with_files": []},
+        )
 
     def test_no_line_comes_with_a_character_that_draws_nothing(self) -> None:
         """Covers: B188"""
@@ -110,6 +136,7 @@ class DistillateTopicTest(test_commands.CommandTest):
         answer = self.topic("Acme Ltd")
 
         self.assertEqual(answer["facts"][0], "Kim Lee leads Acme's IT")
+        self.assertEqual(answer["facts_with_files"][0]["statement"], "Kim Lee leads Acme's IT")
         self.assertEqual(answer["current"], ["Export audit under way (since 2026-11-02)"])
 
     def test_a_name_that_begins_with_a_dash_is_a_name(self) -> None:
