@@ -1,9 +1,11 @@
 """Measures how well a model files an inbox: what lands in memory and the task list, and where.
 
-``tests/ingest/`` is an invented store (``given/``) and an invented inbox (``inbox.json``): twenty
-captures of one day, in English and German, and for each what it should leave behind. Together
-they are twenty things: facts about the owner and people, facts that belong under a topic, things
-going on, tasks with a day and without. One capture holds nothing to file.
+``tests/ingest/`` is an invented store (``given/``) and an invented inbox (``inbox.json``):
+twenty-eight captures of one day, in English and German, and for each what it should leave behind.
+Eight are corrections typed at a fact file, as ``m2b capture --about`` writes them: a mistake set
+right, a value that changed, a detail added and a text typed at the wrong fact, in each language.
+Together they are twenty-eight things: facts about the owner and people, facts that belong under
+a topic, things going on, tasks with a day and without. One capture holds nothing to file.
 
 For each model the tool puts the store and the inbox into a sandbox of their own and starts a
 real curation run there, ``m2b curate --force`` with its own ``M2B_HOME`` and ``curation.model``
@@ -25,7 +27,7 @@ nothing is named too; a current item names no capture, so one made of that captu
 like any other.
 
 The turn limit of a model step is raised for these runs: the default fits a day's inbox, and
-twenty captures at once take more calls than that.
+twenty-eight captures at once take more calls than that.
 
 Every run asks the real model on your own Claude login, several minutes each, so this is not part
 of ``scripts/check``: run it with ``scripts/ingest-eval``.
@@ -83,7 +85,7 @@ DEFAULT_JOBS = 3
 # The share of the expectations a model has to get right, found and with every detail, before it
 # is good enough to file an inbox. Chosen, not derived; the same bar as for proposals.
 BAR = 0.8
-# A day's inbox fits the default of a hundred turns; twenty captures at once do not.
+# A day's inbox fits the default of a hundred turns; twenty-eight captures at once do not.
 MAX_TURNS = 400
 MODEL_TIMEOUT_MINUTES = 20
 # Longer than the run's own budget for its model steps, so the product's supervisor ends a slow
@@ -129,6 +131,13 @@ class Expectation:
     # what its fact file keeps of it under ``## Earlier``.
     no_longer: re.Pattern[str] | None = None
     earlier: re.Pattern[str] | None = None
+    # For a correction that sets a mistake right or adds a detail: nothing was true before that is
+    # not any more, so its fact file keeps under ``## Earlier`` what it kept before the run.
+    earlier_as_before: bool = False
+    # For a correction typed at a fact it does not speak of: the fact file it names in ``about``,
+    # which must not hold it, and what a facts line of that file must still say.
+    not_in: str | None = None
+    keeps: re.Pattern[str] | None = None
 
     def __str__(self) -> str:
         return f"{self.what} ({self.kind} from {self.capture})"
@@ -140,6 +149,7 @@ class Capture:
     text: str
     follow_up: str | None
     expected: tuple[Expectation, ...]
+    about: str | None = None
 
     @property
     def file(self) -> str:
@@ -248,11 +258,12 @@ def _capture(entry: Mapping[str, Any]) -> Capture:
     name = NoteName.parse(entry["file"])
     if name is None:
         raise FixtureError(f"{entry['file']!r} is no name of a capture")
-    expected = tuple(_expectation(entry["file"], item) for item in entry.get("expected", ()))
-    return Capture(name, entry["text"], entry.get("follow_up"), expected)
+    about = entry.get("about")
+    expected = tuple(_expectation(entry["file"], item, about) for item in entry.get("expected", ()))
+    return Capture(name, entry["text"], entry.get("follow_up"), expected, about)
 
 
-def _expectation(file: str, raw: Mapping[str, Any]) -> Expectation:
+def _expectation(file: str, raw: Mapping[str, Any], about: str | None = None) -> Expectation:
     kind = raw["kind"]
     if kind not in KINDS:
         raise FixtureError(f"{file}: {raw['what']!r} is of the kind {kind!r}; known: {', '.join(KINDS)}")
@@ -262,6 +273,12 @@ def _expectation(file: str, raw: Mapping[str, Any]) -> Expectation:
         raise FixtureError(f"{file}: {raw['what']!r}: a task says its due day, and only a task does")
     if kind != FACT and ("no_longer" in raw or "earlier" in raw):
         raise FixtureError(f"{file}: {raw['what']!r}: only a fact replaces an earlier value")
+    if raw.get("earlier_as_before") and (kind != FACT or "earlier" in raw):
+        raise FixtureError(f"{file}: {raw['what']!r}: a fact keeps its earlier values as before or gains one, not both")
+    if raw.get("not_in_about") and about is None:
+        raise FixtureError(f"{file}: {raw['what']!r}: only a capture with `about` can be filed apart from it")
+    if "keeps" in raw and not raw.get("not_in_about"):
+        raise FixtureError(f"{file}: {raw['what']!r}: only a fact filed apart from `about` names what that file keeps")
     topic, due, no_longer, earlier = raw.get("topic"), raw.get("due"), raw.get("no_longer"), raw.get("earlier")
     return Expectation(
         capture=file,
@@ -273,6 +290,9 @@ def _expectation(file: str, raw: Mapping[str, Any]) -> Expectation:
         due=datetime.date.fromisoformat(due) if due is not None else None,
         no_longer=_pattern(no_longer) if no_longer is not None else None,
         earlier=_pattern(earlier) if earlier is not None else None,
+        earlier_as_before=bool(raw.get("earlier_as_before")),
+        not_in=about if raw.get("not_in_about") else None,
+        keeps=_pattern(raw["keeps"]) if "keeps" in raw else None,
     )
 
 
@@ -292,6 +312,8 @@ def write_store(given: Path, inbox: Inbox, store: Path) -> None:
         note.frontmatter.set(keys.SOURCE, capture.name.source)
         if capture.follow_up is not None:
             note.frontmatter.set(keys.FOLLOW_UP, capture.follow_up)
+        if capture.about is not None:
+            note.frontmatter.set(keys.ABOUT, capture.about)
         (folder / capture.file).write_text(note.render(), encoding="utf-8")
 
 
@@ -330,7 +352,7 @@ def score(inbox: Inbox, before: Filed, after: Filed) -> Score:
     accounted: list[object] = []
     for capture in inbox.captures:
         for expectation in capture.expected:
-            candidates = _candidates(expectation, capture, after)
+            candidates = _candidates(expectation, capture, before, after)
             if not candidates:
                 missed.append(Miss(expectation, _stating_fact_file(expectation, after)))
                 continue
@@ -354,14 +376,18 @@ def score(inbox: Inbox, before: Filed, after: Filed) -> Score:
     )
 
 
-def _candidates(expectation: Expectation, capture: Capture, after: Filed) -> list[tuple[object, list[str]]]:
+def _candidates(
+    expectation: Expectation, capture: Capture, before: Filed, after: Filed
+) -> list[tuple[object, list[str]]]:
     """Each line or task that holds the expectation's words, with what is wrong about it."""
 
     def holds(text: str) -> bool:
         return all(word.search(text) for word in expectation.words)
 
     if expectation.kind == FACT:
-        return [(line, _fact_problems(expectation, line, after)) for line in after.facts if holds(line.statement)]
+        return [
+            (line, _fact_problems(expectation, line, before, after)) for line in after.facts if holds(line.statement)
+        ]
     if expectation.kind == CURRENT:
         day = capture.created.date().isoformat()
         return [(item, _current_problems(expectation, item, day)) for item in after.current if holds(item.text)]
@@ -379,7 +405,7 @@ def _stating_fact_file(expectation: Expectation, after: Filed) -> str | None:
     return None
 
 
-def _fact_problems(expectation: Expectation, line: FactLine, after: Filed) -> list[str]:
+def _fact_problems(expectation: Expectation, line: FactLine, before: Filed, after: Filed) -> list[str]:
     problems = _place_problems(expectation, line.topic)
     if expectation.capture not in after.links.get(line.file_name, frozenset()):
         problems.append(f"{line.file_name} does not link the capture")
@@ -389,6 +415,17 @@ def _fact_problems(expectation: Expectation, line: FactLine, after: Filed) -> li
     kept = expectation.earlier
     if kept is not None and not kept.search(after.earlier.get(line.file_name, "")):
         problems.append(f"{line.file_name} keeps no earlier value like {kept.pattern!r}")
+    name = line.file_name
+    if expectation.earlier_as_before and after.earlier.get(name, "") != before.earlier.get(name, ""):
+        problems.append(f"{name} gained an earlier value, though nothing that was true changed")
+    typed_at = expectation.not_in
+    if typed_at is not None and name == typed_at:
+        problems.append(f"filed into {name}, the fact file it was typed at, though it speaks of something else")
+    kept_there = expectation.keeps
+    if typed_at is not None and kept_there is not None:
+        lines_there = [fact.statement for fact in after.facts if fact.file_name == typed_at]
+        if not any(kept_there.search(statement) for statement in lines_there):
+            problems.append(f"no facts line of {typed_at} says {kept_there.pattern!r} any more")
     return problems
 
 

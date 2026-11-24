@@ -1,0 +1,105 @@
+{
+  "description": "E43 a correction typed at its fact: `m2b capture --about dana.md` binds the text to the fact file, the curation run's ingest step (replayed by the stub under the step's real rules) reads that fact file first and sets the line right, without an earlier value since a mistake was set right, changes the facts line in the distillate and links the capture; the run succeeds, the correction no longer waits, and the review task names the changed facts line.",
+  "model": {
+    "skills": {
+      "/m2b:ingest": {
+        "actions": [
+          {
+            "tool": "Bash",
+            "command": "m2b ingest list --json"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest normalize --json"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest list --json"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/memory/MEMORY.md"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/inbox/<capture:cli>"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/memory/dana.md"
+          },
+          {
+            "tool": "Write",
+            "file_path": "<store>/memory/dana.md",
+            "content": "# Dana\n\n- Lives in Basel.\n\n## Evidence\n\n- [[20261003T080000Z-cli-d4e5.md]]\n- [[<capture:cli>]]\n"
+          },
+          {
+            "tool": "Edit",
+            "file_path": "<store>/memory/MEMORY.md",
+            "old_string": "- Dana lives in Zurich (dana.md)",
+            "new_string": "- Dana lives in Basel (dana.md)"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest facts-filed <capture:cli>"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest note <capture:cli> 'filed: fact dana.md, a correction of dana.md'"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest finish <capture:cli>"
+          }
+        ]
+      }
+    }
+  },
+  "steps": [
+    {
+      "run": [
+        "m2b",
+        "capture",
+        "--about",
+        "dana.md",
+        "Dana lives in Basel, Zurich was a mistake."
+      ]
+    },
+    {
+      "run": [
+        "m2b",
+        "source",
+        "--json",
+        "--viewer",
+        "dana.md"
+      ],
+      "stdout": "\"first_line\": \"Dana lives in Basel, Zurich was a mistake.\""
+    },
+    {
+      "run": [
+        "m2b",
+        "curate",
+        "--force"
+      ],
+      "stdout": "\\Athe curation run succeeded\\ninbox: 1 capture filed, 0 waiting; the review task in your list says what to look at\\n"
+    },
+    {
+      "run": [
+        "m2b",
+        "source",
+        "--json",
+        "--viewer",
+        "dana.md"
+      ],
+      "stdout": "\"corrections\": \\[\\]"
+    },
+    {
+      "run": [
+        "m2b",
+        "band",
+        "--json"
+      ],
+      "stdout": "Dana lives in Basel"
+    }
+  ]
+}

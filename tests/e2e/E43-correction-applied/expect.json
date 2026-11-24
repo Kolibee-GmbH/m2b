@@ -1,0 +1,27 @@
+{
+  "store_files": {
+    "memory/MEMORY.md": "# Memory\n\n## Facts\n\n- Dana lives in Basel (dana.md)\n\n## Current\n",
+    "corpus/2026/10/20261003T080000Z-cli-d4e5.md": "---\ncreated: 2026-10-03T10:00:00+02:00\nsource: cli\ncurated: true\n---\nDana lives in Zurich\n",
+    "store.json": "{\n  \"format\": 3,\n  \"tasks\": {\"backend\": \"markdown\"},\n  \"curating_machine\": \"sb-test-e2e\",\n  \"journal_since\": \"2026-11-01\"\n}\n",
+    "profile.json": "{\n  \"version\": 1,\n  \"owner\": \"Alex\",\n  \"language\": \"en\"\n}\n",
+    "state/core/candidates.json": "{\n  \"format\": 1,\n  \"candidates\": {}\n}\n"
+  },
+  "store_patterns": [
+    {
+      "path": "memory/dana.md",
+      "content": "# Dana\n\n- Lives in Basel\\.\n\n## Evidence\n\n- \\[\\[20261003T080000Z-cli-d4e5\\.md\\]\\]\n- \\[\\[\\d{8}T\\d{6}Z-cli-[0-9a-f]{4}\\.md\\]\\]\n"
+    },
+    {
+      "path": "corpus/*/*/????????T??????Z-cli-????.md",
+      "content": "---\ncreated: [^\n]+\nsource: cli\nabout: dana\\.md\nfacts_filed: true\ncurated: true\n---\nDana lives in Basel, Zurich was a mistake\\.\n<!-- m2b:curation -->\nfiled: fact dana\\.md, a correction of dana\\.md\n"
+    },
+    {
+      "path": "state/core/last-run.json",
+      "content": ".*\"state\": \"succeeded\".*"
+    },
+    {
+      "path": "tasks/????????????.md",
+      "content": "(.*\n)*.*Dana lives in Basel(.*\n)*.*"
+    }
+  ]
+}
