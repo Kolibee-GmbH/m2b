@@ -134,14 +134,16 @@ export function dueCounts(due: readonly BandDueTask[]): { text: string; tone: To
 export type ButtonKind = 'accent' | 'default' | 'quiet'
 
 /** `onPress` is handed the press, which names the surface it was made on. */
-export type ButtonSpec = { key: string; label: string; kind: ButtonKind; onPress: (pressed: UiPressArgument) => void }
+/** `hotkey` is the letter that presses the button while the pane holds the keyboard, as a tab's (B315). */
+export type ButtonSpec = { key: string; label: string; kind: ButtonKind; onPress: (pressed: UiPressArgument) => void; hotkey?: string }
 
 export function button(ui: Pick<ElementTable, 'Button'>, spec: ButtonSpec) {
   const { Button } = ui
+  const reach = spec.hotkey === undefined ? {} : { hotkey: spec.hotkey }
   return spec.kind === 'accent' ? (
-    <Button key={spec.key} label={spec.label} variant="primary" onPress={spec.onPress} />
+    <Button key={spec.key} label={spec.label} variant="primary" {...reach} onPress={spec.onPress} />
   ) : (
-    <Button key={spec.key} label={spec.label} dimColor={spec.kind === 'quiet'} onPress={spec.onPress} />
+    <Button key={spec.key} label={spec.label} dimColor={spec.kind === 'quiet'} {...reach} onPress={spec.onPress} />
   )
 }
 
@@ -195,13 +197,18 @@ export function taskLine(ui: Pick<ElementTable, 'Box' | 'Text'>, task: BandDueTa
   )
 }
 
-/** A tab of a row: `turn` is the press that shows its view, null for the tab whose view is shown. */
-export type Tab = { label: string; turn: { key: string; onPress: () => void } | null }
+/**
+ * A tab of a row: `turn` is the press that shows its view, null for a tab beside the six whose view
+ * is shown, which nothing reads again. `isShown` marks the tab of the view below, `hotkey` is the
+ * letter that presses it while the pane holds the keyboard.
+ */
+export type Tab = { label: string; turn: { key: string; onPress: () => void } | null; isShown: boolean; hotkey: string | null }
 
 /**
- * A row of tabs above a view: the one shown is marked, underlined too so it reads without color,
- * and is no button; every other turns to its view. The row breaks between tabs where it is too
- * narrow for them.
+ * A row of tabs above a view. The one shown is marked: one of the six is a button in the accent,
+ * which reads its view again and takes the focus after a turn, so the focus is the one mark there;
+ * a tab beside the six is text, bold and underlined so it reads without color. Every other tab is
+ * a dim button that turns to its view. The row breaks between tabs where it is too narrow.
  */
 export function tabRow(ui: Pick<ElementTable, 'Box' | 'Button' | 'Text'>, tabs: readonly Tab[]) {
   const { Box, Text } = ui
@@ -213,7 +220,13 @@ export function tabRow(ui: Pick<ElementTable, 'Box' | 'Button' | 'Text'>, tabs: 
             {tab.label}
           </Text>
         ) : (
-          button(ui, { key: tab.turn.key, label: tab.label, kind: 'quiet', onPress: tab.turn.onPress })
+          button(ui, {
+            key: tab.turn.key,
+            label: tab.label,
+            kind: tab.isShown ? 'accent' : 'quiet',
+            onPress: tab.turn.onPress,
+            ...(tab.hotkey === null ? {} : { hotkey: tab.hotkey }),
+          })
         ),
       )}
     </Box>

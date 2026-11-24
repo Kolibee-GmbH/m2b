@@ -383,15 +383,6 @@ function topicKey(index: number): string {
   return `topic:${index}`
 }
 
-/**
- * The key of the button of the topic `name`, null where the overview draws none for it. The
- * pane's other views draw no button under it.
- */
-export function topicShowKey(model: SessionModel, name: string): string | null {
-  const index = model.given === null || model.given.error !== null ? -1 : model.given.topics.findIndex(topic => topic.name === name)
-  return index === -1 ? null : topicKey(index)
-}
-
 /** "Waits for you": the proposals as a count that names their tab, every candidate and question, and the review, each with its buttons. */
 function waitsPart($: EngineInterface, e: ResolveInput, model: SessionModel, actions: SessionActions, columns: number) {
   const ui = $.ui.resolve(e)

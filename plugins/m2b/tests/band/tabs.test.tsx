@@ -1,20 +1,16 @@
 import { expect, test } from 'claude-code/testing'
 import { opening } from '../../hooks/look'
-import { beginTopic } from '../../hooks/topic'
+import { topicFactKey } from '../../hooks/topic'
 import type { CommandRunResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { focusKeyAfterTab, tabKeyAfterTurn } from '../../hooks/pane-tabs'
+import { BACK_TO_THE_TOPIC_KEY, backTabKey, focusKeyAfterTab } from '../../hooks/pane-tabs'
 import type { Shown, TabId } from '../../hooks/pane-tabs'
-import { topicShowKey } from '../../hooks/session-view'
-import type { SessionModel } from '../../hooks/session-view'
-import type { BandSession } from '../../types'
 import {
   CURATE_NOW,
   FakeM2b,
   FakeSettings,
   NOTES,
-  SESSION_ID,
   buttonsAt,
   fakeSetting,
   inView,
@@ -48,7 +44,6 @@ const DANA_LINE = 'My sister. Birthday on 3 March.'
 const DANA_NOTE = '20261012T081500Z-claude-3f2a.md'
 const NOTE_WORDS = 'She starts at Northwind in April.'
 const FACTS = ['distillate', 'topics', '--json']
-const TURN_ENDED = { answer: 'done', durationMs: 5, isAborted: false, reason: 'answer' } as const
 
 /** The tabs that stay, in the order drawn. */
 const TABS: readonly TabId[] = ['overview', 'proposals', 'review', 'tasks', 'facts', 'settings']
@@ -215,7 +210,7 @@ async function arrive($: Engine, clock: Clock, ui: Pane, view: View): Promise<vo
 function rowAbove(shown: Shown, aside?: string, proposals = 'Proposals 3'): ShownTab[] {
   const staying = TABS.map(id => ({
     label: id === 'proposals' ? proposals : LABELS[id],
-    key: id === shown ? null : `tab:${id}:in:${shown}`,
+    key: `tab:${id}:in:${shown}`,
   }))
   return aside === undefined ? staying : [...staying, { label: aside, key: null }]
 }
@@ -231,14 +226,14 @@ async function everyButton(ui: Pane): Promise<string[]> {
   return (await ui.findAll({ type: 'Button' })).map(button => String(button.key))
 }
 
-test('above the view the pane starts in stand Overview, Proposals with the number that wait, Review, Tasks, Facts and Settings: Overview as a text, the others as buttons', async ($, on) => {
+test('above the view the pane starts in stand Overview, Proposals with the number that wait, Review, Tasks, Facts and Settings, each a button', async ($, on) => {
   // Covers: B204
   await start($, on, fullFake())
 
   const ui = await mounted($)
 
   expect(await shownTabs(ui)).toEqual([
-    { label: 'Overview', key: null },
+    { label: 'Overview', key: 'tab:overview:in:overview' },
     { label: 'Proposals 3', key: 'tab:proposals:in:overview' },
     { label: 'Review', key: 'tab:review:in:overview' },
     { label: 'Tasks', key: 'tab:tasks:in:overview' },
@@ -246,12 +241,13 @@ test('above the view the pane starts in stand Overview, Proposals with the numbe
     { label: 'Settings', key: 'tab:settings:in:overview' },
   ])
   // The row is the first thing drawn: the view stands below it.
-  expect((await ui.findAll({ type: 'Text' }))[0]?.text).toBe('Overview')
+  expect((await ui.findAll({ type: 'Button' }))[0]?.key).toBe('tab:overview:in:overview')
+  expect(await shownTab(ui)).toBe('overview')
   expect((await texts(ui))[0]).toBe('Waits for you')
   await ui.unmount()
 })
 
-test('the six tabs stand above every view in the same order: the one whose view is shown is a text and no button, every other a button', async ($, on) => {
+test('the six tabs stand above every view in the same order, each a button; a tab beside them is a text while its view is shown', async ($, on) => {
   // Covers: B204
   const { clock } = await start($, on, fullFake())
   const ui = await mounted($)
@@ -261,33 +257,103 @@ test('the six tabs stand above every view in the same order: the one whose view 
 
     expect(await texts(ui)).toContain(SAYS[view])
     expect(await shownTabs(ui)).toEqual(rowOver(view))
-    // No tab is drawn twice: once as the text that is shown, or once as a button.
-    expect((await everyButton(ui)).filter(key => key.startsWith('tab:'))).toHaveLength(6 - (ASIDE[view] === undefined ? 1 : 0) + (view === 'source' ? 1 : 0))
+    // No tab is drawn twice: the six are buttons, above a source the tab of its fact file too.
+    expect((await everyButton(ui)).filter(key => key.startsWith('tab:'))).toHaveLength(6 + (view === 'source' ? 1 : 0))
   }
   await ui.unmount()
 })
 
-test("the tab shown is bold and underlined in the color of m2b's name, and every other tab is a dim button", async ($, on) => {
+test("one of the six shown is a button in the accent, a tab beside them shown is bold and underlined in the color of m2b's name, and every other tab is a dim button", async ($, on) => {
   // Covers: B204
   const { clock } = await start($, on, fullFake())
   const ui = await mounted($)
 
   for (const view of ['overview', 'review', 'tasks', 'facts', 'topic', 'fact', 'group', 'source'] as const) {
     await arrive($, clock, ui, view)
+    const shown = SHOWN[view]
     const row = await shownTabs(ui)
-    const marked = row.find(tab => tab.key === null)
 
-    // The row's one text is the first text the pane draws.
-    const [text] = await ui.findAll({ type: 'Text' })
-    expect(text?.text).toBe(marked?.label)
-    expect(text?.props).toMatchObject({ color: 'remember', weight: 'bold', underline: true })
-    for (const tab of row.filter(one => one.key !== null)) {
+    if (shown === 'aside') {
+      // The row's one text is the first text the pane draws.
+      const [text] = await ui.findAll({ type: 'Text' })
+      expect(text?.text).toBe(ASIDE[view])
+      expect(text?.props).toMatchObject({ color: 'remember', weight: 'bold', underline: true })
+    } else {
+      const marked = await ui.find({ key: `tab:${shown}:in:${shown}` })
+      expect(marked?.props).toMatchObject({ label: LABELS[shown], variant: 'primary' })
+      expect(marked?.props['dimColor']).toBeUndefined()
+    }
+    for (const tab of row.filter(one => one.key !== null && one.key !== `tab:${shown}:in:${shown}`)) {
       const button = await ui.find({ key: tab.key ?? '' })
       expect(button?.type).toBe('Button')
       expect(button?.props['dimColor']).toBe(true)
       expect(button?.props['variant']).toBeUndefined()
     }
   }
+  await ui.unmount()
+})
+
+const HOTKEYS: Readonly<Record<TabId, string>> = { overview: 'o', proposals: 'p', review: 'r', tasks: 't', facts: 'f', settings: 's' }
+
+test('each of the six tabs has its first letter as its key above every view, a tab beside them none, and no other button of the pane has a key', async ($, on) => {
+  // Covers: B315
+  const fake = fullFake()
+  // The topic's fact names its file, so a fact file opened from the topic has a tab that leads back to it.
+  fake.topicLines = { ...fake.topicLines, Northwind: { facts: [KIM], current: [], files: ['dana.md'] } }
+  const { clock } = await start($, on, fake)
+  const ui = await mounted($)
+  const fromTheTopic = async () => {
+    await arrive($, clock, ui, 'topic')
+    await ui.press({ key: topicFactKey(0) })
+  }
+
+  for (const reach of [...VIEWS.map(view => () => arrive($, clock, ui, view)), fromTheTopic]) {
+    await reach()
+    const [six, beside] = [elementsOfTheRow(await ui.findAll({ type: 'Button' })).slice(0, 6), elementsOfTheRow(await ui.findAll({ type: 'Button' })).slice(6)]
+
+    expect(six.map(button => button.props['hotkey'])).toEqual(TABS.map(id => HOTKEYS[id]))
+    // A tab beside the six that leads back, to a fact file above a source or to a topic above its fact file, has no letter.
+    expect(beside.map(button => button.props['hotkey'])).toEqual(beside.map(() => undefined))
+    expect((await inView(ui, 'Button')).filter(button => button.props['hotkey'] !== undefined).map(button => button.key)).toEqual([])
+  }
+  // The last view reached is the fact file opened from the topic, under the topic's tab.
+  expect((await ui.find({ key: BACK_TO_THE_TOPIC_KEY }))?.props['hotkey']).toBeUndefined()
+  await ui.unmount()
+})
+
+/** The buttons of the row of tabs, the six and any beside them, in the order drawn. */
+function elementsOfTheRow<T extends { key?: string | undefined }>(buttons: T[]): T[] {
+  return buttons.filter(button => (button.key ?? '').startsWith('tab:'))
+}
+
+test('a press on the tab shown, as Enter on it or its letter does, reads its view again and leaves the pane there', async ($, on) => {
+  // Covers: B204, B315
+  const fake = fullFake()
+  const { clock } = await start($, on, fake)
+  const ui = await mounted($)
+
+  for (const to of ['tasks', 'facts', 'settings'] as const) {
+    await pressTab(ui, to)
+    await clock.advance(1)
+    const [lists, todos, facts] = [fake.settingCalls().length, fake.todosCalls().length, fake.factsCalls().length]
+
+    await ui.press({ key: `tab:${to}:in:${to}` })
+    await clock.advance(1)
+
+    expect(await shownTab(ui)).toBe(to)
+    expect(await texts(ui)).toContain(SAYS[to])
+    expect(fake.settingCalls().length - lists).toBe(to === 'settings' ? 1 : 0)
+    expect(fake.todosCalls().length - todos).toBe(to === 'tasks' ? 1 : 0)
+    expect(fake.factsCalls().length - facts).toBe(to === 'facts' ? 1 : 0)
+  }
+  // Overview asks again what the session was given, and stays on the overview.
+  await pressTab(ui, 'overview')
+  await clock.advance(1)
+  const asked = fake.looks.length
+  await ui.press({ key: 'tab:overview:in:overview' })
+  await clock.advance(1)
+  expect(await shownTab(ui)).toBe('overview')
+  expect(fake.looks.length).toBeGreaterThan(asked)
   await ui.unmount()
 })
 
@@ -539,95 +605,15 @@ test('in a pane as narrow as a dock gets the row holds the same tabs and breaks 
 // that was left. Claude Code looks a key up in what is drawn when the focus is asked for and waits
 // only for one that is not drawn yet: a key the view before drew too would be found there.
 
-/** Which tab's view a second press on the same key shows: the one that was left, or what stands in for a seventh tab. */
-function leadsBackTo(left: Shown, to: TabId): TabId {
-  if (left !== 'aside') {
-    return left
-  }
-  return to === 'overview' ? 'proposals' : 'overview'
-}
-
-test('after a press on a tab the focus is asked for the tab that leads back to the view that was left; Overview stands in for a seventh tab, and Proposals on the overview itself', () => {
+test('after a press on a tab the focus is asked for that tab, drawn as the one shown; after a press that opens a view beside the six, for the tab of the view it was opened from', () => {
   // Covers: B201
-  const every: readonly Shown[] = [...TABS, 'aside']
-  const asked = Object.fromEntries(every.map(left => [left, every.map(to => tabKeyAfterTurn(left, to))]))
-
-  // Each row: the view that was left; each column: the view turned to, in the order of the tabs, the seventh last.
-  expect(asked).toEqual({
-    overview: [
-      'tab:proposals:in:overview',
-      'tab:overview:in:proposals',
-      'tab:overview:in:review',
-      'tab:overview:in:tasks',
-      'tab:overview:in:facts',
-      'tab:overview:in:settings',
-      'tab:overview:in:aside',
-    ],
-    proposals: [
-      'tab:proposals:in:overview',
-      'tab:overview:in:proposals',
-      'tab:proposals:in:review',
-      'tab:proposals:in:tasks',
-      'tab:proposals:in:facts',
-      'tab:proposals:in:settings',
-      'tab:proposals:in:aside',
-    ],
-    review: [
-      'tab:review:in:overview',
-      'tab:review:in:proposals',
-      'tab:overview:in:review',
-      'tab:review:in:tasks',
-      'tab:review:in:facts',
-      'tab:review:in:settings',
-      'tab:review:in:aside',
-    ],
-    tasks: [
-      'tab:tasks:in:overview',
-      'tab:tasks:in:proposals',
-      'tab:tasks:in:review',
-      'tab:overview:in:tasks',
-      'tab:tasks:in:facts',
-      'tab:tasks:in:settings',
-      'tab:tasks:in:aside',
-    ],
-    facts: [
-      'tab:facts:in:overview',
-      'tab:facts:in:proposals',
-      'tab:facts:in:review',
-      'tab:facts:in:tasks',
-      'tab:overview:in:facts',
-      'tab:facts:in:settings',
-      'tab:facts:in:aside',
-    ],
-    settings: [
-      'tab:settings:in:overview',
-      'tab:settings:in:proposals',
-      'tab:settings:in:review',
-      'tab:settings:in:tasks',
-      'tab:settings:in:facts',
-      'tab:overview:in:settings',
-      'tab:settings:in:aside',
-    ],
-    aside: [
-      'tab:proposals:in:overview',
-      'tab:overview:in:proposals',
-      'tab:overview:in:review',
-      'tab:overview:in:tasks',
-      'tab:overview:in:facts',
-      'tab:overview:in:settings',
-      'tab:overview:in:aside',
-    ],
-  })
-  // The key never names the tab of the view turned to, which is drawn as a text and takes no focus.
-  for (const left of every) {
-    for (const to of every) {
-      expect(tabKeyAfterTurn(left, to).startsWith(`tab:${to}:`)).toBe(false)
-      expect(tabKeyAfterTurn(left, to).endsWith(`:in:${to}`)).toBe(true)
-    }
+  for (const to of TABS) {
+    expect(focusKeyAfterTab(to)).toBe(`tab:${to}:in:${to}`)
+    expect(backTabKey(to)).toBe(`tab:${to}:in:aside`)
   }
 })
 
-test('for every view left and every tab pressed, the key the focus is asked for is a tab drawn above the view turned to, was no button of the view that was left, and leads back', WALK, async ($, on) => {
+test('for every view left and every tab pressed, the key the focus is asked for is that tab drawn as the one shown, was no button of the view that was left, and pressed again stays', WALK, async ($, on) => {
   // Covers: B201
   const { clock } = await start($, on, fullFake())
   const ui = await mounted($)
@@ -640,12 +626,13 @@ test('for every view left and every tab pressed, the key the focus is asked for 
       await pressTab(ui, to)
       await clock.advance(1)
 
-      const key = tabKeyAfterTurn(SHOWN[from], to)
+      const key = focusKeyAfterTab(to)
       expect((await shownTabs(ui)).map(tab => tab.key)).toContain(key)
+      expect(await shownTab(ui)).toBe(to)
       expect(before).not.toContain(key)
-      // The same key pressed again returns to the tab that was left.
+      // The same key pressed again reads the view again and stays there.
       await ui.press({ key })
-      expect(await shownTab(ui)).toBe(leadsBackTo(SHOWN[from], to))
+      expect(await shownTab(ui)).toBe(to)
     }
   }
   await ui.unmount()
@@ -660,138 +647,11 @@ test("after a press on a topic's button the focus is asked for Overview above th
 
   await ui.press({ key: 'topic:0' })
 
-  const key = tabKeyAfterTurn('overview', 'aside')
+  const key = backTabKey('overview')
   expect(key).toBe('tab:overview:in:aside')
   expect((await shownTabs(ui)).map(tab => tab.key)).toContain(key)
   expect(before).not.toContain(key)
   await ui.press({ key })
   expect(await shownTab(ui)).toBe('overview')
-  await ui.unmount()
-})
-
-const GIVEN_TWO: BandSession = {
-  id: SESSION_ID,
-  known: true,
-  topics: [
-    { name: 'Northwind', facts: 3, current: 1 },
-    { name: 'Acme Ltd', facts: 1, current: 0 },
-  ],
-  atStart: 'whole',
-  offUnder: null,
-  error: null,
-}
-
-/** What the start view draws from, with what a test sets and nothing else. */
-function modelWith(parts: Partial<SessionModel>): SessionModel {
-  return {
-    given: null,
-    notes: 0,
-    rowNotice: null,
-    folderNotice: null,
-    curateNotice: null,
-    snapshot: null,
-    proposals: null,
-    presses: {},
-    health: null,
-    curatingMachine: null,
-    versionLine: null,
-    ...parts,
-  }
-}
-
-test('a topic left for the overview has the key of its button there, by its place among the topics, and none where the start view draws no such row', () => {
-  // Covers: B201
-  const full = modelWith({ given: GIVEN_TWO })
-
-  expect(topicShowKey(full, 'Northwind')).toBe('topic:0')
-  expect(topicShowKey(full, 'Acme Ltd')).toBe('topic:1')
-  // A topic the session is no longer given, a session given none, one m2b has not looked at, and one it could not look at.
-  expect(topicShowKey(full, 'Lumen')).toBeNull()
-  expect(topicShowKey(modelWith({ given: { ...GIVEN_TWO, topics: [] } }), 'Northwind')).toBeNull()
-  expect(topicShowKey(modelWith({}), 'Northwind')).toBeNull()
-  expect(topicShowKey(modelWith({ given: { ...GIVEN_TWO, error: 'the machine state cannot be read' } }), 'Northwind')).toBeNull()
-  // Then the tab's own rule holds: the seventh tab is gone, and on the overview Proposals stands in for it.
-  expect(tabKeyAfterTurn('aside', 'overview')).toBe('tab:proposals:in:overview')
-})
-
-test("a topic left by Overview gets its own button before the tabs' rule; left by another tab, or with no such row, the tabs' rule holds", () => {
-  // Covers: B201
-  const full = modelWith({ given: GIVEN_TWO })
-  // The topic's name is kept by its module for the press, never in the view.
-  beginTopic('p1', 'Acme Ltd')
-  const acme = { kind: 'topic', press: 'p1', isRead: true } as const
-
-  expect(focusKeyAfterTab(acme, 'overview', full)).toBe('topic:1')
-  expect(focusKeyAfterTab(acme, 'review', full)).toBe('tab:overview:in:review')
-  expect(focusKeyAfterTab(acme, 'overview', modelWith({}))).toBe('tab:proposals:in:overview')
-  // No other view has a row on the start view: the tab that leads back to it.
-  expect(focusKeyAfterTab({ kind: 'review' }, 'overview', full)).toBe('tab:review:in:overview')
-  expect(focusKeyAfterTab({ kind: 'tasks', press: 'p1', drawn: 1 }, 'overview', full)).toBe('tab:tasks:in:overview')
-  expect(focusKeyAfterTab({ kind: 'facts', press: 'p1', drawn: 1 }, 'overview', full)).toBe('tab:facts:in:overview')
-  // A fact's file stands under a seventh tab: the tabs' rule for it holds, `Facts` pressed above it too.
-  const fact = { kind: 'fact', press: 'p1', drawn: 1 } as const
-  expect(focusKeyAfterTab(fact, 'overview', full)).toBe('tab:proposals:in:overview')
-  expect(focusKeyAfterTab(fact, 'facts', full)).toBe('tab:overview:in:facts')
-  // So does a source a fact rests on: the tab of its fact file is gone with it.
-  const source = { kind: 'source', press: 'p2', from: 'p1', drawn: 1 } as const
-  expect(focusKeyAfterTab(source, 'overview', full)).toBe('tab:proposals:in:overview')
-  expect(focusKeyAfterTab(source, 'facts', full)).toBe('tab:overview:in:facts')
-  expect(focusKeyAfterTab(null, 'settings', full)).toBe('tab:overview:in:settings')
-  // A folded group of the settings stands under a seventh tab, which is gone once it is left: the
-  // tabs' rule for the seventh tab holds, whichever tab is pressed above it, `Settings` among them.
-  const choices = { kind: 'settings', press: 'p1', aside: null, drawn: 0 } as const
-  const group = { ...choices, aside: { name: 'about', title: 'About this setup' }, drawn: 1 } as const
-  expect(focusKeyAfterTab(group, 'overview', full)).toBe('tab:proposals:in:overview')
-  expect(focusKeyAfterTab(group, 'proposals', full)).toBe('tab:overview:in:proposals')
-  expect(focusKeyAfterTab(group, 'review', full)).toBe('tab:overview:in:review')
-  expect(focusKeyAfterTab(group, 'tasks', full)).toBe('tab:overview:in:tasks')
-  expect(focusKeyAfterTab(group, 'facts', full)).toBe('tab:overview:in:facts')
-  expect(focusKeyAfterTab(group, 'settings', full)).toBe('tab:overview:in:settings')
-  // The choices stand under `Settings`, which leads back to them.
-  expect(focusKeyAfterTab(choices, 'review', full)).toBe('tab:settings:in:review')
-})
-
-test("the button of the topic that was left is a button of the start view and was none above the topic's lines", async ($, on) => {
-  // Covers: B201
-  const { clock } = await start($, on, fullFake())
-  const ui = await mounted($)
-
-  for (const at of [0, 1]) {
-    await arrive($, clock, ui, 'overview')
-    await ui.press({ key: `topic:${at}` })
-    const before = await everyButton(ui)
-
-    await pressTab(ui, 'overview')
-
-    expect(await viewButtons(ui)).toContain(`topic:${at}`)
-    expect(before).not.toContain(`topic:${at}`)
-    // The same key pressed again returns to the topic that was left.
-    const heading = at === 0 ? 'Northwind' : LONG_NAME
-    await ui.press({ key: `topic:${at}` })
-    expect((await texts(ui))[0]).toBe(heading)
-  }
-  await ui.unmount()
-})
-
-test('where the start view no longer draws the row of the topic that was left, the tab Proposals is drawn there and was none above the lines', async ($, on) => {
-  // Covers: B201
-  const fake = fullFake()
-  const { clock } = await start($, on, fake)
-  const ui = await mounted($)
-  await arrive($, clock, ui, 'topic')
-  // The session is given no topic any more, as m2b says when it is asked after a turn.
-  fake.given = { topics: [], atStart: 'whole', offUnder: null }
-  await $.turn.complete({ ...TURN_ENDED, turnId: 't1' })
-  await clock.advance(1)
-  expect(await texts(ui)).toContain(KIM)
-  const before = await everyButton(ui)
-
-  await pressTab(ui, 'overview')
-
-  expect(await partLines(ui, 'session')).toEqual(['The distillate was printed whole at the start.'])
-  expect(await viewButtons(ui)).not.toContain('topic:0')
-  const key = tabKeyAfterTurn('aside', 'overview')
-  expect((await shownTabs(ui)).map(tab => tab.key)).toContain(key)
-  expect(before).not.toContain(key)
   await ui.unmount()
 })

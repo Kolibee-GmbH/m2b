@@ -3,9 +3,7 @@ import { factFileNameOf, factTabLabel, topicOfFactFile } from './facts-tab'
 import { sourceLabelOf } from './source-view'
 import { topicLabel } from './look'
 import type { Tab } from './look'
-import { topicShowKey } from './session-view'
 import { topicNameOf } from './topic'
-import type { SessionModel } from './session-view'
 
 /*
  * The tabs above every view of the m2b pane: six that stay, always in one order, and a seventh for
@@ -32,6 +30,8 @@ const LABELS: Readonly<Record<TabId, string>> = {
   settings: 'Settings',
 }
 const SEARCH = 'Search'
+// The letter of each tab that stays: its first, all six different.
+const HOTKEYS: Readonly<Record<TabId, string>> = { overview: 'o', proposals: 'p', review: 'r', tasks: 't', facts: 'f', settings: 's' }
 
 export function shownOf(view: PaneView | null): Shown {
   if (view === null) {
@@ -54,27 +54,20 @@ export function tabKey(to: TabId, shown: Shown): string {
 }
 
 /**
- * The key of the tab the focus is asked for once a press turned the pane from `left` to `to`: the
- * tab that leads back to the view that was left. The same key pressed again returns there, and the
- * focus never stands on a button that writes. The seventh tab is gone once it is left: `Overview`
- * stands in for it, and on the overview itself the tab beside it.
+ * The key of the tab the focus is asked for once a press on the tab `to` turned the pane to its
+ * view: that tab itself, drawn as the one shown, so the focus is the one mark in the row and Enter
+ * reads the view again. The view before drew it under another key, unless it was that very view.
  */
-export function tabKeyAfterTurn(left: Shown, to: Shown): string {
-  if (left !== 'aside' && left !== to) {
-    return tabKey(left, to)
-  }
-  return tabKey(to === 'overview' ? 'proposals' : 'overview', to)
+export function focusKeyAfterTab(to: TabId): string {
+  return tabKey(to, to)
 }
 
 /**
- * The key of the button the focus is asked for once a press on the tab `to` turned the pane from
- * the view `left`. A topic left for the start view has a way back of its own there, the button
- * that bears its name, where `model` has the start view draw it; every other turn follows the
- * tabs' rule.
+ * The key of the tab the focus is asked for once a press in the view `from` opened a view beside
+ * the six (a topic's lines, a fact's file, a note): `from`'s tab, which leads back.
  */
-export function focusKeyAfterTab(left: PaneView | null, to: TabId, model: SessionModel): string {
-  const show = to === 'overview' && left?.kind === 'topic' ? topicShowKey(model, topicNameOf(left.press)) : null
-  return show ?? tabKeyAfterTurn(shownOf(left), to)
+export function backTabKey(from: TabId): string {
+  return tabKey(from, 'aside')
 }
 
 function asideLabel(view: PaneView | null): string | null {
@@ -109,27 +102,29 @@ export type BackTabs = { toFactFile: (from: string) => void; toTopic: (fact: str
  */
 export function paneTabs(view: PaneView | null, waiting: number, onTurn: (to: TabId) => void, back: BackTabs): Tab[] {
   const shown = shownOf(view)
-  const staying = TAB_IDS.map(id => ({
+  const staying: Tab[] = TAB_IDS.map(id => ({
     label: id === 'proposals' && waiting > 0 ? `${LABELS[id]} ${waiting}` : LABELS[id],
-    turn: id === shown ? null : { key: tabKey(id, shown), onPress: () => onTurn(id) },
+    turn: { key: tabKey(id, shown), onPress: () => onTurn(id) },
+    isShown: id === shown,
+    hotkey: HOTKEYS[id],
   }))
   const topic = view?.kind === 'fact' ? topicOfFactFile(view.press) : null
   if (view?.kind === 'fact' && topic !== null) {
     const fact = view.press
     return [
       ...staying,
-      { label: topicLabel(topicNameOf(topic.press)), turn: { key: BACK_TO_THE_TOPIC_KEY, onPress: () => back.toTopic(fact) } },
-      { label: factTabLabel(factFileNameOf(fact)), turn: null },
+      { label: topicLabel(topicNameOf(topic.press)), turn: { key: BACK_TO_THE_TOPIC_KEY, onPress: () => back.toTopic(fact) }, isShown: false, hotkey: null },
+      { label: factTabLabel(factFileNameOf(fact)), turn: null, isShown: true, hotkey: null },
     ]
   }
   if (view?.kind === 'source' && view.from !== null) {
     const from = view.from
     return [
       ...staying,
-      { label: factTabLabel(factFileNameOf(from)), turn: { key: BACK_TO_THE_FACT_FILE_KEY, onPress: () => back.toFactFile(from) } },
-      { label: sourceLabelOf(view.press), turn: null },
+      { label: factTabLabel(factFileNameOf(from)), turn: { key: BACK_TO_THE_FACT_FILE_KEY, onPress: () => back.toFactFile(from) }, isShown: false, hotkey: null },
+      { label: sourceLabelOf(view.press), turn: null, isShown: true, hotkey: null },
     ]
   }
   const aside = asideLabel(view)
-  return aside === null ? staying : [...staying, { label: aside, turn: null }]
+  return aside === null ? staying : [...staying, { label: aside, turn: null, isShown: true, hotkey: null }]
 }

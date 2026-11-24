@@ -1261,11 +1261,19 @@ export async function shownTabs(ui: Drawn): Promise<ShownTab[]> {
 
 /** Which tab the row marks as the one shown: one of the six by its place, or the seventh beside them. */
 export async function shownTab(ui: Drawn): Promise<Shown> {
-  const at = (await shownTabs(ui)).findIndex(tab => tab.key === null)
+  // One of the six is shown as a button in the accent, a tab beside them as text.
+  const at = elementsIn((await ui.find({ key: TABS }))?.children).findIndex(tab => tab.type === 'Text' || tab.props['variant'] === 'primary')
   if (at === -1) {
     throw new Error('the pane marks no tab as the one shown')
   }
   return TAB_IDS[at] ?? 'aside'
+}
+
+/** The label of the tab the row marks as the one shown. */
+export async function shownLabel(ui: Drawn): Promise<string | undefined> {
+  const shown = await shownTab(ui)
+  const row = await shownTabs(ui)
+  return shown === 'aside' ? row.find(tab => tab.key === null)?.label : row[TAB_IDS.indexOf(shown)]?.label
 }
 
 /** Presses the tab that turns the pane to `to`, under the key it has above the view drawn now. */

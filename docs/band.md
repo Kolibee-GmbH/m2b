@@ -544,7 +544,10 @@ click may not reach it: `open` in the band shows the pane with its buttons.
 
 One row of tabs stands above every view of the pane, always in this order: `Overview`, the view
 the pane starts in; `Proposals`, with the number that wait; `Review`; `Tasks`; `Facts`; `Settings`. The tab of the
-view you look at is marked and is no button, every other turns the pane to its view. A topic's
+view you look at is drawn in the accent, and a press on it reads that view again, the open tasks
+or the facts as they are now; every other turns the pane to its view. While the pane holds the
+keyboard, each of the six has its first letter as its key: `o`, `p`, `r`, `t`, `f`, `s`. A letter
+typed into a field of the pane is typed there and turns nothing. A topic's
 lines, a fact's file, a note a current item rests on, the hits of a search and the settings of
 `About this setup` stand under a seventh tab, which
 is there only while the pane shows them. A note or a document a fact rests on stands under an
@@ -644,16 +647,16 @@ pressed twice within half a second leads back once and closes nothing. Above the
 stays a dialog, and a later Escape closes the block.
 
 With the keyboard in the pane, the band asks Claude Code to put the focus where a second Enter
-writes nothing: after a press on a tab, on the tab that leads back to the view you left, so Enter
-pressed again returns there; after a press on a topic's button on `Overview`, and from there back
-on that topic's button; after a fact's row or a topic's button in the tab `Facts` on that tab; after
-an evidence entry's row on the tab of the fact's file, and from there back on that row; after a
-fact's row in a topic's lines on the topic's tab, and from there back on that row; after a current
-item's row or a note's button below it on the tab `Facts`, or for an item in a topic's lines on
-the tab the topic was opened from; after keep, drop, `ok`,
-a task's mark, `turn off here` or `curate now` on the row's `undo`. After `open the file` it stays on
-that button, which writes nothing. Once an answer is written its
-row is gone, and the focus stands on the row that moved up.
+writes nothing: after a press on a tab, on that tab, so the focus is the one mark in the row and
+Enter pressed again reads the view again, and the view you left is its tab or its letter away;
+after a press on a topic's button on `Overview` above its lines; after a fact's row or a topic's
+button in the tab `Facts` on that tab; after an evidence entry's row on the tab of the fact's
+file, and from there back on that row; after a fact's row in a topic's lines on the topic's tab,
+and from there back on that row; after a current item's row or a note's button below it on the
+tab `Facts`, or for an item in a topic's lines on the tab the topic was opened from; after keep,
+drop, `ok`, a task's mark, `turn off here` or `curate now` on the row's `undo`. After `open the
+file` it stays on that button, which writes nothing. Once an answer is written its row is gone,
+and the focus stands on the row that moved up.
 
 ## The whole review, and search, in a pane
 

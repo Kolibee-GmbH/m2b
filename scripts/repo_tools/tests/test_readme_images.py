@@ -287,12 +287,9 @@ class ShotsTest(unittest.TestCase):
         steps = readme_images.steps_for(fact)
 
         self.assertEqual((fact.name, fact.prompt), ("fact", "/m2b-pane"))
-        # Four Tabs to the tab Facts, Enter, five Tabs to the first fact's details, Enter, then the wait.
-        self.assertEqual(
-            [keys for _, keys in steps[-5:]],
-            [readme_images.TAB * 4, readme_images.ENTER, readme_images.TAB * 5, readme_images.ENTER, ""],
-        )
-        self.assertEqual(steps[-5][0], fact.answer_seconds)
+        # The letter of the tab Facts, two Tabs to the first fact's row, Enter, then the wait.
+        self.assertEqual([keys for _, keys in steps[-4:]], ["f", readme_images.TAB * 2, readme_images.ENTER, ""])
+        self.assertEqual(steps[-4][0], fact.answer_seconds)
         self.assertEqual(steps[-1][0], 5)
 
 

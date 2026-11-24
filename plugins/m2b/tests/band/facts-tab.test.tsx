@@ -18,7 +18,7 @@ import {
   parseFacts,
 } from '../../hooks/facts-tab'
 import type { FactFileLook, FactsLook } from '../../hooks/facts-tab'
-import { tabKeyAfterTurn } from '../../hooks/pane-tabs'
+import { backTabKey } from '../../hooks/pane-tabs'
 import { FakeM2b, everyText, inView, lookOf, pane, piecesAt, pressTab, shownParts, shownTab, shownTabs, start, texts, viewButtons } from './harness'
 import type { ShownPiece } from './harness'
 
@@ -347,7 +347,7 @@ test("a press on a topic opens its lines as a press on the overview does, under 
   expect(await shownTab(ui)).toBe('aside')
   expect((await shownTabs(ui)).at(-1)).toEqual({ label: 'Acme Ltd', key: null })
   // The focus is asked for the tab Facts above the lines, which the view of the facts did not draw.
-  const back = tabKeyAfterTurn('facts', 'aside')
+  const back = backTabKey('facts')
   expect(back).toBe('tab:facts:in:aside')
   expect((await shownTabs(ui)).map(tab => tab.key)).toContain(back)
   expect(before).not.toContain(back)
@@ -497,7 +497,7 @@ test('the seventh tab bears the file name without .md, cut to 20 characters, and
     { label: 'dana', key: null },
   ])
   // The focus is asked for the tab Facts, which the view of the facts did not draw.
-  expect(before).not.toContain(tabKeyAfterTurn('facts', 'aside'))
+  expect(before).not.toContain(backTabKey('facts'))
 
   expect(factTabLabel('dana.md')).toBe('dana')
   expect(factTabLabel('northwind-trading-co.md')).toBe('northwind-trading-co')

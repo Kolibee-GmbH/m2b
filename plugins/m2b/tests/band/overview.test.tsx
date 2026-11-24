@@ -15,6 +15,7 @@ import {
   STATUS,
   buttonsAt,
   everyText,
+  inView,
   linesAt,
   lookOf,
   pane,
@@ -310,8 +311,8 @@ test('keep and ok are the one accent button of their row; drop and the button th
   expect(await buttonsAt(ui, 'review:r1')).toEqual([accent('ok:r1')])
   expect(await buttonsAt(ui, 'row:folder')).toEqual([{ key: 'folder:off', label: 'turn off here', variant: undefined, dimColor: true }])
   expect(await buttonsAt(ui, 'row:topic:0')).toEqual([{ key: 'topic:0', label: 'Northwind', variant: undefined, dimColor: false }])
-  // No part holds more than one accent button in a row, and the view none outside the rows that are answered.
-  const accents = (await ui.findAll({ type: 'Button' })).filter(button => button.props['variant'] === 'primary').map(button => button.key)
+  // No part holds more than one accent button in a row, and the view none outside the rows that are answered; above it the tab shown is the row's.
+  const accents = (await inView(ui, 'Button')).filter(button => button.props['variant'] === 'primary').map(button => button.key)
   expect(accents).toEqual(['keep:c1', 'keep:q1', 'ok:r1'])
 
   await ui.press({ key: 'keep:c1' })

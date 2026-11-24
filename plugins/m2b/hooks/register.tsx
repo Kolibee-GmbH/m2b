@@ -45,7 +45,7 @@ import {
   showPane,
 } from './pane'
 import { CLOSED_BY_HAND, closeAnswer, docksFor, staysBesideChat } from './pane-seat'
-import { BACK_TO_THE_FACT_FILE_KEY, BACK_TO_THE_TOPIC_KEY, focusKeyAfterTab, paneTabs, tabKeyAfterTurn } from './pane-tabs'
+import { BACK_TO_THE_FACT_FILE_KEY, BACK_TO_THE_TOPIC_KEY, backTabKey, focusKeyAfterTab, paneTabs } from './pane-tabs'
 import type { TabId } from './pane-tabs'
 import { plainLine, wholePath } from './plain-text'
 import {
@@ -654,13 +654,14 @@ async function sessionModel($: EngineInterface): Promise<SessionModel> {
 }
 
 /**
- * A press on a tab: the pane turns to that tab's view, and the focus goes to the tab that leads
- * back to the view that is left, which that view did not draw. Left at its place in the row of
- * buttons, the focus could stand on a button of the new view that writes. Escape leads to the
- * start view without it: it hands the keyboard back to the prompt.
+ * A press on a tab, by Enter, a click or its letter: the pane turns to that tab's view, or reads it
+ * again where it is the one shown, and the focus goes to that tab, drawn as the one shown, so the
+ * focus is the one mark in the row. Left at its place in the row of buttons, the focus could stand
+ * on a button of the new view that writes. Escape leads to the start view without it: it hands the
+ * keyboard back to the prompt.
  */
 async function turnByTab($: EngineInterface, to: TabId): Promise<void> {
-  const focusKey = await focusKeyAfterPress($, to)
+  const focusKey = focusKeyAfterTab(to)
   if (to === 'overview') {
     await backToStart($)
     await focusInPane($, focusKey)
@@ -682,16 +683,6 @@ async function turnByTab($: EngineInterface, to: TabId): Promise<void> {
   const focusMoved = focusInPane($, focusKey)
   $.clock.after(0, inBackground($, () => refresh($, true)))
   await focusMoved
-}
-
-/** Where the focus goes after a press on the tab `to`, null where what the pane shows cannot be read. */
-async function focusKeyAfterPress($: EngineInterface, to: TabId): Promise<string | null> {
-  try {
-    return focusKeyAfterTab(await read($, paneViewAtom), to, await sessionModel($))
-  } catch {
-    // The pane turns all the same.
-    return null
-  }
 }
 
 /**
@@ -734,7 +725,7 @@ async function showTopic($: EngineInterface, name: string, from: TabId = 'overvi
   beginTopic(press, name, from)
   await asDialog($, { kind: 'topic', press, isRead: false })
   // The read does not wait for the focus.
-  const focusMoved = focusInPane($, tabKeyAfterTurn(from, 'aside'))
+  const focusMoved = focusInPane($, backTabKey(from))
   if (fillTopic(press, await readTopic($, name))) {
     // The lines are the module's; this write is what draws the pane again.
     await update($, paneViewAtom, view => (view !== null && view.kind === 'topic' && view.press === press ? { ...view, isRead: true } : view))
@@ -856,7 +847,7 @@ async function showFactFile($: EngineInterface, file: string, topic: FromTopic |
   const opening = await newPressToken($)
   beginFactFile(opening, file, topic)
   await asDialog($, { kind: 'fact', press: opening, drawn: 0 })
-  const focusMoved = focusInPane($, topic === null ? tabKeyAfterTurn('facts', 'aside') : BACK_TO_THE_TOPIC_KEY)
+  const focusMoved = focusInPane($, topic === null ? backTabKey('facts') : BACK_TO_THE_TOPIC_KEY)
   if (fillFactFile(opening, await readFactFile($, file))) {
     await redrawn($, 'fact', opening)
   }
@@ -888,7 +879,7 @@ async function showNote($: EngineInterface, note: string, back: TabId): Promise<
   const opening = await newPressToken($)
   beginNote(opening)
   await asDialog($, { kind: 'source', press: opening, from: null, drawn: 0 })
-  const focusMoved = focusInPane($, tabKeyAfterTurn(back, 'aside'))
+  const focusMoved = focusInPane($, backTabKey(back))
   if (fillSource(opening, await readSource($, note))) {
     await redrawn($, 'source', opening)
   }
@@ -903,7 +894,7 @@ async function backToFactFile($: EngineInterface, from: string): Promise<void> {
   const view = await read($, paneViewAtom)
   const index = view?.kind === 'source' ? evidenceIndexOf(view.press) : null
   await asDialog($, { kind: 'fact', press: from, drawn: 0 })
-  await focusInPane($, index === null ? tabKeyAfterTurn('facts', 'aside') : showKey(index))
+  await focusInPane($, index === null ? backTabKey('facts') : showKey(index))
 }
 
 /**
@@ -1113,7 +1104,7 @@ function settingsActions($: EngineInterface, press: string): SettingsActions {
       undoChange(press)
       await turnSettings($, press, view => ({ ...view, aside: { name, title }, drawn: view.drawn + 1 }))
       // The group stands under a tab of its own, which holds no button: the focus goes to the tab that leads back.
-      await focusInPane($, tabKeyAfterTurn('settings', 'aside'))
+      await focusInPane($, backTabKey('settings'))
     },
     choose: async (at, place, surface) => {
       const token = await newPressToken($)

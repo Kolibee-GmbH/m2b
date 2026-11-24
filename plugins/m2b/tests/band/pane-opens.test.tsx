@@ -299,15 +299,16 @@ for (const [command, shows] of [
   })
 }
 
-test('the view the pane starts in has no way back to itself: Overview is the tab shown, and no button', async ($, on) => {
+test('the view the pane starts in has no way back to itself but its tab: Overview is the tab shown, which reads it again', async ($, on) => {
   // Covers: B187, B204
   await start($, on, searchedFake())
   await typed($, 'm2b-pane')
   const ui = await $.ui.mount({ ...pane(PANE), surface: 'terminal' })
 
-  expect((await shownTabs(ui))[0]).toEqual({ label: 'Overview', key: null })
+  expect((await shownTabs(ui))[0]).toEqual({ label: 'Overview', key: 'tab:overview:in:overview' })
+  expect(await shownTab(ui)).toBe('overview')
   const keys = (await ui.findAll({ type: 'Button' })).map(button => String(button.key))
-  expect(keys.filter(key => key.startsWith('tab:overview'))).toEqual([])
+  expect(keys.filter(key => key.startsWith('tab:overview'))).toEqual(['tab:overview:in:overview'])
   await ui.unmount()
 })
 
