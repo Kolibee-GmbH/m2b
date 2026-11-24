@@ -85,6 +85,7 @@ def ingest_list(arguments: argparse.Namespace, context: Context) -> int:
                         "quiet": capture.quiet,
                         "follow_up": capture.follow_up,
                         "about": capture.about,
+                        "placed": capture.placed,
                         "members": list(capture.members),
                     }
                     for capture in report.captures

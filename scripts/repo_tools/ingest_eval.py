@@ -1,10 +1,14 @@
 """Measures how well a model files an inbox: what lands in memory and the task list, and where.
 
 ``tests/ingest/`` is an invented store (``given/``) and an invented inbox (``inbox.json``):
-twenty-eight captures of one day, in English and German, and for each what it should leave behind.
+thirty-one captures of one day, in English and German, and for each what it should leave behind.
 Eight are corrections typed at a fact file, as ``m2b capture --about`` writes them: a mistake set
 right, a value that changed, a detail added and a text typed at the wrong fact, in each language.
-Together they are twenty-eight things: facts about the owner and people, facts that belong under
+Three are edits, a fact file rewritten whole as ``m2b store edit --keep`` writes it: one changes a
+value, one removes a line, and one was made from a fact file that changed since, so the run must
+not put it in place. An edit's fact is right only where its fact file holds the owner's text and
+the capture's link alone, or, for the one not put in place, stays as it was.
+Together they are thirty-one things: facts about the owner and people, facts that belong under
 a topic, things going on, tasks with a day and without. One capture holds nothing to file.
 
 For each model the tool puts the store and the inbox into a sandbox of their own and starts a
@@ -27,7 +31,7 @@ nothing is named too; a current item names no capture, so one made of that captu
 like any other.
 
 The turn limit of a model step is raised for these runs: the default fits a day's inbox, and
-twenty-eight captures at once take more calls than that.
+thirty-one captures at once take more calls than that.
 
 Every run asks the real model on your own Claude login, several minutes each, so this is not part
 of ``scripts/check``: run it with ``scripts/ingest-eval``.
@@ -53,6 +57,7 @@ from pathlib import Path
 from typing import Any
 
 from m2b.config.machine import CURATION_MODELS, StoreLocation
+from m2b.fact_edit import content_hash
 from m2b.notes import frontmatter as keys
 from m2b.notes import layout
 from m2b.notes.frontmatter import Note
@@ -85,7 +90,7 @@ DEFAULT_JOBS = 3
 # The share of the expectations a model has to get right, found and with every detail, before it
 # is good enough to file an inbox. Chosen, not derived; the same bar as for proposals.
 BAR = 0.8
-# A day's inbox fits the default of a hundred turns; twenty-eight captures at once do not.
+# A day's inbox fits the default of a hundred turns; thirty-one captures at once do not.
 MAX_TURNS = 400
 MODEL_TIMEOUT_MINUTES = 20
 # Longer than the run's own budget for its model steps, so the product's supervisor ends a slow
@@ -103,6 +108,9 @@ EXIT_PASSED = 0
 EXIT_FAILED = 1
 EXIT_USAGE = 2
 EXIT_REFUSED = 2
+
+# The base of an edit made from a fact file that a run changed since.
+STALE = "stale"
 
 _LINK = re.compile(r"\[\[([^\[\]]+)\]\]")
 # A fact file's section of earlier values, up to its next section.
@@ -138,9 +146,21 @@ class Expectation:
     # which must not hold it, and what a facts line of that file must still say.
     not_in: str | None = None
     keeps: re.Pattern[str] | None = None
+    # For a fact an edit of a fact file brings: the fact file, which must hold the edit's text and
+    # nothing else but the capture's link; or, for an edit whose base is stale, the fact file that
+    # must hold no line of the edit it did not hold before, nor link the capture. Other captures of
+    # the same run may still change that file.
+    edited: str | None = None
+    edit_text: str | None = None
+    refused_edit: str | None = None
 
     def __str__(self) -> str:
         return f"{self.what} ({self.kind} from {self.capture})"
+
+    @property
+    def of_an_edit(self) -> bool:
+        """An edit rewrites a fact that stands already, so its words may stand before the run."""
+        return self.edited is not None or self.refused_edit is not None
 
 
 @dataclass(frozen=True)
@@ -150,6 +170,10 @@ class Capture:
     follow_up: str | None
     expected: tuple[Expectation, ...]
     about: str | None = None
+    # ``edit`` for a fact file rewritten whole, as ``m2b store edit --keep`` writes it; with
+    # ``stale``, its base is not the hash of the fact file, so a run must not put it in place.
+    kind: str | None = None
+    stale: bool = False
 
     @property
     def file(self) -> str:
@@ -259,11 +283,20 @@ def _capture(entry: Mapping[str, Any]) -> Capture:
     if name is None:
         raise FixtureError(f"{entry['file']!r} is no name of a capture")
     about = entry.get("about")
-    expected = tuple(_expectation(entry["file"], item, about) for item in entry.get("expected", ()))
-    return Capture(name, entry["text"], entry.get("follow_up"), expected, about)
+    kind = entry.get("kind")
+    stale = entry.get("base") == STALE
+    if kind not in (None, keys.KIND_EDIT) or (kind is not None and about is None):
+        raise FixtureError(f"{entry['file']}: only an edit has a kind, and an edit names its fact file in `about`")
+    if "base" in entry and (kind is None or not stale):
+        raise FixtureError(f"{entry['file']}: only an edit names its base, and only as {STALE!r}")
+    edit = None if kind is None else (about, stale, entry["text"] + "\n")
+    expected = tuple(_expectation(entry["file"], item, about, edit) for item in entry.get("expected", ()))
+    return Capture(name, entry["text"], entry.get("follow_up"), expected, about, kind, stale)
 
 
-def _expectation(file: str, raw: Mapping[str, Any], about: str | None = None) -> Expectation:
+def _expectation(
+    file: str, raw: Mapping[str, Any], about: str | None = None, edit: tuple[str | None, bool, str] | None = None
+) -> Expectation:
     kind = raw["kind"]
     if kind not in KINDS:
         raise FixtureError(f"{file}: {raw['what']!r} is of the kind {kind!r}; known: {', '.join(KINDS)}")
@@ -279,7 +312,10 @@ def _expectation(file: str, raw: Mapping[str, Any], about: str | None = None) ->
         raise FixtureError(f"{file}: {raw['what']!r}: only a capture with `about` can be filed apart from it")
     if "keeps" in raw and not raw.get("not_in_about"):
         raise FixtureError(f"{file}: {raw['what']!r}: only a fact filed apart from `about` names what that file keeps")
+    if edit is not None and (kind != FACT or raw.get("not_in_about") or raw.get("earlier_as_before")):
+        raise FixtureError(f"{file}: {raw['what']!r}: an edit brings facts of its own fact file alone")
     topic, due, no_longer, earlier = raw.get("topic"), raw.get("due"), raw.get("no_longer"), raw.get("earlier")
+    edited, stale, edit_text = edit if edit is not None else (None, False, None)
     return Expectation(
         capture=file,
         what=raw["what"],
@@ -293,6 +329,9 @@ def _expectation(file: str, raw: Mapping[str, Any], about: str | None = None) ->
         earlier_as_before=bool(raw.get("earlier_as_before")),
         not_in=about if raw.get("not_in_about") else None,
         keeps=_pattern(raw["keeps"]) if "keeps" in raw else None,
+        edited=edited if not stale else None,
+        edit_text=edit_text,
+        refused_edit=edited if stale else None,
     )
 
 
@@ -314,6 +353,10 @@ def write_store(given: Path, inbox: Inbox, store: Path) -> None:
             note.frontmatter.set(keys.FOLLOW_UP, capture.follow_up)
         if capture.about is not None:
             note.frontmatter.set(keys.ABOUT, capture.about)
+        if capture.kind is not None and capture.about is not None:
+            note.frontmatter.set(keys.KIND, capture.kind)
+            fact_file = (given / layout.MEMORY / capture.about).read_bytes()
+            note.frontmatter.set(keys.BASE, content_hash(STALE.encode("ascii") if capture.stale else fact_file))
         (folder / capture.file).write_text(note.render(), encoding="utf-8")
 
 
@@ -376,6 +419,12 @@ def score(inbox: Inbox, before: Filed, after: Filed) -> Score:
     )
 
 
+def held_before(inbox: Inbox, before: Filed) -> int:
+    """How many expectations the store holds before the run, edits aside."""
+    missed = {miss.expectation for miss in score(inbox, before, before).missed}
+    return sum(1 for expectation in inbox.expectations if not expectation.of_an_edit and expectation not in missed)
+
+
 def _candidates(
     expectation: Expectation, capture: Capture, before: Filed, after: Filed
 ) -> list[tuple[object, list[str]]]:
@@ -407,8 +456,18 @@ def _stating_fact_file(expectation: Expectation, after: Filed) -> str | None:
 
 def _fact_problems(expectation: Expectation, line: FactLine, before: Filed, after: Filed) -> list[str]:
     problems = _place_problems(expectation, line.topic)
-    if expectation.capture not in after.links.get(line.file_name, frozenset()):
+    refused = expectation.refused_edit
+    if refused is not None:
+        if _took_the_edit(refused, expectation, before, after):
+            problems.append(f"{refused} took the edit, though its base is stale and it was not to be put in place")
+    elif expectation.capture not in after.links.get(line.file_name, frozenset()):
         problems.append(f"{line.file_name} does not link the capture")
+    edited = expectation.edited
+    if (
+        edited is not None
+        and _without_link(after.fact_files.get(edited, ""), expectation.capture) != expectation.edit_text
+    ):
+        problems.append(f"{edited} is not the owner's edit with the capture's link")
     old = expectation.no_longer
     if old is not None and any(old.search(other.statement) for other in after.facts):
         problems.append(f"a facts line still says {old.pattern!r}")
@@ -427,6 +486,20 @@ def _fact_problems(expectation: Expectation, line: FactLine, before: Filed, afte
         if not any(kept_there.search(statement) for statement in lines_there):
             problems.append(f"no facts line of {typed_at} says {kept_there.pattern!r} any more")
     return problems
+
+
+def _took_the_edit(fact_file: str, expectation: Expectation, before: Filed, after: Filed) -> bool:
+    """Whether the fact file links the edit or holds a line of it that it did not hold before."""
+    if expectation.capture in after.links.get(fact_file, frozenset()):
+        return True
+    had = set(before.fact_files.get(fact_file, "").splitlines())
+    has = set(after.fact_files.get(fact_file, "").splitlines())
+    return any(line in has and line not in had for line in (expectation.edit_text or "").splitlines() if line.strip())
+
+
+def _without_link(text: str, capture: str) -> str:
+    """The fact file without the evidence line that links the capture."""
+    return "".join(line for line in text.splitlines(keepends=True) if line.strip() != f"- [[{capture}]]")
 
 
 def _current_problems(expectation: Expectation, item: CurrentLine, day: str) -> list[str]:
@@ -525,9 +598,9 @@ class Runner:
         write_store(self.given, self.inbox, store)
         temp_dir = sandbox / "tmp"
         before = read_filed(store, temp_dir)
-        held = score(self.inbox, before, before)
-        if held.found:
-            raise FixtureError(f"the store before the run already holds {held.found} of what the inbox should bring")
+        held = held_before(self.inbox, before)
+        if held:
+            raise FixtureError(f"the store before the run already holds {held} of what the inbox should bring")
 
         config = isolated_machine_config(store, MODEL)
         config["curation"] = {"model": model, "model_timeout_minutes": MODEL_TIMEOUT_MINUTES, "max_turns": MAX_TURNS}

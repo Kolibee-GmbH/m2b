@@ -1,5 +1,5 @@
 {
-  "description": "An invented inbox for scripts/ingest-eval: twenty-eight captures of one day, 9 November 2026, in English and German, and what each should leave behind. `words` are regular expressions, ignoring case, that the facts line, the current item or the task title must hold, because a model words its lines its own way. For a fact or a current item, `topic` is null when it belongs above the first topic, a regular expression for the topic's name when it belongs under one, and missing where the filing rules leave room. `no_longer` is a value that must not stand in the facts list any more, and `earlier` what the fact file keeps of it under `## Earlier`. A task says its `due` day, or null for none. One capture writes its day out with its year, one names a weekday and one a day without its year; those two count from the day of the capture, so the expected day is the same on whatever day the eval runs, and the weekday's lies before any such day: a model that counts from the day of the run cannot land on it. `about` names the fact file a capture corrects, as `m2b capture --about` writes it; eight captures are such corrections, a mistake set right, a value that changed, a detail added and a text typed at the wrong fact, each in English and German. `earlier_as_before` says that a fact file keeps under `## Earlier` what it kept before, as for a mistake set right or a detail added; `not_in_about` that the fact must not be filed into the file `about` names, and `keeps` what a facts line of that file must still say. A capture without `expected` holds nothing to file. `topics` names the topics a filing may start; the store before has the others.",
+  "description": "An invented inbox for scripts/ingest-eval: thirty-one captures of one day, 9 November 2026, in English and German, and what each should leave behind. `words` are regular expressions, ignoring case, that the facts line, the current item or the task title must hold, because a model words its lines its own way. For a fact or a current item, `topic` is null when it belongs above the first topic, a regular expression for the topic's name when it belongs under one, and missing where the filing rules leave room. `no_longer` is a value that must not stand in the facts list any more, and `earlier` what the fact file keeps of it under `## Earlier`. A task says its `due` day, or null for none. One capture writes its day out with its year, one names a weekday and one a day without its year; those two count from the day of the capture, so the expected day is the same on whatever day the eval runs, and the weekday's lies before any such day: a model that counts from the day of the run cannot land on it. `about` names the fact file a capture corrects, as `m2b capture --about` writes it; eight captures are such corrections, a mistake set right, a value that changed, a detail added and a text typed at the wrong fact, each in English and German. `earlier_as_before` says that a fact file keeps under `## Earlier` what it kept before, as for a mistake set right or a detail added; `not_in_about` that the fact must not be filed into the file `about` names, and `keeps` what a facts line of that file must still say. `kind: edit` marks a fact file rewritten whole, its text the whole file, as `m2b store edit --keep` writes it with the hash of the fact file as `base`; three captures are such edits, one that changes a value, one that removes a line, and one whose `base` is `stale`, made from a fact file that changed since, which the run must not put in place. A capture without `expected` holds nothing to file. `topics` names the topics a filing may start; the store before has the others.",
   "topics": ["Globex"],
   "captures": [
     {
@@ -203,6 +203,34 @@
       "text": "Die Bibliothek in Thun hat neu auch am Samstag offen.",
       "expected": [
         {"what": "the library's Saturday hours, typed at the wrong fact", "kind": "fact", "words": ["librar|Bibliothek", "Saturday|Samstag"], "not_in_about": true, "keeps": "March 2029"}
+      ]
+    },
+    {
+      "file": "20261109T101600Z-cli-1a1d.md",
+      "kind": "edit",
+      "about": "kayak.md",
+      "text": "# Kayak\n\n- Alex keeps a yellow kayak at the boathouse in Hilterfingen.\n\n## Evidence\n\n- [[20261001T080000Z-cli-0a1b.md]]",
+      "expected": [
+        {"what": "the kayak moved, an edit that changes a value", "kind": "fact", "words": ["kayak", "Hilterfingen"], "topic": null, "no_longer": "Oberhofen"}
+      ]
+    },
+    {
+      "file": "20261109T102300Z-mac-1a1e.md",
+      "kind": "edit",
+      "about": "piano.md",
+      "text": "# Piano lessons\n\n- Alex takes piano lessons with Nora Brand.\n\n## Evidence\n\n- [[20261001T080000Z-cli-0a1b.md]]",
+      "expected": [
+        {"what": "the lesson day is gone, an edit that removes a line", "kind": "fact", "words": ["piano", "Nora"], "topic": null, "no_longer": "Wednesday"}
+      ]
+    },
+    {
+      "file": "20261109T103000Z-cli-1a1f.md",
+      "kind": "edit",
+      "about": "alex.md",
+      "base": "stale",
+      "text": "# Alex\n\n- Prefers black coffee in the morning.\n\n## Evidence\n\n- [[20261001T080000Z-cli-0a1b.md]]",
+      "expected": [
+        {"what": "green tea stays, an edit made from a fact file that changed since", "kind": "fact", "words": ["green tea"], "topic": null, "no_longer": "black coffee"}
       ]
     }
   ]

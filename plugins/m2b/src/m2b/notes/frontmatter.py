@@ -26,6 +26,8 @@ FROM_PROPOSAL = "from_proposal"
 ABOUT = "about"
 # The hash of the fact file an edit was made from: written by `m2b store edit --keep`.
 BASE = "base"
+# On a capture of kind edit: the run's harvest step put its text in place as the fact file.
+PLACED = "placed"
 KIND = "kind"
 FACTS_FILED = "facts_filed"
 CURATED = "curated"

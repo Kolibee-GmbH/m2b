@@ -98,6 +98,8 @@ class Pending:
     follow_up: str | None = None
     members: tuple[str, ...] = ()
     about: str | None = None
+    # An edit the run's harvest step put in place (``kept_edits``); offered to ingest only then.
+    placed: bool = False
 
 
 @dataclass
@@ -154,6 +156,11 @@ def _pending_problem(
     # the file would get a second, empty note when it arrives.
     if capture.kind == keys.KIND_SIDECAR and not capture.members:
         return f"{relative} stands for a file that is not in {INBOX}/ yet; it is filed once the file has synced here"
+    # An edit not put in place is no capture to file yet: its text is a whole fact file, which only
+    # the harvest step puts in place, after its checks. Harvest names in the review why it waits.
+    if capture.kind == keys.KIND_EDIT and not capture.placed:
+        report.stuck.append(relative)
+        return None
     report.captures.append(capture)
     return None
 
@@ -171,9 +178,8 @@ def _pending_capture(store: Store, relative: str, others: list[str]) -> Pending:
         quiet=frontmatter.get_flag(keys.QUIET),
         follow_up=frontmatter.get(keys.FOLLOW_UP),
         members=tuple(others) if kind == keys.KIND_SIDECAR else (),
-        # An edit names its fact file too, but it is no correction: the run puts it in place in a step
-        # of its own, only while the fact file is as the edit found it.
-        about=None if kind == keys.KIND_EDIT else frontmatter.get(keys.ABOUT),
+        about=frontmatter.get(keys.ABOUT),
+        placed=kind == keys.KIND_EDIT and frontmatter.get_flag(keys.PLACED),
     )
 
 

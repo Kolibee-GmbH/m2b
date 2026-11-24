@@ -1159,14 +1159,17 @@ class IngestCommandTest(test_commands.CommandTest):
 
         self.assertEqual(listed["about"], "dana.md")
 
-    def test_list_names_no_about_for_a_kept_edit_which_is_no_correction(self) -> None:
-        """Covers: B307"""
+    def test_list_offers_a_kept_edit_only_once_the_run_put_it_in_place(self) -> None:
+        """Covers: B311"""
         edit = CAPTURED.replace("source: cli\n", "source: cli\nkind: edit\nabout: dana.md\nbase: 0a1b\n")
         self.write(f"inbox/{CAPTURE}", edit)
 
+        self.assertEqual(self.run_json("ingest", "list")["captures"], [])
+
+        self.write(f"inbox/{CAPTURE}", edit.replace("base: 0a1b\n", "base: 0a1b\nplaced: true\n"))
         (listed,) = self.run_json("ingest", "list")["captures"]
 
-        self.assertEqual((listed["kind"], listed["about"]), ("edit", None))
+        self.assertEqual((listed["kind"], listed["about"], listed["placed"]), ("edit", "dana.md", True))
 
     def test_list_names_the_owner_so_first_person_facts_join_their_file(self) -> None:
         self.write(f"inbox/{CAPTURE}", CAPTURED)
@@ -1195,6 +1198,7 @@ class IngestCommandTest(test_commands.CommandTest):
                     "quiet": False,
                     "follow_up": None,
                     "about": None,
+                    "placed": False,
                     "members": [],
                 }
             ],

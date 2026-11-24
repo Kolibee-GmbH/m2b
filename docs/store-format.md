@@ -71,6 +71,7 @@ The frontmatter is a block between `---` lines, one `key: value` per line, lists
 | `from_proposal` | harvest | the proposal a capture came from, by its id |
 | `about` | `m2b capture --about`, `m2b store edit --keep` | the fact file of `memory/` the capture corrects or rewrites, by its name alone (`dana.md`) |
 | `base` | `m2b store edit --keep` | the SHA-256 of the fact file as it was when its editing copy was made; with `kind: edit` |
+| `placed: true` | harvest | on an edit: the run put its text in place as the fact file; ingest files it only then |
 | `facts_filed: true`, `curated: true` | the curator | how far ingest got; a client never writes these |
 
 **The captured text is never rewritten.** The curator appends its notes after a last line

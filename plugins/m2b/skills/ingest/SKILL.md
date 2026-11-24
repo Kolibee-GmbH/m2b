@@ -129,6 +129,14 @@ like any other. Then, in this order:
    `<store>/memory/<name>.md` first, and if it exists for someone or something else, take
    `<name>-2.md`, then `-3`.
 
+   A capture with `kind: edit` is the owner's own version of the fact file `about` names, which
+   this run has put in place already: `list` offers one only then, with `placed: true`, and
+   `<store>/memory/<about>` holds its text now. File no facts from its text, and the correction
+   paragraph below does not apply to it. Read that fact file, add the capture's link under its
+   `## Evidence` (add the heading at the end where it has none), and change no other line of it.
+   In step 3, rewrite that file's facts line in `MEMORY.md` so it says in one line what the file
+   says now, where it stands; a file without a facts line gets one. Then go on with tasks.
+
    A capture that `list` names with `about` corrects that fact file: the owner typed it where the
    fact is read. Read `<store>/memory/<about>` first. When the text speaks of a line there (the
    same matter, with another value or set right), that file and that line are the ones step 2

@@ -44,6 +44,9 @@ GYM = "20261109T094800Z-cli-1a19.md"
 DOCTOR = "20261109T095500Z-claude-1a1a.md"
 PASSPORT_DRAWER = "20261109T100200Z-phone-1a1b.md"
 LIBRARY = "20261109T100900Z-cli-1a1c.md"
+KAYAK = "20261109T101600Z-cli-1a1d.md"
+PIANO = "20261109T102300Z-mac-1a1e.md"
+STALE_TEA = "20261109T103000Z-cli-1a1f.md"
 GIVEN_NOTE = "20261001T080000Z-cli-0a1b.md"
 
 # The distillate after a filing with nothing to object to, written by hand.
@@ -68,6 +71,8 @@ MEMORY = """\
 - Sam Weber, a neighbour, is allergic to nuts (sam-weber.md)
 - Robin, Alex's brother, has his birthday on 12 May (robin.md)
 - Robin lives at Mill Lane 4 in Thun (robin.md)
+- Alex keeps a yellow kayak at the boathouse in Hilterfingen (kayak.md)
+- Alex takes piano lessons with Nora Brand (piano.md)
 
 ### Acme Ltd (Acme Ltd, Acme, Kim Lee, Jo Marti)
 - Kim Lee leads Acme's IT and wants a status mail every Monday (kim-lee.md)
@@ -112,6 +117,16 @@ LINKS = {
     "mira-keller.md": (MIRA_KELLER,),
     "globex.md": (GLOBEX_TERM,),
 }
+# The fact files two edits rewrote, as the owner wrote them, with the link a filing adds.
+EDITED = {
+    "kayak.md": "# Kayak\n\n- Alex keeps a yellow kayak at the boathouse in Hilterfingen.\n\n## Evidence\n\n"
+    f"- [[{GIVEN_NOTE}]]\n- [[{KAYAK}]]\n",
+    "piano.md": f"# Piano lessons\n\n- Alex takes piano lessons with Nora Brand.\n\n## Evidence\n\n- [[{GIVEN_NOTE}]]\n"
+    f"- [[{PIANO}]]\n",
+}
+# Everything the inbox should bring; the edit made from a fact file that changed since brings
+# nothing, and counts as right where it was not put in place.
+EXPECTED = 31
 # What a fact file keeps under its heading of earlier values.
 EARLIER = {
     "dana.md": "- Lived in Zurich (until 2026-11-09)\n",
@@ -195,7 +210,7 @@ class Sandbox(unittest.TestCase):
         kept = EARLIER if earlier is None else earlier
         for name, notes in (LINKS if links is None else links).items():
             (store / "memory" / name).write_text(fact_file(notes, kept.get(name, "")), encoding="utf-8")
-        for name, text in (fact_texts or {}).items():
+        for name, text in {**EDITED, **(fact_texts or {})}.items():
             (store / "memory" / name).write_text(text, encoding="utf-8")
         (store / "tasks").mkdir()
         texts = [task_file(f"m2b:capture {capture} {key}", title, due) for capture, key, title, due in tasks]
@@ -218,10 +233,11 @@ class Sandbox(unittest.TestCase):
 
 
 class InventedInboxTest(Sandbox):
-    def test_twenty_eight_captures_should_leave_twenty_eight_things_and_one_capture_nothing(self) -> None:
-        self.assertEqual(len(self.inbox.captures), 28)
+    def test_thirty_one_captures_should_leave_thirty_one_things_and_one_capture_nothing(self) -> None:
+        self.assertEqual(len(self.inbox.captures), 31)
         kinds = Counter(expectation.kind for expectation in self.inbox.expectations)
-        self.assertEqual(kinds, {"fact": 19, "task": 7, "current": 2})
+        self.assertEqual(kinds, {"fact": 22, "task": 7, "current": 2})
+        self.assertEqual(len(self.inbox.expectations), EXPECTED)
         self.assertEqual([capture.file for capture in self.inbox.captures if not capture.expected], [NOTHING])
 
     def test_four_tasks_name_a_day_and_three_none(self) -> None:
@@ -253,15 +269,19 @@ class InventedInboxTest(Sandbox):
             "---\ncreated: 2026-11-09T09:45:00+01:00\nsource: phone\nfollow_up: 2026-11-18\n---\n"
             "Ask Robin whether he comes for Christmas.\n",
         )
-        self.assertEqual(len(list((store / "inbox").iterdir())), 28)
+        self.assertEqual(len(list((store / "inbox").iterdir())), 31)
 
     def test_the_store_before_the_run_holds_nothing_the_inbox_should_bring(self) -> None:
         before = self.read(self.store_before())
 
         result = ingest_eval.score(self.inbox, before, before)
 
-        self.assertEqual((result.found, result.extra, result.without_source), (0, (), ()))
-        self.assertEqual(len(result.waiting), 28)
+        self.assertEqual(ingest_eval.held_before(self.inbox, before), 0)
+        self.assertEqual((result.extra, result.without_source), ((), ()))
+        self.assertEqual(len(result.waiting), 31)
+        # An edit rewrites a line that stands: the one made from a fact file that changed since is
+        # right as the store stands, the one that removes a line is found and not right yet.
+        self.assertEqual((result.found, result.right), (2, 1))
 
 
 class BrokenInboxTest(Sandbox):
@@ -352,12 +372,12 @@ class ScoreTest(Sandbox):
     def test_a_filing_with_everything_in_its_place_is_all_found_and_all_right(self) -> None:
         result = self.score()
 
-        self.assertEqual((result.expected, result.found, result.right), (28, 28, 28))
+        self.assertEqual((result.expected, result.found, result.right), (EXPECTED, EXPECTED, EXPECTED))
         self.assertEqual((result.extra, result.without_source, result.from_nothing), ((), (), ()))
         self.assertTrue(result.nothing_left_behind)
 
     def test_each_line_that_is_missing_is_one_expectation_missed(self) -> None:
-        self.assertEqual(len(NEW_LINES), 21)
+        self.assertEqual(len(NEW_LINES), 23)
         for line in NEW_LINES:
             with self.subTest(line=line):
                 result = self.score(memory=MEMORY.replace(line + "\n", ""))
@@ -370,7 +390,7 @@ class ScoreTest(Sandbox):
         result = self.score(memory=MEMORY.replace(line, ""))
 
         self.assertEqual([str(missed) for missed in result.missed], [f"Sam's allergy (fact from {SAM})"])
-        self.assertEqual((result.found, result.right), (27, 27))
+        self.assertEqual((result.found, result.right), (EXPECTED - 1, EXPECTED - 1))
 
     def test_a_fact_that_only_its_fact_file_states_is_missed_and_the_file_is_named(self) -> None:
         memory = MEMORY.replace("- Dana's phone number is 555 0142 (dana.md)\n", "")
@@ -381,7 +401,7 @@ class ScoreTest(Sandbox):
             [str(missed) for missed in result.missed],
             [f"Dana's phone number (fact from {DANA_PHONE}): dana.md holds it, no facts line does"],
         )
-        self.assertEqual((result.found, result.right), (27, 27))
+        self.assertEqual((result.found, result.right), (EXPECTED - 1, EXPECTED - 1))
 
     def test_a_fact_file_that_does_not_link_the_capture_is_not_what_states_a_missed_fact(self) -> None:
         memory = MEMORY.replace("- Dana's phone number is 555 0142 (dana.md)\n", "")
@@ -405,7 +425,7 @@ class ScoreTest(Sandbox):
         coffee = "Alex drinks no coffee after 14:00"
         for wording in ("Alex trinkt nach 14 Uhr keinen KAFFEE mehr", "Alex drinks no coffee after 2:00 pm"):
             with self.subTest(wording=wording):
-                self.assertEqual(self.score(memory=MEMORY.replace(coffee, wording)).right, 28)
+                self.assertEqual(self.score(memory=MEMORY.replace(coffee, wording)).right, EXPECTED)
 
     def test_one_line_that_holds_two_expected_facts_counts_for_both(self) -> None:
         both = "- Dana is Alex's sister, lives in Bern and has the phone number 555 0142 (dana.md)\n"
@@ -414,7 +434,7 @@ class ScoreTest(Sandbox):
 
         result = self.score(memory=memory)
 
-        self.assertEqual((result.found, result.right, result.extra), (28, 28, ()))
+        self.assertEqual((result.found, result.right, result.extra), (EXPECTED, EXPECTED, ()))
 
     def test_a_line_that_holds_two_expected_facts_and_stands_twice_is_extra_once(self) -> None:
         both = "- Dana is Alex's sister, lives in Bern and has the phone number 555 0142 (dana.md)\n"
@@ -423,7 +443,7 @@ class ScoreTest(Sandbox):
 
         result = self.score(memory=memory)
 
-        self.assertEqual((result.right, len(result.extra)), (28, 1))
+        self.assertEqual((result.right, len(result.extra)), (EXPECTED, 1))
 
     def test_a_topic_fact_above_the_first_topic_is_found_and_not_right(self) -> None:
         line = "- Acme's office is at Harbour Street 12 (acme.md)\n"
@@ -431,7 +451,7 @@ class ScoreTest(Sandbox):
 
         result = self.score(memory=memory)
 
-        self.assertEqual((result.found, result.right), (28, 27))
+        self.assertEqual((result.found, result.right), (EXPECTED, EXPECTED - 1))
         self.assertEqual(
             self.flaws(result),
             {"Acme's office": ("stands above the first topic, belongs under a topic named like 'Acme'",)},
@@ -463,7 +483,7 @@ class ScoreTest(Sandbox):
         line = "- Sam Weber, a neighbour, is allergic to nuts (sam-weber.md)\n"
         memory = MEMORY.replace(line, "").replace("(globex.md)\n", "(globex.md)\n" + line)
 
-        self.assertEqual(self.score(memory=memory).right, 28)
+        self.assertEqual(self.score(memory=memory).right, EXPECTED)
 
     def test_a_fact_whose_file_does_not_link_its_capture_is_not_right(self) -> None:
         result = self.score(links={**LINKS, "sam-weber.md": ()})
@@ -520,7 +540,7 @@ class ScoreTest(Sandbox):
 
         result = self.score(tasks=tasks)
 
-        self.assertEqual((result.found, result.right), (28, 25))
+        self.assertEqual((result.found, result.right), (EXPECTED, EXPECTED - 3))
         self.assertEqual(
             self.flaws(result),
             {
@@ -536,7 +556,7 @@ class ScoreTest(Sandbox):
             for capture, key, title, due in TASKS
         )
 
-        self.assertEqual(self.score(tasks=timed).right, 28)
+        self.assertEqual(self.score(tasks=timed).right, EXPECTED)
 
     def test_a_task_with_the_words_from_another_capture_is_not_the_expected_one(self) -> None:
         swapped = tuple((LOCK if key == "plumber" else capture, key, title, due) for capture, key, title, due in TASKS)
@@ -552,7 +572,7 @@ class ScoreTest(Sandbox):
         result = self.score(memory=memory)
 
         self.assertEqual(result.extra, (f"facts line 'Sam Weber lives next door' (sam-weber.md), from {SAM}",))
-        self.assertEqual((result.right, result.without_source), (28, ()))
+        self.assertEqual((result.right, result.without_source), (EXPECTED, ()))
         self.assertTrue(result.nothing_left_behind)
 
     def test_a_second_line_for_one_expectation_is_extra(self) -> None:
@@ -560,14 +580,14 @@ class ScoreTest(Sandbox):
 
         result = self.score(memory=memory)
 
-        self.assertEqual((result.right, len(result.extra)), (28, 1))
+        self.assertEqual((result.right, len(result.extra)), (EXPECTED, 1))
 
     def test_of_two_lines_for_one_expectation_the_one_without_a_flaw_counts(self) -> None:
         misplaced = "- Acme Ltd has its office at Harbour Street 12 (acme.md)\n"
 
         result = self.score(memory=MEMORY.replace("## Facts\n\n", "## Facts\n\n" + misplaced))
 
-        self.assertEqual((result.right, len(result.extra)), (28, 1))
+        self.assertEqual((result.right, len(result.extra)), (EXPECTED, 1))
 
     def test_a_topic_started_that_the_inbox_does_not_name_is_extra(self) -> None:
         line = "- Sam Weber, a neighbour, is allergic to nuts (sam-weber.md)\n"
@@ -577,12 +597,12 @@ class ScoreTest(Sandbox):
 
         result = self.score(memory=memory)
 
-        self.assertEqual((result.right, result.extra), (28, ("topic 'Sam Weber'",)))
+        self.assertEqual((result.right, result.extra), (EXPECTED, ("topic 'Sam Weber'",)))
         self.assertTrue(result.nothing_left_behind)
 
     def test_a_line_that_stands_twice_is_extra_once(self) -> None:
         new = "- Sam Weber, a neighbour, is allergic to nuts (sam-weber.md)\n"
-        given = "- Alex prefers green tea in the morning (alex.md)\n"
+        given = "- Lena Frei, Alex's neighbour, keeps a spare key (lena-frei.md)\n"
 
         again_new = self.score(memory=MEMORY.replace(new, new + new))
         again_given = self.score(memory=MEMORY.replace(given, given + given))
@@ -591,9 +611,10 @@ class ScoreTest(Sandbox):
             again_new.extra, (f"facts line 'Sam Weber, a neighbour, is allergic to nuts' (sam-weber.md), from {SAM}",)
         )
         self.assertEqual(
-            again_given.extra, (f"facts line 'Alex prefers green tea in the morning' (alex.md), from {COFFEE}",)
+            again_given.extra,
+            (f"""facts line "Lena Frei, Alex's neighbour, keeps a spare key" (lena-frei.md), from {LENA_PLANTS}""",),
         )
-        self.assertEqual((again_new.right, again_given.right), (28, 28))
+        self.assertEqual((again_new.right, again_given.right), (EXPECTED, EXPECTED))
 
     def test_a_current_item_that_stands_twice_is_extra_once(self) -> None:
         new = "- Planning a hiking week in Norway for next summer (since 2026-11-09)\n"
@@ -632,7 +653,7 @@ class ScoreTest(Sandbox):
 
         result = self.score(task_files=(review, question))
 
-        self.assertEqual((result.right, result.extra, result.without_source), (28, (), ()))
+        self.assertEqual((result.right, result.extra, result.without_source), (EXPECTED, (), ()))
 
     def test_what_was_filed_from_the_capture_that_holds_nothing_is_named(self) -> None:
         memory = MEMORY.replace("## Facts\n\n", "## Facts\n\n- Alex is trying a new shortcut (shortcut.md)\n")
@@ -658,7 +679,7 @@ class ScoreTest(Sandbox):
 
         result = ingest_eval.score(self.inbox, self.read(self.store_before()), self.read(store))
 
-        self.assertEqual(Counter(missed.expectation.kind for missed in result.missed), {"fact": 19, "current": 2})
+        self.assertEqual(Counter(missed.expectation.kind for missed in result.missed), {"fact": 22, "current": 2})
 
 
 class ReportTest(Sandbox):
@@ -675,14 +696,14 @@ class ReportTest(Sandbox):
             passed = ingest_eval.report(outcomes)
         return passed, out.getvalue()
 
-    def test_twenty_three_of_twenty_eight_found_and_right_meet_the_bar_and_twenty_two_do_not(self) -> None:
-        at_the_bar, _ = self.report(ingest_eval.Outcome("haiku", 61.4, self.without(5), ()))
-        below, out = self.report(ingest_eval.Outcome("haiku", 61.4, self.without(6), ()))
+    def test_twenty_five_of_thirty_one_found_and_right_meet_the_bar_and_twenty_four_do_not(self) -> None:
+        at_the_bar, _ = self.report(ingest_eval.Outcome("haiku", 61.4, self.without(6), ()))
+        below, out = self.report(ingest_eval.Outcome("haiku", 61.4, self.without(7), ()))
 
         self.assertTrue(at_the_bar)
         self.assertFalse(below)
-        self.assertIn("haiku run 1 (61 s): found 22 of 28, right 22, 0 extra\n", out)
-        self.assertIn("found 0.79, right 0.79 over 1 runs, 0 of them failed or left something behind; misses", out)
+        self.assertIn("haiku run 1 (61 s): found 24 of 31, right 24, 0 extra\n", out)
+        self.assertIn("found 0.77, right 0.77 over 1 runs, 0 of them failed or left something behind; misses", out)
 
     def test_enough_found_and_too_few_of_them_right_miss_the_bar(self) -> None:
         unlinked = {name: () for name in LINKS}
@@ -690,10 +711,10 @@ class ReportTest(Sandbox):
         passed, out = self.report(ingest_eval.Outcome("haiku", 1.0, self.score(links=unlinked), ()))
 
         self.assertFalse(passed)
-        self.assertIn("ingest-eval: haiku: found 1.00, right 0.32 over 1 runs", out)
+        self.assertIn("ingest-eval: haiku: found 1.00, right 0.39 over 1 runs", out)
 
     def test_five_runs_that_add_up_to_exactly_the_bar_meet_it(self) -> None:
-        runs = [ingest_eval.Outcome("haiku", 1.0, self.without(lines), ()) for lines in (10, 6, 6, 3, 3)]
+        runs = [ingest_eval.Outcome("haiku", 1.0, self.without(lines), ()) for lines in (10, 7, 6, 4, 4)]
 
         passed, out = self.report(*runs)
 
@@ -706,7 +727,7 @@ class ReportTest(Sandbox):
         passed, out = self.report(*runs)
 
         self.assertTrue(passed)
-        self.assertIn("ingest-eval: haiku: found 0.82, right 0.82 over 2 runs", out)
+        self.assertIn("ingest-eval: haiku: found 0.84, right 0.84 over 2 runs", out)
 
     def test_one_run_that_left_something_behind_fails_a_model_that_meets_the_numbers(self) -> None:
         runs = [
@@ -734,7 +755,7 @@ class ReportTest(Sandbox):
         passed, out = self.report(haiku, sonnet)
 
         self.assertFalse(passed)
-        self.assertIn("ingest-eval: haiku: found 0.71, right 0.71 over 1 runs", out)
+        self.assertIn("ingest-eval: haiku: found 0.74, right 0.74 over 1 runs", out)
         self.assertIn("ingest-eval: sonnet: found 1.00, right 1.00 over 1 runs", out)
         self.assertRegex(out, r"sonnet: [^\n]*; meets the bar of 0\.80 with every run clean\n")
 
@@ -776,12 +797,19 @@ def filing_script(*extra_actions: dict[str, str], captures: tuple[str, ...] | No
     """What the scripted model does in the ingest step: the filing built by hand above, through the
     commands a model has, for every capture or for the ones named."""
     inbox = ingest_eval.load_inbox(ingest_eval.FIXTURE / "inbox.json")
-    files = [capture.file for capture in inbox.captures] if captures is None else list(captures)
+    # The harvest step archives the edit made from a fact file that changed since; no model sees it.
+    files = (
+        [capture.file for capture in inbox.captures if capture.file != STALE_TEA]
+        if captures is None
+        else list(captures)
+    )
     actions = [bash("m2b", "ingest", "list", "--json"), bash("m2b", "ingest", "normalize", "--json")]
     if captures is None:
         actions.append(write("memory/MEMORY.md", MEMORY))
         for name, notes in LINKS.items():
             actions.append(write(f"memory/{name}", fact_file(notes, EARLIER.get(name, ""))))
+        for name, text in EDITED.items():
+            actions.append(write(f"memory/{name}", text))
     for capture, key, title, due in TASKS:
         if capture not in files:
             continue
@@ -821,7 +849,7 @@ class MainTest(Sandbox):
         code, out = self.run_main(filing_script(), "--model", "sonnet", "--runs", "1")
 
         self.assertEqual(code, ingest_eval.EXIT_PASSED, out)
-        self.assertRegex(out, r"sonnet run 1 \(\d+ s\): found 28 of 28, right 28, 0 extra\n")
+        self.assertRegex(out, rf"sonnet run 1 \(\d+ s\): found {EXPECTED} of {EXPECTED}, right {EXPECTED}, 0 extra\n")
         self.assertIn(
             "ingest-eval: sonnet: found 1.00, right 1.00 over 1 runs, 0 of them failed or left something behind; meets",
             out,
@@ -846,19 +874,21 @@ class MainTest(Sandbox):
         self.assertEqual(code, ingest_eval.EXIT_FAILED, out)
         runs = sorted(path.name for path in self.sandbox.iterdir())
         self.assertEqual(runs, ["haiku-1", "haiku-2", "haiku-3", "sonnet-1", "sonnet-2", "sonnet-3"])
-        self.assertIn("ingest-eval: haiku: found 0.00, right 0.00 over 3 runs", out)
-        self.assertIn("ingest-eval: sonnet: found 0.00, right 0.00 over 3 runs", out)
+        self.assertIn("ingest-eval: haiku: found 0.06, right 0.03 over 3 runs", out)
+        self.assertIn("ingest-eval: sonnet: found 0.06, right 0.03 over 3 runs", out)
 
     def test_a_model_that_files_too_little_misses_the_bar_and_what_it_left_is_named(self) -> None:
         code, out = self.run_main(filing_script(captures=(PLUMBER, LOCK)), "--model", "haiku", "--runs", "1")
 
         self.assertEqual(code, ingest_eval.EXIT_FAILED, out)
-        self.assertIn("found 2 of 28, right 2, 0 extra", out)
+        # Of the edits, harvest put two in place, which wait for their filing, and archived the third,
+        # which counts as right; the one that removes a line is found in the line it did not change.
+        self.assertIn("found 4 of 31, right 3, 0 extra", out)
         self.assertIn(f"  missed: Sam's allergy (fact from {SAM})", out)
         self.assertIn(f"  still in the inbox: {SAM}", out)
-        self.assertEqual(out.count("still in the inbox"), 26)
+        self.assertEqual(out.count("still in the inbox"), 28)
         self.assertIn(
-            "ingest-eval: haiku: found 0.07, right 0.07 over 1 runs, 1 of them failed or left something behind; misses",
+            "ingest-eval: haiku: found 0.13, right 0.10 over 1 runs, 1 of them failed or left something behind; misses",
             out,
         )
 
@@ -866,7 +896,7 @@ class MainTest(Sandbox):
         code, out = self.run_main(filing_script(bash("ls")), "--model", "haiku", "--runs", "1")
 
         self.assertEqual(code, ingest_eval.EXIT_FAILED, out)
-        self.assertIn("found 28 of 28, right 28", out)
+        self.assertIn(f"found {EXPECTED} of {EXPECTED}, right {EXPECTED}", out)
         self.assertIn("  run: the curation run failed: ingest: denied 1 tool call(s) outside its rules\n", out)
         self.assertIn("1 of them failed or left something behind; misses", out)
 
