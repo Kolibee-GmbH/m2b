@@ -215,9 +215,9 @@ session ran it ([The band](docs/band.md)).
 due today, what m2b gave this session and how m2b itself stands, with the button `curate now`
 on the machine that curates, which starts a curation run in the background. A row of tabs above
 every view leads to the others: `Proposals`, `Review`, `Tasks` with every open task of yours and
-`done` to tick one, `Facts` with what every session starts with and every topic, and `Settings`.
-In `Facts`, `details` on a fact shows its file with the notes and documents it rests on, `show`
-one of those or the note a current item rests on, and `open the file` a PDF or a picture in the
+a mark `○` to tick one, `Facts` with what every session starts with and every topic, and
+`Settings`. In `Facts`, a press on a fact shows its file with the notes and documents it rests on,
+a press on one of those shows it, `show` the note a current item rests on, and `open the file` a PDF or a picture in the
 system's viewer
 ([What m2b knows](docs/band.md#what-m2b-knows)). Under Claude Code's fullscreen layout the
 pane sits beside the conversation, where it opens by itself in a wide terminal, and

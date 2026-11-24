@@ -145,6 +145,38 @@ export function button(ui: Pick<ElementTable, 'Button'>, spec: ButtonSpec) {
   )
 }
 
+/** The glyph before a task that ticks it: a control by itself, the row's one action that writes. */
+const TICK_MARK = '○'
+
+/** The mark before a task, a button without chrome that ticks it. */
+export function tickMark(ui: Pick<ElementTable, 'Button'>, spec: { key: string; onPress: () => void }) {
+  const { Button } = ui
+  return <Button key={spec.key} plain label={TICK_MARK} onPress={spec.onPress} />
+}
+/** What ends a row that opens what it names. */
+export const OPENS = '›'
+// A space that never breaks: the mark stays with the last word, never alone on a line.
+const KEEPS_TOGETHER = '\u00a0'
+
+/** A row's text as a row that opens what it names draws it. */
+export function opening(text: string): string {
+  return `${text}${KEEPS_TOGETHER}${OPENS}`
+}
+
+/**
+ * A row that is its own button: the text drawn without chrome, wrapped over as many lines as it
+ * takes, `›` at its end, and a press anywhere on it opens what it names. The focus inverts every
+ * line of it, so the row one stands on is seen among many.
+ */
+export function opensRow(ui: Pick<ElementTable, 'Button' | 'Text'>, spec: { key: string; text: string; onPress: () => void }) {
+  const { Button, Text } = ui
+  return (
+    <Button key={spec.key} plain label={opening(spec.text)} onPress={spec.onPress}>
+      <Text wrap="wrap">{opening(spec.text)}</Text>
+    </Button>
+  )
+}
+
 // As wide as the longer of the two, so the titles of a list start in one column.
 const DUE_COLUMN = Math.max(DUE_TODAY.length, OVERDUE.length)
 

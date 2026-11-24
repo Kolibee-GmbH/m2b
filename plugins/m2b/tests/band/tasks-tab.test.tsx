@@ -78,7 +78,7 @@ function oneTask(id = 't1', title = LADDER): FakeM2b {
   return new FakeM2b().todo('later', id, title, '2026-04-02')
 }
 
-test('the tab Tasks reads the open tasks and shows a part for each group, in the order a day passes, each row when it is due, then its title, then done', async ($, on) => {
+test('the tab Tasks reads the open tasks and shows a part for each group, in the order a day passes, each row one line: the mark that ticks it, when it is due, its title', async ($, on) => {
   // Covers: B222
   const fake = fullList()
   const { opened } = await start($, on, fake)
@@ -92,21 +92,21 @@ test('the tab Tasks reads the open tasks and shows a part for each group, in the
   expect(opened.slice(opensBefore)).toEqual([AS_A_DIALOG])
   expect(await shownTab(ui)).toBe('tasks')
   expect(await shownParts(ui)).toEqual([
-    { key: 'tasks:overdue', title: 'Overdue', count: null, lines: [`overdue ${OFFER}`, '[done]'] },
+    { key: 'tasks:overdue', title: 'Overdue', count: null, lines: [`○ overdue ${OFFER}`] },
     {
       key: 'tasks:today',
       title: 'Today',
       count: null,
-      lines: [`due today ${LADDER}`, '[done]', `due today 10:00 ${CALL}`, '[done]'],
+      lines: [`○ due today ${LADDER}`, `○ due today 10:00 ${CALL}`],
     },
-    { key: 'tasks:soon', title: 'Next 7 days', count: null, lines: [`Thu 19 Mar ${HALL}`, '[done]'] },
+    { key: 'tasks:soon', title: 'Next 7 days', count: null, lines: [`○ Thu 19 Mar ${HALL}`] },
     {
       key: 'tasks:later',
       title: 'Later',
       count: null,
-      lines: [`Thu 2 Apr 09:30 ${SPRING}`, '[done]', `Sat 2 Jan 2027 ${PASSPORT}`, '[done]'],
+      lines: [`○ Thu 2 Apr 09:30 ${SPRING}`, `○ Sat 2 Jan 2027 ${PASSPORT}`],
     },
-    { key: 'tasks:undated', title: 'Without a date', count: null, lines: [PHOTOS, '[done]'] },
+    { key: 'tasks:undated', title: 'Without a date', count: null, lines: [`○ ${PHOTOS}`] },
   ])
   expect(await viewButtons(ui)).toEqual(['done:t1', 'done:t2', 'done:t3', 'done:t4', 'done:t5', 'done:t6', 'done:t7'])
   await ui.unmount()
@@ -125,9 +125,9 @@ test('a group without tasks is left out, and today is taken out of the next seve
   const ui = await tasksView($)
 
   expect((await shownParts(ui)).map(part => [part.title, part.lines])).toEqual([
-    ['Today', [`due today ${LADDER}`, '[done]']],
-    ['Next 7 days', [`Mon 16 Mar ${HALL}`, '[done]']],
-    ['Without a date', [PHOTOS, '[done]']],
+    ['Today', [`○ due today ${LADDER}`]],
+    ['Next 7 days', [`○ Mon 16 Mar ${HALL}`]],
+    ['Without a date', [`○ ${PHOTOS}`]],
   ])
   await ui.unmount()
 })
@@ -151,7 +151,10 @@ test('when a task is due is in the color the part Today gives it, kept whole on 
   expect((await lookOf(ui, 'due today'))?.color).toBe('warning')
 
   const kept = (await ui.findAll({ type: 'Box' })).filter(box => box.props['flexShrink'] === 0).map(box => box.text)
-  expect(kept).toEqual(['overdue', 'due today', 'due today 10:00', 'Thu 19 Mar', 'Thu 2 Apr 09:30', 'Sat 2 Jan 2027'])
+  // The mark before each task is kept whole too, so a narrow pane never breaks it from its row.
+  const days = ['overdue', 'due today', 'due today 10:00', 'Thu 19 Mar', 'Thu 2 Apr 09:30', 'Sat 2 Jan 2027']
+  expect(kept).toEqual([...days.flatMap(day => ['○', day]), '○'])
+  expect((await ui.find({ key: 'done:t1' }))?.props).toMatchObject({ plain: true, label: '○' })
   for (const title of TITLES) {
     expect((await lookOf(ui, title))?.wrap).toBe('wrap')
   }
@@ -165,7 +168,7 @@ test('a title is drawn without what a terminal would run, in a narrow pane too',
   const ui = await startView($, 24)
   await pressTab(ui, 'tasks')
 
-  expect(await linesAt(ui, 'task:t1')).toEqual(['Thu 2 Apr Call Dana about Acme', '[done]'])
+  expect(await linesAt(ui, 'task:t1')).toEqual(['○ Thu 2 Apr Call Dana about Acme'])
   expect((await everyText(ui)).filter(text => text.includes('\u001b') || text.includes('\n') || text.includes('\u0007'))).toEqual([])
   await ui.unmount()
 })
@@ -273,7 +276,7 @@ test('an answer of another shape is could not read, never a list without tasks',
   })
 })
 
-test('done writes nothing for five seconds: the row offers undo beside completing, then m2b completes that one task once', async ($, on) => {
+test('the mark writes nothing for five seconds: the row is undo and completing, the title below, then m2b completes that one task once', async ($, on) => {
   // Covers: B223
   const fake = oneTask()
   const { clock } = await start($, on, fake)
@@ -281,7 +284,7 @@ test('done writes nothing for five seconds: the row offers undo beside completin
 
   await ui.press({ key: 'done:t1' })
 
-  expect(await linesAt(ui, 'task:t1')).toEqual([`Thu 2 Apr ${LADDER}`, '[undo] completing'])
+  expect(await linesAt(ui, 'task:t1')).toEqual(['[undo] completing', LADDER])
   expect(await viewButtons(ui)).toEqual(['undo:t1'])
   await clock.advance(UNDO_MS - 1)
   expect(fake.writes()).toEqual([])
@@ -294,7 +297,7 @@ test('done writes nothing for five seconds: the row offers undo beside completin
   await ui.unmount()
 })
 
-test('undo within the five seconds takes the press back: nothing is written, and the row offers done again', async ($, on) => {
+test('undo within the five seconds takes the press back: nothing is written, and the row offers its mark again', async ($, on) => {
   // Covers: B223
   const fake = oneTask()
   const { clock } = await start($, on, fake)
@@ -306,7 +309,7 @@ test('undo within the five seconds takes the press back: nothing is written, and
   await clock.advance(10_000)
 
   expect(fake.writes()).toEqual([])
-  expect(await linesAt(ui, 'task:t1')).toEqual([`Thu 2 Apr ${LADDER}`, '[done]'])
+  expect(await linesAt(ui, 'task:t1')).toEqual([`○ Thu 2 Apr ${LADDER}`])
   await ui.unmount()
 })
 
@@ -356,10 +359,10 @@ test('refused, the row stays and says why under it in the error color, until the
   await clock.advance(UNDO_MS + 1)
 
   expect(fake.writes()).toEqual([['tasks', 'complete', '--', 't1']])
-  expect(await linesAt(ui, 'task:t1')).toEqual([`Thu 2 Apr ${LADDER}`, '[done]', refusal])
+  expect(await linesAt(ui, 'task:t1')).toEqual([`○ Thu 2 Apr ${LADDER}`, refusal])
   expect((await lookOf(ui, refusal))?.color).toBe('error')
   // The other row says nothing of it, and a press there leaves it standing.
-  expect(await linesAt(ui, 'task:t2')).toEqual([PHOTOS, '[done]'])
+  expect(await linesAt(ui, 'task:t2')).toEqual([`○ ${PHOTOS}`])
   await ui.press({ key: 'done:t2' })
   expect(await texts(ui)).toContain(refusal)
   await ui.press({ key: 'undo:t2' })
@@ -371,7 +374,7 @@ test('refused, the row stays and says why under it in the error color, until the
 
   fake.completeFails = null
   await ui.press({ key: 'done:t1' })
-  expect(await linesAt(ui, 'task:t1')).toEqual([`Thu 2 Apr ${LADDER}`, '[undo] completing'])
+  expect(await linesAt(ui, 'task:t1')).toEqual(['[undo] completing', LADDER])
   await clock.advance(UNDO_MS + 1)
   expect(await texts(ui)).not.toContain(refusal)
   expect(await texts(ui)).toEqual(['Without a date', PHOTOS])

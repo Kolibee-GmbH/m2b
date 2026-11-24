@@ -48,7 +48,7 @@ flowchart LR
 
 1. **Clients only add.** Skills, a Shortcut you write and integrations write new files into `inbox/`
    and new tasks; the todos skill ticks a task you say is done, and the band's pane ticks or drops
-   a task on your press: one of yours with `done` in its tab `Tasks`, a curator task with keep,
+   a task on your press: one of yours with its mark in the tab `Tasks`, a curator task with keep,
    drop or `ok`. Only the curation run moves, renames or edits, and only on the machine
    `store.json` names.
 2. **"Could not look" is never "nothing there".** Every answer that depends on a backend says

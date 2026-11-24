@@ -267,7 +267,7 @@ what you can press.
 - **Today** lists your own tasks due today, then the overdue ones, the most recent first,
   whatever the band shows of them: `due today` in the warning color, `overdue` in the error
   color, each title at full strength. The tab `Tasks` lists
-  [every open task](#all-your-open-tasks), with `done` to tick one.
+  [every open task](#all-your-open-tasks), with a mark `○` before each to tick it.
 - **This session** says what m2b put into this session: each topic whose facts it got, at its
   start because the project path names it or before a prompt that named it, as a button that
   bears the topic's name and leads to [its lines](#a-topics-lines), with the facts lines and
@@ -555,9 +555,10 @@ between two tabs.
 
 The tab `Tasks` shows every open task of your list, read with `m2b todos --json` the moment you
 turn the pane to it, in groups by when each is due: `Overdue`, `Today`, `Next 7 days`, `Later`
-and `Without a date`, a group with no task left out. Each row is when the task is due, in the
-color the part "Today" gives it (`overdue`, `due today`, otherwise the day, `Thu 20 Nov`), and its
-title, with `done` below. A press on `done` writes nothing for five seconds and offers `undo`, as
+and `Without a date`, a group with no task left out. Each row is the mark `○`, when the task is
+due, in the color the part "Today" gives it (`overdue`, `due today`, otherwise the day,
+`Thu 20 Nov`), and its title, on as many lines as the title takes. A press on the mark writes
+nothing for five seconds and turns the row into `[ undo ] completing` with the title below, as
 keep does; then, if the task is still open in your list, it is ticked, the tab reads the list
 again and the band its counts. A task another session ticked or dropped in those seconds is left
 alone, and the row says so. Where your task list
@@ -570,26 +571,27 @@ as long as the tab is shown, and never in the session's state, which other plugi
 
 The tab `Facts` shows what m2b knows, read with `m2b distillate topics --json` the moment you
 turn the pane to it, in two parts named by when a session gets them. **Every session starts
-with** holds the facts outside any topic, each with `details` where its line names a fact file,
-and the current items, each as its words and since when it holds. **When a prompt names them** holds every topic as a button with its
+with** holds the facts outside any topic, each a row you press to open its fact file where its
+line names one (it ends in `›`), and the current items, each as its words and since when it holds. **When a prompt names them** holds every topic as a button with its
 counts (`2 facts, 1 current`); a press opens [its lines](#a-topics-lines) as the button in "This
 session" does, with the focus on the tab `Facts`, which leads back.
 
-`details` opens the fact's file, read with `m2b source --json` at the press, under a tab that
+A press on a fact opens its file, read with `m2b source --json` at the press, under a tab that
 bears the file's name without `.md`: its lines, the day it stops being true where it has one, its
 earlier values, and **What it rests on**, the notes and documents behind it, each with its day,
 what it is, a document's original file name and its first line. The first eight are listed, and a
 line says how many more there are.
 
-Below each of them that m2b could read stands `show`. It turns the pane to that note or document,
+Each of them that m2b could read is a row you press, ending in `›` as a fact does. It turns the
+pane to that note or document,
 read with `m2b source --json --viewer`, under a tab beside the fact file's that bears a document's
 or a picture's original file name, or else what it is and its day (`note 2026-10-12`). **What it
 is** says what it is and when it was captured and holds the words as you captured them; **What
 stands on which page** holds a document's outline, and **What the curation run added** the lines
 the run wrote below your words. The tab of the fact's file leads back to the file as it was drawn,
-with the focus on the `show` you pressed.
+with the focus on the row you pressed.
 
-A current item has such a button too, here and in a topic's lines: `show` below it where it rests
+A current item has a button for its note, here and in a topic's lines: `show` below it where it rests
 on a note, `show 1` and `show 2` where it rests on several, in the order the distillate names
 them, and none where it names no note. The note's file name is not drawn in the line.
 
@@ -619,14 +621,14 @@ started, since a viewer for it could run what it holds
 
 A fact's file, a note or a document that is not downloaded to this machine says so, with the
 command that fetches it; an entry under **What it rests on** that is not on this machine, could
-not be read or names no note of the archive says so and has no `show`. What these views show, your facts and your own words in a note, is held by the pane alone
+not be read or names no note of the archive says so and is no row to press. What these views show, your facts and your own words in a note, is held by the pane alone
 while they are shown, never in the session's state, which other plugins can read: turning the pane
 away from them or closing it drops it.
 
 ### Back to the start view
 
 `/m2b-review`, `/m2b-search`, `/m2b-proposals`, `/m2b-settings`, a tab, a topic's button,
-`details` and `show` turn the pane to their view and give it the keyboard. Escape there, the pane's close
+a fact's row and an evidence entry's row turn the pane to their view and give it the keyboard. Escape there, the pane's close
 mark or the tab `Overview` lead back to the start view; the pane stays open. From
 `About this setup` under its own tab they lead there too, and the tab `Settings` to the other
 settings. Beside the chat it then stays
@@ -637,11 +639,11 @@ stays a dialog, and a later Escape closes the block.
 With the keyboard in the pane, the band asks Claude Code to put the focus where a second Enter
 writes nothing: after a press on a tab, on the tab that leads back to the view you left, so Enter
 pressed again returns there; after a press on a topic's button on `Overview`, and from there back
-on that topic's button; after `details` or a topic's button in the tab `Facts` on that tab; after
-`show` on the tab of the fact's file, and from there back on that `show`; after `show` below a
+on that topic's button; after a fact's row or a topic's button in the tab `Facts` on that tab; after
+an evidence entry's row on the tab of the fact's file, and from there back on that row; after `show` below a
 current item on the tab `Facts`, or for an item in a topic's lines on the tab the topic was
 opened from; after keep, drop, `ok`,
-`done`, `turn off here` or `curate now` on the row's `undo`. After `open the file` it stays on
+a task's mark, `turn off here` or `curate now` on the row's `undo`. After `open the file` it stays on
 that button, which writes nothing. Once an answer is written its
 row is gone, and the focus stands on the row that moved up.
 
@@ -984,10 +986,11 @@ background; once an answer to a proposal is written and none waits any more, the
 `m2b curate --detach --after-answers --json`, which starts one only where a kept proposal waits
 for a run. What that run reads and writes is in [The curation run](curation.md).
 A topic's button calls `m2b distillate topic --json`, which reads `memory/MEMORY.md`, and so does
-`m2b distillate topics --json` for the tab `Facts`. `details` and `show` call `m2b source --json`,
+`m2b distillate topics --json` for the tab `Facts`. A fact's row, an evidence entry's row and `show`
+call `m2b source --json`,
 which reads one fact file in `memory/` or one note in `corpus/`, and `open the file` calls
 `m2b store open`, which starts the system's viewer on a PDF or a picture of the archive. The tab
-`Tasks` reads your task list with `m2b todos --json`, and `done` calls `m2b tasks complete` after
+`Tasks` reads your task list with `m2b todos --json`, and a task's mark calls `m2b tasks complete` after
 reading the list again. The
 settings are read with `m2b settings --json`, and a press on a value calls `m2b settings set`,
 which writes the machine config or, for your language, `profile.json` in the store. Every open session asks about once a
@@ -1001,7 +1004,7 @@ That folder holds titles, findings and the proposals with the words they stand o
 you only. At each session start
 it writes `~/.local/state/m2b/band-seen.json`, which `m2b doctor` reads. That you closed the pane
 beside the chat by hand is one value, `paneClosedByHand`, in the store Claude Code keeps for the
-plugin under its own configuration folder. Apart from keep, drop, `ok` and `done`, which
+plugin under its own configuration folder. Apart from keep, drop, `ok` and a task's mark, which
 change that one task in your task list (with the `markdown` backend, its file in `tasks/` of the
 store) or add your answer to a proposal as an empty file in `state/core/proposal-answers/`, and
 a press on a value of `Language` in the settings, it writes nothing in the store.

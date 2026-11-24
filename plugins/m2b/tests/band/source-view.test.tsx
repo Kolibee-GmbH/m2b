@@ -2,6 +2,8 @@ import { expect, test } from 'claude-code/testing'
 import type { CommandRunResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
+import { opening } from '../../hooks/look'
+
 import { beginFactFile, factFileOf, fillFactFile, forgetFactsUnless, holdsFacts, showKey } from '../../hooks/facts-tab'
 import type { Evidence, FactFileLook } from '../../hooks/facts-tab'
 import { BACK_TO_THE_FACT_FILE_KEY } from '../../hooks/pane-tabs'
@@ -217,7 +219,7 @@ function viewsWritten(writes: readonly string[]): unknown[] {
     .map(write => write.value)
 }
 
-test('show stands below each evidence entry that was read, keyed by its place, and below none that was not', async ($, on) => {
+test('each evidence entry that was read is a row that shows its source, keyed by its place, and none that was not', async ($, on) => {
   // Covers: B230, B227
   await start($, on, danaWorld())
 
@@ -225,18 +227,17 @@ test('show stands below each evidence entry that was read, keyed by its place, a
 
   expect(await viewButtons(ui)).toEqual(['show:0', 'show:1', 'show:3'])
   expect((await shownParts(ui)).find(part => part.key === 'fact:evidence')?.lines).toEqual([
-    '2026-10-12 a note: Dana, my sister.',
-    '[show]',
-    '2026-11-16 a document, handbook.pdf: p. 1: club name',
-    '[show]',
+    opening('2026-10-12 a note: Dana, my sister.'),
+    opening('2026-11-16 a document, handbook.pdf: p. 1: club name'),
     '20260903T100000Z-phone-c3d4.md: not downloaded to this machine',
-    `2026-10-20 a picture, ${PICTURE_NAME}: The choir in the hall`,
-    '[show]',
+    opening(`2026-10-20 a picture, ${PICTURE_NAME}: The choir in the hall`),
     '20260202T090000Z-cli-1111.md: could not be read',
   ])
-  // Each `show` stands with the line of its entry, beside the point as the tabs are.
-  expect(await linesAt(ui, 'evidence:0')).toEqual(['2026-10-12 a note: Dana, my sister.', '[show]'])
-  expect(await buttonsAt(ui, 'evidence:3')).toEqual([{ key: 'show:3', label: 'show', variant: undefined, dimColor: true }])
+  // An entry that was read is one button, its own line, drawn without chrome.
+  expect(await linesAt(ui, 'evidence:0')).toEqual([opening('2026-10-12 a note: Dana, my sister.')])
+  expect(await buttonsAt(ui, 'evidence:3')).toEqual([
+    { key: 'show:3', label: opening(`2026-10-20 a picture, ${PICTURE_NAME}: The choir in the hall`), variant: undefined, dimColor: undefined },
+  ])
   // An entry not read is one line in the error color.
   expect((await lookOf(ui, '20260903T100000Z-phone-c3d4.md: not downloaded to this machine'))?.color).toBe('error')
   expect((await lookOf(ui, '20260202T090000Z-cli-1111.md: could not be read'))?.color).toBe('error')
@@ -245,7 +246,7 @@ test('show stands below each evidence entry that was read, keyed by its place, a
   await ui.unmount()
 })
 
-test('show reads its source once, with source --json --viewer and the name of its entry, and turns the pane to it as a dialog', async ($, on) => {
+test('a press on an evidence entry reads its source once, with source --json --viewer and the name of its entry, and turns the pane to it as a dialog', async ($, on) => {
   // Covers: B230
   const fake = danaWorld()
   const { opened } = await start($, on, fake)
@@ -267,7 +268,7 @@ test('show reads its source once, with source --json --viewer and the name of it
     ['source', '--json', '--viewer', '--', NOTE],
     ['source', '--json', '--viewer', '--', PICTURE],
   ])
-  // The fact file was read once, for `details`; the way down and back never reads it again.
+  // The fact file was read once, for the fact's row; the way down and back never reads it again.
   expect(fake.sourceCalls().filter(call => !call.includes('--viewer'))).toEqual([READ_FILE])
   await ui.unmount()
 })
@@ -692,7 +693,7 @@ test('an answer of store open that comes after the pane turned away draws nothin
   await ui.unmount()
 })
 
-test("the fact file's tab above a source leads back to the fact file as it was drawn, without reading it again, and the focus is asked for show of that entry", async ($, on) => {
+test("the fact file's tab above a source leads back to the fact file as it was drawn, without reading it again, and the focus is asked for the row of that entry", async ($, on) => {
   // Covers: B232
   const fake = danaWorld()
   const { opened } = await start($, on, fake)
@@ -712,7 +713,7 @@ test("the fact file's tab above a source leads back to the fact file as it was d
   expect(tabsOfFile.at(-1)).toEqual({ label: 'dana', key: null })
   expect(fake.sourceCalls()).toEqual([READ_FILE, ['source', '--json', '--viewer', '--', PICTURE]])
   expect(opened.slice(opensBefore)).toEqual([AS_A_DIALOG])
-  // The key the focus is asked for is the `show` of the entry the source came from: drawn now, and by no button of the source.
+  // The key the focus is asked for is the row of the entry the source came from: drawn now, and by no button of the source.
   expect(await viewButtons(ui)).toContain(showKey(3))
   expect(before).not.toContain(showKey(3))
   // From there the tab Facts leads on, and the same `show` reads its source anew.
@@ -753,12 +754,12 @@ test('the tab Facts above a source reads the facts anew and leaves nothing of th
 
   expect(await shownTab(ui)).toBe('facts')
   expect(fake.factsCalls()).toEqual([READ_FACTS, READ_FACTS])
-  expect(await texts(ui)).toContain('Dana moved to Porto')
+  expect(await texts(ui)).toContain(opening('Dana moved to Porto'))
   expect(await shownTabs(ui)).toHaveLength(6)
   for (const line of [...NOTE_WORDS, ...NOTE_ADDED, ...FACT_LINES, 'What it rests on', WHAT_IT_IS]) {
     expect(await everyText(ui)).not.toContain(line)
   }
-  // `details` reads the fact file anew.
+  // The fact's row reads the fact file anew.
   await ui.press({ key: 'details:0' })
   expect(fake.sourceCalls().filter(call => !call.includes('--viewer'))).toEqual([READ_FILE, READ_FILE])
   await ui.unmount()

@@ -1,4 +1,5 @@
 import { expect, test } from 'claude-code/testing'
+import { opening } from '../../hooks/look'
 import { beginTopic } from '../../hooks/topic'
 import type { CommandRunResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
@@ -98,7 +99,8 @@ const SAYS: Readonly<Record<View, string>> = {
   proposals: 'said on 2026-03-12: "Dana runs IT at Northwind"',
   review: 'lint: broken link in a.md',
   tasks: LADDER_TASK,
-  facts: DANA_FACT,
+  // A fact that names its file is drawn as the row that opens it.
+  facts: opening(DANA_FACT),
   settings: 'that only inform or are changed by a command',
   group: `Store folder: ${NOTES}`,
   topic: KIM,
@@ -396,7 +398,7 @@ test('the seventh tab, and the eighth above a source, stand there only while the
   await ui.unmount()
 })
 
-test("no view has a button labelled back or settings, and only a fact's file one labelled show: a topic's button on the overview is labelled with the topic's name", async ($, on) => {
+test("no view has a button labelled back or settings, no evidence entry one labelled show, and only a fact's file one keyed show: a topic's button on the overview is labelled with the topic's name", async ($, on) => {
   // Covers: B204, B190, B230
   const { clock } = await start($, on, fullFake())
   const ui = await mounted($)
@@ -408,8 +410,8 @@ test("no view has a button labelled back or settings, and only a fact's file one
 
     expect(labels).not.toContain('back')
     expect(labels).not.toContain('settings')
-    // `show` below the one entry of the fact file that was read leads down to its source; no other view has one.
-    expect(labels.filter(label => label === 'show')).toEqual(view === 'fact' ? ['show'] : [])
+    // The one entry of the fact file that was read is the row that leads down to its source; this fixture has no current item with a note, whose button says show (B242).
+    expect(labels.filter(label => label === 'show')).toEqual([])
     const topics = drawn.filter(button => (button.key ?? '').startsWith('topic:')).map(button => [button.key, button.props['label']])
     expect(topics).toEqual(
       view === 'overview'

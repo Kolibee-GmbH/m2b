@@ -767,7 +767,7 @@ async function drawTasks($: EngineInterface, opening: string): Promise<void> {
 }
 
 /**
- * `done` on a task: the same press as keep on a candidate, five seconds of undo, then
+ * The mark on a task: the same press as keep on a candidate, five seconds of undo, then
  * `m2b tasks complete`. Written, the tab reads the list again and the band its counts; refused,
  * the row stays and says why until the next press on it.
  */
@@ -836,7 +836,7 @@ async function showFacts($: EngineInterface, focusKey: string | null): Promise<v
   await focusMoved
 }
 
-/** `details` on a fact: its file under a tab of its own, read with `m2b source --json`; the focus on the tab that leads back. */
+/** A press on a fact's row: its file under a tab of its own, read with `m2b source --json`; the focus on the tab that leads back. */
 async function showFactFile($: EngineInterface, file: string): Promise<void> {
   const opening = await newPressToken($)
   beginFactFile(opening, file)
@@ -849,7 +849,7 @@ async function showFactFile($: EngineInterface, file: string): Promise<void> {
 }
 
 /**
- * `show` on an evidence row of the fact file shown as `from`: that source under a tab of its own,
+ * A press on an evidence row of the fact file shown as `from`: that source under a tab of its own,
  * read with `m2b source --json --viewer`; the focus on the tab of the fact file, which leads back.
  */
 async function showSource($: EngineInterface, from: string, index: number, evidence: Evidence): Promise<void> {
@@ -882,7 +882,7 @@ async function showNote($: EngineInterface, note: string, back: TabId): Promise<
 
 /**
  * The tab of the fact file above a source: the fact file as it was drawn, which its module kept,
- * the focus on `show` of the row the source was opened from.
+ * the focus on the row the source was opened from.
  */
 async function backToFactFile($: EngineInterface, from: string): Promise<void> {
   const view = await read($, paneViewAtom)

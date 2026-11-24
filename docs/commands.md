@@ -61,7 +61,7 @@ do not do their work there. The first three start a curation run in the backgrou
 
 | Command | What it does |
 |---|---|
-| `/m2b-pane` | shows in the m2b pane its overview: what waits for you, what is due today, what m2b gave this session and how m2b itself stands; there a press shows a topic's lines, turns m2b off in the session's folder or, on the machine that curates, starts a curation run (`curate now`), and the tabs above lead to the other views, of which `Tasks` (every open task, with `done`) and `Facts` (what m2b knows, each fact with `details`) have no command of their own; under the fullscreen layout that pane opens by itself |
+| `/m2b-pane` | shows in the m2b pane its overview: what waits for you, what is due today, what m2b gave this session and how m2b itself stands; there a press shows a topic's lines, turns m2b off in the session's folder or, on the machine that curates, starts a curation run (`curate now`), and the tabs above lead to the other views, of which `Tasks` (every open task, with a mark `○` to tick it) and `Facts` (what m2b knows, each fact a row that opens its file) have no command of their own; under the fullscreen layout that pane opens by itself |
 | `/m2b-note <text>` | writes the text into the inbox at once, through `m2b capture` |
 | `/m2b-search [--word] <text>` | shows the hits of `m2b search` in the m2b pane; `--word` matches whole words only |
 | `/m2b-review` | shows the last curation run in the m2b pane: every finding, candidate and question |
@@ -114,7 +114,7 @@ commit the change ([Using m2b](using.md#fixes-for-the-files-claude-reads)).
 
 With Markdown tasks, these are how you look at a task's id and tick it in a terminal; with Apple
 Reminders the Reminders app does the same. In a session, saying that a task is done ticks it, and
-so does `done` on its row in the m2b pane's tab `Tasks`.
+so does the mark `○` before it in the m2b pane's tab `Tasks`.
 
 | Command | What it does |
 |---|---|

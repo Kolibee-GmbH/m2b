@@ -2,23 +2,22 @@ import type { EngineInterface, ResolveInput } from 'claude-code'
 
 import type { PaneView } from '../types'
 import { currentItemRow } from './current-item'
-import { part, pressLine, said, topicLabel } from './look'
-import type { ButtonSpec } from './look'
+import { opensRow, part, pressLine, said, topicLabel } from './look'
 import { runM2b } from './m2b'
 import { OLDER_CORE } from './session'
 import { plainLine } from './plain-text'
 
 /*
  * The tab "Facts": what every session starts with, the facts and the current items outside any
- * topic, as `m2b distillate topics --json` answers at the press that opens the tab, each fact with
- * `details` and each current item with a button for a note it names (`current-item.tsx`); and the
- * topics, each a button that opens its lines. `details` turns the pane to the
- * fact's file under a tab of its own, read with `m2b source --json`.
+ * topic, as `m2b distillate topics --json` answers at the press that opens the tab, each fact that
+ * names a fact file a row that opens it, and each current item with a button for a note it names
+ * (`current-item.tsx`); and the topics, each a button that opens its lines. A fact's row turns the
+ * pane to the fact's file under a tab of its own, read with `m2b source --json`.
  *
  * The facts are the owner's and often a customer's. As a topic's lines, they are this module's
  * alone, for the opening that read them, and dropped the moment the pane turns away: the session's
  * state is one every plugin can read. A fact file stays kept while a source it rests on is shown
- * (`show`, in `source-view.tsx`): the tab that leads back draws it as it was.
+ * (an evidence entry's row, in `source-view.tsx`): the tab that leads back draws it as it was.
  */
 
 export type StartFact = { statement: string; file: string | null }
@@ -233,7 +232,7 @@ export function parseFactFile(text: string): FactFileLook {
   }
 }
 
-/** The key of `details` on the fact drawn at `index`; a fact's file can be named by more than one fact. */
+/** The key of the row of the fact drawn at `index`, which opens its file; a fact's file can be named by more than one fact. */
 export function detailsKey(index: number): string {
   return `details:${index}`
 }
@@ -243,7 +242,7 @@ export function factsTopicKey(index: number): string {
   return `facts-topic:${index}`
 }
 
-/** The key of `show` on the evidence row drawn at `index`. */
+/** The key of the evidence row drawn at `index`, which shows its source. */
 export function showKey(index: number): string {
   return `show:${index}`
 }
@@ -278,12 +277,12 @@ export function factsPane($: EngineInterface, e: ResolveInput, look: FactsLook, 
   const start = [
     look.facts.length === 0 && look.current.length === 0 && said(ui, NOTHING_YET, 'quiet'),
     ...look.facts.map((fact, index) => {
-      const buttons: ButtonSpec[] =
-        fact.file === null ? [] : [{ key: detailsKey(index), label: 'details', kind: 'quiet', onPress: () => actions.details(fact.file ?? '') }]
+      const file = fact.file
       return (
         <Box key={`fact:${index}`} flexDirection="column">
-          {said(ui, plainLine(fact.statement))}
-          {buttons.length > 0 && pressLine(ui, buttons, null)}
+          {file === null
+            ? said(ui, plainLine(fact.statement))
+            : opensRow(ui, { key: detailsKey(index), text: plainLine(fact.statement), onPress: () => actions.details(file) })}
         </Box>
       )
     }),
@@ -348,8 +347,7 @@ export function factFilePane($: EngineInterface, e: ResolveInput, press: string,
     ...shown.map((item, index) =>
       item.state === 'read' ? (
         <Box key={`evidence:${index}`} flexDirection="column">
-          {said(ui, evidenceLine(item))}
-          {pressLine(ui, [{ key: showKey(index), label: 'show', kind: 'quiet', onPress: () => actions.show(index, item) }], null)}
+          {opensRow(ui, { key: showKey(index), text: evidenceLine(item), onPress: () => actions.show(index, item) })}
         </Box>
       ) : (
         said(ui, evidenceLine(item), 'trouble')

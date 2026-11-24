@@ -9,7 +9,7 @@ import { OLDER_CORE } from './session'
 import { plainLine } from './plain-text'
 
 /*
- * What a fact rests on, one press below its fact file: `show` on an evidence row turns the pane to
+ * What a fact rests on, one press below its fact file: an evidence entry's row turns the pane to
  * that source under a tab of its own, read with `m2b source --json --viewer`. A note shows the
  * words as they were captured and what the curation run added; a picture or a document what it is,
  * the outline of what stands on which page, and `open the file` where `m2b store open` would open

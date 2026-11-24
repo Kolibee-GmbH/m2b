@@ -1311,7 +1311,9 @@ function linesOf(element: Element): string[] {
     return [shownText(element).trim()]
   }
   if (element.type === 'Button') {
-    return [`[${String(element.props['label'])}]`]
+    // A plain Button is drawn as its label alone, the row it stands for.
+    const label = String(element.props['label'])
+    return [element.props['plain'] === true ? label : `[${label}]`]
   }
   const inside = elementsIn(element.children).flatMap(linesOf)
   if (element.props['flexDirection'] !== 'row') {

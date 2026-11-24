@@ -1,16 +1,16 @@
 import type { EngineInterface, ResolveInput } from 'claude-code'
 
 import type { BandPress, PaneView } from '../types'
-import { DUE_TODAY, OVERDUE, part, pressLine, said, styleOf, under } from './look'
-import type { ButtonSpec, Tone } from './look'
+import { DUE_TODAY, OVERDUE, part, pressLine, said, styleOf, tickMark, under } from './look'
+import type { Tone } from './look'
 import { runM2b } from './m2b'
 import { plainLine } from './plain-text'
 import { undoKey } from './rows'
 
 /*
  * The tab "Tasks": every open task of the owner's list, as `m2b todos --json` answers at the
- * moment the tab is turned to, in groups by when each is due, and `done` on each. The review task,
- * the candidates and the questions are not among them: the core leaves curator tasks out, and they
+ * moment the tab is turned to, in groups by when each is due, and a mark before each that ticks
+ * it. The review task, the candidates and the questions are not among them: the core leaves curator tasks out, and they
  * are answered under "Waits for you".
  *
  * The titles are this module's alone, for the opening that read them, and dropped the moment the
@@ -95,7 +95,7 @@ export function noteRefusal(opening: string, id: string, reason: string | null):
 const pressKeys = new Map<string, string>()
 const LOAD = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
 
-/** The key under which the presses hold a press on `done` of the task `id`. */
+/** The key under which the presses hold a press on the mark of the task `id`. */
 export function taskPressKey(id: string): string {
   let key = pressKeys.get(id)
   if (key === undefined) {
@@ -106,7 +106,7 @@ export function taskPressKey(id: string): string {
 }
 
 const READ_TIMEOUT_MS = 20_000
-/** What a press on `done` says where the task is no longer open when its undo window is over. */
+/** What a press on the mark says where the task is no longer open when its undo window is over. */
 export const NO_LONGER_OPEN = 'it is no longer open in the task list; nothing was written'
 // The exit of the core's command line for a command that ran and found something to act on.
 const EXIT_PROBLEM = 1
@@ -229,16 +229,16 @@ const TONES: Readonly<Record<TaskGroup, Tone>> = {
   undated: 'quiet',
 }
 
-/** What a row's button does: `done` completes the task after the undo window, `undo` takes the press back. */
+/** What a row's buttons do: the mark completes the task after the undo window, `undo` takes the press back. */
 export type TaskActions = {
   done: (task: OpenTask) => Promise<void>
   undo: (id: string) => Promise<void>
 }
 
 /**
- * One task: when it is due in its group's color and its title, and below it `done`; while a press
- * waits, `undo` and what it will do; while it writes, that line alone; what the command refused
- * stands below the row until the next press there.
+ * One task on its lines: the mark that ticks it, when it is due in its group's color, its title;
+ * while a press waits, `undo` and what it will do, the title below; while it writes, that line alone;
+ * what the command refused stands below the row until the next press there.
  */
 function taskRow(
   $: EngineInterface,
@@ -252,30 +252,35 @@ function taskRow(
   const ui = $.ui.resolve(e)
   const { Box, Text } = ui
   const title = plainLine(task.title)
-  const when = whenDue(task, group, today)
-  const line = (
-    <Box flexDirection="row" columnGap={1}>
-      {when !== '' && (
-        // Whole, so a narrow pane wraps the title and never breaks the word for when it is due.
-        <Box flexShrink={0}>
-          <Text {...styleOf(TONES[group])}>{when}</Text>
-        </Box>
-      )}
-      <Text wrap="wrap">{title}</Text>
-    </Box>
-  )
   if (pressed?.phase === 'writing') {
     return <Box key={`task:${task.id}`}>{said(ui, `completing: ${title}`, 'quiet')}</Box>
   }
-  const buttons: ButtonSpec[] =
-    pressed?.phase === 'waiting'
-      ? [{ key: undoKey(task.id), label: 'undo', kind: 'default', onPress: () => actions.undo(task.id) }]
-      : [{ key: `done:${task.id}`, label: 'done', kind: 'accent', onPress: () => actions.done(task) }]
+  const when = whenDue(task, group, today)
+  // The mark and the day are kept whole, so a narrow pane wraps the title and never breaks them.
+  const line =
+    pressed?.phase === 'waiting' ? (
+      // The title below: beside `[ undo ] completing` a narrow pane would leave it a column or two.
+      <Box flexDirection="column">
+        {pressLine(ui, [{ key: undoKey(task.id), label: 'undo', kind: 'default', onPress: () => actions.undo(task.id) }], 'completing')}
+        <Text wrap="wrap">{title}</Text>
+      </Box>
+    ) : (
+      <Box flexDirection="row" columnGap={1}>
+        <Box flexShrink={0}>
+          {tickMark(ui, { key: `done:${task.id}`, onPress: () => actions.done(task) })}
+        </Box>
+        {when !== '' && (
+          <Box flexShrink={0}>
+            <Text {...styleOf(TONES[group])}>{when}</Text>
+          </Box>
+        )}
+        <Text wrap="wrap">{title}</Text>
+      </Box>
+    )
   const refusal = refusals.get(task.id)
   return (
     <Box key={`task:${task.id}`} flexDirection="column">
       {line}
-      {pressLine(ui, buttons, pressed?.phase === 'waiting' ? 'completing' : null)}
       {refusal !== undefined && under(ui, `m2b could not complete it: ${plainLine(refusal)}`, 'trouble')}
     </Box>
   )

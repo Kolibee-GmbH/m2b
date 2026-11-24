@@ -200,7 +200,7 @@ it in the m2b pane, or delete the task, and it does not come back for 90 days.
 
 **Ticking a task.** Say in a session that a task is done, "I returned Sam's ladder, tick it
 off", and the `todos` skill ticks it: it finds the task in your list and asks when more than one
-fits. In the m2b pane, the tab `Tasks` lists every open task of yours, each with `done`
+fits. In the m2b pane, the tab `Tasks` lists every open task of yours, each with a mark `○` to tick it
 ([The band](band.md#all-your-open-tasks)). With Apple Reminders you can also tick in the Reminders app. In a terminal with Markdown
 tasks, `m2b tasks list` shows every open task with its id, the review task and these questions
 among them; `m2b tasks complete <id>` ticks one and `m2b tasks drop <id>` drops one. Keep and
