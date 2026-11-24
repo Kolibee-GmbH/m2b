@@ -429,6 +429,48 @@ class CaptureCommandTest(unittest.TestCase):
                 self.assertEqual(code, cli.EXIT_USAGE, err)
         self.assertFalse((self.store_root / "inbox").exists())
 
+    def test_about_names_the_fact_file_the_capture_is_about(self) -> None:
+        """Covers: B303"""
+        self.set_up()
+        (self.store_root / "memory").mkdir()
+        (self.store_root / "memory" / "dana.md").write_text("# Dana\n\nMy sister.\n", encoding="utf-8")
+        text = "Dana lives in Bern since October."
+
+        code, out, err = self.run_command("capture", "--about", "dana.md", "--json", "-", stdin=text)
+
+        (path,) = self.inbox_files()
+        self.assertEqual((code, json.loads(out)["path"]), (cli.EXIT_OK, f"inbox/{path.name}"), err)
+        note = Note.parse(path.read_text(encoding="utf-8"))
+        assert note.frontmatter is not None
+        self.assertEqual(note.frontmatter.get("about"), "dana.md")
+        self.assertEqual(note.body, text + "\n")
+
+    def test_about_refuses_what_is_no_fact_file_and_writes_nothing(self) -> None:
+        """Covers: B303"""
+        self.set_up()
+        lessons = self.store_root / "memory" / "lessons"
+        lessons.mkdir(parents=True)
+        (lessons / "run-only-the-touched-checks.md").write_text("# Lesson\n", encoding="utf-8")
+        (self.store_root / "memory" / "MEMORY.md").write_text("# Memory\n", encoding="utf-8")
+        refused = {
+            "memory/dana.md": (cli.EXIT_USAGE, "never a path"),
+            "lessons/run-only-the-touched-checks.md": (cli.EXIT_USAGE, "never a path"),
+            "MEMORY.md": (cli.EXIT_USAGE, "the distillate"),
+            "20261012T081500Z-claude-3f2a.md": (cli.EXIT_USAGE, "a note"),
+            "dana.txt": (cli.EXIT_USAGE, "no fact file"),
+            "": (cli.EXIT_USAGE, "no name given"),
+            "run-only-the-touched-checks.md": (cli.EXIT_PROBLEM, "no fact file is named"),
+            "sam.md": (cli.EXIT_PROBLEM, "no fact file is named"),
+        }
+        for name, (exit_code, words) in refused.items():
+            with self.subTest(name=name):
+                code, _, err = self.run_command("capture", "--about", name, "Dana lives in Bern.")
+                self.assertEqual(code, exit_code, err)
+                self.assertIn(words, err)
+        code, _, err = self.run_command("capture", "--about", "dana.md", "--project", "Dana lives in Bern.")
+        self.assertEqual(code, cli.EXIT_USAGE, err)
+        self.assertEqual(self.inbox_files(), [])
+
     def test_without_a_store_set_up_it_exits_2_and_a_missing_store_folder_3_writing_nothing(self) -> None:
         """Covers: B3"""
         code, _, err = self.run_command("capture", "Alex prefers green tea")

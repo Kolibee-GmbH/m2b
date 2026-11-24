@@ -69,6 +69,7 @@ The frontmatter is a block between `---` lines, one `key: value` per line, lists
 | `refs` | ingest | archive file names or URLs; merged, never replaced |
 | `from_candidate` | harvest | the candidate task a capture came from |
 | `from_proposal` | harvest | the proposal a capture came from, by its id |
+| `about` | `m2b capture --about` | the fact file of `memory/` the capture corrects, by its name alone (`dana.md`) |
 | `facts_filed: true`, `curated: true` | the curator | how far ingest got; a client never writes these |
 
 **The captured text is never rewritten.** The curator appends its notes after a last line
@@ -377,6 +378,8 @@ The curating machine then migrates the store at the start of its next run
 ([Curation](curation.md#after-an-update)). The inbox is not part of the format: its file names and
 the frontmatter `created` and `source` stay the same, so a machine on an older m2b keeps
 capturing into a newer store.
+A key a new client adds to a capture, such as `about`, leaves the format as it is: an older m2b
+files the capture as a plain note and keeps the key in the archive.
 
 | Format | Since | What it holds |
 |---|---|---|

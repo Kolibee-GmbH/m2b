@@ -9,6 +9,10 @@ waits in the inbox, is said to be so with exit 0, and nothing is captured.
 The skill passes its text on standard input, so quotes, dollar signs and line breaks arrive as
 written; a capture from Claude Code carries the source ``claude``, one typed on the command line
 ``cli``. The source names where a capture came from, not a device, so it is right on Linux too.
+
+With ``--about <fact file>`` the capture names the fact file of ``memory/`` it corrects, by its name
+alone; a name that is no fact file's, a path or the distillate ends with exit 2, one ``memory/``
+does not hold with exit 1, and nothing is written.
 """
 
 from __future__ import annotations
@@ -22,13 +26,14 @@ from pathlib import Path
 from m2b import project_capture, session_remotes
 from m2b.capture import capture
 from m2b.capture_file import CaptureFileRefusedError, capture_file
-from m2b.commands import Context, UsageError
+from m2b.commands import Context, ProblemError, UsageError
 from m2b.commands.backends import configured_store
 from m2b.commands.output import print_json
 from m2b.commands.times import parse_day
 from m2b.config.machine import load_machine_config
 from m2b.config.store_settings import STORE_SETTINGS_FILE_NAME, load_store_settings, require_inbox_writable
 from m2b.notes.characters import with_hidden_written_out
+from m2b.source import SourceNotFoundError, SourceRefusedError, fact_file_named
 from m2b.store.base import FetchError, Store
 from m2b.tasks.factory import open_tasks
 
@@ -44,6 +49,8 @@ def capture_command(arguments: argparse.Namespace, context: Context) -> int:
     follow_up = parse_day(arguments.follow_up, "--follow-up") if arguments.follow_up else None
     if arguments.project and follow_up is not None:
         raise UsageError("a project is captured without a follow-up")
+    if arguments.project and arguments.about is not None:
+        raise UsageError("a project is captured without --about: it corrects no fact file")
     repository = _repository_here(context) if arguments.project else None
     if repository is None and not text.strip():
         raise UsageError("there is nothing to capture: the text is empty")
@@ -52,6 +59,8 @@ def capture_command(arguments: argparse.Namespace, context: Context) -> int:
     with contextlib.suppress(FetchError):
         store.fetch([STORE_SETTINGS_FILE_NAME], STORE_SETTINGS_FETCH_SECONDS)
     require_inbox_writable(store)
+    if arguments.about is not None:
+        _require_fact_file(store, arguments.about)
     if repository is not None:
         topic, waiting = _already_there(store, repository)
         if topic is not None or waiting is not None:
@@ -68,7 +77,15 @@ def capture_command(arguments: argparse.Namespace, context: Context) -> int:
         text = project_capture.capture_text(repository.addresses, text)
     tasks = open_tasks(load_store_settings(store).tasks, store, config.executables) if follow_up else None
     try:
-        result = capture(store, text, arguments.source, quiet=arguments.quiet, follow_up=follow_up, tasks=tasks)
+        result = capture(
+            store,
+            text,
+            arguments.source,
+            quiet=arguments.quiet,
+            follow_up=follow_up,
+            tasks=tasks,
+            about=arguments.about,
+        )
     except ValueError as error:
         raise UsageError(str(error)) from error
     if result.notice:
@@ -84,6 +101,17 @@ def capture_command(arguments: argparse.Namespace, context: Context) -> int:
     else:
         print(result.path)
     return 0
+
+
+def _require_fact_file(store: Store, name: str) -> None:
+    """A name that is no fact file's is a usage error, one that names none a problem; both before
+    anything is written, as for an empty text."""
+    try:
+        fact_file_named(store, name)
+    except SourceRefusedError as error:
+        raise UsageError(with_hidden_written_out(str(error))) from error
+    except SourceNotFoundError as error:
+        raise ProblemError(with_hidden_written_out(str(error))) from error
 
 
 def _repository_here(context: Context) -> session_remotes.Repository:

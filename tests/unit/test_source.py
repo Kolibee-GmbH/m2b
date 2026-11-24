@@ -23,6 +23,7 @@ from m2b.source import (
     NotRead,
     SourceNotFoundError,
     SourceRefusedError,
+    fact_file_named,
     read_source,
 )
 from m2b.store.base import Scan
@@ -274,6 +275,18 @@ class NoteTest(SourceFixture):
             read_source(self.store, "20261109T080000Z-cli-aaaa.md")
 
 
+class FactFileNamedTest(SourceFixture):
+    def test_a_fact_file_not_downloaded_is_named_and_a_symbolic_link_is_refused(self) -> None:
+        """Covers: B303"""
+        self.write(DANA, FACT_FILE)
+        self.evict(DANA)
+        self.assertEqual(fact_file_named(self.store, "dana.md"), DANA)
+
+        (self.root / "memory" / "sam.md").symlink_to(self.root / DANA)
+        with self.assertRaisesRegex(SourceRefusedError, "symbolic link"):
+            fact_file_named(self.store, "sam.md")
+
+
 class RefusalTest(SourceFixture):
     def test_a_path_a_separator_or_a_name_of_no_source_is_refused_and_nothing_is_read(self) -> None:
         """Covers: B219"""
@@ -404,6 +417,33 @@ class SourceCommandTest(unittest.TestCase):
                 "  20260101T000000Z-cli-0000.md: no note of the archive has this name",
             ],
         )
+
+    def test_with_viewer_a_fact_file_names_the_corrections_that_wait_for_it(self) -> None:
+        """Covers: B304"""
+        self.write(DANA, FACT_FILE)
+        waiting = "20261124T180000Z-cli-a1b2.md"
+        self.write(
+            f"inbox/{waiting}",
+            "---\ncreated: 2026-11-24T19:00:00+01:00\nsource: cli\nabout: dana.md\n---\n"
+            "Dana lives in Bern since October.\nShe moved for the new job.\n",
+        )
+        self.write(
+            "inbox/20261124T181000Z-cli-c3d4.md",
+            "---\ncreated: 2026-11-24T19:10:00+01:00\nsource: cli\nabout: sam.md\n---\nSam has a new boat.\n",
+        )
+        self.write(
+            "inbox/20261124T182000Z-cli-e5f6.md",
+            "---\ncreated: 2026-11-24T19:20:00+01:00\nsource: cli\n---\nDana called.\n",
+        )
+
+        code, out, err = self.run_command("source", "--json", "--viewer", "dana.md")
+
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertEqual(
+            json.loads(out)["corrections"], [{"capture": waiting, "first_line": "Dana lives in Bern since October."}]
+        )
+        code, out, err = self.run_command("source", "--json", "dana.md")
+        self.assertNotIn("corrections", json.loads(out))
 
     def test_a_documents_note_as_json(self) -> None:
         """Covers: B218"""

@@ -97,6 +97,7 @@ class Pending:
     quiet: bool = False
     follow_up: str | None = None
     members: tuple[str, ...] = ()
+    about: str | None = None
 
 
 @dataclass
@@ -170,6 +171,7 @@ def _pending_capture(store: Store, relative: str, others: list[str]) -> Pending:
         quiet=frontmatter.get_flag(keys.QUIET),
         follow_up=frontmatter.get(keys.FOLLOW_UP),
         members=tuple(others) if kind == keys.KIND_SIDECAR else (),
+        about=frontmatter.get(keys.ABOUT),
     )
 
 

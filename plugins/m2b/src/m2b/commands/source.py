@@ -11,8 +11,9 @@ model reads this answer. Text loses such characters, a path or a name keeps them
 from __future__ import annotations
 
 import argparse
+from pathlib import PurePosixPath
 
-from m2b import viewer
+from m2b import corrections, viewer
 from m2b.commands import Context, ProblemError, UsageError
 from m2b.commands.backends import configured_store
 from m2b.commands.output import print_json
@@ -88,7 +89,13 @@ def _viewer_json(source: Source, store: Store, context: Context) -> dict[str, ob
     """For a picture's or a document's note, whether ``m2b store open`` opens the file, why not, and
     where it lies; the pane offers ``open the file`` or names the path. Only with ``--viewer``, which
     the pane passes: the skill ``m2b:search`` hands the JSON to a session's model, which is never
-    given a path into the store."""
+    given a path into the store. For a fact file, the corrections that wait for it in the inbox,
+    each with its capture's name and first line."""
+    if isinstance(source, FactFile):
+        waiting = corrections.waiting_for(store, PurePosixPath(source.path).name)
+        return {
+            "corrections": [{"capture": _name(item.capture), "first_line": _text(item.first_line)} for item in waiting]
+        }
     if not isinstance(source, NoteSource):
         return {}
     if source.original is None:

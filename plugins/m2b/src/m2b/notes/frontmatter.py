@@ -22,6 +22,8 @@ TASKS = "tasks"
 REFS = "refs"
 FROM_CANDIDATE = "from_candidate"
 FROM_PROPOSAL = "from_proposal"
+# The fact file of memory/ a capture corrects, by its name alone: written by `m2b capture --about`.
+ABOUT = "about"
 KIND = "kind"
 FACTS_FILED = "facts_filed"
 CURATED = "curated"

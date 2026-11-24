@@ -312,6 +312,7 @@ def _parser() -> argparse.ArgumentParser:
     capture.add_argument(
         "--project", action="store_true", help="make the working folder's project known, named by its git remote"
     )
+    capture.add_argument("--about", help="the fact file of memory/ the text corrects, by its name (dana.md)")
     capture_file = _command(
         commands, "capture-file", capture_commands.capture_file_command, "copy a file into the inbox, with words"
     )

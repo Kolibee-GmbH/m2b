@@ -775,6 +775,20 @@ class OutlineTest(IngestFixture):
 
 
 class FinishTest(IngestFixture):
+    def test_a_capture_about_a_fact_file_is_filed_as_any_capture_keeping_its_about(self) -> None:
+        """Covers: B304"""
+        name = "20261124T180000Z-cli-a1b2.md"
+        self.write(
+            f"inbox/{name}",
+            "---\ncreated: 2026-11-24T19:00:00+01:00\nsource: cli\nabout: dana.md\n---\nDana lives in Bern.\n",
+        )
+
+        destinations = ingest.finish(self.store, self.tasks, name)
+
+        self.assertEqual(destinations, [f"corpus/2026/11/{name}"])
+        self.assertEqual(self.inbox(), [])
+        self.assertIn("\nabout: dana.md\n", self.read(f"corpus/2026/11/{name}"))
+
     def test_a_capture_moves_to_the_month_of_its_created_time_in_utc(self) -> None:
         """Covers: B19"""
         name = "20261031T233000Z-cli-0001.md"
@@ -1137,6 +1151,14 @@ class IngestCommandTest(test_commands.CommandTest):
                 self.assertEqual(code, cli.EXIT_PROBLEM, err)
         self.assertTrue((self.store_root / "inbox" / CAPTURE).is_file())
 
+    def test_list_names_the_fact_file_a_capture_is_about(self) -> None:
+        """Covers: B304"""
+        self.write(f"inbox/{CAPTURE}", CAPTURED.replace("source: cli\n", "source: cli\nabout: dana.md\n"))
+
+        (listed,) = self.run_json("ingest", "list")["captures"]
+
+        self.assertEqual(listed["about"], "dana.md")
+
     def test_list_names_the_owner_so_first_person_facts_join_their_file(self) -> None:
         self.write(f"inbox/{CAPTURE}", CAPTURED)
         profile.save_profile(self.store, {"version": 1, "owner": "Alex", "language": "en"})
@@ -1163,6 +1185,7 @@ class IngestCommandTest(test_commands.CommandTest):
                     "facts_filed": False,
                     "quiet": False,
                     "follow_up": None,
+                    "about": None,
                     "members": [],
                 }
             ],
