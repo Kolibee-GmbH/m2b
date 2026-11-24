@@ -24,6 +24,8 @@ FROM_CANDIDATE = "from_candidate"
 FROM_PROPOSAL = "from_proposal"
 # The fact file of memory/ a capture corrects, by its name alone: written by `m2b capture --about`.
 ABOUT = "about"
+# The hash of the fact file an edit was made from: written by `m2b store edit --keep`.
+BASE = "base"
 KIND = "kind"
 FACTS_FILED = "facts_filed"
 CURATED = "curated"
@@ -33,6 +35,8 @@ UNTIL = "until"
 KIND_WORKLOG = "worklog"
 KIND_JOURNAL = "journal"
 KIND_SIDECAR = "sidecar"
+# A fact file rewritten whole by the owner, which a curation run puts in place (`m2b store edit`).
+KIND_EDIT = "edit"
 
 QUIET_LINE = f"{QUIET}: true"
 

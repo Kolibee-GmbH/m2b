@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse
 from pathlib import PurePosixPath
 
-from m2b import corrections, viewer
+from m2b import corrections, fact_edit, viewer
 from m2b.commands import Context, ProblemError, UsageError
 from m2b.commands.backends import configured_store
 from m2b.commands.output import print_json
@@ -90,11 +90,13 @@ def _viewer_json(source: Source, store: Store, context: Context) -> dict[str, ob
     where it lies; the pane offers ``open the file`` or names the path. Only with ``--viewer``, which
     the pane passes: the skill ``m2b:search`` hands the JSON to a session's model, which is never
     given a path into the store. For a fact file, the corrections that wait for it in the inbox,
-    each with its capture's name and first line."""
+    each with its capture's name and first line, and its editing copy and kept edits (``edit``)."""
     if isinstance(source, FactFile):
-        waiting = corrections.waiting_for(store, PurePosixPath(source.path).name)
+        name = PurePosixPath(source.path).name
+        waiting = corrections.waiting_for(store, name)
         return {
-            "corrections": [{"capture": _name(item.capture), "first_line": _text(item.first_line)} for item in waiting]
+            "corrections": [{"capture": _name(item.capture), "first_line": _text(item.first_line)} for item in waiting],
+            "edit": _edit_json(store, context, name),
         }
     if not isinstance(source, NoteSource):
         return {}
@@ -105,6 +107,17 @@ def _viewer_json(source: Source, store: Store, context: Context) -> dict[str, ob
         "opens": why_not is None,
         "not_opened": _name(why_not) if why_not is not None else None,
         "file": _name(str(store.path(source.original))),
+    }
+
+
+def _edit_json(store: Store, context: Context, name: str) -> dict[str, object]:
+    """The editing copy of a fact file, if there is one, and the kept edits that wait for a run."""
+    state = fact_edit.copy_state(store, context.machine, name)
+    return {
+        "copy": str(state.copy) if state else None,
+        "differs": state.differs if state else False,
+        "fact_file_changed": state.fact_file_changed if state else False,
+        "kept": [_name(capture) for capture in corrections.edits_waiting(store, name)],
     }
 
 

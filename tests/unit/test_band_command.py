@@ -10,7 +10,7 @@ from unittest import mock
 
 import test_proposals_command
 import test_runner
-from m2b import cli, launcher, proposals, topic_state
+from m2b import cli, fact_edit, launcher, proposals, topic_state
 from m2b.commands import band, doctor
 from m2b.store.base import StoreError
 from m2b.tasks import markers
@@ -22,6 +22,19 @@ class BandCommandTest(test_runner.RunnerTest):
     def band(self) -> dict[str, Any]:
         result: dict[str, Any] = self.run_json("band")
         return result
+
+    def test_the_editing_copies_that_differ_are_counted(self) -> None:
+        """Covers: B308"""
+        self.curating()
+        self.assertEqual(self.band()["edits_not_kept"], 0)
+        copy = fact_edit.copy_path(self.machine, "dana.md")
+        copy.parent.mkdir(parents=True)
+        copy.write_text("# Dana\n\n- Lives in Basel.\n", encoding="utf-8")
+        (copy.parent / "dana.md.base").write_text(
+            fact_edit.content_hash(b"# Dana\n\n- Lives in Zurich.\n"), encoding="ascii"
+        )
+
+        self.assertEqual(self.band()["edits_not_kept"], 1)
 
     def test_candidates_questions_the_review_and_the_status_come_in_one_answer(self) -> None:
         """Covers: B93"""

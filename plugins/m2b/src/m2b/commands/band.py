@@ -54,7 +54,7 @@ import difflib
 import re
 from typing import Any
 
-from m2b import topic_state
+from m2b import fact_edit, topic_state
 from m2b.commands import Context, UsageError
 from m2b.commands.backends import configured_store, configured_tasks
 from m2b.commands.doctor import NOT_REACHABLE, PROBE_FAILURES, REACHABLE, Check
@@ -101,6 +101,7 @@ def band_command(arguments: argparse.Namespace, context: Context) -> int:
         "tasks": tasks,
         "proposals": waiting,
         "status": status,
+        "edits_not_kept": fact_edit.differing_copies(context.machine),
     }
     if arguments.session is not None:
         answer["session"] = _session_part(config, context, arguments.session)

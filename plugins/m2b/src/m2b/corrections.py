@@ -1,4 +1,4 @@
-"""Corrections that wait: captures in ``inbox/`` whose ``about`` names a fact file.
+"""Corrections and edits that wait: captures in ``inbox/`` whose ``about`` names a fact file.
 
 ``m2b capture --about <fact file>`` writes such a capture. Until a curation run files it, the
 pane's view of that fact file names it, so the person sees that the correction was kept. Only the
@@ -21,10 +21,21 @@ from m2b.store.base import Store, StoreError
 class WaitingCorrection:
     capture: str
     first_line: str
+    is_edit: bool = False
 
 
 def waiting_for(store: Store, fact_file: str) -> list[WaitingCorrection]:
-    """The captures about ``fact_file`` (its name alone, ``dana.md``), oldest first by name."""
+    """The corrections about ``fact_file`` (its name alone, ``dana.md``), oldest first by name; an
+    edit of the whole file (``kind: edit``) is no correction and is left out."""
+    return [item for item in _about_file(store, fact_file) if not item.is_edit]
+
+
+def edits_waiting(store: Store, fact_file: str) -> list[str]:
+    """The names of the kept edits of ``fact_file`` that wait in the inbox, oldest first."""
+    return [item.capture for item in _about_file(store, fact_file) if item.is_edit]
+
+
+def _about_file(store: Store, fact_file: str) -> list[WaitingCorrection]:
     found = []
     for relative in sorted(store.scan(INBOX).files):
         path = PurePosixPath(relative)
@@ -44,4 +55,5 @@ def _about(store: Store, relative: str, fact_file: str) -> WaitingCorrection | N
     if note.frontmatter is None or note.frontmatter.get(keys.ABOUT) != fact_file:
         return None
     first = next((line.strip() for line in note.body.split("\n") if line.strip()), "")
-    return WaitingCorrection(PurePosixPath(relative).name, first)
+    is_edit = note.frontmatter.get(keys.KIND) == keys.KIND_EDIT
+    return WaitingCorrection(PurePosixPath(relative).name, first, is_edit)

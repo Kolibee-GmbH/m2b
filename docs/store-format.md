@@ -64,12 +64,13 @@ The frontmatter is a block between `---` lines, one `key: value` per line, lists
 | `source` | the client, required | who captured |
 | `quiet: true` | the client | keep the note out of everything proactive (rediscover, `## Current`); search still finds it |
 | `follow_up` | the client | a due date whose task is still to be created |
-| `kind` | the writer | `worklog`, `journal` or `sidecar`; absent on a plain capture |
+| `kind` | the writer | `worklog`, `journal`, `sidecar` or `edit` (a fact file rewritten whole, its text the capture's); absent on a plain capture |
 | `tasks` | capture, ingest | ids of the tasks created from this note |
 | `refs` | ingest | archive file names or URLs; merged, never replaced |
 | `from_candidate` | harvest | the candidate task a capture came from |
 | `from_proposal` | harvest | the proposal a capture came from, by its id |
-| `about` | `m2b capture --about` | the fact file of `memory/` the capture corrects, by its name alone (`dana.md`) |
+| `about` | `m2b capture --about`, `m2b store edit --keep` | the fact file of `memory/` the capture corrects or rewrites, by its name alone (`dana.md`) |
+| `base` | `m2b store edit --keep` | the SHA-256 of the fact file as it was when its editing copy was made; with `kind: edit` |
 | `facts_filed: true`, `curated: true` | the curator | how far ingest got; a client never writes these |
 
 **The captured text is never rewritten.** The curator appends its notes after a last line
@@ -379,7 +380,8 @@ The curating machine then migrates the store at the start of its next run
 the frontmatter `created` and `source` stay the same, so a machine on an older m2b keeps
 capturing into a newer store.
 A key a new client adds to a capture, such as `about`, leaves the format as it is: an older m2b
-files the capture as a plain note and keeps the key in the archive.
+files the capture as a plain note and keeps the key in the archive. An edit (`kind: edit`) is then
+read as a note whose text is the whole fact file as the owner rewrote it.
 
 | Format | Since | What it holds |
 |---|---|---|

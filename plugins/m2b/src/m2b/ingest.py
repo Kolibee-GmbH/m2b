@@ -171,7 +171,9 @@ def _pending_capture(store: Store, relative: str, others: list[str]) -> Pending:
         quiet=frontmatter.get_flag(keys.QUIET),
         follow_up=frontmatter.get(keys.FOLLOW_UP),
         members=tuple(others) if kind == keys.KIND_SIDECAR else (),
-        about=frontmatter.get(keys.ABOUT),
+        # An edit names its fact file too, but it is no correction: the run puts it in place in a step
+        # of its own, only while the fact file is as the edit found it.
+        about=None if kind == keys.KIND_EDIT else frontmatter.get(keys.ABOUT),
     )
 
 

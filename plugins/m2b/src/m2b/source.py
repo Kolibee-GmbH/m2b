@@ -150,7 +150,7 @@ def fact_file_named(store: Store, name: str) -> str:
     kept.
     """
     if _checked(name) is not None:
-        raise SourceRefusedError(f"{name} is a note, not a fact file: a correction is about a fact file of memory/")
+        raise SourceRefusedError(f"{name} is a note, not a fact file: give the name of a fact file of memory/")
     relative = f"{MEMORY}/{name}"
     try:
         found = _located(store.scan(MEMORY), relative, name)

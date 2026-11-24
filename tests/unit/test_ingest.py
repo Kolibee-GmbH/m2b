@@ -1159,6 +1159,15 @@ class IngestCommandTest(test_commands.CommandTest):
 
         self.assertEqual(listed["about"], "dana.md")
 
+    def test_list_names_no_about_for_a_kept_edit_which_is_no_correction(self) -> None:
+        """Covers: B307"""
+        edit = CAPTURED.replace("source: cli\n", "source: cli\nkind: edit\nabout: dana.md\nbase: 0a1b\n")
+        self.write(f"inbox/{CAPTURE}", edit)
+
+        (listed,) = self.run_json("ingest", "list")["captures"]
+
+        self.assertEqual((listed["kind"], listed["about"]), ("edit", None))
+
     def test_list_names_the_owner_so_first_person_facts_join_their_file(self) -> None:
         self.write(f"inbox/{CAPTURE}", CAPTURED)
         profile.save_profile(self.store, {"version": 1, "owner": "Alex", "language": "en"})
