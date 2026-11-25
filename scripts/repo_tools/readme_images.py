@@ -100,7 +100,7 @@ class Shot:
 # so recording one alone leaves the pictures before it as they are. The last asks nothing: it shows
 # the band at the end of the hint line below the prompt, in a terminal wide enough for every count.
 # Before it, the way from a fact to its file: the pane beside the chat, the letter of the tab
-# `Facts`, then two Tabs from that tab, past `Settings`, to the first fact's row.
+# `Facts`, then three Tabs from that tab, past `Settings` and the field `search`, to the first fact's row.
 SHOTS = (
     Shot("session-start", 30, 30, "When does Sam bring the plywood, and where is the spare key for the shed?", True),
     Shot(
@@ -124,7 +124,7 @@ SHOTS = (
         EVERYDAY,
         WIDE,
         True,
-        keys=(("f", 4), (TAB * 2, 1), (ENTER, 5)),
+        keys=(("f", 4), (TAB * 3, 1), (ENTER, 5)),
     ),
     Shot("band-below", 12, 6, "", True, EVERYDAY, WIDE, settings=(("band.place", "below"),)),
 )
