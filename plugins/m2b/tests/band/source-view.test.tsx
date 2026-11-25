@@ -21,13 +21,13 @@ import {
   sourceTabLabel,
 } from '../../hooks/source-view'
 import type { SourceLook } from '../../hooks/source-view'
-import { FakeM2b, buttonsAt, everyText, fail, inView, linesAt, lookOf, ok, pane, piecesAt, pressTab, shownParts, shownTab, shownTabs, start, texts, viewButtons, isTheOverview } from './harness'
+import { FakeM2b, buttonsAt, everyText, fail, inView, linesAt, lookOf, ok, pane, piecesAt, pressTab, readsASource, shownParts, shownTab, shownTabs, start, texts, viewButtons, isTheOverview } from './harness'
 import type { ShownPiece, ShownTab } from './harness'
 
 const PANE = 'm2b'
 const AS_A_DIALOG = { id: PANE, title: 'm2b', closeOnEscape: true, focus: true }
 const READ_FACTS = ['distillate', 'topics', '--json']
-const READ_FILE = ['source', '--json', '--', 'dana.md']
+const READ_FILE = ['source', '--json', '--viewer', '--', 'dana.md']
 const READING = 'm2b is reading it…'
 const OPENING = 'm2b is opening it…'
 const OPENED = 'Opened in the system’s viewer.'
@@ -225,7 +225,7 @@ test('each evidence entry that was read is a row that shows its source, keyed by
 
   const ui = await factFileView($)
 
-  expect(await viewButtons(ui)).toEqual(['show:0', 'show:1', 'show:3'])
+  expect(await viewButtons(ui)).toEqual(['fact:correct', 'show:0', 'show:1', 'show:3'])
   expect((await shownParts(ui)).find(part => part.key === 'fact:evidence')?.lines).toEqual([
     opening('2026-10-12 a note: Dana, my sister.'),
     opening('2026-11-16 a document, handbook.pdf: p. 1: club name'),
@@ -269,7 +269,7 @@ test('a press on an evidence entry reads its source once, with source --json --v
     ['source', '--json', '--viewer', '--', PICTURE],
   ])
   // The fact file was read once, for the fact's row; the way down and back never reads it again.
-  expect(fake.sourceCalls().filter(call => !call.includes('--viewer'))).toEqual([READ_FILE])
+  expect(fake.sourceCalls().filter(call => !readsASource(call))).toEqual([READ_FILE])
   await ui.unmount()
 })
 
@@ -415,7 +415,7 @@ test('a note without a day says what it is alone, and a source without added lin
 test('while m2b reads the source the view says so under What it is, the tabs already stand, and then it shows what m2b answered', async ($, on) => {
   // Covers: B230
   const fake = danaWorld()
-  fake.delayMs = args => (args.includes('--viewer') ? 2_000 : 0)
+  fake.delayMs = args => (readsASource(args) ? 2_000 : 0)
   const { clock } = await start($, on, fake)
   const ui = await factFileView($)
 
@@ -761,7 +761,7 @@ test('the tab Facts above a source reads the facts anew and leaves nothing of th
   }
   // The fact's row reads the fact file anew.
   await ui.press({ key: 'details:0' })
-  expect(fake.sourceCalls().filter(call => !call.includes('--viewer'))).toEqual([READ_FILE, READ_FILE])
+  expect(fake.sourceCalls().filter(call => !readsASource(call))).toEqual([READ_FILE, READ_FILE])
   await ui.unmount()
 })
 
@@ -769,7 +769,7 @@ for (const to of ['overview', 'proposals', 'review', 'tasks', 'facts', 'settings
   test(`an answer for a source that comes after ${to === 'back' ? "the fact file's tab" : `the tab ${to}`} was pressed is dropped, and draws nothing of it`, async ($, on) => {
     // Covers: B232
     const fake = danaWorld()
-    fake.delayMs = args => (args.includes('--viewer') ? 2_000 : 0)
+    fake.delayMs = args => (readsASource(args) ? 2_000 : 0)
     const { clock } = await start($, on, fake)
     const ui = await factFileView($)
 
@@ -795,7 +795,7 @@ test('an answer for the source of an earlier press does not fill the view of a l
   // Covers: B232
   const fake = danaWorld()
   let reads = 0
-  fake.delayMs = args => (!args.includes('--viewer') ? 0 : (reads += 1) === 1 ? 2_000 : 5_000)
+  fake.delayMs = args => (!readsASource(args) ? 0 : (reads += 1) === 1 ? 2_000 : 5_000)
   const { clock } = await start($, on, fake)
   const ui = await factFileView($)
 
@@ -849,7 +849,7 @@ test('a command that turns the pane away from a source leaves nothing of it, and
   await ui.press({ key: 'show:0' })
 
   expect(fake.viewerCalls()).toHaveLength(2)
-  expect(fake.sourceCalls().filter(call => !call.includes('--viewer'))).toHaveLength(2)
+  expect(fake.sourceCalls().filter(call => !readsASource(call))).toHaveLength(2)
   await ui.unmount()
 })
 
@@ -899,7 +899,7 @@ test("the session's state, which every plugin can read, holds nothing a source s
 
 const NOTE_ENTRY: Evidence = { name: NOTE, state: 'read', day: '2026-10-12', kind: 'note', originalName: null, firstLine: 'Dana, my sister.' }
 const READ_NOTE: SourceLook = parseSource(JSON.stringify(noteAnswer()))
-const READ_FILE_LOOK: FactFileLook = { state: 'read', title: 'Dana', until: null, lines: FACT_LINES, earlier: [], evidence: [] }
+const READ_FILE_LOOK: FactFileLook = { state: 'read', title: 'Dana', until: null, lines: FACT_LINES, earlier: [], evidence: [], corrections: [] }
 
 test('a source is kept for the press that opened it, with how a press on open the file stands, and turning the pane to any other view drops both', () => {
   // Covers: B232

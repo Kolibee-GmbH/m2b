@@ -606,11 +606,18 @@ line names one (it ends in `›`), and the current items, each as its words and 
 counts (`2 facts, 1 current`); a press opens [its lines](#a-topics-lines) as the button in "This
 session" does, with the focus on the tab `Facts`, which leads back.
 
-A press on a fact opens its file, read with `m2b source --json` at the press, under a tab that
-bears the file's name without `.md`: its lines, the day it stops being true where it has one, its
-earlier values, and **What it rests on**, the notes and documents behind it, each with its day,
+A press on a fact opens its file, read with `m2b source --json --viewer` at the press, under a tab
+that bears the file's name without `.md`: its lines, the day it stops being true where it has one,
+its earlier values, and **What it rests on**, the notes and documents behind it, each with its day,
 what it is, a document's original file name and its first line. The first eight are listed, and a
 line says how many more there are.
+
+`correct` under the file's title opens a field `what is right`. Type how the fact should read and
+press Enter: after the five seconds of `undo` the words go into the inbox as a correction of that
+file (`m2b capture --about`), and the next curation run applies them to it. Until then the view
+says that the correction waits, with your words, and on the machine that curates `curate now`
+stands below them, which starts that run. What you typed stays in the field when you leave the
+view, Escape included, and is there again when you open the same file.
 
 Each of them that m2b could read is a row you press, ending in `›` as a fact does. It turns the
 pane to that note or document,

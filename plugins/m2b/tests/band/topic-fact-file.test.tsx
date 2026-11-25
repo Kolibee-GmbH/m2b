@@ -15,7 +15,7 @@ const PAYS = 'Acme pays within 30 days'
 const SIGNED = 'The framework contract is signed'
 const AUDIT = 'Export audit under way (since 2026-11-02)'
 const READ_ACME = ['distillate', 'topic', '--json', '--', 'Acme Ltd']
-const READ_PAYS = ['source', '--json', '--', 'acme.md']
+const READ_PAYS = ['source', '--json', '--viewer', '--', 'acme.md']
 const OTHER_SHAPE = 'm2b answered something other than a topic'
 const EVIDENCE = '20261012T081500Z-claude-3f2a.md'
 const SIX = ['overview', 'proposals', 'review', 'tasks', 'facts', 'settings'] as const
@@ -150,7 +150,7 @@ test("a fact's row opens its file under the tab beside the topic's, which bears 
   await ui.press({ key: topicFactKey(1) })
 
   expect(fake.calls.slice(callsBefore).filter(call => call[0] === 'source' || call[0] === 'distillate')).toEqual([READ_PAYS])
-  expect(await partLines(ui, 'fact')).toEqual(['Pays within 30 days.'])
+  expect(await partLines(ui, 'fact')).toEqual(['[correct]', 'Pays within 30 days.'])
   expect(await shownTabs(ui)).toEqual(tabsAboveTheFile())
   // The key the focus is asked for is drawn above the file and was drawn by no view before: Claude Code finds it there.
   expect(before).not.toContain(BACK_TO_THE_TOPIC_KEY)

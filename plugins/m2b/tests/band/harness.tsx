@@ -262,6 +262,11 @@ export class FakeM2b {
   viewerAnswers: Record<string, Record<string, unknown>> = {}
   /** When set, `m2b source --json --viewer` ends with this whatever the name, as a core that does not know the option. */
   viewerRefusal: ProcessRunResult | null = null
+  /**
+   * The corrections that wait in the inbox, by the fact file they are about, as `m2b source --json
+   * --viewer` names them; a capture with `--about` adds one, as the core finds it in `inbox/`.
+   */
+  readonly corrections: Record<string, { capture: string; first_line: string }[]> = {}
   /** How `m2b store open` ends; how long it takes is `delayMs`'s. */
   openAnswer: ProcessRunResult = ok("opened corpus/2026/11/20261116T165634Z-cli-7198.pdf in the system's viewer\n")
   /**
@@ -396,7 +401,7 @@ export class FakeM2b {
     if (args[0] === 'band') {
       return this.bandAnswer(args.includes('--tasks-only'))
     }
-    if (args[0] === 'source' && args.includes('--viewer')) {
+    if (readsASource(args)) {
       if (this.viewerRefusal !== null) {
         return this.viewerRefusal
       }
@@ -404,7 +409,9 @@ export class FakeM2b {
       return answer === undefined ? fail(this.sourceFails) : ok(JSON.stringify(answer))
     }
     if (args[0] === 'source') {
-      return this.sourceAnswer === null ? fail(this.sourceFails) : ok(JSON.stringify(this.sourceAnswer))
+      // A fact file read for the pane, with `--viewer`, names the corrections that wait for it.
+      const corrections = args.includes('--viewer') && this.sourceAnswer?.['kind'] === 'fact file' ? { corrections: this.corrections[args.at(-1) ?? ''] ?? [] } : {}
+      return this.sourceAnswer === null ? fail(this.sourceFails) : ok(JSON.stringify({ ...this.sourceAnswer, ...corrections }))
     }
     if (args[0] === 'store' && args[1] === 'open') {
       return this.openAnswer
@@ -424,6 +431,12 @@ export class FakeM2b {
       this.captured.push(stdin ?? '')
       this.captureArgs.push(args)
       const path = 'inbox/20260314-173000-claude-ab12.md'
+      const aboutAt = args.indexOf('--about')
+      const about = aboutAt === -1 ? undefined : args[aboutAt + 1]
+      if (about !== undefined) {
+        const firstLine = (stdin ?? '').split('\n').map(line => line.trim()).find(line => line !== '') ?? ''
+        this.corrections[about] = [...(this.corrections[about] ?? []), { capture: path.slice('inbox/'.length), first_line: firstLine }]
+      }
       const dayAt = args.indexOf('--follow-up')
       const followUp = dayAt === -1 ? null : (args[dayAt + 1] ?? null)
       const stdout = args.includes('--json')
@@ -559,7 +572,7 @@ export class FakeM2b {
 
   /** The calls that read a source a fact rests on, for the pane. */
   viewerCalls(): string[][] {
-    return this.calls.filter(call => call[0] === 'source' && call.includes('--viewer'))
+    return this.calls.filter(readsASource)
   }
 
   /** The calls that opened a file of the archive in the system's viewer, or tried to. */
@@ -710,6 +723,15 @@ export class FakeM2b {
 }
 
 const NOT_SET_UP = 'not set up: no machine config at /home/alex/.config/m2b/config.json'
+
+/**
+ * Whether a call reads a note or a document a fact rests on, for the pane: `m2b source --json
+ * --viewer` with a name of the archive, which begins with its moment (`20261012T081500Z-`). The
+ * pane reads a fact file with `--viewer` too, by a name that has no moment.
+ */
+export function readsASource(args: readonly string[]): boolean {
+  return args[0] === 'source' && args.includes('--viewer') && /^\d{8}T\d{6}Z-/.test(args.at(-1) ?? '')
+}
 
 export function ok(stdout: string): ProcessRunResult {
   return { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false }

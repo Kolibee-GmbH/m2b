@@ -418,13 +418,13 @@ test('a press on a fact reads its fact file once, with source --json, and turns 
 
   await ui.press({ key: 'details:0' })
 
-  expect(fake.calls.slice(callsBefore)).toEqual([['source', '--json', '--', 'dana.md']])
+  expect(fake.calls.slice(callsBefore)).toEqual([['source', '--json', '--viewer', '--', 'dana.md']])
   expect(opened.slice(opensBefore)).toEqual([AS_A_DIALOG])
   await pressTab(ui, 'facts')
   await ui.press({ key: 'details:2' })
   expect(fake.sourceCalls()).toEqual([
-    ['source', '--json', '--', 'dana.md'],
-    ['source', '--json', '--', 'sam.md'],
+    ['source', '--json', '--viewer', '--', 'dana.md'],
+    ['source', '--json', '--viewer', '--', 'sam.md'],
   ])
   await ui.unmount()
 })
@@ -437,7 +437,7 @@ test("the fact's file is one part under its title, with its last day, lines and 
   await ui.press({ key: 'details:0' })
 
   expect(await shownParts(ui)).toEqual([
-    { key: 'fact', title: 'Dana', count: null, lines: ['true until 2027-03-31', ...FACT_LINES, 'Earlier', EARLIER] },
+    { key: 'fact', title: 'Dana', count: null, lines: ['[correct]', 'true until 2027-03-31', ...FACT_LINES, 'Earlier', EARLIER] },
     {
       key: 'fact:evidence',
       title: 'What it rests on',
@@ -462,7 +462,7 @@ test("the fact's file is one part under its title, with its last day, lines and 
   // An entry read is plain; one not on this machine, not found or not readable is in the error color.
   expect((await piecesAt(ui, 'part:fact:evidence')).map(drawn => drawn.color)).toEqual(['remember', undefined, undefined, 'error', 'error', 'error'])
   // Only an entry that was read can be pressed, to show its source; the tabs are the way to every other view.
-  expect(await viewButtons(ui)).toEqual(['show:0', 'show:1'])
+  expect(await viewButtons(ui)).toEqual(['fact:correct', 'show:0', 'show:1'])
   await ui.unmount()
 })
 
@@ -475,7 +475,7 @@ test('a fact file without a last day, earlier values and evidence is its lines i
 
   await ui.press({ key: 'details:0' })
 
-  expect(await shownParts(ui)).toEqual([{ key: 'fact', title: 'Dana', count: null, lines: FACT_LINES }])
+  expect(await shownParts(ui)).toEqual([{ key: 'fact', title: 'Dana', count: null, lines: ['[correct]', ...FACT_LINES] }])
   await ui.unmount()
 })
 
@@ -526,7 +526,7 @@ test('of more than eight evidence entries the view shows eight and says how many
   expect(rests.slice(0, 8)).toEqual(shownEight)
   expect(rests[8]).toBe('3 more not shown')
   expect((await lookOf(ui, '3 more not shown'))?.dimColor).toBe(true)
-  expect(await viewButtons(ui)).toEqual(Array.from({ length: 8 }, (_, at) => `show:${at}`))
+  expect(await viewButtons(ui)).toEqual(['fact:correct', ...Array.from({ length: 8 }, (_, at) => `show:${at}`)])
 
   fake.sourceAnswer = { ...danaFile(), evidence: entries.slice(0, 8) }
   await pressTab(ui, 'facts')
@@ -608,6 +608,7 @@ test('an answer of another shape is could not read, never a fact file without li
     lines: FACT_LINES,
     earlier: [],
     evidence: [],
+    corrections: [],
   })
 })
 
@@ -856,7 +857,7 @@ test("the session's state, which every plugin can read, holds nothing a fact fil
 // above hold what it comes to in the pane and in the session's state.
 
 const READ_FACTS_LOOK: FactsLook = { state: 'read', facts: [{ statement: SISTER, file: 'dana.md' }], current: [PORTO], topics: [] }
-const READ_FILE_LOOK: FactFileLook = { state: 'read', title: 'Dana', until: null, lines: FACT_LINES, earlier: [], evidence: [] }
+const READ_FILE_LOOK: FactFileLook = { state: 'read', title: 'Dana', until: null, lines: FACT_LINES, earlier: [], evidence: [], corrections: [] }
 
 test('the facts are kept for the opening that read them, and turning the pane to any other view drops them', () => {
   // Covers: B226

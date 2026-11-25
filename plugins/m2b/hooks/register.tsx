@@ -36,6 +36,18 @@ import {
   takeNote,
 } from './note-field'
 import type { NoteFieldActions, TakenNote } from './note-field'
+import {
+  CORRECT_FIELD,
+  CORRECT_PRESS,
+  UNDO_CORRECT,
+  correctionWritten,
+  forgetCorrection,
+  giveCorrectionBack,
+  openCorrection,
+  takeCorrection,
+  writeCorrection,
+} from './correct-field'
+import type { CorrectActions, TakenCorrection } from './correct-field'
 import { isInOwnWords, isOwnPrompt, withPrompt } from './own-words'
 import {
   AS_A_DIALOG,
@@ -142,6 +154,7 @@ import {
   factFilePane,
   factsOf,
   factsPane,
+  factFileNameOf,
   fillFactFile,
   fillFacts,
   forgetFactsUnless,
@@ -371,8 +384,14 @@ async function loadNow($: EngineInterface, isForced: boolean): Promise<void> {
   await update($, runAtom, current => (view.run === undefined ? current : view.run))
   // Nor has an answer a session without proposals stored, or one m2b could not give, a word on them.
   await update($, proposalsAtom, current => view.proposals ?? current)
+  const wasCurating = (await read($, healthAtom))?.isCurating === true
   await update($, healthAtom, current => view.health ?? current)
   curatingMachine = view.health === undefined ? curatingMachine : (view.curatingMachine ?? null)
+  // A run that ended may have applied the corrections a fact file's view names as waiting.
+  if (wasCurating && view.health !== undefined && !view.health.isCurating) {
+    // Outside the band's queue: the read touches nothing it guards, and the status line waits for it.
+    $.clock.after(0, inBackground($, () => readShownFactFileAgain($)))
+  }
   // Another session's answer, which this session did not read, leaves the sentences as they were.
   lessonSentences = readSentences ?? lessonSentences
   readSentences = null
@@ -1186,8 +1205,10 @@ async function viewOfPane(
       return tasksPane($, e, heldTasks(view.press), presses, taskActions($, view.press), bodyColumns)
     case 'facts':
       return factsPane($, e, factsOf(view.press), factsActions($), bodyColumns, await $.clock.now())
-    case 'fact':
-      return factFilePane($, e, view.press, { show: (index, evidence) => showSource($, view.press, index, evidence) }, bodyColumns)
+    case 'fact': {
+      const correction = { pressed: presses[CORRECT_PRESS], curation: await answersCuration($, presses), actions: correctActions($, view.press) }
+      return factFilePane($, e, view.press, { show: (index, evidence) => showSource($, view.press, index, evidence) }, correction, bodyColumns)
+    }
     case 'source':
       return sourcePane($, e, view.press, sourceActions($, view.press), bodyColumns)
     case 'review': {
@@ -1339,16 +1360,86 @@ function sessionActions($: EngineInterface): SessionActions {
 }
 
 /**
- * The field `note`: Enter takes the text for a press that waits five seconds for `undo`, as keep
- * and drop do, and then writes it with a task due the day chosen; the session counts it and the
- * status line reads again, as after `/m2b-note`. Undo puts the text and its day back.
+ * `correct` in the view of the fact file the press `opening` opened: the field opens for that
+ * file; Enter takes the text for a press that waits five seconds for `undo`, then writes it as a
+ * capture about the file and reads the file again, so the view names the correction as the core
+ * found it in the inbox. Undo puts the text back.
  */
-/** Empties the field `note` and sets its day back to `no day`. */
-async function emptyNoteField($: EngineInterface): Promise<void> {
+function correctActions($: EngineInterface, opening: string): CorrectActions {
+  return {
+    open: async () => {
+      const file = factFileNameOf(opening)
+      if (file === '') {
+        return
+      }
+      openCorrection(file)
+      await redrawn($, 'fact', opening)
+      await focusInPane($, CORRECT_FIELD)
+    },
+    keep: async value => {
+      // A correction whose write has not landed yet keeps the field's press; the text stays in the field.
+      if ((await read($, pressesAtom))[CORRECT_PRESS] !== undefined) {
+        return
+      }
+      const taken = takeCorrection(factFileNameOf(opening), value)
+      if (taken === null) {
+        return
+      }
+      await press($, CORRECT_PRESS, 'correct', correctionWrite($, taken), UNDO_CORRECT)
+    },
+    undo: async () => {
+      // A press whose window ended while undo was on its way is written: its text stays out of the field.
+      if (!(await takeBack($, CORRECT_PRESS))) {
+        return
+      }
+      giveCorrectionBack()
+      await redrawn($, 'fact', opening)
+      await focusInPane($, CORRECT_FIELD)
+    },
+  }
+}
+
+/**
+ * Reads the fact file the pane shows again, where it shows one, and `only` where that is given:
+ * its lines and the corrections that wait.
+ */
+async function readShownFactFileAgain($: EngineInterface, only?: string): Promise<void> {
+  const view = await read($, paneViewAtom)
+  const file = view?.kind === 'fact' ? factFileNameOf(view.press) : ''
+  if (view?.kind !== 'fact' || file === '' || (only !== undefined && file !== only)) {
+    return
+  }
+  if (fillFactFile(view.press, await readFactFile($, file))) {
+    await redrawn($, 'fact', view.press)
+  }
+}
+
+/** Writes the correction Enter took, then reads its fact file again where a view of it is shown. */
+function correctionWrite($: EngineInterface, taken: TakenCorrection): PressWrite {
+  return async () => {
+    const refused = await writeCorrection($, taken)
+    correctionWritten(taken, refused)
+    if (refused === null) {
+      // Outside the band's queue, which this write holds: the read touches nothing it guards.
+      $.clock.after(0, inBackground($, () => readShownFactFileAgain($, taken.file)))
+    }
+    // The band counts the capture in the inbox.
+    return refused === null
+  }
+}
+
+/** Forgets what was typed into the pane's fields: the field `note`, with its day back to `no day`, and every correction. */
+async function forgetTypedFields($: EngineInterface): Promise<void> {
+  forgetCorrection()
   forgetNoteField()
   await update($, noteDayAtom, () => 'none')
 }
 
+/**
+ * The field `note`: Enter takes the text for a press that waits five seconds for `undo`, as keep
+ * and drop do, and then writes it with a task due the day chosen; the session counts it and the
+ * status line reads again, as after `/m2b-note`. Undo puts the text and its day back.
+ */
 function noteFieldActions($: EngineInterface): NoteFieldActions {
   return {
     keep: async value => {
@@ -1949,7 +2040,7 @@ export const register: Register = on => {
     }
     undoTimers.clear()
     lockTimers.clear()
-    await emptyNoteField($)
+    await forgetTypedFields($)
     lookTimers.clear()
     isOpeningDue = true
     await carryPressesOver($)
@@ -2003,7 +2094,7 @@ export const register: Register = on => {
       }
       await forgetSession($)
       // A note half typed belongs to the conversation that ended, as what the last write said does.
-      await emptyNoteField($)
+      await forgetTypedFields($)
       // A topic's lines were opened from the list of the conversation that ended.
       if ((await read($, paneViewAtom))?.kind === 'topic') {
         await turnTo($, null)

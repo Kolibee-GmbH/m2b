@@ -1,11 +1,14 @@
 import type { EngineInterface, ResolveInput } from 'claude-code'
 
-import type { PaneView } from '../types'
+import type { BandPress, PaneView } from '../types'
+import { correctionRow, waitingCorrections } from './correct-field'
+import type { CorrectActions } from './correct-field'
 import { currentItemRow } from './current-item'
 import { opensRow, part, pressLine, said, topicLabel } from './look'
 import { runM2b } from './m2b'
 import { OLDER_CORE } from './session'
 import { plainLine } from './plain-text'
+import type { AnswersCuration } from './proposals'
 
 /*
  * The tab "Facts": what every session starts with, the facts and the current items outside any
@@ -38,9 +41,12 @@ export type Evidence = {
   firstLine: string | null
 }
 
+/** A correction that waits in the inbox for the next curation run: its capture, and its first line as typed. */
+export type WaitingCorrection = { capture: string; firstLine: string }
+
 export type FactFileLook =
   | { state: 'reading' }
-  | { state: 'read'; title: string; until: string | null; lines: string[]; earlier: string[]; evidence: Evidence[] }
+  | { state: 'read'; title: string; until: string | null; lines: string[]; earlier: string[]; evidence: Evidence[]; corrections: WaitingCorrection[] }
   | { state: 'failed'; error: string }
 
 /** The topic a fact file was opened from: the press that opened the topic, and the place of the fact in it. */
@@ -177,10 +183,11 @@ export function parseFacts(text: string): FactsLook {
   }
 }
 
-/** Reads one fact file with `m2b source --json`; a file not on this machine or not readable is could not read. */
+/** Reads one fact file with `m2b source --json --viewer`; a file not on this machine or not readable is could not read. */
 export async function readFactFile($: EngineInterface, file: string): Promise<FactFileLook> {
   // `--`: a name is the distillate's own text, and it may start with a dash.
-  const outcome = await runM2b($, ['source', '--json', '--', file], READ_TIMEOUT_MS)
+  // `--viewer`: the corrections that wait for the file in the inbox come with it.
+  const outcome = await runM2b($, ['source', '--json', '--viewer', '--', file], READ_TIMEOUT_MS)
   if (!outcome.ok) {
     return { state: 'failed', error: isOlderCore(outcome) ? OLDER_CORE : outcome.error }
   }
@@ -238,6 +245,11 @@ export function parseFactFile(text: string): FactFileLook {
       originalName: textOrNull(item['original_name']),
       firstLine: textOrNull(item['first_line']),
     })),
+    // A core without the field, or an answer without `--viewer`, names none.
+    corrections: (Array.isArray(answer['corrections']) ? answer['corrections'] : []).filter(isObject).map(item => ({
+      capture: String(item['capture'] ?? ''),
+      firstLine: String(item['first_line'] ?? ''),
+    })),
   }
 }
 
@@ -257,6 +269,9 @@ export function showKey(index: number): string {
 }
 
 export type FactFileActions = { show: (index: number, evidence: Evidence) => Promise<void> }
+
+/** What the view of a fact file draws its correction from: the press of the field, how curation stands, and the presses. */
+export type FactFileCorrection = { pressed: BandPress | undefined; curation: AnswersCuration; actions: CorrectActions }
 
 export type FactsActions = {
   details: (file: string) => Promise<void>
@@ -334,7 +349,14 @@ function evidenceLine(item: Evidence): string {
 }
 
 /** The fact file under its own tab: its title, last day, lines, earlier values and evidence. */
-export function factFilePane($: EngineInterface, e: ResolveInput, press: string, actions: FactFileActions, columns: number) {
+export function factFilePane(
+  $: EngineInterface,
+  e: ResolveInput,
+  press: string,
+  actions: FactFileActions,
+  correction: FactFileCorrection,
+  columns: number,
+) {
   const ui = $.ui.resolve(e)
   const file = factFileNameOf(press)
   const look = factFileOf(press)
@@ -346,11 +368,13 @@ export function factFilePane($: EngineInterface, e: ResolveInput, press: string,
   const { Box } = ui
   const shown = look.evidence.slice(0, EVIDENCE_SHOWN)
   const more = look.evidence.length - shown.length
-  const facts = part(ui, { key: 'fact', title: plainLine(look.title), waits: false, columns }, [
+  const facts = part(ui, { key: 'fact', title: plainLine(look.title), waits: look.corrections.length > 0, columns }, [
+    correctionRow($, e, file, correction.pressed, correction.actions, columns),
     look.until !== null && said(ui, `true until ${plainLine(look.until)}`, 'quiet'),
     ...look.lines.map(line => said(ui, plainLine(line))),
     look.earlier.length > 0 && said(ui, 'Earlier', 'strong'),
     ...look.earlier.map(line => said(ui, plainLine(line), 'quiet')),
+    waitingCorrections($, e, look.corrections, correction.curation),
   ])
   if (look.evidence.length === 0) {
     return facts

@@ -92,6 +92,9 @@ export type CurateNow = 'curate'
 /** What Enter in the overview's field `note` asks for: its text written as a capture. The text is never in a press. */
 export type NoteKeep = 'note'
 
+/** What Enter in the field `what is right` of a fact file's view asks for: its text written as a correction of that file. The text is never in a press. */
+export type CorrectFact = 'correct'
+
 /** The day below the overview's field `note`: none, or the day a task for the note is due. */
 export type NoteDay = 'none' | 'today' | 'tomorrow' | 'week'
 
@@ -109,7 +112,7 @@ export type CurateRefusal = 'running' | 'not-curating' | 'not-downloaded' | 'fai
  * are the proposals a press on keep all stands for: those the pane showed when it was pressed.
  */
 export type BandPress = {
-  action: BandSettle | KeepForEveryProject | FolderSwitch | CurateNow | NoteKeep
+  action: BandSettle | KeepForEveryProject | FolderSwitch | CurateNow | NoteKeep | CorrectFact
   phase: 'waiting' | 'writing'
   token: string
   deadlineMs?: number
