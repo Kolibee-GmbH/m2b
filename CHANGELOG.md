@@ -5,6 +5,14 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/), with tags `vX.Y.Z`. How a release is made is in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [0.16.1] - 2026-11-25
+
+### Fixed
+
+- Where an organization manages Claude Code, the plugin list no longer warns that m2b's hooks on
+  `session.compact` do not run: the band has no such hook any more. After a `/compact`, the part
+  "This session" of the pane asks again with your next prompt ([#64](https://github.com/Kolibee-GmbH/m2b/pull/64)).
+
 ## [0.16.0] - 2026-11-25
 
 The pane is shorter to read and one key away in every view, and you write into it: a note with a
