@@ -281,7 +281,7 @@ class ShotsTest(unittest.TestCase):
         self.assertEqual([shot.name for shot in readme_images.shots_for("settings")], ["settings"])
         self.assertEqual([shot.name for shot in readme_images.shots_for("fact")], ["fact"])
 
-    def test_the_shot_of_a_facts_file_presses_its_way_from_the_pane_past_the_search_field_to_the_first_fact(self) -> None:
+    def test_the_shot_of_a_facts_file_presses_past_the_search_field_to_the_first_fact(self) -> None:
         (fact,) = [shot for shot in readme_images.SHOTS if shot.keys]
 
         steps = readme_images.steps_for(fact)
