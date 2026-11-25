@@ -4,6 +4,7 @@ import type { BandPress, PaneView } from '../types'
 import { correctionRow, waitingForTheRun } from './correct-field'
 import type { CorrectActions } from './correct-field'
 import { editButton, editRow } from './edit-copy'
+import { searchField } from './search-field'
 import type { EditActions } from './edit-copy'
 import { currentItemRow } from './current-item'
 import { opensRow, part, pressLine, said, topicLabel } from './look'
@@ -320,6 +321,7 @@ export type FactsActions = {
   details: (file: string) => Promise<void>
   showNote: (note: string) => Promise<void>
   showTopic: (name: string) => Promise<void>
+  search: (value: string) => Promise<void>
 }
 
 export function textOrNull(value: unknown): string | null {
@@ -333,15 +335,17 @@ function counts(topic: TopicCount): string {
 }
 
 /**
- * The tab's view: what every session starts with, then the topics, each part under when a session
- * gets it. `nowMs` is the moment a note's day is said against.
+ * The tab's view: the field `search`, then what every session starts with, then the topics, each
+ * part under when a session gets it. `nowMs` is the moment a note's day is said against.
  */
 export function factsPane($: EngineInterface, e: ResolveInput, look: FactsLook, actions: FactsActions, columns: number, nowMs: number) {
   const ui = $.ui.resolve(e)
+  // The search needs no distillate: the field stands while it is read, and where it could not be.
+  const field = searchField($, e, { search: actions.search }, columns)
   if (look.state !== 'read') {
     const line =
       look.state === 'reading' ? said(ui, READING, 'quiet') : said(ui, `m2b could not read the distillate: ${plainLine(look.error)}`, 'trouble')
-    return part(ui, { key: 'facts:start', title: AT_THE_START, waits: false, columns }, [line])
+    return [field, part(ui, { key: 'facts:start', title: AT_THE_START, waits: false, columns }, [line])]
   }
   const { Box } = ui
   const start = [
@@ -367,6 +371,7 @@ export function factsPane($: EngineInterface, e: ResolveInput, look: FactsLook, 
         </Box>
       ))
   return [
+    field,
     part(ui, { key: 'facts:start', title: AT_THE_START, waits: false, columns }, start),
     part(ui, { key: 'facts:topics', title: WHEN_NAMED, waits: false, columns }, topics),
   ]

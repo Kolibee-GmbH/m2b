@@ -49,6 +49,7 @@ import {
   writeCorrection,
 } from './correct-field'
 import type { CorrectActions, TakenCorrection } from './correct-field'
+import { forgetSearchField, searched, takeSearch } from './search-field'
 import { EDIT_PRESS, UNDO_EDIT, focusAfterUndo, forgetEdits, giveEditPressBack, openEditCopy, takeEditPress, writeEditCopy } from './edit-copy'
 import type { EditActions } from './edit-copy'
 import { isInOwnWords, isOwnPrompt, withPrompt } from './own-words'
@@ -998,12 +999,45 @@ function topicActions($: EngineInterface, press: string): TopicActions {
   }
 }
 
-function factsActions($: EngineInterface): FactsActions {
+/** The presses in the tab Facts the press `opening` opened: a fact opens its file, a note's button the note, a topic its lines, and the field searches. */
+function factsActions($: EngineInterface, opening: string): FactsActions {
   return {
     details: file => showFactFile($, file),
     showNote: note => showNote($, note, 'facts'),
     showTopic: name => showTopic($, name, 'facts'),
+    search: value => searchFromFacts($, opening, value),
   }
+}
+
+/**
+ * Enter in the field `search` of the tab Facts: the store is searched as `/m2b-search` does it.
+ * Hits turn the pane to the search's view, the command's own, with the focus on `Facts`, which
+ * leads back; no hit, or a search m2b could not make, is said below the field, and the pane stays.
+ */
+async function searchFromFacts($: EngineInterface, opening: string, value: string): Promise<void> {
+  const taken = takeSearch(value)
+  if (taken === null) {
+    return
+  }
+  await redrawn($, 'facts', opening)
+  const outcome = await searchStore($, taken.text)
+  const hits = 'line' in outcome || outcome.search.total === 0 ? null : outcome.search
+  const line = 'line' in outcome ? outcome.line : hits === null ? searchSummary(outcome.search) : null
+  // A search the field forgot while it ran, at `/clear` or a resume, says nothing and turns nothing.
+  if (!searched(taken, line, 'line' in outcome ? 'trouble' : 'quiet')) {
+    return
+  }
+  const view = await read($, paneViewAtom)
+  // A pane that turned away while m2b searched is left where it is.
+  if (view?.kind !== 'facts' || view.press !== opening) {
+    return
+  }
+  if (hits === null) {
+    await redrawn($, 'facts', opening)
+    return
+  }
+  await asDialog($, { kind: 'search', search: hits })
+  await focusInPane($, backTabKey('facts'))
 }
 
 type SettingsView = Extract<PaneView, { kind: 'settings' }>
@@ -1213,7 +1247,7 @@ async function viewOfPane(
     case 'tasks':
       return tasksPane($, e, heldTasks(view.press), presses, taskActions($, view.press), bodyColumns)
     case 'facts':
-      return factsPane($, e, factsOf(view.press), factsActions($), bodyColumns, await $.clock.now())
+      return factsPane($, e, factsOf(view.press), factsActions($, view.press), bodyColumns, await $.clock.now())
     case 'fact': {
       const correction = {
         pressed: presses[CORRECT_PRESS],
@@ -1514,12 +1548,18 @@ function correctionWrite($: EngineInterface, taken: TakenCorrection): PressWrite
   }
 }
 
-/** Forgets what was typed into the pane's fields: the field `note`, with its day back to `no day`, and every correction. */
+/** Forgets what was typed into the pane's fields: the field `note`, with its day back to `no day`, every correction, what a press on an editing copy could not do, and the field `search`. */
 async function forgetTypedFields($: EngineInterface): Promise<void> {
   forgetCorrection()
   forgetEdits()
+  forgetSearchField()
   forgetNoteField()
   await update($, noteDayAtom, () => 'none')
+  // The tab Facts, shown, draws its field empty at once, without a search that was running.
+  const view = await read($, paneViewAtom)
+  if (view?.kind === 'facts') {
+    await redrawn($, 'facts', view.press)
+  }
 }
 
 /**
