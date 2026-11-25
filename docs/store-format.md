@@ -172,6 +172,11 @@ Run only the checks the change touches; the whole proof only when the change giv
 An action lesson names the words a command holds when it applies, `words: [scripts/check]`, and
 those that keep it silent, `unless: [--quick]`; `ask: true` has Claude Code ask you before the
 call. A lesson you keep in a session waits in `state/core/lessons-kept/` until the next run files it.
+The run names a new lesson's file from its title, in lower case: `ä`, `ö`, `ü` and `ß` are written
+`ae`, `oe`, `ue` and `ss`, another letter with a mark loses the mark, anything else between
+letters is one hyphen, and a name longer than 40 characters ends at the last whole word before
+that: `Über Prüfungen` is `ueber-pruefungen.md`. A name another lesson holds gets a number
+(`-2`); a lesson file that stands keeps its name.
 `kind` is `knowledge` (how to name or judge a thing) or `action` (about a command), `target` is
 `every project` or a repository's address, and `kept_at` names the source that states it now,
 such as `~/.claude/CLAUDE.md`, written when the lesson is kept or when a later reading finds the
@@ -359,9 +364,9 @@ The session start only reads the fixes.
 
 | What | Created by | Changed by | Removed by |
 |---|---|---|---|
-| `inbox/` | clients, integrations, harvest (a ticked candidate, a kept proposal), the worklog | the curating machine (name, frontmatter, trailer; never the text) | ingest moves files into the archive; normalize removes conflict copies identical to their original |
-| `corpus/` | ingest, the journal | the journal (appends to the month's file) | lint, only conflict copies identical to their original |
-| `memory/` | ingest; harvest (a lesson under `memory/lessons/`) | ingest, refresh, the sorting step, a migration after an update, harvest (only `## Current`, from "Still current?" answers), lint (a broken link it repairs, a current item it moves under its topic), the reading of your sessions (`kept_at` of a lesson a source states) | harvest (a lesson a kept one replaces) and the curation run (a lesson whose "Still needed?" you dropped) |
+| `inbox/` | clients, integrations, harvest (a ticked candidate, a kept proposal), the worklog, the curation run (an edit put in place, back from the archive where the run puts `memory/` back) | the curating machine (name, frontmatter, trailer; never the text) | ingest moves files into the archive; normalize removes conflict copies identical to their original |
+| `corpus/` | ingest, the journal | the journal (appends to the month's file) | lint, only conflict copies identical to their original; the curation run, an edit put in place that goes back to `inbox/` where the run puts `memory/` back |
+| `memory/` | ingest; harvest (a lesson under `memory/lessons/`) | ingest, refresh, the sorting step, a migration after an update, harvest (only `## Current`, from "Still current?" answers, and a fact file an edit you kept replaces), lint (a broken link it repairs, a current item it moves under its topic), the reading of your sessions (`kept_at` of a lesson a source states) | harvest (a lesson a kept one replaces) and the curation run (a lesson whose "Still needed?" you dropped) |
 | `state/core/` | the curation run; any client adds an answer to a proposal under `proposal-answers/`, a proposal a session hands in under `handed-in/`, and a fix and what became of it under `fixes/` | the curating machine | harvest prunes settled candidates and removes the answers it settled; the run removes the handed-in proposals it took in; every curation run removes the proposals kept, dropped or expired 90 days ago or longer |
 | tasks (`tasks/` with the `markdown` backend, or the Reminders list) | you, integrations, capture (a follow-up), ingest, `m2b tasks add --candidate` (a memory candidate), the curation run (review, "Still current?" and "Still needed?" questions, the task for waiting proposals) | you, also through the todos skill, which ticks a task you say is done, and through the m2b pane, which ticks one of your tasks with its mark `○` and ticks or drops a curator task with keep, drop or `ok`; the curation run completes its review task when nothing needs you, and the task for waiting proposals when none waits | harvest and the refresh step, once a curator task is settled or its item is gone; lint, with the `markdown` backend, only conflict copies of task files identical to their original; you |
 | `state/addons/<a>/`, `state/integrations/<i>/` | that add-on or integration | the same | the same |

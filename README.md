@@ -207,18 +207,22 @@ line appears only while something is wrong with m2b.
 
 `/m2b-review` opens the pane in the picture with the whole last run, `/m2b-proposals` the
 proposals from your sessions, `/m2b-search <text>` search hits, and `/m2b-note <text>` notes a
-text at once, without a model turn. The band is a mod, a module Claude Code loads with the plugin,
+text at once, without a model turn, with `--due tomorrow` also a task due that day. The band is a mod, a module Claude Code loads with the plugin,
 so it runs only while mods are on in Claude Code; `/m2b:m2b doctor` says whether the latest
 session ran it ([The band](docs/band.md)).
 
-`/m2b-pane` opens the pane in the view it starts in, its overview: what waits for you, what is
+`/m2b-pane` opens the pane in the view it starts in, its overview: a field `note` that keeps a
+note without a model turn, with the day of its task, then what waits for you, what is
 due today, what m2b gave this session and how m2b itself stands, with the button `curate now`
 on the machine that curates, which starts a curation run in the background. A row of tabs above
 every view leads to the others: `Proposals`, `Review`, `Tasks` with every open task of yours and
 a mark `○` to tick one, `Facts` with what every session starts with and every topic, and
-`Settings`. In `Facts`, a press on a fact shows its file with the notes and documents it rests on,
+`Settings`; each tab has its first letter as its key. In `Facts`, a field `search` searches the
+store, a press on a fact shows its file with the notes and documents it rests on,
 a press on one of those shows it, a current item leads to the note it rests on, and `open the file` a PDF or a picture in the
-system's viewer
+system's viewer. A fact's file has `correct`, for how the fact should read, and `edit`, for a
+copy of the file in your text editor, which `keep the edit` hands on once you saved it; the next
+curation run applies either
 ([What m2b knows](docs/band.md#what-m2b-knows)). Under Claude Code's fullscreen layout the
 pane sits beside the conversation, where it opens by itself in a wide terminal, and
 `/m2b-settings` turns it to every setting of m2b, sorted by what you want from m2b, a switch

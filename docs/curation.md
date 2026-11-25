@@ -46,9 +46,9 @@ flowchart LR
 |---|---|---|
 | Preflight | code | removes leftover temp files, downloads the files the run reads, loads the profile |
 | Migrate | code, only when the store's format is older than this m2b | brings `memory/` up to the rules of this m2b, one format at a time, each checked in code; a failing one puts `memory/` back, keeps the format and ends the run with the review |
-| Harvest | code | settles the memory candidates, the "Still current? ..." and "Still needed? ..." questions you ticked or dropped, and the proposals you kept or dropped; writes the lessons you kept into `memory/lessons/` and keeps the fixes |
+| Harvest | code | settles the memory candidates, the "Still current? ..." and "Still needed? ..." questions you ticked or dropped, and the proposals you kept or dropped; writes the lessons you kept into `memory/lessons/` and keeps the fixes; puts an edit you kept of a fact file in place, before ingest, where the fact file is still as your copy found it ([Correcting what a run filed](#correcting-what-a-run-filed)) |
 | Glean | code and up to three model calls without tools, only with `curation.read_sessions` | reads what you typed in Claude Code since the last reading and keeps what the model proposes for your memory ([Reading your sessions](#reading-your-sessions)) |
-| Ingest | model, only with captures in the inbox | files facts and what is going on into memory, under its topic what concerns one subject only, tasks into your list, each capture into `corpus/YYYY/MM/`; reads a PDF whole up to its 60th page and writes what stands on which page into the note beside it ([A document in the inbox](#a-document-in-the-inbox)) |
+| Ingest | model, only with captures in the inbox | files facts and what is going on into memory, under its topic what concerns one subject only, tasks into your list, each capture into `corpus/YYYY/MM/`; applies a correction to the fact file it names, and brings the facts line of an edit put in place in step; reads a PDF whole up to its 60th page and writes what stands on which page into the note beside it ([A document in the inbox](#a-document-in-the-inbox)) |
 | Refresh | model, only when a fact is past its day | rewrites the facts whose `until` has passed |
 | Sort | model, only with `m2b curate --sort-facts` | moves facts lines of an older distillate into topics; code puts the file back if a statement changed |
 | Lint | code; the model only to repair a broken memory link with exactly one candidate | moves a current item above the topics that names exactly one topic under it, then checks names, links, conflict copies and the distillate's size |
@@ -239,6 +239,10 @@ left them.
   line from the capture first.
 - A capture that came in while the run was already under way, and that the run still filed, is
   not put back: git did not know it when the run began. `git show` has it in the same way.
+- An edit of a fact file you kept is in the commit of the captures, and its change of the fact
+  file in the run's commit. The revert puts the fact file back and the edit into `inbox/`, so the
+  next run puts it in place again; to take the edit back for good, delete it from `inbox/` after
+  the revert.
 - A capture you staged and did not commit is not put back either. m2b commits nothing you staged,
   so the run's commit has that capture only where it was filed; `git show` has it there.
 
@@ -272,6 +276,24 @@ nothing a run filed is final:
   run rewrites the line; a correction leaves no old value behind, while a fact that changed, such
   as a new address, keeps its old value under `## Earlier` in the fact file. Or edit the line in
   `memory/MEMORY.md` and in its fact file yourself.
+- **Correct it where you read it.** In the m2b pane, a fact's file has `correct`: type how the
+  fact should read, and the words go into the inbox as a correction of that file
+  (`m2b capture --about dana.md` in a terminal). The next run reads that fact file first and
+  changes the line your words speak of, as it changes any fact; words that fit no line and no
+  subject of the file are filed as any note, and the review says so. The correction names the
+  file in data, so the run does not guess which fact you meant
+  ([The band](band.md#what-m2b-knows)).
+- **Rewrite a fact file whole.** `edit` beside `correct`, or `m2b store edit dana.md` in a
+  terminal, makes a copy of the fact file on this machine and opens it in the system's text
+  editor; `m2b store edit --keep dana.md` hands it to the inbox. The next run puts your text in
+  place as the fact file in code, before ingest, and ingest rewrites its line in
+  `memory/MEMORY.md` to say what the file says now and links the edit under `## Evidence`. Your
+  text is put in place only while the fact file is still as the copy found it, and only where
+  your text has a `# ` title line at its top, no frontmatter key but `until` (a day) and no
+  character that hides or reorders text; otherwise it goes to the archive with the reason, and
+  the review names it. An edit of a fact
+  file that is not downloaded waits in the inbox. Editing the copy, not the file itself, keeps a
+  run under way from counting your change as its own and undoing it.
 - **A fact stands under a topic and every session should start with it.** Move its line in
   `memory/MEMORY.md` above the first `###` heading. The other way round, a line moved under a
   `### <name> (<word>, <word>)` heading reaches a session only when it is about that topic
