@@ -1,7 +1,7 @@
 {
   "name": "m2b",
   "description": "Your second brain for Claude Code, one store across all your projects and machines: capture notes, search them, see your tasks, get a small curated distillate in every session, see in a band above the prompt what waits for your answer, and keep or drop what curation proposes in the m2b pane. One add-on, off until set up: a worklog of your agent sessions in herdr.",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "author": {
     "name": "Kolibee GmbH"
   },

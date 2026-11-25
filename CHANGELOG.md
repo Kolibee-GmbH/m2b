@@ -5,6 +5,39 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/), with tags `vX.Y.Z`. How a release is made is in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [0.16.0] - 2026-11-25
+
+The pane is shorter to read and one key away in every view, and you write into it: a note with a
+day, a correction of a fact, your own version of a fact file in your text editor, and a search.
+
+### Added
+
+- `/m2b-note --due today|tomorrow|YYYY-MM-DD <text>` makes the note's task due that day, without
+  a model turn ([#61](https://github.com/Kolibee-GmbH/m2b/pull/61)).
+- The overview has a field `note` with the day of a task below it (`no day`, `today`, `tomorrow`,
+  `in a week`); Enter keeps the text after five seconds of `undo` ([#61](https://github.com/Kolibee-GmbH/m2b/pull/61)).
+- A fact file's view has `correct`: what you type goes to the inbox as a correction of that file
+  (`m2b capture --about`), and the next curation run applies it to the file ([#61](https://github.com/Kolibee-GmbH/m2b/pull/61)).
+- A fact file's view has `edit`: `m2b store edit` copies the fact file into this machine's state
+  folder and opens the copy in the system's text editor; the view follows your save and offers
+  `keep the edit` and `discard`. A kept edit goes to the inbox, and the next curation run puts it
+  in place where the fact file is still as the copy found it, then brings the distillate's line in
+  step; nothing writes `memory/` outside a run. The overview counts copies you saved and did not
+  keep ([#61](https://github.com/Kolibee-GmbH/m2b/pull/61)).
+- The tab `Facts` has a field `search`, which searches as `/m2b-search` does ([#61](https://github.com/Kolibee-GmbH/m2b/pull/61)).
+
+### Changed
+
+- Rows are shorter: a task is one line with its mark `○`, and a fact's or an evidence entry's
+  text is itself the button, ending in `›` ([#61](https://github.com/Kolibee-GmbH/m2b/pull/61)).
+- The six tabs are buttons with a letter each (`o`, `p`, `r`, `t`, `f`, `s`); the one shown is
+  in the accent and reads its view again, and a fact file's own tab reads the file again ([#61](https://github.com/Kolibee-GmbH/m2b/pull/61)).
+- A fact in a topic's lines opens its file under a tab beside the topic's, and a note's button
+  bears its day ([#61](https://github.com/Kolibee-GmbH/m2b/pull/61)).
+- The overview speaks in sentences: one quiet line where nothing waits and nothing is due, and a
+  lesson you kept as its sentence ([#61](https://github.com/Kolibee-GmbH/m2b/pull/61)).
+- A new lesson's file name writes out umlauts (`ue` for `ü`) and ends at a whole word ([#61](https://github.com/Kolibee-GmbH/m2b/pull/61)).
+
 ## [0.15.0] - 2026-11-23
 
 A correction of how Claude works is proposed as a lesson the first time, also where the reading
