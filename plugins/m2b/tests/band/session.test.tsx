@@ -503,23 +503,22 @@ test('a session that only ends, and the end of another reason, keep what was loo
   await ui.unmount()
 })
 
-test('after a compaction of the conversation the pane asks again, and not for a subagent or a skipped one', async ($, on) => {
+test('a compaction of the conversation asks nothing, the next prompt asks again', async ($, on) => {
   // Covers: B185
   const fake = new FakeM2b()
   fake.given = NORTHWIND
+  on('prompt.submit', (_, e) => ({ text: e.text }))
   const { clock } = await start($, on, fake)
   const ui = await startView($)
   const before = fake.looks.length
 
   fake.given = NO_TOPICS
-  await $.session.compact({ trigger: 'manual', messages: MESSAGES, agentId: 'a1' })
-  await $.session.compact({ trigger: 'precompute', messages: MESSAGES })
-  await $.session.compact({ trigger: 'manual', messages: MESSAGES, instructions: 'skip' })
+  await $.session.compact({ trigger: 'manual', messages: MESSAGES })
   await clock.advance(3_000)
   expect(fake.looks).toHaveLength(before)
-
-  await $.session.compact({ trigger: 'manual', messages: MESSAGES })
   expect(await given(ui)).toContain('[Northwind] 3 facts')
+
+  await $.prompt.submit({ text: 'go on', origin: { kind: 'composer' }, wait: false })
   await clock.advance(3_000)
   expect(fake.looks).toHaveLength(before + 1)
   expect(await given(ui)).toEqual([PRINTED_WHOLE])

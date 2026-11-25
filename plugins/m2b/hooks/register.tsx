@@ -235,8 +235,10 @@ const WRITE_TIMEOUT_MS = 90_000
 // A press is written only once this is over, so undo takes it back without touching the task list.
 const UNDO_WINDOW_MS = 5_000
 // m2b's own hooks give a session its topics: before a prompt, and at the start that follows a
-// compaction. This long after either, the pane asks what the session holds now, so a topic that
-// came in with a prompt shows while the turn still works.
+// compaction. This long after a prompt, the pane asks what the session holds now, so a topic that
+// came in with it shows while the turn still works. A compaction gets no look of its own: where an
+// organization manages Claude Code, an installed plugin's hooks on it do not run, and Claude Code
+// warns about them in its plugin list. The end of the turn or the next prompt looks instead.
 const LOOK_AFTER_GIVING_MS = 3_000
 // A session not known right at its start is looked at once more: its start may still be noting.
 const SECOND_LOOK_MS = 5_000
@@ -2305,16 +2307,6 @@ export const register: Register = on => {
         await turnTo($, null)
       }
       lookUnderNewId($, e.sessionId, NEW_ID_TRIES)
-    }
-    return result
-  })
-
-  // A compaction begins the list of what the session was given again, at the start that follows it.
-  on('session.compact', async ($, e, next) => {
-    const result = await next(e)
-    // Not what a precompute prepares, and not a compaction that was skipped.
-    if (e.agentId === undefined && e.trigger !== 'precompute' && !('skip' in result)) {
-      lookLater($, LOOK_AFTER_GIVING_MS)
     }
     return result
   })
