@@ -1291,7 +1291,22 @@ export async function inView(ui: Drawn, ...types: string[]): Promise<Found[]> {
   expect(drawn.slice(0, inRow.length).map(found => found.key ?? found.text)).toEqual(
     inRow.map(tab => (tab.type === 'Button' ? String(tab.props['key']) : shownText(tab))),
   )
-  return drawn.slice(inRow.length)
+  // The overview's field `note` is drawn next, above its parts; `noteLines` reads it.
+  const field = await ui.find({ key: NOTE_BOX })
+  const inField = field === undefined ? 0 : types.reduce((sum, type) => sum + allIn(asElement(field), type).length, 0)
+  return drawn.slice(inRow.length + inField)
+}
+
+/** The key of the box that holds the overview's field `note`, its day and what it says. */
+export const NOTE_BOX = 'note'
+
+/** What the overview's field `note` draws, as `linesOf` reads it; null where the view has none. */
+export function noteLines(ui: Drawn): Promise<string[] | null> {
+  return linesAt(ui, NOTE_BOX)
+}
+
+function asElement(found: Found): Element {
+  return { ...found, props: found.props ?? {} } as Element
 }
 
 /** The keys of the buttons of the pane's view, without the tabs above it. */
@@ -1322,6 +1337,12 @@ export async function everyText(ui: Drawn): Promise<string[]> {
 function linesOf(element: Element): string[] {
   if (element.type === 'Text') {
     return [shownText(element).trim()]
+  }
+  if (element.type === 'Input') {
+    // A field as `label: text`, with its placeholder in parentheses while it holds nothing.
+    const value = String(element.props['value'] ?? '')
+    const shown = value === '' ? `(${String(element.props['placeholder'] ?? '')})` : value
+    return [element.props['label'] === undefined ? shown : `${String(element.props['label'])}: ${shown}`]
   }
   if (element.type === 'Button') {
     // A plain Button is drawn as its label alone, the row it stands for.

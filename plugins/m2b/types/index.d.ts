@@ -89,6 +89,12 @@ export type FolderSwitch = 'off' | 'on'
 /** What a press on `curate now` asks for: one curation run, started in the background. */
 export type CurateNow = 'curate'
 
+/** What Enter in the overview's field `note` asks for: its text written as a capture. The text is never in a press. */
+export type NoteKeep = 'note'
+
+/** The day below the overview's field `note`: none, or the day a task for the note is due. */
+export type NoteDay = 'none' | 'today' | 'tomorrow' | 'week'
+
 /**
  * Why a press on `curate now` started no run: a run is under way, another machine curates the
  * store, `store.json` is not on this machine, or the command failed or answered something else.
@@ -103,7 +109,7 @@ export type CurateRefusal = 'running' | 'not-curating' | 'not-downloaded' | 'fai
  * are the proposals a press on keep all stands for: those the pane showed when it was pressed.
  */
 export type BandPress = {
-  action: BandSettle | KeepForEveryProject | FolderSwitch | CurateNow
+  action: BandSettle | KeepForEveryProject | FolderSwitch | CurateNow | NoteKeep
   phase: 'waiting' | 'writing'
   token: string
   deadlineMs?: number
@@ -278,6 +284,8 @@ declare module 'claude-code' {
       bandToastedRun: string | null
       /** The words of each prompt the person submitted in this session, the newest last. */
       ownPrompts: string[][]
+      /** The day chosen below the overview's field `note`; what is typed there is never kept in the state. */
+      noteDay: NoteDay
     }
   }
 }

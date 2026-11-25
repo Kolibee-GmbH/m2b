@@ -24,7 +24,18 @@ import type { BandModel } from './band'
 import { tabRow } from './look'
 import { launcherPath, m2bHome, machineConfigPath, runM2b } from './m2b'
 import { timeOrDay } from './moment'
-import { NOTE_COMMAND, note } from './note'
+import { NOTE_COMMAND, note, writeNote } from './note'
+import {
+  NOTE_FIELD,
+  NOTE_PRESS,
+  UNDO_NOTE,
+  dueOf,
+  forgetNoteField,
+  giveNoteBack,
+  noteWritten,
+  takeNote,
+} from './note-field'
+import type { NoteFieldActions, TakenNote } from './note-field'
 import { isInOwnWords, isOwnPrompt, withPrompt } from './own-words'
 import {
   AS_A_DIALOG,
@@ -185,6 +196,8 @@ const sessionAtom = atom({ plugin: 'm2b', key: 'bandSession' } as const, null)
 const notesAtom = atom({ plugin: 'm2b', key: 'sessionNotes' } as const, null)
 const sessionNoticeAtom = atom({ plugin: 'm2b', key: 'sessionNotice' } as const, null)
 const curateNoticeAtom = atom({ plugin: 'm2b', key: 'curateNotice' } as const, null)
+// The day chosen below the overview's field `note`, `none` until a value is pressed and again after a note is written.
+const noteDayAtom = atom({ plugin: 'm2b', key: 'noteDay' } as const, 'none')
 // The command's own account of a start that failed. Its words can name a folder or a machine: they
 // are drawn, and never put into the session's state, which holds only that the start failed.
 let curateFailure: string | null = null
@@ -661,6 +674,7 @@ async function sessionModel($: EngineInterface): Promise<SessionModel> {
     health: await read($, healthAtom),
     curatingMachine,
     lessonSentences,
+    noteDay: (await read($, noteDayAtom)) ?? 'none',
     versionLine: await read($, versionNoticeAtom),
     snapshot: await read($, snapshotAtom),
     proposals: await read($, proposalsAtom),
@@ -1320,6 +1334,69 @@ function sessionActions($: EngineInterface): SessionActions {
       await press($, FOLDER_PRESS, change, folderWrite($, change, folder), UNDO_FOLDER)
     },
     undoFolder: () => undo($, FOLDER_PRESS),
+    note: noteFieldActions($),
+  }
+}
+
+/**
+ * The field `note`: Enter takes the text for a press that waits five seconds for `undo`, as keep
+ * and drop do, and then writes it with a task due the day chosen; the session counts it and the
+ * status line reads again, as after `/m2b-note`. Undo puts the text and its day back.
+ */
+/** Empties the field `note` and sets its day back to `no day`. */
+async function emptyNoteField($: EngineInterface): Promise<void> {
+  forgetNoteField()
+  await update($, noteDayAtom, () => 'none')
+}
+
+function noteFieldActions($: EngineInterface): NoteFieldActions {
+  return {
+    keep: async value => {
+      // A note whose write has not landed yet keeps the field's press; the text stays in the field.
+      if ((await read($, pressesAtom))[NOTE_PRESS] !== undefined) {
+        return
+      }
+      const taken = takeNote(value, (await read($, noteDayAtom)) ?? 'none')
+      if (taken === null) {
+        return
+      }
+      await press($, NOTE_PRESS, 'note', noteWrite($, taken), UNDO_NOTE)
+    },
+    undo: async () => {
+      // A press whose window ended while undo was on its way is written: its text stays out of the field.
+      if (!(await takeBack($, NOTE_PRESS))) {
+        return
+      }
+      const day = giveNoteBack()
+      if (day !== null) {
+        await update($, noteDayAtom, () => day)
+        await focusInPane($, NOTE_FIELD)
+      }
+    },
+    chooseDay: async day => {
+      await update($, noteDayAtom, () => day)
+      // The pressed value becomes text; left in place the focus would stand on the next value, and
+      // what follows a day is the text.
+      await focusInPane($, NOTE_FIELD)
+    },
+  }
+}
+
+/**
+ * Writes the note Enter took, held here and not read again when the write comes: a write that waits
+ * behind a read of the band still writes what was pressed, and only undo, through the press's token,
+ * takes it back.
+ */
+function noteWrite($: EngineInterface, taken: TakenNote): PressWrite {
+  return async () => {
+    const outcome = await writeNote($, taken.text, dueOf(taken.day, await $.clock.now()), () => isSetUp($))
+    noteWritten(taken, outcome)
+    if (!outcome.isWritten) {
+      return false
+    }
+    await update($, noteDayAtom, () => 'none')
+    await countNote($)
+    return true
   }
 }
 
@@ -1636,6 +1713,11 @@ async function press(
 }
 
 async function undo($: EngineInterface, id: string): Promise<void> {
+  await takeBack($, id)
+}
+
+/** Takes a press back while it waits; answers whether it did, false once its write has begun. */
+async function takeBack($: EngineInterface, id: string): Promise<boolean> {
   let isUndone = false
   await update($, pressesAtom, presses => {
     const pressed = presses[id]
@@ -1646,6 +1728,7 @@ async function undo($: EngineInterface, id: string): Promise<void> {
     undoTimers.get(id)?.cancel()
     undoTimers.delete(id)
   }
+  return isUndone
 }
 
 /**
@@ -1866,6 +1949,7 @@ export const register: Register = on => {
     }
     undoTimers.clear()
     lockTimers.clear()
+    await emptyNoteField($)
     lookTimers.clear()
     isOpeningDue = true
     await carryPressesOver($)
@@ -1918,6 +2002,8 @@ export const register: Register = on => {
         openSoon($)
       }
       await forgetSession($)
+      // A note half typed belongs to the conversation that ended, as what the last write said does.
+      await emptyNoteField($)
       // A topic's lines were opened from the list of the conversation that ended.
       if ((await read($, paneViewAtom))?.kind === 'topic') {
         await turnTo($, null)

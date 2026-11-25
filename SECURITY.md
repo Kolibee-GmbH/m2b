@@ -393,6 +393,15 @@ A store that is a git repository keeps every proposal a run committed in its his
 one too, beyond the 90 days the proposals file remembers it. That holds for the proposals of a
 reading as well.
 
+## What you type into the pane
+
+A note typed into the field `note` of the m2b pane is held by the field and by the band's module
+until it is written as a capture, never in the session's state: another plugin that reads or
+watches m2b's state sees that a note waits for `undo`, and the day chosen, but not its words. The
+input itself is another matter. Claude Code hands each key typed into a pane to the hooks every
+plugin may put on that input (`ui.input`), as it hands a prompt you submit to the hooks on the
+prompt; such a hook sees the note as it is typed. A plugin with code of its own runs as you.
+
 ## The tools the model calls
 
 Where the mod runs, the model has two tools, `mcp__m2b__note` and `mcp__m2b__search`, and where

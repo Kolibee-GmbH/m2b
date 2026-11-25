@@ -8,6 +8,7 @@ import type {
   BandSession,
   BandSnapshot,
   FolderSwitch,
+  NoteDay,
   SessionTopic,
 } from '../types'
 import {
@@ -28,6 +29,8 @@ import {
   waitForYou,
 } from './look'
 import type { Tone } from './look'
+import { NOTE_PRESS, noteField } from './note-field'
+import type { NoteFieldActions } from './note-field'
 import { plainLine, wholePath } from './plain-text'
 import { HANDED_IN_NOT_COUNTED, couldNotLookLine, countLine, errorBesideTasks, waitingForRunLine } from './proposals'
 import { CURATE_PRESS, CURATE_ROW, REVIEW, candidateRow, changesSummary, curateButton, reviewRow } from './rows'
@@ -115,19 +118,22 @@ export type SessionModel = {
   curatingMachine: string | null
   versionLine: string | null
   lessonSentences: ReadonlyMap<string, string>
+  /** The day chosen below the field `note`. */
+  noteDay: NoteDay
   nowMs: number
 }
 
 /**
  * What the overview's buttons do: keep, drop and `ok`; a topic's button, which turns the pane to
- * that topic's lines; m2b off or on for a folder, with its undo; and a curation run now, with its
- * undo.
+ * that topic's lines; m2b off or on for a folder, with its undo; a curation run now, with its
+ * undo; and the field `note` above the parts, with its undo and its day.
  */
 export type SessionActions = RowActions &
   CurateActions & {
     showTopic: (name: string) => Promise<void>
     switchFolder: (change: FolderSwitch, folder: string) => Promise<void>
     undoFolder: () => Promise<void>
+    note: NoteFieldActions
   }
 
 /** A line and what it is, by which it is drawn. */
@@ -559,6 +565,7 @@ export function sessionPane($: EngineInterface, e: ResolveInput, model: SessionM
   const { Box } = ui
   return (
     <Box flexDirection="column">
+      {noteField($, e, model.noteDay, model.presses[NOTE_PRESS], actions.note, columns)}
       {isQuiet(model) ? (
         <Box key="quiet" flexDirection="column">
           {said(ui, NOTHING_AT_ALL, 'quiet')}

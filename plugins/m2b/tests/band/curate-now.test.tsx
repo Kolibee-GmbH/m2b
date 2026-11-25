@@ -882,6 +882,7 @@ test('the text form says where curation runs below the line about curation, on a
       curatingMachine: null,
       versionLine: null,
       lessonSentences: new Map(),
+      noteDay: 'none',
       nowMs: NOW,
       ...fields,
     })

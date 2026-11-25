@@ -191,6 +191,14 @@ nothing and names them. To note with the model's help, for instance with a day s
 ("next Friday"), ask the model: it uses the tool below, or the skill `/m2b:capture` where the mod
 does not run.
 
+The pane's overview has the same at its top: a field `note`, and below it the day of a task for
+the note, `no day` until you press `today`, `tomorrow` or `in a week`. Tab walks from the row of
+tabs into the field. Enter keeps the text after the five seconds of `undo` every press that writes
+has; then the field is empty, the day is `no day` again, and "This session" counts the note. What
+you type stays in the field over the band's reads and the end of a turn, and when you close the
+pane with Escape and open it again; it is in no state another plugin reads, only a hook on the
+pane's input sees it ([SECURITY.md](../SECURITY.md#what-you-type-into-the-pane)).
+
 ## This session, what waits and today, in the pane
 
 `/m2b-pane` opens the m2b pane in the view it starts in, its overview, with four parts below

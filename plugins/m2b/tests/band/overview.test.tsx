@@ -77,6 +77,7 @@ const NO_ACTIONS: SessionActions = {
   undoFolder: async () => undefined,
   curateNow: async () => undefined,
   undoCurate: async () => undefined,
+  note: { keep: async () => undefined, undo: async () => undefined, chooseDay: async () => undefined },
 }
 
 const KNOWN: BandSession = { id: 's', known: true, topics: [], atStart: 'whole', offUnder: null, folder: null, error: null }
@@ -108,6 +109,7 @@ function modelWith(parts: Partial<SessionModel>): SessionModel {
     curatingMachine: null,
     versionLine: null,
     lessonSentences: new Map(),
+    noteDay: 'none',
     nowMs: NOW,
     ...parts,
   }

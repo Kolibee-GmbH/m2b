@@ -43,16 +43,47 @@ export async function note($: EngineInterface, typed: string, isSetUp: () => Pro
     const line = `nothing noted: write the text after the command, as in /${NOTE_COMMAND.name} Sam brings the plywood`
     return { line, isWritten: false }
   }
+  return writeNote($, text, null, isSetUp)
+}
+
+/**
+ * Writes `text`, which holds more than blanks, through `m2b capture`, with a task due `day`
+ * (YYYY-MM-DD) where it is given; `isSetUp` is asked before anything is called. The one write of
+ * the command and of the overview's field.
+ */
+export async function writeNote(
+  $: EngineInterface,
+  text: string,
+  day: string | null,
+  isSetUp: () => Promise<boolean>,
+): Promise<NoteOutcome> {
   const notReady = await notSetUp(isSetUp)
   if (notReady !== undefined) {
     return notReady
   }
-  // On standard input, so quotes, dollar signs and a leading dash arrive as written.
-  const outcome = await runM2b($, ['capture', '--source', 'claude', '-'], CAPTURE_TIMEOUT_MS, text)
-  if (!outcome.ok) {
-    return { line: `not noted: ${plainLine(outcome.error)}`, isWritten: false }
+  const noted = `noted: ${beginning(plainLine(text).trim())}`
+  if (day === null) {
+    // On standard input, so quotes, dollar signs and a leading dash arrive as written.
+    const outcome = await runM2b($, ['capture', '--source', 'claude', '-'], CAPTURE_TIMEOUT_MS, text)
+    return outcome.ok ? { line: noted, isWritten: true } : { line: `not noted: ${plainLine(outcome.error)}`, isWritten: false }
   }
-  return { line: `noted: ${beginning(plainLine(text).trim())}`, isWritten: true }
+  const args = ['capture', '--source', 'claude', '--json', '--follow-up', day, '-']
+  const outcome = await runM2b($, args, FOLLOW_UP_TIMEOUT_MS, text)
+  if (!outcome.ok) {
+    const reason = plainLine(outcome.error)
+    // The note is in the inbox; typing it again would note it twice.
+    if (reason.includes(CAPTURED_BUT_TASK_UNCONFIRMED)) {
+      return { line: `${noted}; ${reason}`, isWritten: true }
+    }
+    return { line: `not noted: ${reason}`, isWritten: false }
+  }
+  const saved = parseCapture(outcome.stdout)
+  if (typeof saved?.taskId === 'string') {
+    return { line: `${noted}; a task is due ${dayInWords(day, await $.clock.now())}`, isWritten: true }
+  }
+  // The core says on standard error why the task waits for the next curation run.
+  const [said] = notices(outcome.stderr, plainLine)
+  return { line: `${noted}; ${said ?? 'look at the task list for its task'}`, isWritten: true }
 }
 
 /** Why nothing can be noted before m2b is set up, or undefined where it is. */
@@ -84,28 +115,7 @@ async function noteWithDay(
     const line = `nothing noted: write the text after the day, as in /${NOTE_COMMAND.name} --due tomorrow Call Sam`
     return { line, isWritten: false }
   }
-  const notReady = await notSetUp(isSetUp)
-  if (notReady !== undefined) {
-    return notReady
-  }
-  const args = ['capture', '--source', 'claude', '--json', '--follow-up', day, '-']
-  const outcome = await runM2b($, args, FOLLOW_UP_TIMEOUT_MS, text)
-  const noted = `noted: ${beginning(plainLine(text).trim())}`
-  if (!outcome.ok) {
-    const reason = plainLine(outcome.error)
-    // The note is in the inbox; typing it again would note it twice.
-    if (reason.includes(CAPTURED_BUT_TASK_UNCONFIRMED)) {
-      return { line: `${noted}; ${reason}`, isWritten: true }
-    }
-    return { line: `not noted: ${reason}`, isWritten: false }
-  }
-  const saved = parseCapture(outcome.stdout)
-  if (typeof saved?.taskId === 'string') {
-    return { line: `${noted}; a task is due ${dayInWords(day, nowMs)}`, isWritten: true }
-  }
-  // The core says on standard error why the task waits for the next curation run.
-  const [said] = notices(outcome.stderr, plainLine)
-  return { line: `${noted}; ${said ?? 'look at the task list for its task'}`, isWritten: true }
+  return writeNote($, text, day, isSetUp)
 }
 
 /**
@@ -113,9 +123,8 @@ async function noteWithDay(
  * `offsetAt` is the owner's offset from UTC, in minutes, at a moment.
  */
 export function dayOf(given: string, nowMs: number, offsetAt: (ms: number) => number = ownersOffsetAt): string | undefined {
-  const today = nowMs + offsetAt(nowMs) * 60_000
   if (given === 'today' || given === 'tomorrow') {
-    return new Date(today + (given === 'tomorrow' ? DAY_MS : 0)).toISOString().slice(0, 10)
+    return daysFromToday(given === 'tomorrow' ? 1 : 0, nowMs, offsetAt)
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(given)) {
     return undefined
@@ -123,6 +132,11 @@ export function dayOf(given: string, nowMs: number, offsetAt: (ms: number) => nu
   // 2026-02-30 would roll over to 2 March.
   const parsed = new Date(`${given}T00:00:00Z`)
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(given) ? given : undefined
+}
+
+/** The day `days` after today on the owner's clock at `nowMs`, as YYYY-MM-DD. */
+export function daysFromToday(days: number, nowMs: number, offsetAt: (ms: number) => number = ownersOffsetAt): string {
+  return new Date(nowMs + offsetAt(nowMs) * 60_000 + days * DAY_MS).toISOString().slice(0, 10)
 }
 
 /** The first characters, counted as characters a person sees, so an emoji is never cut in half. */

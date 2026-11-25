@@ -1406,6 +1406,7 @@ test('the small form is in the order of the overview: what waits, the tasks due,
       curatingMachine: null,
       versionLine: null,
       lessonSentences: new Map(),
+      noteDay: 'none',
       nowMs: NOW,
       ...fields,
     })
