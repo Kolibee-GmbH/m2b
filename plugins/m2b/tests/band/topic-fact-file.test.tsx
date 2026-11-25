@@ -83,7 +83,7 @@ function tabsAboveTheFile(): { label: string; key: string | null }[] {
   return [
     ...SIX.map((id, at) => ({ label: LABELS[at] ?? '', key: `tab:${id}:in:aside` })),
     { label: 'Acme Ltd', key: BACK_TO_THE_TOPIC_KEY },
-    { label: 'acme', key: null },
+    { label: 'acme', key: 'tab:fact:shown' },
   ]
 }
 
@@ -150,7 +150,7 @@ test("a fact's row opens its file under the tab beside the topic's, which bears 
   await ui.press({ key: topicFactKey(1) })
 
   expect(fake.calls.slice(callsBefore).filter(call => call[0] === 'source' || call[0] === 'distillate')).toEqual([READ_PAYS])
-  expect(await partLines(ui, 'fact')).toEqual(['[correct]', 'Pays within 30 days.'])
+  expect(await partLines(ui, 'fact')).toEqual(['[correct] [edit]', 'Pays within 30 days.'])
   expect(await shownTabs(ui)).toEqual(tabsAboveTheFile())
   // The key the focus is asked for is drawn above the file and was drawn by no view before: Claude Code finds it there.
   expect(before).not.toContain(BACK_TO_THE_TOPIC_KEY)

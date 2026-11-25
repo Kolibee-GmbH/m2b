@@ -267,6 +267,23 @@ export class FakeM2b {
    * --viewer` names them; a capture with `--about` adds one, as the core finds it in `inbox/`.
    */
   readonly corrections: Record<string, { capture: string; first_line: string }[]> = {}
+  /**
+   * This machine's editing copies, by the fact file they are of, as `m2b source --json --viewer`
+   * names them under `edit`; `m2b store edit` makes one that does not differ, `--keep` and
+   * `--discard` remove it, and a test sets `differs` or `factFileChanged` as a save in the editor or
+   * a run would.
+   */
+  readonly edits: Record<string, { differs: boolean; factFileChanged: boolean }> = {}
+  /** The kept edits that wait in the inbox, by the fact file they are of; `m2b store edit --keep` adds one. */
+  readonly keptEdits: Record<string, string[]> = {}
+  /** When set, `m2b store edit` without `--keep` or `--discard` ends with this, as a refusal; no copy is made. */
+  editRefusal: ProcessRunResult | null = null
+  /** When set, `m2b store edit --keep` ends with this, as for an emptied copy; the copy stays. */
+  keepRefusal: ProcessRunResult | null = null
+  /** Why `m2b store edit` opened no editor, as in a session without a screen; null where one opened. */
+  editNotOpened: string | null = null
+  /** Unset, the core is one from before the copies: `m2b band --json` names no `edits_not_kept`. */
+  countsEdits = true
   /** How `m2b store open` ends; how long it takes is `delayMs`'s. */
   openAnswer: ProcessRunResult = ok("opened corpus/2026/11/20261116T165634Z-cli-7198.pdf in the system's viewer\n")
   /**
@@ -410,8 +427,15 @@ export class FakeM2b {
     }
     if (args[0] === 'source') {
       // A fact file read for the pane, with `--viewer`, names the corrections that wait for it.
-      const corrections = args.includes('--viewer') && this.sourceAnswer?.['kind'] === 'fact file' ? { corrections: this.corrections[args.at(-1) ?? ''] ?? [] } : {}
+      const name = args.at(-1) ?? ''
+      const corrections =
+        args.includes('--viewer') && this.sourceAnswer?.['kind'] === 'fact file'
+          ? { corrections: this.corrections[name] ?? [], edit: this.editPart(name) }
+          : {}
       return this.sourceAnswer === null ? fail(this.sourceFails) : ok(JSON.stringify({ ...this.sourceAnswer, ...corrections }))
+    }
+    if (args[0] === 'store' && args[1] === 'edit') {
+      return this.editAnswer(args)
     }
     if (args[0] === 'store' && args[1] === 'open') {
       return this.openAnswer
@@ -661,7 +685,54 @@ export class FakeM2b {
     }
     const proposals = this.proposalsPart ?? this.waitingProposals()
     const band = this.bandPart === undefined ? this.settingsPart() : { band: this.bandPart }
-    return ok(JSON.stringify({ version: this.version, ...band, tasks, ...(proposals === null ? {} : { proposals }), status: this.status }))
+    const edits = this.countsEdits ? { edits_not_kept: Object.values(this.edits).filter(edit => edit.differs).length } : {}
+    return ok(JSON.stringify({ version: this.version, ...band, tasks, ...(proposals === null ? {} : { proposals }), status: this.status, ...edits }))
+  }
+
+  /** What `m2b source --json --viewer` names under `edit` for `file`: its copy, and the kept edits that wait. */
+  editPart(file: string): Record<string, unknown> {
+    const edit = this.edits[file]
+    return {
+      copy: edit === undefined ? null : editCopyPath(file),
+      differs: edit?.differs ?? false,
+      fact_file_changed: edit?.factFileChanged ?? false,
+      kept: this.keptEdits[file] ?? [],
+    }
+  }
+
+  /** `m2b store edit --json [--keep | --discard] -- <file>`, as the core answers each. */
+  editAnswer(args: readonly string[]): ProcessRunResult {
+    const file = args.at(-1) ?? ''
+    const edit = this.edits[file]
+    if (args.includes('--keep')) {
+      if (this.keepRefusal !== null) {
+        return this.keepRefusal
+      }
+      if (edit === undefined) {
+        return fail(`there is no editing copy of ${file}; m2b store edit ${file} makes one`)
+      }
+      delete this.edits[file]
+      if (!edit.differs) {
+        return ok(JSON.stringify({ kept: null }))
+      }
+      const capture = '20261125T101500Z-cli-ef56.md'
+      this.keptEdits[file] = [...(this.keptEdits[file] ?? []), capture]
+      return ok(JSON.stringify({ kept: `inbox/${capture}` }))
+    }
+    if (args.includes('--discard')) {
+      delete this.edits[file]
+      return ok(JSON.stringify({ discarded: edit !== undefined }))
+    }
+    if (this.editRefusal !== null) {
+      return this.editRefusal
+    }
+    this.edits[file] ??= { differs: false, factFileChanged: false }
+    return ok(JSON.stringify({ copy: editCopyPath(file), opened: this.editNotOpened === null, not_opened: this.editNotOpened }))
+  }
+
+  /** The calls of `m2b store edit`, in the order they ran. */
+  editCalls(): string[][] {
+    return this.calls.filter(call => call[0] === 'store' && call[1] === 'edit')
   }
 
   /** The `band` part as the installed core names the machine's settings; none from a core before them. */
@@ -731,6 +802,11 @@ const NOT_SET_UP = 'not set up: no machine config at /home/alex/.config/m2b/conf
  */
 export function readsASource(args: readonly string[]): boolean {
   return args[0] === 'source' && args.includes('--viewer') && /^\d{8}T\d{6}Z-/.test(args.at(-1) ?? '')
+}
+
+/** Where the core keeps the editing copy of `file` on the test's machine. */
+export function editCopyPath(file: string): string {
+  return `/home/alex/.local/state/m2b/edits/${file}`
 }
 
 export function ok(stdout: string): ProcessRunResult {

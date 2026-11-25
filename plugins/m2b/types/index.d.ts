@@ -61,6 +61,8 @@ export type BandHealth = {
   isCurating: boolean
   // The lessons the owner kept, where there are any; a band before them shared its answer without.
   lessons?: LessonStanding[]
+  // How many editing copies of fact files on this machine differ and are not kept; a count, never a file's name. Absent from a core before the copies.
+  editsNotKept?: number
 }
 
 /**
@@ -95,6 +97,9 @@ export type NoteKeep = 'note'
 /** What Enter in the field `what is right` of a fact file's view asks for: its text written as a correction of that file. The text is never in a press. */
 export type CorrectFact = 'correct'
 
+/** What a press on `keep the edit` or `discard` in a fact file's view asks for: the editing copy kept for the next run, or removed. The file is never in a press. */
+export type EditCopy = 'keep the edit' | 'discard'
+
 /** The day below the overview's field `note`: none, or the day a task for the note is due. */
 export type NoteDay = 'none' | 'today' | 'tomorrow' | 'week'
 
@@ -112,7 +117,7 @@ export type CurateRefusal = 'running' | 'not-curating' | 'not-downloaded' | 'fai
  * are the proposals a press on keep all stands for: those the pane showed when it was pressed.
  */
 export type BandPress = {
-  action: BandSettle | KeepForEveryProject | FolderSwitch | CurateNow | NoteKeep | CorrectFact
+  action: BandSettle | KeepForEveryProject | FolderSwitch | CurateNow | NoteKeep | CorrectFact | EditCopy
   phase: 'waiting' | 'writing'
   token: string
   deadlineMs?: number

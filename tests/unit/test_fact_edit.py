@@ -11,9 +11,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from m2b import cli, fact_edit, paths, viewer
+from m2b import cli, fact_edit, kept_edits, paths, viewer
 from m2b.config import machine
 from m2b.notes.frontmatter import Note
+from m2b.store.folder import FolderStore
 from m2b.store.guard import DatalessGuard
 from store_contract import FakeEviction
 
@@ -172,6 +173,25 @@ class StoreEditTest(unittest.TestCase):
         self.assertEqual(note.body, EDITED)
         self.assertFalse(copy.exists())
         self.assertEqual(self.memory(), before)
+
+    def test_a_copy_saved_without_a_newline_at_its_end_is_kept_and_put_in_place_by_the_run(self) -> None:
+        """Covers: B307"""
+        # The system's text editor on a Mac saves a file as typed, without a newline after its last line;
+        # the pane calls the command with `--` before the name, as a name may start with a dash.
+        self.edit_json("--", "dana.md")
+        saved = EDITED.rstrip("\n")
+        fact_edit.copy_path(self.machine, "dana.md").write_text(saved, encoding="utf-8")
+
+        answer = self.edit_json("--keep", "--", "dana.md")
+
+        (kept,) = self.inbox()
+        self.assertEqual(answer, {"kept": f"inbox/{kept.name}"})
+        store = FolderStore(
+            self.store_root, Path(self._temp.name) / "machine-tmp", DatalessGuard(True, lstat=self.eviction.lstat)
+        )
+        report = kept_edits.put_in_place(store)
+        self.assertEqual((len(report.placed), report.refused), (1, []))
+        self.assertEqual((self.store_root / "memory/dana.md").read_text(encoding="utf-8").rstrip("\n"), saved)
 
     def test_keep_of_an_unchanged_copy_and_discard_write_nothing_and_remove_the_copy(self) -> None:
         """Covers: B307"""

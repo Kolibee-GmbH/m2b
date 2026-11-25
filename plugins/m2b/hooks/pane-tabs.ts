@@ -74,9 +74,7 @@ function asideLabel(view: PaneView | null): string | null {
   if (view?.kind === 'topic') {
     return topicLabel(topicNameOf(view.press))
   }
-  if (view?.kind === 'fact') {
-    return factTabLabel(factFileNameOf(view.press))
-  }
+  // A fact file's tab is drawn by `paneTabs` itself: shown, it is a button.
   // A note opened from a current item: no fact file stands above it, so its tab is the seventh.
   if (view?.kind === 'source') {
     return sourceLabelOf(view.press)
@@ -90,11 +88,17 @@ function asideLabel(view: PaneView | null): string | null {
 /** The key of the tab that leads from a source back to the fact file it was shown from; no other view draws it. */
 export const BACK_TO_THE_FACT_FILE_KEY = 'tab:fact:in:source'
 
+/** The key of a fact file's own tab while its view is shown: a press reads the file again, to see what became of its editing copy. */
+export const FACT_FILE_TAB_KEY = 'tab:fact:shown'
+
 /** The key of the tab that leads from a fact file back to the topic it was opened from; no other view draws it. */
 export const BACK_TO_THE_TOPIC_KEY = 'tab:topic:in:fact'
 
-/** The presses on a tab that leads back beside the six: to the fact file a source was shown from, to the topic a fact file was opened from. */
-export type BackTabs = { toFactFile: (from: string) => void; toTopic: (fact: string) => void }
+/**
+ * The presses on a tab beside the six: one that leads back, to the fact file a source was shown
+ * from or to the topic a fact file was opened from, and a fact file's own tab, which reads it again.
+ */
+export type BackTabs = { toFactFile: (from: string) => void; toTopic: (fact: string) => void; readFactFileAgain: () => void }
 
 /**
  * The pane's tabs above `view`. `waiting` is how many proposals wait: the tab counts them, and a
@@ -108,13 +112,18 @@ export function paneTabs(view: PaneView | null, waiting: number, onTurn: (to: Ta
     isShown: id === shown,
     hotkey: HOTKEYS[id],
   }))
-  const topic = view?.kind === 'fact' ? topicOfFactFile(view.press) : null
-  if (view?.kind === 'fact' && topic !== null) {
+  if (view?.kind === 'fact') {
     const fact = view.press
+    const topic = topicOfFactFile(fact)
+    // Shown, a fact file's tab is a button as each of the six is: Enter on it reads the file again.
+    const own: Tab = { label: factTabLabel(factFileNameOf(fact)), turn: { key: FACT_FILE_TAB_KEY, onPress: () => back.readFactFileAgain() }, isShown: true, hotkey: null }
+    if (topic === null) {
+      return [...staying, own]
+    }
     return [
       ...staying,
       { label: topicLabel(topicNameOf(topic.press)), turn: { key: BACK_TO_THE_TOPIC_KEY, onPress: () => back.toTopic(fact) }, isShown: false, hotkey: null },
-      { label: factTabLabel(factFileNameOf(fact)), turn: null, isShown: true, hotkey: null },
+      own,
     ]
   }
   if (view?.kind === 'source' && view.from !== null) {

@@ -594,6 +594,13 @@ test("the part about m2b lists each lesson as its sentence, and below it the day
   await ui.unmount()
 })
 
+test('where no pane can be shown, the part about m2b counts the edited copies not kept, and says nothing of none', () => {
+  // Covers: B324
+  const lines = sessionLines(modelWith({ health: healthWith({ editsNotKept: 1 }) }))
+  expect(lines.slice(lines.indexOf('m2b'))).toEqual(['m2b', '  1 edited copy not kept yet'])
+  expect(sessionLines(modelWith({ health: healthWith({}) }))).not.toContain('m2b')
+})
+
 test('where no pane can be shown, the part about m2b says each lesson and below it, indented, how it does', () => {
   // Covers: B282
   const once = { name: 'once.md', kind: 'knowledge', kept: '2026-11-20', correctedAgain: 2 }

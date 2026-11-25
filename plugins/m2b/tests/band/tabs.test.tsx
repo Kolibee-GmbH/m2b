@@ -88,6 +88,7 @@ const SHOWN: Readonly<Record<View, Shown>> = {
 const ASIDE: Readonly<Partial<Record<View, string>>> = { group: 'About this setup', topic: 'Northwind', fact: 'dana', search: 'Search', source: 'note 2026-10-12' }
 /** The seventh tab above a source: its fact file, a button that leads back to it. */
 const BACK_TO_DANA: ShownTab = { label: 'dana', key: 'tab:fact:in:source' }
+const DANA_SHOWN: ShownTab = { label: 'dana', key: 'tab:fact:shown' }
 /** A line each view draws and no other does: the review has a part "Waits for you" too, so the overview is told by its part "Today". */
 const SAYS: Readonly<Record<View, string>> = {
   overview: 'Today',
@@ -215,9 +216,15 @@ function rowAbove(shown: Shown, aside?: string, proposals = 'Proposals 3'): Show
   return aside === undefined ? staying : [...staying, { label: aside, key: null }]
 }
 
-/** The row of tabs above `view` while three proposals wait: above a source the tab of its fact file stands before its own. */
+/**
+ * The row of tabs above `view` while three proposals wait: above a source the tab of its fact file
+ * stands before its own; a fact file's tab, shown, is a button that reads it again.
+ */
 function rowOver(view: View): ShownTab[] {
   const row = rowAbove(SHOWN[view], ASIDE[view])
+  if (view === 'fact') {
+    return [...row.slice(0, -1), DANA_SHOWN]
+  }
   return view === 'source' ? [...row.slice(0, -1), BACK_TO_DANA, ...row.slice(-1)] : row
 }
 
@@ -247,7 +254,7 @@ test('above the view the pane starts in stand Overview, Proposals with the numbe
   await ui.unmount()
 })
 
-test('the six tabs stand above every view in the same order, each a button; a tab beside them is a text while its view is shown', async ($, on) => {
+test("the six tabs stand above every view in the same order, each a button; a tab beside them is a text while its view is shown, but a fact file's, a button that reads it again", async ($, on) => {
   // Covers: B204
   const { clock } = await start($, on, fullFake())
   const ui = await mounted($)
@@ -257,13 +264,13 @@ test('the six tabs stand above every view in the same order, each a button; a ta
 
     expect(await texts(ui)).toContain(SAYS[view])
     expect(await shownTabs(ui)).toEqual(rowOver(view))
-    // No tab is drawn twice: the six are buttons, above a source the tab of its fact file too.
-    expect((await everyButton(ui)).filter(key => key.startsWith('tab:'))).toHaveLength(6 + (view === 'source' ? 1 : 0))
+    // No tab is drawn twice: the six are buttons, above a source or its own view the tab of a fact file too.
+    expect((await everyButton(ui)).filter(key => key.startsWith('tab:'))).toHaveLength(6 + (view === 'source' || view === 'fact' ? 1 : 0))
   }
   await ui.unmount()
 })
 
-test("one of the six shown is a button in the accent, a tab beside them shown is bold and underlined in the color of m2b's name, and every other tab is a dim button", async ($, on) => {
+test("one of the six shown is a button in the accent, as is a fact file's tab shown, any other tab beside them shown is bold and underlined in the color of m2b's name, and every other tab is a dim button", async ($, on) => {
   // Covers: B204
   const { clock } = await start($, on, fullFake())
   const ui = await mounted($)
@@ -273,7 +280,10 @@ test("one of the six shown is a button in the accent, a tab beside them shown is
     const shown = SHOWN[view]
     const row = await shownTabs(ui)
 
-    if (shown === 'aside') {
+    if (view === 'fact') {
+      const marked = await ui.find({ key: DANA_SHOWN.key ?? '' })
+      expect(marked?.props).toMatchObject({ label: ASIDE.fact, variant: 'primary' })
+    } else if (shown === 'aside') {
       // The row's one text is the first text the pane draws.
       const [text] = await ui.findAll({ type: 'Text' })
       expect(text?.text).toBe(ASIDE[view])
@@ -283,7 +293,7 @@ test("one of the six shown is a button in the accent, a tab beside them shown is
       expect(marked?.props).toMatchObject({ label: LABELS[shown], variant: 'primary' })
       expect(marked?.props['dimColor']).toBeUndefined()
     }
-    for (const tab of row.filter(one => one.key !== null && one.key !== `tab:${shown}:in:${shown}`)) {
+    for (const tab of row.filter(one => one.key !== null && one.key !== `tab:${shown}:in:${shown}` && one.key !== DANA_SHOWN.key)) {
       const button = await ui.find({ key: tab.key ?? '' })
       expect(button?.type).toBe('Button')
       expect(button?.props['dimColor']).toBe(true)

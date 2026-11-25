@@ -16,6 +16,7 @@ import type {
   BandShows,
   BandSnapshot,
   CurateRefusal,
+  EditCopy,
   FolderSwitch,
   PaneView,
 } from '../types'
@@ -48,6 +49,8 @@ import {
   writeCorrection,
 } from './correct-field'
 import type { CorrectActions, TakenCorrection } from './correct-field'
+import { EDIT_PRESS, UNDO_EDIT, focusAfterUndo, forgetEdits, giveEditPressBack, openEditCopy, takeEditPress, writeEditCopy } from './edit-copy'
+import type { EditActions } from './edit-copy'
 import { isInOwnWords, isOwnPrompt, withPrompt } from './own-words'
 import {
   AS_A_DIALOG,
@@ -68,7 +71,7 @@ import {
   showPane,
 } from './pane'
 import { CLOSED_BY_HAND, closeAnswer, docksFor, staysBesideChat } from './pane-seat'
-import { BACK_TO_THE_FACT_FILE_KEY, BACK_TO_THE_TOPIC_KEY, backTabKey, focusKeyAfterTab, paneTabs } from './pane-tabs'
+import { BACK_TO_THE_FACT_FILE_KEY, BACK_TO_THE_TOPIC_KEY, FACT_FILE_TAB_KEY, backTabKey, focusKeyAfterTab, paneTabs } from './pane-tabs'
 import type { TabId } from './pane-tabs'
 import { plainLine, wholePath } from './plain-text'
 import {
@@ -314,9 +317,14 @@ async function loadView($: EngineInterface, answer: readonly string[] = BAND_ANS
     version: typeof fields['version'] === 'string' ? fields['version'] : null,
     run: runOf(fields['status']),
     proposals: parseProposals(fields['proposals']),
-    health: healthOf(fields['status'], await $.clock.now()),
+    health: { ...healthOf(fields['status'], await $.clock.now()), ...editsNotKeptOf(fields['edits_not_kept']) },
     curatingMachine: curatingMachineOf(fields['status']),
   }
+}
+
+/** The count of editing copies that differ and are not kept; nothing where none is, as from a core before the copies, so the answer the sessions share keeps its shape. */
+function editsNotKeptOf(count: unknown): { editsNotKept?: number } {
+  return typeof count === 'number' && Number.isInteger(count) && count > 0 ? { editsNotKept: count } : {}
 }
 
 function snapshotOf(part: unknown, shows: BandShows | undefined): BandSnapshot {
@@ -501,7 +509,8 @@ function isHealth(value: unknown): value is BandHealth {
     // A band from before the button shared its answer without these: it is not taken, and m2b is asked.
     (value['curates'] === null || typeof value['curates'] === 'boolean') &&
     typeof value['isCurating'] === 'boolean' &&
-    (value['lessons'] === undefined || (Array.isArray(value['lessons']) && value['lessons'].every(isLessonStanding)))
+    (value['lessons'] === undefined || (Array.isArray(value['lessons']) && value['lessons'].every(isLessonStanding))) &&
+    (value['editsNotKept'] === undefined || Number.isInteger(value['editsNotKept']))
   )
 }
 
@@ -1206,7 +1215,12 @@ async function viewOfPane(
     case 'facts':
       return factsPane($, e, factsOf(view.press), factsActions($), bodyColumns, await $.clock.now())
     case 'fact': {
-      const correction = { pressed: presses[CORRECT_PRESS], curation: await answersCuration($, presses), actions: correctActions($, view.press) }
+      const correction = {
+        pressed: presses[CORRECT_PRESS],
+        curation: await answersCuration($, presses),
+        actions: correctActions($, view.press),
+        edit: { pressed: presses[EDIT_PRESS], actions: editActions($, view.press) },
+      }
       return factFilePane($, e, view.press, { show: (index, evidence) => showSource($, view.press, index, evidence) }, correction, bodyColumns)
     }
     case 'source':
@@ -1400,8 +1414,80 @@ function correctActions($: EngineInterface, opening: string): CorrectActions {
 }
 
 /**
+ * A press on the shown fact file's own tab: the file is read again, with what became of its
+ * editing copy, and the band reads again, so the overview counts a copy saved since it last read.
+ */
+async function readFactFileByItsTab($: EngineInterface): Promise<void> {
+  $.clock.after(0, inBackground($, () => refresh($, true)))
+  await readShownFactFileAgain($)
+}
+
+// While the core makes or opens a copy: a second press on `edit` would start the editor twice.
+let isOpeningACopy = false
+
+/**
+ * The editing copy of the fact file the press `opening` opened. `edit` has the core make the copy,
+ * or find the one there is, and open it; the view reads the file again to name the copy, and the
+ * focus goes to the file's own tab, whose press reads it again once the copy is saved. `keep the
+ * edit` and `discard` wait five seconds for `undo`, then keep the copy for the next curation run or
+ * remove it, and the file is read again.
+ */
+function editActions($: EngineInterface, opening: string): EditActions {
+  const settled = (choice: EditCopy) => async () => {
+    // A press of keep or discard whose write has not landed yet keeps the copy as it is.
+    if ((await read($, pressesAtom))[EDIT_PRESS] !== undefined) {
+      return
+    }
+    const file = factFileNameOf(opening)
+    if (file === '' || !takeEditPress(file)) {
+      return
+    }
+    await press($, EDIT_PRESS, choice, editWrite($, file, choice), UNDO_EDIT)
+  }
+  return {
+    open: async () => {
+      const file = factFileNameOf(opening)
+      if (file === '' || isOpeningACopy) {
+        return
+      }
+      isOpeningACopy = true
+      try {
+        await openEditCopy($, file)
+      } finally {
+        isOpeningACopy = false
+      }
+      await readShownFactFileAgain($, file)
+      await focusInPane($, FACT_FILE_TAB_KEY)
+    },
+    keep: settled('keep the edit'),
+    discard: settled('discard'),
+    undo: async () => {
+      const choice = (await read($, pressesAtom))[EDIT_PRESS]?.action
+      // A press whose window ended while undo was on its way is written: the copy is kept or gone.
+      if (!(await takeBack($, EDIT_PRESS))) {
+        return
+      }
+      giveEditPressBack()
+      await redrawn($, 'fact', opening)
+      await focusInPane($, focusAfterUndo(choice === 'keep the edit' ? 'keep the edit' : 'discard'))
+    },
+  }
+}
+
+/** Keeps or removes the copy, then reads its fact file again where a view of it is shown. */
+function editWrite($: EngineInterface, file: string, choice: EditCopy): PressWrite {
+  return async () => {
+    await writeEditCopy($, file, choice)
+    // Outside the band's queue, which this write holds: the read touches nothing it guards.
+    $.clock.after(0, inBackground($, () => readShownFactFileAgain($, file)))
+    // The band counts the copies not kept, and the inbox, again.
+    return true
+  }
+}
+
+/**
  * Reads the fact file the pane shows again, where it shows one, and `only` where that is given:
- * its lines and the corrections that wait.
+ * its lines, the corrections and kept edits that wait, and its editing copy.
  */
 async function readShownFactFileAgain($: EngineInterface, only?: string): Promise<void> {
   const view = await read($, paneViewAtom)
@@ -1431,6 +1517,7 @@ function correctionWrite($: EngineInterface, taken: TakenCorrection): PressWrite
 /** Forgets what was typed into the pane's fields: the field `note`, with its day back to `no day`, and every correction. */
 async function forgetTypedFields($: EngineInterface): Promise<void> {
   forgetCorrection()
+  forgetEdits()
   forgetNoteField()
   await update($, noteDayAtom, () => 'none')
 }
@@ -2340,7 +2427,7 @@ export const register: Register = on => {
     const { Box } = ui
     return (
       <Box flexDirection="column">
-        <Box marginBottom={1}>{tabRow(ui, paneTabs(view, proposals?.waiting.length ?? 0, to => turnByTab($, to), { toFactFile: from => backToFactFile($, from), toTopic: fact => backToTopic($, fact) }))}</Box>
+        <Box marginBottom={1}>{tabRow(ui, paneTabs(view, proposals?.waiting.length ?? 0, to => turnByTab($, to), { toFactFile: from => backToFactFile($, from), toTopic: fact => backToTopic($, fact), readFactFileAgain: () => readFactFileByItsTab($) }))}</Box>
         {await viewOfPane($, e, view, proposals, e.props.bodyColumns)}
       </Box>
     )

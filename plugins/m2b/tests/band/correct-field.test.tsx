@@ -47,10 +47,10 @@ test("a fact file's view has correct under its title, and a press draws the fiel
   await start($, on, busyFake())
   const ui = await factFileView($)
 
-  expect((await linesAt(ui, 'part:fact'))?.slice(0, 3)).toEqual(['Dana', '[correct]', 'My sister.'])
+  expect((await linesAt(ui, 'part:fact'))?.slice(0, 3)).toEqual(['Dana', '[correct] [edit]', 'My sister.'])
   await ui.press({ key: CORRECT })
 
-  expect(await linesAt(ui, CORRECTING)).toEqual(['what is right: (the fact as it should read)'])
+  expect(await linesAt(ui, CORRECTING)).toEqual(['what is right: (the fact as it should read)', '[edit]'])
   expect((await ui.find({ key: FIELD }))?.props['submitLabel']).toBe('keep')
   await ui.unmount()
 })
@@ -69,7 +69,7 @@ test('a text and Enter offer undo for five seconds, then the correction is captu
 
   expect(fake.captured).toEqual([RIGHT])
   expect(fake.captureArgs).toEqual([['capture', '--source', 'claude', '--about', 'dana.md', '-']])
-  expect(await linesAt(ui, CORRECTING)).toEqual(['[correct]'])
+  expect(await linesAt(ui, CORRECTING)).toEqual(['[correct] [edit]'])
   expect(await linesAt(ui, WAITING)).toEqual(['1 correction waits for the next curation run:', `“${RIGHT}”`, '[curate now]'])
   await ui.unmount()
 })
@@ -131,7 +131,7 @@ test('once a run under way ends, the view reads its fact file again and names wh
   fake.status = STATUS
   await clock.advance(60_000)
 
-  expect(await linesAt(ui, 'part:fact')).toEqual(['Dana', '[correct]', 'My sister.', RIGHT])
+  expect(await linesAt(ui, 'part:fact')).toEqual(['Dana', '[correct] [edit]', 'My sister.', RIGHT])
   expect(await linesAt(ui, WAITING)).toBeNull()
   await ui.unmount()
 })
@@ -151,7 +151,7 @@ test("a field opened for another fact file while a correction waits keeps what i
   await clock.advance(UNDO_MS)
 
   expect(fake.captureArgs).toEqual([['capture', '--source', 'claude', '--about', 'dana.md', '-']])
-  expect(await linesAt(ui, CORRECTING)).toEqual(['what is right: Sam lends the long ladder'])
+  expect(await linesAt(ui, CORRECTING)).toEqual(['what is right: Sam lends the long ladder', '[edit]'])
   await ui.unmount()
 })
 
@@ -171,7 +171,7 @@ test('each fact file keeps its own draft: one typed for another file leaves it a
   await pressTab(ui, 'facts')
   await ui.press({ key: 'details:0' })
 
-  expect(await linesAt(ui, CORRECTING)).toEqual(['what is right: Dana lives in Por'])
+  expect(await linesAt(ui, CORRECTING)).toEqual(['what is right: Dana lives in Por', '[edit]'])
   await ui.unmount()
 })
 
@@ -187,7 +187,7 @@ test('undo writes nothing and puts the text back in the field', async ($, on) =>
   await clock.advance(UNDO_MS * 2)
 
   expect(fake.calls.filter(call => call[0] === 'capture')).toEqual([])
-  expect(await linesAt(ui, CORRECTING)).toEqual([`what is right: ${RIGHT}`])
+  expect(await linesAt(ui, CORRECTING)).toEqual([`what is right: ${RIGHT}`, '[edit]'])
   await ui.unmount()
 })
 
@@ -201,7 +201,7 @@ test('an empty text and Enter write nothing and leave the field open', async ($,
   await clock.advance(UNDO_MS * 2)
 
   expect(fake.calls.filter(call => call[0] === 'capture')).toEqual([])
-  expect(await linesAt(ui, CORRECTING)).toEqual(['what is right: (the fact as it should read)'])
+  expect(await linesAt(ui, CORRECTING)).toEqual(['what is right: (the fact as it should read)', '[edit]'])
   await ui.unmount()
 })
 
@@ -215,7 +215,7 @@ test('a correction m2b could not write says why and puts the text back in the fi
   await correctWith(ui, RIGHT)
   await clock.advance(UNDO_MS)
 
-  expect(await linesAt(ui, CORRECTING)).toEqual([`what is right: ${RIGHT}`, 'not kept: the inbox is not writable: /home/alex/Notes/inbox'])
+  expect(await linesAt(ui, CORRECTING)).toEqual([`what is right: ${RIGHT}`, 'not kept: the inbox is not writable: /home/alex/Notes/inbox', '[edit]'])
   await ui.unmount()
 })
 
@@ -230,12 +230,12 @@ test('a text half typed is drawn again when the view of the same fact file is op
   await pressTab(ui, 'overview')
   await pressTab(ui, 'facts')
   await ui.press({ key: 'details:0' })
-  expect(await linesAt(ui, CORRECTING)).toEqual(['what is right: Dana lives in Por'])
+  expect(await linesAt(ui, CORRECTING)).toEqual(['what is right: Dana lives in Por', '[edit]'])
 
   await $.session.end({ reason: 'clear', sessionId: SESSION_ID, resume: { id: SESSION_ID } })
   await pressTab(ui, 'facts')
   await ui.press({ key: 'details:0' })
-  expect(await linesAt(ui, CORRECTING)).toEqual(['[correct]'])
+  expect(await linesAt(ui, CORRECTING)).toEqual(['[correct] [edit]'])
   await ui.unmount()
 })
 
@@ -263,6 +263,6 @@ test('below 36 columns the field has no label, only its placeholder', async ($, 
   await start($, on, busyFake())
   const ui = await factFileView($, 24)
   await ui.press({ key: CORRECT })
-  expect(await linesAt(ui, CORRECTING)).toEqual(['(what is right)'])
+  expect(await linesAt(ui, CORRECTING)).toEqual(['(what is right)', '[edit]'])
   await ui.unmount()
 })

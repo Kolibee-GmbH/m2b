@@ -272,13 +272,27 @@ function curatesElsewhere(model: SessionModel): Line[] {
 }
 
 /**
- * How m2b itself stands, as lines: what is wrong first, then the line about curation, which steps
- * back, where curation runs, and how each lesson does, its standing indented below it.
+ * The editing copies of fact files on this machine that differ and are not kept, as a count: a
+ * file's name can name a customer, and the owner finds each copy in its fact file's view.
+ */
+function editsNotKept(model: SessionModel): Line[] {
+  const count = model.health?.editsNotKept ?? 0
+  if (count === 0) {
+    return []
+  }
+  return [line(count === 1 ? '1 edited copy not kept yet' : `${count} edited copies not kept yet`, 'waits')]
+}
+
+/**
+ * How m2b itself stands, as lines: what is wrong first, the edited copies not kept, then the line
+ * about curation, which steps back, where curation runs, and how each lesson does, its standing
+ * indented below it.
  */
 function healthLines(model: SessionModel): Line[] {
   const { health } = model
   return [
     ...troubleLines(model),
+    ...editsNotKept(model),
     ...(health?.curation ? [line(plainLine(health.curation), 'quiet')] : []),
     ...curatesElsewhere(model),
     ...lessonLines(model).flatMap(lesson => [lesson.title, { ...lesson.standing, text: `  ${lesson.standing.text}` }]),
@@ -541,9 +555,10 @@ function curationLines($: EngineInterface, e: ResolveInput, model: SessionModel,
 }
 
 /**
- * "m2b": what is wrong with m2b, each with its reason, why the last press started no run, how
- * curation stands, with the button that starts a run on the machine that curates, and how each
- * lesson the owner kept does, one they corrected Claude on again marked as not working. Left out
+ * "m2b": what is wrong with m2b, each with its reason, why the last press started no run, how many
+ * edited copies of fact files are not kept, how curation stands, with the button that starts a run
+ * on the machine that curates, and how each lesson the owner kept does, one they corrected Claude
+ * on again marked as not working. Left out
  * where there is nothing to say.
  */
 function healthPart($: EngineInterface, e: ResolveInput, model: SessionModel, actions: SessionActions, columns: number) {
@@ -552,6 +567,8 @@ function healthPart($: EngineInterface, e: ResolveInput, model: SessionModel, ac
   const body = [
     ...troubleLines(model).map(one => said(ui, one.text, one.tone)),
     curateNotice !== null && said(ui, plainLine(curateNotice), 'trouble'),
+    // Above the run's lines: `curate now` does nothing for a copy the owner has not kept.
+    ...editsNotKept(model).map(one => said(ui, one.text, one.tone)),
     ...(health === null ? [] : curationLines($, e, model, health, actions)),
     ...curatesElsewhere(model).map(one => said(ui, one.text, one.tone)),
     ...lessonLines(model).flatMap(({ title, standing }) => [said(ui, title.text, title.tone), under(ui, standing.text, standing.tone)]),

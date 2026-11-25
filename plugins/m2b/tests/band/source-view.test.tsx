@@ -225,7 +225,7 @@ test('each evidence entry that was read is a row that shows its source, keyed by
 
   const ui = await factFileView($)
 
-  expect(await viewButtons(ui)).toEqual(['fact:correct', 'show:0', 'show:1', 'show:3'])
+  expect(await viewButtons(ui)).toEqual(['fact:correct', 'fact:edit', 'show:0', 'show:1', 'show:3'])
   expect((await shownParts(ui)).find(part => part.key === 'fact:evidence')?.lines).toEqual([
     opening('2026-10-12 a note: Dana, my sister.'),
     opening('2026-11-16 a document, handbook.pdf: p. 1: club name'),
@@ -686,7 +686,7 @@ test('an answer of store open that comes after the pane turned away draws nothin
   await pressed
   await clock.advance(1)
 
-  expect((await shownTabs(ui)).at(-1)).toEqual({ label: 'dana', key: null })
+  expect((await shownTabs(ui)).at(-1)).toEqual({ label: 'dana', key: 'tab:fact:shown' })
   for (const line of [OPENED, OPENING, DOCUMENT_WORDS]) {
     expect(await everyText(ui)).not.toContain(line)
   }
@@ -710,7 +710,7 @@ test("the fact file's tab above a source leads back to the fact file as it was d
 
   expect(await shownParts(ui)).toEqual(fileDrawn)
   expect(await shownTabs(ui)).toEqual(tabsOfFile)
-  expect(tabsOfFile.at(-1)).toEqual({ label: 'dana', key: null })
+  expect(tabsOfFile.at(-1)).toEqual({ label: 'dana', key: 'tab:fact:shown' })
   expect(fake.sourceCalls()).toEqual([READ_FILE, ['source', '--json', '--viewer', '--', PICTURE]])
   expect(opened.slice(opensBefore)).toEqual([AS_A_DIALOG])
   // The key the focus is asked for is the row of the entry the source came from: drawn now, and by no button of the source.
@@ -899,7 +899,7 @@ test("the session's state, which every plugin can read, holds nothing a source s
 
 const NOTE_ENTRY: Evidence = { name: NOTE, state: 'read', day: '2026-10-12', kind: 'note', originalName: null, firstLine: 'Dana, my sister.' }
 const READ_NOTE: SourceLook = parseSource(JSON.stringify(noteAnswer()))
-const READ_FILE_LOOK: FactFileLook = { state: 'read', title: 'Dana', until: null, lines: FACT_LINES, earlier: [], evidence: [], corrections: [] }
+const READ_FILE_LOOK: FactFileLook = { state: 'read', title: 'Dana', until: null, lines: FACT_LINES, earlier: [], evidence: [], corrections: [], edit: { copy: null, differs: false, factFileChanged: false, kept: [] } }
 
 test('a source is kept for the press that opened it, with how a press on open the file stands, and turning the pane to any other view drops both', () => {
   // Covers: B232

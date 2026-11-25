@@ -3,7 +3,8 @@ import type { EngineInterface, ResolveInput } from 'claude-code'
 import type { BandPress } from '../types'
 
 import type { WaitingCorrection } from './facts-tab'
-import { button, pressLine, said } from './look'
+import { pressLine, said } from './look'
+import type { ButtonSpec } from './look'
 import { runM2b } from './m2b'
 import { plainLine } from './plain-text'
 import type { AnswersCuration } from './proposals'
@@ -31,7 +32,7 @@ export const CORRECT_FIELD = 'fact:correct:field'
 export const CORRECT_PRESS = 'fact:correct'
 /** The key of `undo` while the press waits. */
 export const UNDO_CORRECT = 'undo:correct'
-/** The key of the lines that name the corrections that wait, with what starts a run beside them. */
+/** The key of the lines that name the corrections and the kept edits that wait, with what starts a run beside them. */
 export const WAITING_CORRECTIONS = 'fact:corrections'
 
 // Below this width of the pane's body the label would leave the text a few characters.
@@ -141,8 +142,9 @@ export async function writeCorrection($: EngineInterface, taken: TakenCorrection
 }
 
 /**
- * Under a fact file's title: `correct`; once pressed, the field `what is right`; while its press
- * waits, `undo` and the text it keeps; while it writes, that alone.
+ * Under a fact file's title: `correct`, with `beside` after it; once pressed, the field `what is
+ * right`, with `beside` below it; while its press waits, `undo` and the text it keeps; while it
+ * writes, that alone.
  */
 export function correctionRow(
   $: EngineInterface,
@@ -150,6 +152,7 @@ export function correctionRow(
   file: string,
   pressed: BandPress | undefined,
   actions: CorrectActions,
+  beside: readonly ButtonSpec[],
   columns: number,
 ) {
   const ui = $.ui.resolve(e)
@@ -169,7 +172,7 @@ export function correctionRow(
   if (field === undefined) {
     return (
       <Box key={CORRECTING} flexDirection="column">
-        {button(ui, { key: CORRECT, label: 'correct', kind: 'default', onPress: () => void actions.open() })}
+        {pressLine(ui, [{ key: CORRECT, label: 'correct', kind: 'default', onPress: () => void actions.open() }, ...beside])}
       </Box>
     )
   }
@@ -186,29 +189,40 @@ export function correctionRow(
         onSubmit={value => void actions.keep(value)}
       />
       {field.failed !== null && said(ui, `not kept: ${field.failed}`, 'trouble')}
+      {/* The field stays open, empty too, until a correction is written: what stands beside it stays reachable. */}
+      {beside.length > 0 && pressLine(ui, beside)}
     </Box>
   )
 }
 
 /**
- * The corrections that wait for the next curation run, as the core named them with the file, each
- * by its first line; on the machine that curates `curate now` below them, on another the line
- * names the machine that curates, and while a run is under way it says so. Nothing where none waits.
+ * What waits in the inbox for the next curation run to change this fact file, as the core named it
+ * with the file: the corrections, each by its first line, and the edits kept. On the machine that
+ * curates one `curate now` below them, on another each line names the machine that curates, and
+ * while a run is under way it says so. Nothing where nothing waits.
  */
-export function waitingCorrections($: EngineInterface, e: ResolveInput, corrections: readonly WaitingCorrection[], curation: AnswersCuration) {
-  if (corrections.length === 0) {
+export function waitingForTheRun(
+  $: EngineInterface,
+  e: ResolveInput,
+  corrections: readonly WaitingCorrection[],
+  keptEdits: number,
+  curation: AnswersCuration,
+) {
+  if (corrections.length === 0 && keptEdits === 0) {
     return null
   }
   const ui = $.ui.resolve(e)
   const { Box } = ui
   const { health, curatingMachine, notice, pressed, actions } = curation
   const count = corrections.length === 1 ? '1 correction waits' : `${corrections.length} corrections wait`
+  const edits = keptEdits === 1 ? 'your edit waits' : `${keptEdits} of your edits wait`
   const elsewhere = pressed === undefined && health?.curates === false && curatingMachine !== null ? ` on ${plainLine(curatingMachine)}` : ''
   const canStart = pressed !== undefined || (health?.curates === true && health.isCurating !== true)
   return (
     <Box key={WAITING_CORRECTIONS} flexDirection="column">
-      {said(ui, `${count} for the next curation run${elsewhere}:`, 'waits')}
+      {corrections.length > 0 && said(ui, `${count} for the next curation run${elsewhere}:`, 'waits')}
       {corrections.map(correction => said(ui, `“${plainLine(correction.firstLine)}”`, 'quiet'))}
+      {keptEdits > 0 && said(ui, `${edits} for the next curation run${elsewhere}`, 'waits')}
       {health?.isCurating === true && pressed === undefined && said(ui, 'A curation run is under way.', 'quiet')}
       {canStart && notice !== null && said(ui, plainLine(notice), 'trouble')}
       {canStart && curateButton($, e, pressed, actions)}

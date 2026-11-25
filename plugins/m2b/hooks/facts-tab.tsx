@@ -1,8 +1,10 @@
 import type { EngineInterface, ResolveInput } from 'claude-code'
 
 import type { BandPress, PaneView } from '../types'
-import { correctionRow, waitingCorrections } from './correct-field'
+import { correctionRow, waitingForTheRun } from './correct-field'
 import type { CorrectActions } from './correct-field'
+import { editButton, editRow } from './edit-copy'
+import type { EditActions } from './edit-copy'
 import { currentItemRow } from './current-item'
 import { opensRow, part, pressLine, said, topicLabel } from './look'
 import { runM2b } from './m2b'
@@ -44,9 +46,27 @@ export type Evidence = {
 /** A correction that waits in the inbox for the next curation run: its capture, and its first line as typed. */
 export type WaitingCorrection = { capture: string; firstLine: string }
 
+/**
+ * The editing copy of a fact file on this machine, as `m2b source --json --viewer` names it under
+ * `edit`: its path, null where there is none; whether it differs from what it was made from;
+ * whether the fact file changed since; and the kept edits that wait in the inbox, by capture.
+ */
+export type EditLook = { copy: string | null; differs: boolean; factFileChanged: boolean; kept: string[] }
+
+const NO_EDIT: EditLook = { copy: null, differs: false, factFileChanged: false, kept: [] }
+
 export type FactFileLook =
   | { state: 'reading' }
-  | { state: 'read'; title: string; until: string | null; lines: string[]; earlier: string[]; evidence: Evidence[]; corrections: WaitingCorrection[] }
+  | {
+      state: 'read'
+      title: string
+      until: string | null
+      lines: string[]
+      earlier: string[]
+      evidence: Evidence[]
+      corrections: WaitingCorrection[]
+      edit: EditLook
+    }
   | { state: 'failed'; error: string }
 
 /** The topic a fact file was opened from: the press that opened the topic, and the place of the fact in it. */
@@ -186,7 +206,8 @@ export function parseFacts(text: string): FactsLook {
 /** Reads one fact file with `m2b source --json --viewer`; a file not on this machine or not readable is could not read. */
 export async function readFactFile($: EngineInterface, file: string): Promise<FactFileLook> {
   // `--`: a name is the distillate's own text, and it may start with a dash.
-  // `--viewer`: the corrections that wait for the file in the inbox come with it.
+  // `--viewer`: the corrections and the kept edits that wait for the file in the inbox come with
+  // it, and this machine's editing copy of it.
   const outcome = await runM2b($, ['source', '--json', '--viewer', '--', file], READ_TIMEOUT_MS)
   if (!outcome.ok) {
     return { state: 'failed', error: isOlderCore(outcome) ? OLDER_CORE : outcome.error }
@@ -250,6 +271,20 @@ export function parseFactFile(text: string): FactFileLook {
       capture: String(item['capture'] ?? ''),
       firstLine: String(item['first_line'] ?? ''),
     })),
+    edit: editOf(answer['edit']),
+  }
+}
+
+/** The part `edit` of the answer; a core without it, or an answer without `--viewer`, names no copy. */
+function editOf(part: unknown): EditLook {
+  if (!isObject(part)) {
+    return NO_EDIT
+  }
+  return {
+    copy: textOrNull(part['copy']),
+    differs: part['differs'] === true,
+    factFileChanged: part['fact_file_changed'] === true,
+    kept: strings(part['kept']) ?? [],
   }
 }
 
@@ -270,8 +305,16 @@ export function showKey(index: number): string {
 
 export type FactFileActions = { show: (index: number, evidence: Evidence) => Promise<void> }
 
-/** What the view of a fact file draws its correction from: the press of the field, how curation stands, and the presses. */
-export type FactFileCorrection = { pressed: BandPress | undefined; curation: AnswersCuration; actions: CorrectActions }
+/**
+ * What the view of a fact file draws its correction and its editing copy from: the press of the
+ * field and that of keep or discard, how curation stands, and the presses.
+ */
+export type FactFileCorrection = {
+  pressed: BandPress | undefined
+  curation: AnswersCuration
+  actions: CorrectActions
+  edit: { pressed: BandPress | undefined; actions: EditActions }
+}
 
 export type FactsActions = {
   details: (file: string) => Promise<void>
@@ -368,13 +411,15 @@ export function factFilePane(
   const { Box } = ui
   const shown = look.evidence.slice(0, EVIDENCE_SHOWN)
   const more = look.evidence.length - shown.length
-  const facts = part(ui, { key: 'fact', title: plainLine(look.title), waits: look.corrections.length > 0, columns }, [
-    correctionRow($, e, file, correction.pressed, correction.actions, columns),
+  const waits = look.corrections.length > 0 || look.edit.kept.length > 0
+  const facts = part(ui, { key: 'fact', title: plainLine(look.title), waits, columns }, [
+    correctionRow($, e, file, correction.pressed, correction.actions, [editButton(correction.edit.actions)], columns),
+    editRow($, e, file, look.edit, correction.edit.pressed, correction.edit.actions),
     look.until !== null && said(ui, `true until ${plainLine(look.until)}`, 'quiet'),
     ...look.lines.map(line => said(ui, plainLine(line))),
     look.earlier.length > 0 && said(ui, 'Earlier', 'strong'),
     ...look.earlier.map(line => said(ui, plainLine(line), 'quiet')),
-    waitingCorrections($, e, look.corrections, correction.curation),
+    waitingForTheRun($, e, look.corrections, look.edit.kept.length, correction.curation),
   ])
   if (look.evidence.length === 0) {
     return facts
