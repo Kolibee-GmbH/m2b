@@ -273,7 +273,7 @@ export class FakeM2b {
    * `--discard` remove it, and a test sets `differs` or `factFileChanged` as a save in the editor or
    * a run would.
    */
-  readonly edits: Record<string, { differs: boolean; factFileChanged: boolean }> = {}
+  readonly edits: Record<string, { differs: boolean; factFileChanged: boolean; savedAtMs?: number }> = {}
   /** The kept edits that wait in the inbox, by the fact file they are of; `m2b store edit --keep` adds one. */
   readonly keptEdits: Record<string, string[]> = {}
   /** When set, `m2b store edit` without `--keep` or `--discard` ends with this, as a refusal; no copy is made. */
@@ -282,6 +282,10 @@ export class FakeM2b {
   keepRefusal: ProcessRunResult | null = null
   /** Why `m2b store edit` opened no editor, as in a session without a screen; null where one opened. */
   editNotOpened: string | null = null
+  /** The paths the mod looked at with `$.fs.stat`, in order. */
+  readonly stats: string[] = []
+  /** Set, a hook refuses every `$.fs.stat`, as one of another plugin might. */
+  statRefused = false
   /** Unset, the core is one from before the copies: `m2b band --json` names no `edits_not_kept`. */
   countsEdits = true
   /** How `m2b store open` ends; how long it takes is `delayMs`'s. */
@@ -1065,6 +1069,18 @@ export async function start(
       return { deny: `ETIMEDOUT: ${e.path}` }
     }
     return { value: (e.path === fake.launcher && fake.hasLauncher) || (e.path === fake.machineConfig && fake.isSetUp) }
+  })
+  // An editing copy as the system sees it: its time of the last save, which a test sets as an editor's save would.
+  on('fs.stat', (_, e) => {
+    fake.stats.push(e.path)
+    if (fake.statRefused) {
+      return { deny: `EPERM: ${e.path}` }
+    }
+    const file = Object.keys(fake.edits).find(name => editCopyPath(name) === e.path)
+    if (file === undefined) {
+      return { deny: `ENOENT: ${e.path}` }
+    }
+    return { value: { kind: 'file' as const, size: 120, mtimeMs: fake.edits[file]?.savedAtMs ?? 0, isLink: false } }
   })
   on('fs.read', (_, e) => {
     if (e.path.endsWith('/.claude-plugin/plugin.json') && fake.bandVersion !== null) {

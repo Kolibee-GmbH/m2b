@@ -159,6 +159,7 @@ import {
   factsOf,
   factsPane,
   factFileNameOf,
+  factFileOf,
   fillFactFile,
   fillFacts,
   forgetFactsUnless,
@@ -909,6 +910,8 @@ async function showFactFile($: EngineInterface, file: string, topic: FromTopic |
   const focusMoved = focusInPane($, topic === null ? backTabKey('facts') : BACK_TO_THE_TOPIC_KEY)
   if (fillFactFile(opening, await readFactFile($, file))) {
     await redrawn($, 'fact', opening)
+    // A copy made in an earlier opening of this view, its editor perhaps still open.
+    await watchShownCopy($, opening)
   }
   await focusMoved
 }
@@ -954,6 +957,7 @@ async function backToFactFile($: EngineInterface, from: string): Promise<void> {
   const index = view?.kind === 'source' ? evidenceIndexOf(view.press) : null
   await asDialog($, { kind: 'fact', press: from, drawn: 0 })
   await focusInPane($, index === null ? backTabKey('facts') : showKey(index))
+  await watchShownCopy($, from)
 }
 
 /**
@@ -1521,7 +1525,7 @@ function editWrite($: EngineInterface, file: string, choice: EditCopy): PressWri
 
 /**
  * Reads the fact file the pane shows again, where it shows one, and `only` where that is given:
- * its lines, the corrections and kept edits that wait, and its editing copy.
+ * its lines, the corrections and kept edits that wait, and its editing copy, which it then watches.
  */
 async function readShownFactFileAgain($: EngineInterface, only?: string): Promise<void> {
   const view = await read($, paneViewAtom)
@@ -1531,6 +1535,80 @@ async function readShownFactFileAgain($: EngineInterface, only?: string): Promis
   }
   if (fillFactFile(view.press, await readFactFile($, file))) {
     await redrawn($, 'fact', view.press)
+  }
+  await watchShownCopy($, view.press)
+}
+
+// How often the time of an editing copy's last save is looked at while its fact file is shown.
+const COPY_LOOK_MS = 2_000
+
+/**
+ * The editing copy watched: the opening of the fact file's view it belongs to, its path, the time
+ * of its last save at the last look (null before the first, or where it cannot be looked at), and
+ * the number of the chain of looks that watches it. Held by this module alone: the path names the
+ * file. A copy made again at the same path after a keep or discard gets a chain of its own, and a
+ * look of an older chain ends.
+ */
+let watched: { opening: string; copy: string; savedAtMs: number | null; chain: number } | null = null
+let chains = 0
+
+/**
+ * Watches the editing copy of the fact file the opening `opening` shows, where it has one: every
+ * two seconds the time of its last save is looked at (`$.fs.stat`, no call of m2b), and when it
+ * changed the file is read again and the band with it, so a save in the editor shows `keep the
+ * edit` without a press. A new chain knows no time yet, so its first look reads the file once: a
+ * save between a read and the first look is not lost. It stops once the view is left or the copy
+ * is gone; where a hook refuses the look, the press on the file's tab stays the way.
+ */
+async function watchShownCopy($: EngineInterface, opening: string): Promise<void> {
+  const look = factFileOf(opening)
+  const copy = look.state === 'read' ? look.edit.copy : null
+  if (copy === null) {
+    watched = watched?.opening === opening ? null : watched
+    return
+  }
+  if (watched?.opening === opening && watched.copy === copy) {
+    return
+  }
+  chains += 1
+  const chain = chains
+  watched = { opening, copy, savedAtMs: null, chain }
+  $.clock.after(COPY_LOOK_MS, inBackground($, () => lookAtCopy($, chain)))
+}
+
+/** One look of the chain `chain` at its copy; the next is scheduled while the chain is the one watching. */
+async function lookAtCopy($: EngineInterface, chain: number): Promise<void> {
+  const mine = watched
+  if (mine === null || mine.chain !== chain) {
+    return
+  }
+  const view = await read($, paneViewAtom)
+  if (view?.kind !== 'fact' || view.press !== mine.opening) {
+    watched = watched?.chain === chain ? null : watched
+    return
+  }
+  const savedAtMs = await savedAt($, mine.copy)
+  try {
+    // A stat refused before and now says nothing new; the first look of a chain that can look reads once.
+    if (watched?.chain === chain && savedAtMs !== null && savedAtMs !== mine.savedAtMs) {
+      // The time this look saw is the next look's start: a save during the read below is seen then.
+      mine.savedAtMs = savedAtMs
+      $.clock.after(0, inBackground($, () => refresh($, true)))
+      await readShownFactFileAgain($)
+    }
+  } finally {
+    if (watched?.chain === chain) {
+      $.clock.after(COPY_LOOK_MS, inBackground($, () => lookAtCopy($, chain)))
+    }
+  }
+}
+
+/** The time of the last save of `copy`, null where it cannot be looked at. */
+async function savedAt($: EngineInterface, copy: string): Promise<number | null> {
+  try {
+    return (await $.fs.stat(copy)).mtimeMs
+  } catch {
+    return null
   }
 }
 

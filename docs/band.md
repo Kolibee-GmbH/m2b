@@ -654,7 +654,9 @@ with `m2b store edit` and opens it in the system's text editor, where the sessio
 ([m2b store edit](commands.md#the-stores-files)). You edit the copy, never the fact file: a
 curation run alone writes `memory/`. The copy lies on this machine, outside the store, and the view
 names its path below the buttons, the path alone where no editor opened, as in a session without a
-screen. Save it in the editor, then press the tab of the fact's file, which reads the file again:
+screen. Save it in the editor: while the view is shown, it looks every two seconds whether the
+copy was saved and then reads the file again by itself; the tab of the fact's file reads it at
+once:
 
 ```text
  Dana
@@ -666,7 +668,8 @@ screen. Save it in the editor, then press the tab of the fact's file, which read
  fountain pen.
 ```
 
-Until you save, the view says `an editing copy is open` with `discard`; once the copy differs,
+Until you save, the view says `an editing copy is open: save it, and this view follows` with
+`discard`; once the copy differs,
 `your copy differs from the fact file` with `keep the edit` and `discard`; where a curation run
 changed the fact file since the copy was made, `the fact file changed since you opened the copy`
 with `discard` alone, since keeping it would put your copy over that change. `keep the edit` and

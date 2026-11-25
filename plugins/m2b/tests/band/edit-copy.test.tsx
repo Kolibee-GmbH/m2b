@@ -17,6 +17,7 @@ const FACT_TAB = 'tab:fact:shown'
 const UNDO_MS = 5_000
 const COPY = editCopyPath('dana.md')
 const TROUBLE = { color: 'error', dimColor: undefined, wrap: 'wrap' }
+const OPEN_LINE = 'an editing copy is open: save it, and this view follows'
 
 const OPEN = ['store', 'edit', '--json', '--', 'dana.md']
 const KEEP_CALL = ['store', 'edit', '--json', '--keep', '--', 'dana.md']
@@ -59,8 +60,8 @@ test("a fact file's view has edit beside correct; a press makes the copy and the
   await ui.press({ key: EDIT })
 
   expect(fake.editCalls()).toEqual([OPEN])
-  expect(await linesAt(ui, EDITING)).toEqual(['an editing copy is open', COPY, '[discard]'])
-  expect((await linesAt(ui, 'part:fact'))?.slice(0, 5)).toEqual(['Dana', '[correct] [edit]', 'an editing copy is open', COPY, '[discard]'])
+  expect(await linesAt(ui, EDITING)).toEqual([OPEN_LINE, COPY, '[discard]'])
+  expect((await linesAt(ui, 'part:fact'))?.slice(0, 5)).toEqual(['Dana', '[correct] [edit]', OPEN_LINE, COPY, '[discard]'])
   await ui.unmount()
 })
 
@@ -206,7 +207,7 @@ test('in a session without a screen the view names the path alone', async ($, on
 
   await ui.press({ key: EDIT })
 
-  expect(await linesAt(ui, EDITING)).toEqual(['an editing copy is open', COPY, '[discard]'])
+  expect(await linesAt(ui, EDITING)).toEqual([OPEN_LINE, COPY, '[discard]'])
   await ui.unmount()
 })
 
@@ -358,5 +359,99 @@ test('a core from before the copies names no count, and the part about m2b says 
   const ui = await $.ui.mount({ ...pane(PANE, 80), surface: 'terminal' })
 
   expect(((await partLines(ui, 'm2b')) ?? []).filter(line => line.includes('edited cop'))).toEqual([])
+  await ui.unmount()
+})
+
+test('a save in the editor is seen without a press: while the view shows the copy, a new time of its last save reads the file again', async ($, on) => {
+  // Covers: B322
+  const fake = busyFake()
+  const { clock } = await start($, on, fake)
+  const ui = await factFileView($)
+  await ui.press({ key: EDIT })
+  await clock.advance(2_000)
+  const reads = fake.sourceCalls().length
+  expect(reads).toBeGreaterThan(0)
+  await clock.advance(4_000)
+  expect(fake.sourceCalls().length).toBe(reads)
+
+  fake.edits['dana.md'] = { differs: true, factFileChanged: false, savedAtMs: 1_000 }
+  await clock.advance(2_000)
+
+  expect(fake.sourceCalls().length).toBe(reads + 1)
+  expect(await linesAt(ui, EDITING)).toEqual(['your copy differs from the fact file', COPY, '[keep the edit] [discard]'])
+  await ui.unmount()
+})
+
+test('once the view is left, the copy is no longer looked at', async ($, on) => {
+  // Covers: B322
+  const fake = busyFake()
+  const { clock } = await start($, on, fake)
+  const ui = await factFileView($)
+  await ui.press({ key: EDIT })
+  await clock.advance(2_000)
+  await pressTab(ui, 'overview')
+  await clock.advance(2_000)
+  const looks = fake.stats.length
+
+  await clock.advance(10_000)
+
+  expect(fake.stats.length).toBe(looks)
+  await ui.unmount()
+})
+
+test('a save made while a source was shown is seen on the way back to the fact file', async ($, on) => {
+  // Covers: B322
+  const fake = busyFake()
+  fake.sourceAnswer = { ...danaFile(), evidence: [{ name: '20261012T081500Z-claude-3f2a.md', state: 'read', day: '2026-10-12', kind: 'note', original_name: null, first_line: 'Dana, my sister.' }] }
+  fake.viewerAnswers['20261012T081500Z-claude-3f2a.md'] = { name: '20261012T081500Z-claude-3f2a.md', kind: 'note', day: '2026-10-12', words: ['Dana, my sister.'], added: [] }
+  const { clock } = await start($, on, fake)
+  const ui = await factFileView($)
+  await ui.press({ key: EDIT })
+  await ui.press({ key: 'show:0' })
+
+  fake.edits['dana.md'] = { differs: true, factFileChanged: false, savedAtMs: 1_000 }
+  await ui.press({ key: 'tab:fact:in:source' })
+  await clock.advance(2_000)
+
+  expect(await linesAt(ui, EDITING)).toEqual(['your copy differs from the fact file', COPY, '[keep the edit] [discard]'])
+  await ui.unmount()
+})
+
+test('a second save while m2b reads the first is seen by the next look', async ($, on) => {
+  // Covers: B322
+  const fake = busyFake()
+  const { clock } = await start($, on, fake)
+  const ui = await factFileView($)
+  await ui.press({ key: EDIT })
+  // From here each read of the fact file takes a second, during which a save can land.
+  fake.delayMs = args => (args[0] === 'source' ? 1_000 : 0)
+  await clock.advance(2_100)
+
+  // A save that changes nothing, then, while m2b reads, the one that does.
+  fake.edits['dana.md'] = { differs: false, factFileChanged: false, savedAtMs: 1_000 }
+  await clock.advance(2_000)
+  fake.edits['dana.md'] = { differs: true, factFileChanged: false, savedAtMs: 2_000 }
+  await clock.advance(5_000)
+
+  expect(await linesAt(ui, EDITING)).toEqual(['your copy differs from the fact file', COPY, '[keep the edit] [discard]'])
+  await ui.unmount()
+})
+
+test('where a hook refuses to look at the copy, the view reads nothing by itself and the tab still reads it', async ($, on) => {
+  // Covers: B322
+  const fake = busyFake()
+  fake.statRefused = true
+  const { clock } = await start($, on, fake)
+  const ui = await factFileView($)
+  await ui.press({ key: EDIT })
+  await clock.advance(2_000)
+  const reads = fake.sourceCalls().length
+
+  fake.edits['dana.md'] = { differs: true, factFileChanged: false, savedAtMs: 1_000 }
+  await clock.advance(6_000)
+  expect(fake.sourceCalls().length).toBe(reads)
+
+  await ui.press({ key: FACT_TAB })
+  expect(await linesAt(ui, EDITING)).toEqual(['your copy differs from the fact file', COPY, '[keep the edit] [discard]'])
   await ui.unmount()
 })

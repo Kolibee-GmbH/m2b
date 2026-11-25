@@ -15,8 +15,8 @@ import { plainLine, wholePath } from './plain-text'
  * the five seconds of `undo` every press that writes has, and the next run puts it in place.
  *
  * What the copy is, the view reads from the core with the fact file (`edit` in `m2b source --json
- * --viewer`), so a save in the editor is seen once the view reads the file again: by a press on its
- * tab, or after a write. The copy's path names the fact file, which can name a customer: it is held
+ * --viewer`), so a save in the editor is seen once the view reads the file again: when the time of
+ * the copy's last save changes, by a press on its tab, or after a write. The copy's path names the fact file, which can name a customer: it is held
  * with the file in this module, as is what a press could not do, and never put in the session's
  * state, which other plugins can read.
  */
@@ -120,7 +120,8 @@ function copyState(edit: EditLook): { said: string; canKeep: boolean } {
   if (edit.differs) {
     return { said: 'your copy differs from the fact file', canKeep: true }
   }
-  return { said: 'an editing copy is open', canKeep: false }
+  // Saved in the editor, the view follows by itself (`watchShownCopy` in register.tsx); this says so.
+  return { said: 'an editing copy is open: save it, and this view follows', canKeep: false }
 }
 
 /**
