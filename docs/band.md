@@ -350,7 +350,8 @@ What **This session** says is asked for each session by itself, with
 `m2b band --json --session <id> --session-only`, which reads one small file on this machine and
 no task list, and is told the session's project root: when the session starts, and once more five seconds later if m2b did not know the
 session yet; three seconds after you send a prompt, so a topic that came in with it shows while
-the turn still works; after a compaction; when a turn ends and when you type `/m2b-pane`. It is kept
+the turn still works; when a turn ends and when you type `/m2b-pane`. After a `/compact`
+it asks with your next prompt. It is kept
 in the session's own state and is not part of the answer the open sessions share. After `/clear`
 the session goes on under a new id: the part says that m2b has not looked yet until, a second or
 a few later, it has asked for the new one. When m2b could not look, the part says so with the reason;
