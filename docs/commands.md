@@ -61,8 +61,8 @@ do not do their work there. The first three start a curation run in the backgrou
 
 | Command | What it does |
 |---|---|
-| `/m2b-pane` | shows in the m2b pane its overview: what waits for you, what is due today, what m2b gave this session and how m2b itself stands; there a press shows a topic's lines, turns m2b off in the session's folder or, on the machine that curates, starts a curation run (`curate now`), and the tabs above lead to the other views, of which `Tasks` (every open task, with `done`) and `Facts` (what m2b knows, each fact with `details`) have no command of their own; under the fullscreen layout that pane opens by itself |
-| `/m2b-note <text>` | writes the text into the inbox at once, through `m2b capture` |
+| `/m2b-pane` | shows in the m2b pane its overview: what waits for you, what is due today, what m2b gave this session and how m2b itself stands; there the field `note` writes a note at once, with the day of its task, a press shows a topic's lines, turns m2b off in the session's folder or, on the machine that curates, starts a curation run (`curate now`), and the tabs above lead to the other views, of which `Tasks` (every open task, with a mark `○` to tick it) and `Facts` (what m2b knows, each fact a row that opens its file, where `correct` and `edit` change it, and a field `search` above) have no command of their own; under the fullscreen layout that pane opens by itself |
+| `/m2b-note [--due <day>] <text>` | writes the text into the inbox at once, through `m2b capture`; `--due today`, `tomorrow` or `YYYY-MM-DD` also makes a task due that day |
 | `/m2b-search [--word] <text>` | shows the hits of `m2b search` in the m2b pane; `--word` matches whole words only |
 | `/m2b-review` | shows the last curation run in the m2b pane: every finding, candidate and question |
 | `/m2b-proposals` | shows what your sessions proposed for your memory, each to keep or drop |
@@ -80,10 +80,10 @@ command answers as JSON with it.
 
 | Command | What it does |
 |---|---|
-| `m2b capture [--follow-up <day>] [--quiet] [--project] [--source <name>] [--json] <text>` | writes a new note into the inbox; with `--follow-up YYYY-MM-DD` also a task due that day; `--quiet` keeps the note out of everything proactive; `--project` keeps the project of the working folder, named by its git remote, and says so instead where the project already has a topic or its capture waits, and refuses a folder without a remote with exit 2, and together with `--follow-up` with exit 2; `--source` says who wrote it, `cli` when left out ([Integrations](integrations.md)); without text, or with `-`, it reads standard input |
+| `m2b capture [--follow-up <day>] [--quiet] [--project] [--about <fact file>] [--source <name>] [--json] <text>` | writes a new note into the inbox; with `--follow-up YYYY-MM-DD` also a task due that day; `--quiet` keeps the note out of everything proactive; `--project` keeps the project of the working folder, named by its git remote, and says so instead where the project already has a topic or its capture waits, and refuses a folder without a remote with exit 2, and together with `--follow-up` with exit 2; `--about dana.md` names the fact file of `memory/` the text corrects, by its name alone: a path, a lesson, `MEMORY.md`, a note's name, a name without `.md` or an empty name end with exit 2, a name `memory/` does not hold with exit 1, and `--about` with `--project` with exit 2, nothing written; `--source` says who wrote it, `cli` when left out ([Integrations](integrations.md)); without text, or with `-`, it reads standard input |
 | `m2b capture-file [--source <name>] <path> [<words>]` | copies a file into the inbox, the original stays where it is: the file under a new name and a note beside it with the words (with `-`, from standard input) and the file's original name, which the next curation run reads. A relative path, a folder, a symbolic link, a text file (capture its words with `m2b capture`) and a file over `capture.file_limit_mb` megabytes are refused in one line with exit 2. No skill may run it without asking |
 | `m2b search [--any] [--word] [--json] <terms>` | full text over archive, memory and inbox; the terms are one phrase, with `--any` each term counts on its own |
-| `m2b source [--json [--viewer]] <name>` | one fact file or note, read whole by its name: the name a distillate line ends with (`dana.md`), or a note's name from the archive (a document's or picture's name answers its note); a fact file with its lines, last day, earlier values and evidence, a note with its words and what curation added, a document's note with its original name and outline. A path or any other name is refused with exit 2; a file not on this machine is named with the command that fetches it. `--viewer` adds for a note whether `m2b store open` opens its file, why not, and where it lies; the pane passes it, the skill `m2b:search` cannot |
+| `m2b source [--json [--viewer]] <name>` | one fact file or note, read whole by its name: the name a distillate line ends with (`dana.md`), or a note's name from the archive (a document's or picture's name answers its note); a fact file with its lines, last day, earlier values and evidence, a note with its words and what curation added, a document's note with its original name and outline. A path or any other name is refused with exit 2; a file not on this machine is named with the command that fetches it. `--viewer` adds for a note whether `m2b store open` opens its file, why not, and where it lies, and for a fact file the captures in the inbox that correct it (`corrections`, each with its name and first line) and its editing copy and the kept edits that wait (`edit`); the pane passes it, the skill `m2b:search` cannot |
 | `m2b todos [--json]` | open tasks by due date, and today's events |
 | `m2b rediscover [--count <n>] [--month <YYYY-MM>] [--today <day>] [--json]` | old notes back into view, three without `--count`; `--today YYYY-MM-DD` sets the day that counts as today |
 | `m2b status [--json]` | the inbox, the last curation run, whether one is due, the backends, how many proposals sessions handed in wait for the next run, and how large everything is that a session in this folder starts with (the `CLAUDE.md` files and rules, the output style, Claude Code's auto memory, m2b's part), in KB and list points with the sum, the share kept of the lessons answered in the last 30 days, and the lessons: how many every session starts with, which are kept at their source, and each lesson (a fix kept from one too) with how often you corrected Claude on it again and, for a lesson about a command, how often it fired in how many Bash calls, `not working` after a correction, `corrections not counted` where nothing counts them, `could not look` where the lessons cannot be read |
@@ -114,7 +114,7 @@ commit the change ([Using m2b](using.md#fixes-for-the-files-claude-reads)).
 
 With Markdown tasks, these are how you look at a task's id and tick it in a terminal; with Apple
 Reminders the Reminders app does the same. In a session, saying that a task is done ticks it, and
-so does `done` on its row in the m2b pane's tab `Tasks`.
+so does the mark `○` before it in the m2b pane's tab `Tasks`.
 
 | Command | What it does |
 |---|---|
@@ -158,7 +158,7 @@ To pause the runs on a machine: `m2b config set curation.paused true`
 | `m2b profile merge <json>` | merges a JSON object into the profile |
 | `m2b distillate off [<folder>]` | no distillate, no m2b notices, routing rule or lessons at session start, and no lesson before a Bash call, in sessions in this folder and below, on this machine |
 | `m2b distillate on [<folder>]` | the distillate again in this folder |
-| `m2b distillate topic [--json] <name>` | the facts and current items of one topic, as the distillate holds them now; the m2b pane reads a topic's lines with it |
+| `m2b distillate topic [--json] <name>` | the facts and current items of one topic, as the distillate holds them now, with `--json` each fact's file under `facts_with_files`; the m2b pane reads a topic's lines with it |
 | `m2b distillate topics [--json]` | what every session starts with (the facts outside any topic, each with its fact file, and the current items) and each topic with its counts; the m2b pane's tab `Facts` reads it |
 | `m2b addons list [--json]` | each add-on and whether it is on |
 | `m2b addons on <addon>` | turns an add-on on; its setup skill does this once the add-on is set up |
@@ -173,6 +173,7 @@ To pause the runs on a machine: `m2b config set curation.paused true`
 | `m2b store check-local [--json] <paths>` | names the files among these that the sync service has not downloaded |
 | `m2b store fetch [--timeout <seconds>] <paths>` | downloads them |
 | `m2b store open <name>` | opens a PDF or a picture of the archive in the system's viewer, by its file name, never a path: only where its first bytes are of that kind, the file is on this machine and the session has a screen (not over SSH on a Mac; a display on Linux). Any other kind is refused with exit 2, since a viewer for it could run what it holds; the pane's `open the file` runs it |
+| `m2b store edit [--keep \| --discard] [--json] <fact file>` | a copy of a fact file to edit, outside the store in this machine's state folder (`~/.local/state/m2b/edits/<name>`, readable by you only), opened in the system's text editor where the session has a screen (`open -t` on a Mac, not over SSH; `xdg-open` on Linux with a display, never `$EDITOR` or `$VISUAL`) and named by its path either way; a copy that exists opens again. Nothing under `memory/` is written. `--keep` hands a copy that differs to the inbox as an edit (`kind: edit`, `about`, `base`) and removes it, which the next curation run puts in place while the fact file is as the copy found it; a copy that does not differ is removed and nothing kept, an emptied one is not kept (exit 1), and with no copy `--keep` ends with exit 1. `--discard` drops the copy, also once its fact file is gone. A path, a lesson, `MEMORY.md`, a note's name or a name without `.md` end with exit 2; a name `memory/` does not hold, a fact file not downloaded or a run under way with exit 1, and no copy is made |
 
 ### What m2b calls itself
 
@@ -180,7 +181,7 @@ These are listed by `--help`, but the plugin is their caller.
 
 | Command | Who calls it |
 |---|---|
-| `m2b band [--tasks-only] [--session <id> [--session-only]] [--json]` | the band, for what its row and the pane show; with `--session`, also what m2b gave that session, and with `--session-only` nothing else |
+| `m2b band [--tasks-only] [--session <id> [--session-only]] [--json]` | the band, for what its row and the pane show, the editing copies not kept among it (`edits_not_kept`); with `--session`, also what m2b gave that session, and with `--session-only` nothing else |
 | `m2b refresh due [--json]` | the refresh step, for the memory lines past their day |
 | `m2b lint fix [--json]` | the lint step; it runs only inside a curation run |
 | `m2b curate model --skill <plugin:skill> --allow <rule>` | the worklog add-on's step in a curation run, for its fenced model step. Run by hand it starts that step on its own, with the tool rules you give it, outside a run |

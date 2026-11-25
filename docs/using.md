@@ -11,9 +11,11 @@ this", "remind me to call the plumber on Friday". You type no command: the model
 or the `capture` skill where the band does not run, writes a note into `inbox/` in your own words,
 without the request around them ("remember that", "remind me to"). With a date it also creates a
 task that points back to the note, and the day stands in the task. Typed in a terminal, `m2b capture "<text>"` keeps the text character for character.
-Say that you want it
-kept; a sentence on its own, such as "Dana's birthday is on 3 March", stays part of the
-conversation and is not captured.
+Say that you want it kept; a sentence on its own, such as "Dana's birthday is on 3 March", stays
+part of the conversation and is not captured.
+Where the band runs, `/m2b-note <text>` at the prompt, or the field `note` at the top of the m2b
+pane, writes the text at once without a model turn; `--due tomorrow`, or a day below the field,
+also makes a task due that day ([The band](band.md#noting-without-the-model)).
 
 A reminder and a to-do are the same thing in m2b: a task in your task list, Apple Reminders or
 Markdown files in the store. Its due date is a day, without a time of day; whether your phone
@@ -200,7 +202,7 @@ it in the m2b pane, or delete the task, and it does not come back for 90 days.
 
 **Ticking a task.** Say in a session that a task is done, "I returned Sam's ladder, tick it
 off", and the `todos` skill ticks it: it finds the task in your list and asks when more than one
-fits. In the m2b pane, the tab `Tasks` lists every open task of yours, each with `done`
+fits. In the m2b pane, the tab `Tasks` lists every open task of yours, each with a mark `○` to tick it
 ([The band](band.md#all-your-open-tasks)). With Apple Reminders you can also tick in the Reminders app. In a terminal with Markdown
 tasks, `m2b tasks list` shows every open task with its id, the review task and these questions
 among them; `m2b tasks complete <id>` ticks one and `m2b tasks drop <id>` drops one. Keep and
@@ -256,7 +258,7 @@ What m2b has that Claude Code's memory does not:
 | review task | the one task m2b keeps in your task list for what a run needs you to look at: a step that failed, a finding, a facts line it removed or rewrote. Ticking it, or `ok` in the m2b pane, closes it |
 | proposal | a fact a curation run suggests from what you typed and pasted in your sessions, or a session hands in by itself, with the words it stands on beside it. Each way is off until you turn it on, the reading in setup and handing in with `m2b config set sessions.propose true` in a terminal of your own or a press on its `on` in the pane's settings, and nothing is filed before you keep it |
 | memory candidate | a task "Remember? ..." that proposes one fact, put into your list by a script or an integration of yours: tick it and the next run files it |
-| band | m2b's row in a session, below the prompt in a terminal and above it in the desktop app unless `band.place` moves it: it counts what waits for your answer and has `open` for the m2b pane, where you keep or drop what curation proposes, tick a task and see your facts with what they rest on; below the prompt, a status line while something is wrong with m2b |
+| band | m2b's row in a session, below the prompt in a terminal and above it in the desktop app unless `band.place` moves it: it counts what waits for your answer and has `open` for the m2b pane, where you keep or drop what curation proposes, tick a task, write a note, search, and see your facts with what they rest on and correct or edit one; below the prompt, a status line while something is wrong with m2b |
 | mod | a module Claude Code loads with a plugin. m2b's mod is the band, with its `/m2b-...` commands and the tools of the model: note, search and, where you turn it on, handing in a proposal |
 | add-on | an optional piece of m2b, off until its own setup: `worklog` |
 | herdr | an [agent runtime](https://herdr.dev), a product of its own. Only the worklog add-on needs it; the rest of m2b runs without it |

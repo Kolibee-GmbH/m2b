@@ -349,7 +349,8 @@ class CountTest(ToolHookFixture):
         self.call("scripts/check")
         self.call("git status")
 
-        today = datetime.datetime.now(datetime.timezone.utc).date()
+        # The day where the owner is, as the hook files a call: in UTC it is another day for an hour or more.
+        today = datetime.datetime.now().astimezone().date()
         self.assertEqual(action_lessons.calls(self.machine, today), 2)
         self.assertEqual(action_lessons.calls(self.machine, today + datetime.timedelta(days=1)), 0)
         self.assertEqual(action_lessons.fired(self.machine, today), {"proof.md": 1})

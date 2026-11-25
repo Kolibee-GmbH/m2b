@@ -3,13 +3,13 @@ import type { CommandRunResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
 import { wholePath } from '../../hooks/plain-text'
-import { CURATE_NOW, FakeM2b, SESSION_ID, buttonsAt, linesAt, lookOf, pane, partLines, pathPieces, start, texts, viewButtons } from './harness'
+import { CURATE_NOW, FakeM2b, SESSION_ID, buttonsAt, linesAt, lookOf, pane, partLines, pathPieces, start, texts, viewButtons, NOTHING_AT_ALL } from './harness'
 
 const PANE = 'm2b'
 const UNDO_MS = 5_000
 const ACME = '/home/alex/code/acme'
 const LOOK = ['band', '--json', '--session', SESSION_ID, '--session-only']
-const PRINTED_WHOLE = 'The distillate was printed whole at the start.'
+const PRINTED_WHOLE = 'This session started with all your facts.'
 const ON_HERE = 'm2b is on in this folder.'
 const OFF_HERE = 'm2b is off under this folder.'
 const KEEPS = 'This session keeps what it was given and gets no more topics.'
@@ -159,7 +159,8 @@ test('a write m2b refuses is said in the part of the session, in the color of tr
   expect(await partLines(ui, 'session')).toEqual(['[Acme Ltd] 3 facts', PRINTED_WHOLE, ON_HERE, ACME, '[turn off here]', refused])
   expect(await lookOf(ui, refused)).toEqual({ color: 'error', dimColor: undefined, wrap: 'wrap' })
   // Said where it was pressed, and nowhere else in the view.
-  expect(await partLines(ui, 'waits')).toEqual(['Nothing waits for you.'])
+  // Nothing waits and nothing is due: both are one quiet line.
+  expect(await texts(ui)).toContain(NOTHING_AT_ALL)
   expect(await texts(ui)).not.toContain(KEEPS)
   expect(await viewButtons(ui)).toContain('folder:off')
 

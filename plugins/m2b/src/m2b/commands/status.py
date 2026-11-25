@@ -46,7 +46,7 @@ from m2b.curate import machine_state
 from m2b.curate.due import PAUSED_NOTE, check_due
 from m2b.glean import AGENT, KINDS, LESSON, PASTED, TOOL, TYPED, WORKED
 from m2b.hook_input import project_folder
-from m2b.notes.characters import with_hidden_written_out
+from m2b.notes.characters import with_hidden_written_out, with_unseen_written_out
 from m2b.notes.layout import INBOX
 from m2b.paths import MachinePaths
 from m2b.run_record import RUNNING, RunRecordError, is_interrupted, load_run_record
@@ -159,6 +159,8 @@ def _how_the_fix_does(fix: fixes.Fix, again: dict[str, int] | None) -> dict[str,
         "kind": FIX_KIND,
         "kept": with_hidden_written_out(fix.kept),
         "corrected_again": None if again is None else again.get(fix.name, 0),
+        # The lesson's sentence the fix was kept from: what the owner kept, in their words.
+        "sentence": with_unseen_written_out(fix.lesson or fix.wording),
     }
 
 
@@ -175,6 +177,8 @@ def _how_it_does(lesson: lessons.Lesson, machine: MachinePaths, again: dict[str,
         # Without a day it was kept, nothing can be counted since then: both stay 0.
         counted["fired"] = action_lessons.fired(machine, since).get(lesson.name, 0) if since else 0
         counted["calls"] = action_lessons.calls(machine, since) if since else 0
+    # The lesson itself, for the pane: one line, as the lesson's first paragraph is read.
+    counted["sentence"] = with_unseen_written_out(lesson.text)
     return counted
 
 

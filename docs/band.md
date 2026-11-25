@@ -175,23 +175,50 @@ command also while a turn is working. The text goes in as typed, quotes and dash
 source `claude`, as a capture through the skill would; the next curation run files it. Without
 text it writes nothing and says what it needs; when `m2b` fails, the line says why, starting with
 `not noted:`. The confirmation stays in the conversation, where the model reads it in its next
-request. To note with the model's help, for instance with a follow-up date, ask the model: it uses
-the tool below, or the skill `/m2b:capture` where the mod does not run.
+request.
+
+`--due` before the text also makes a task due that day, as a follow-up of `m2b capture` does:
+`today`, `tomorrow` (on your machine's clock) or a day as `YYYY-MM-DD`.
+
+```text
+> /m2b-note --due tomorrow Call Sam about the long boards
+  noted: Call Sam about the long boards; a task is due 26 Nov
+```
+
+Where the task list does not answer, the note is written all the same, and the line says in m2b's
+words that the task follows with the next curation run. A day that is none of these forms writes
+nothing and names them. To note with the model's help, for instance with a day said in words
+("next Friday"), ask the model: it uses the tool below, or the skill `/m2b:capture` where the mod
+does not run.
+
+The pane's overview has the same at its top: a field `note`, and below it the day of a task for
+the note, `no day` until you press `today`, `tomorrow` or `in a week`. Tab walks from the row of
+tabs into the field. Enter keeps the text after the five seconds of `undo` every press that writes
+has; then the field is empty, the day is `no day` again, and "This session" counts the note.
+Below the values stands what the write said, in the error color where nothing was written, and a
+note that was not written goes back into the field, unless you typed something there meanwhile. What
+you type stays in the field over the band's reads and the end of a turn, and when you close the
+pane with Escape and open it again; it is in no state another plugin reads, only a hook on the
+pane's input sees it ([SECURITY.md](../SECURITY.md#what-you-type-into-the-pane)).
 
 ## This session, what waits and today, in the pane
 
-`/m2b-pane` opens the m2b pane in the view it starts in, its overview, with four parts below
-[the row of tabs](#the-tabs). (`/m2b` alone is not this command: Claude Code runs the skill
+`/m2b-pane` opens the m2b pane in the view it starts in, its overview, with
+[the row of tabs](#the-tabs) at its top, the field `note` below it
+([Noting without the model](#noting-without-the-model)) and four parts below that. (`/m2b` alone is not this command: Claude Code runs the skill
 `/m2b:m2b` for it, which asks the model what m2b is.)
 
-![A Claude Code session in the fullscreen layout after /m2b-pane: the m2b pane sits beside the chat, under the tabs Overview, Proposals 3, Review, Tasks, Facts and Settings. The part "Waits for you", framed in the warning color, counts 5: 3 proposals from your sessions, in the tab Proposals; a "Still current?" question with keep and drop; the review of the last curation run with ok and "1 fact changed: Sam". The part "Today" names one task due today and one overdue, and the part "This session" begins below it. Left of the pane the band above the prompt is one row, "m2b 5 wait for you" with the button "open", and the two tasks below it](images/pane.png)
+![A Claude Code session in the fullscreen layout after /m2b-pane: the m2b pane sits beside the chat, under the tabs Overview, Proposals 3, Review, Tasks, Facts and Settings. Below them stands the field "note" with "what to keep" in it and the day of a task for the note, "no day" marked, then today, tomorrow and in a week. The part "Waits for you", framed in the warning color, counts 5: 3 proposals from your sessions, in the tab Proposals; a "Still current?" question with keep and drop; the review of the last curation run with ok and "1 fact changed: Sam". The part "Today" names one task due today and one overdue, and the part "This session" begins below it. Left of the pane the band above the prompt is one row, "m2b 5 wait for you" with the button "open", and the two tasks below it](images/pane.png)
 
 As text, another session:
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ Overview [ Proposals 1 ] [ Review ] [ Tasks ] [ Facts ]      │
+│ [ Overview ] [ Proposals 1 ] [ Review ] [ Tasks ] [ Facts ]  │
 │ [ Settings ]                                                 │
+│                                                              │
+│ note: what to keep                                           │
+│ ● no day [ today ] [ tomorrow ] [ in a week ]                │
 │                                                              │
 │ ╭──────────────────────────────────────────────────────────╮ │
 │ │ Waits for you                                          3 │ │
@@ -212,7 +239,7 @@ As text, another session:
 │ │ This session                                             │ │
 │ │ [ Northwind ] 3 facts, 1 current                         │ │
 │ │ [ Acme Ltd ] 1 fact                                      │ │
-│ │ The distillate was printed whole at the start.           │ │
+│ │ This session started with all your facts.                │ │
 │ │ m2b is on in this folder.                                │ │
 │ │ /home/alex/code/lumen                                    │ │
 │ │ [ turn off here ]                                        │ │
@@ -231,7 +258,9 @@ As text, another session:
 The parts stand in this order, what needs you first. The frame and title of **Waits for you** are
 in the warning color while something waits, with the number that waits beside the title; a part
 with nothing in it is one dim line, a count of none is not said, and in a pane narrower than 36
-columns a bar down the left stands in for each frame. A row is its text and, on the line below,
+columns a bar down the left stands in for each frame. Where nothing waits and nothing is due,
+**Waits for you** and **Today** are one dim line without a frame:
+`Nothing waits for you, nothing due today.` A row is its text and, on the line below,
 what you can press.
 
 - **Waits for you** holds what the band counts: one row for the proposals from your sessions,
@@ -267,12 +296,13 @@ what you can press.
 - **Today** lists your own tasks due today, then the overdue ones, the most recent first,
   whatever the band shows of them: `due today` in the warning color, `overdue` in the error
   color, each title at full strength. The tab `Tasks` lists
-  [every open task](#all-your-open-tasks), with `done` to tick one.
+  [every open task](#all-your-open-tasks), with a mark `○` before each to tick it.
 - **This session** says what m2b put into this session: each topic whose facts it got, at its
   start because the project path names it or before a prompt that named it, as a button that
   bears the topic's name and leads to [its lines](#a-topics-lines), with the facts lines and
-  current items the topic held at that moment beside it; how the start printed the distillate
-  (whole, cut to fit, or none because there was none to read); whether m2b is on in the session's
+  current items the topic held at that moment beside it; how the session started, in one
+  sentence: `This session started with all your facts.`, `... with your facts, cut to fit.`, or
+  `... without facts: the distillate is empty.`; whether m2b is on in the session's
   folder, with the button that [turns it off there](#turning-m2b-off-in-a-folder) or on again;
   and how many notes the session wrote through `/m2b-note` and the note tool. A note written with
   `m2b capture` in a shell is not counted. `/clear` and a compaction begin the list of topics
@@ -284,9 +314,14 @@ what you can press.
   last curated, and `curation paused` where this machine starts no run by itself. What is wrong
   stands above it in the error color, each with its reason: a curation run that failed, a
   calendar m2b could not reach, an inbox it could not read. A session that still runs an older
-  m2b than the installed one says so here and names `/reload-plugins`. Below it stands each lesson
-  you kept with how it does since you kept it, as `m2b status` says it; a lesson you corrected
-  Claude on again is marked `not working` and stands out in the color of what waits.
+  m2b than the installed one says so here and names `/reload-plugins`. Where an editing copy of a
+  fact file on this machine differs from its fact file and you have not kept it
+  ([What m2b knows](#what-m2b-knows)), a line says `1 edited copy not kept yet` in the color of
+  what waits, above the line about curation, since `curate now` does nothing for it; it names no
+  file, and you find the copy in its fact file's view. Below it stands each lesson
+  you kept, as its sentence, and below that, dim, the day you kept it and how it does since, as
+  `m2b status` counts it (`kept 20 Nov, not corrected again`); a lesson you corrected Claude on
+  again says `corrected again 2 times: not working` in the color of what waits.
 
   On the machine that curates the store, the button `curate now` stands below the line about
   curation. A press writes nothing for five seconds: the row offers `undo` beside
@@ -333,9 +368,11 @@ without one the text says that m2b has not looked yet.
 A topic's button turns the pane to that topic: its facts and its current items, read with
 `m2b distillate topic` at the press. m2b keeps the names and counts of what it gave a session and
 not the lines, so these are the lines the distillate holds now; a curation run since the session
-got the topic may have changed them, and the view says so. A current item is its words and since
-when it holds, with `show` below it for the note it rests on
-([What m2b knows](#what-m2b-knows)). The topic stands under a seventh tab
+got the topic may have changed them, and the view says so. A fact whose line names its fact file
+is a row you press, ending in `›`, that opens the file as a fact in the tab `Facts` does, under a
+tab beside the topic's; the topic's tab leads back to the lines as they were drawn, with the focus
+on that fact. A current item is its words and since when it holds, and a row that opens the note
+it rests on ([What m2b knows](#what-m2b-knows)). The topic stands under a seventh tab
 that bears its name while the pane shows it; the tab `Overview`, Escape or `/m2b-pane` lead
 [back](#back-to-the-start-view).
 
@@ -383,7 +420,7 @@ button that sets it. The top of the view:
 ```text
 ┌──────────────────────────────────────────────────────────────┐
 │ [ Overview ] [ Proposals ] [ Review ] [ Tasks ] [ Facts ]    │
-│ Settings                                                     │
+│ [ Settings ]                                                 │
 │                                                              │
 │ ╭──────────────────────────────────────────────────────────╮ │
 │ │ What m2b shows                                           │ │
@@ -446,7 +483,7 @@ sets nothing, the tab `Overview` above the first setting or the row of `About th
 the last, so Enter pressed once more never sets a value. After a press on that row it is on the
 tab `Settings`. Escape hands the keyboard back to the prompt.
 
-![The pane beside the chat, driven with the keyboard. After /m2b-settings, thirteen Tabs put the focus on "sonnet" beside the marked "haiku" under "Model of curation"; Enter puts "undo" and "changing to sonnet" where the values stood, and Enter on "undo" takes the press back, with the focus on "23 settings", the row of "About this setup" below the settings. Five Shift+Tabs lead back to "sonnet"; pressed again and left alone, it is written after five seconds: the row reads "haiku" as a button and "sonnet" marked, and the focus is on "23 settings" again. Enter there opens the seventh tab "About this setup" with 23 settings that only inform or are changed by a command, the store folder, the kind of store and the machine's name among them, each with what changes it](images/pane-settings.gif)
+![The pane beside the chat, driven with the keyboard. After /m2b-settings, fourteen Tabs put the focus on "sonnet" beside the marked "haiku" under "Model of curation"; Enter puts "undo" and "changing to sonnet" where the values stood, and Enter on "undo" takes the press back, with the focus on "23 settings", the row of "About this setup" below the settings. Five Shift+Tabs lead back to "sonnet"; pressed again and left alone, it is written after five seconds: the row reads "haiku" as a button and "sonnet" marked, and the focus is on "23 settings" again. Enter there opens the seventh tab "About this setup" with 23 settings that only inform or are changed by a command, the store folder, the kind of store and the machine's name among them, each with what changes it](images/pane-settings.gif)
 
 <sub>One real Claude Code session on a demo machine with invented notes, recorded by `scripts/readme-demo --only pane-settings`. Only keys are typed and no model is asked; the five seconds a press waits run as recorded.</sub>
 
@@ -471,7 +508,7 @@ the values of every setting are text and no button. Leaving the values within th
 with a tab, the row of `About this setup` or Escape, takes the press back, and so does a command
 that turns the pane. A change that is already being written goes on; its setting says what is
 written, and the list is read again when it has ended. Every other setting is shown with the
-command or the skill that changes it; the pane has no field to type into and changes no path, no
+command or the skill that changes it; this view has no field to type into and changes no path, no
 program and no time limit.
 
 `sessions.propose`, titled `Sessions hand in proposals`, is the one switch a session's shell
@@ -542,11 +579,20 @@ click may not reach it: `open` in the band shows the pane with its buttons.
 
 One row of tabs stands above every view of the pane, always in this order: `Overview`, the view
 the pane starts in; `Proposals`, with the number that wait; `Review`; `Tasks`; `Facts`; `Settings`. The tab of the
-view you look at is marked and is no button, every other turns the pane to its view. A topic's
+view you look at is drawn in the accent, and a press on it reads that view again, the open tasks
+or the facts as they are now; every other turns the pane to its view. While the pane holds the
+keyboard, each of the six has its first letter as its key: `o`, `p`, `r`, `t`, `f`, `s`. A letter
+typed into a field of the pane is typed there and turns nothing; no other tab and no other
+button has a letter. A topic's
 lines, a fact's file, a note a current item rests on, the hits of a search and the settings of
 `About this setup` stand under a seventh tab, which
 is there only while the pane shows them. A note or a document a fact rests on stands under an
-eighth, beside the seventh, which then bears the fact's file and leads back to it. No view has a
+eighth, beside the seventh, which then bears the fact's file and leads back to it; a fact's file
+opened from a topic's lines stands under an eighth too, beside the seventh, which then bears the
+topic's name and leads back to its lines. A fact's file, while its view is shown, has a tab that is
+a button in the accent, as the shown one of the six is: a press on it reads the file again, and
+the band its counts, so you see what became of [its editing copy](#what-m2b-knows). Every other
+tab beside the six, while its view is shown, is its name alone and no button. No view has a
 button that leads back: the tabs are the one way from a view to another. `Tasks` and `Facts` have
 no command of their own; their tabs open them. Where the pane is too narrow for the row, it breaks
 between two tabs.
@@ -555,9 +601,10 @@ between two tabs.
 
 The tab `Tasks` shows every open task of your list, read with `m2b todos --json` the moment you
 turn the pane to it, in groups by when each is due: `Overdue`, `Today`, `Next 7 days`, `Later`
-and `Without a date`, a group with no task left out. Each row is when the task is due, in the
-color the part "Today" gives it (`overdue`, `due today`, otherwise the day, `Thu 20 Nov`), and its
-title, with `done` below. A press on `done` writes nothing for five seconds and offers `undo`, as
+and `Without a date`, a group with no task left out. Each row is the mark `○`, when the task is
+due, in the color the part "Today" gives it (`overdue`, `due today`, otherwise the day,
+`Thu 20 Nov`), and its title, on as many lines as the title takes. A press on the mark writes
+nothing for five seconds and turns the row into `[ undo ] completing` with the title below, as
 keep does; then, if the task is still open in your list, it is ticked, the tab reads the list
 again and the band its counts. A task another session ticked or dropped in those seconds is left
 alone, and the row says so. Where your task list
@@ -570,34 +617,94 @@ as long as the tab is shown, and never in the session's state, which other plugi
 
 The tab `Facts` shows what m2b knows, read with `m2b distillate topics --json` the moment you
 turn the pane to it, in two parts named by when a session gets them. **Every session starts
-with** holds the facts outside any topic, each with `details` where its line names a fact file,
-and the current items, each as its words and since when it holds. **When a prompt names them** holds every topic as a button with its
+with** holds the facts outside any topic, each a row you press to open its fact file where its
+line names one (it ends in `›`), and the current items, each as its words and since when it holds. **When a prompt names them** holds every topic as a button with its
 counts (`2 facts, 1 current`); a press opens [its lines](#a-topics-lines) as the button in "This
 session" does, with the focus on the tab `Facts`, which leads back.
 
-`details` opens the fact's file, read with `m2b source --json` at the press, under a tab that
-bears the file's name without `.md`: its lines, the day it stops being true where it has one, its
-earlier values, and **What it rests on**, the notes and documents behind it, each with its day,
+Above the two parts stands a field `search`, also while the distillate is read and where it could
+not be. Type what to look for and press Enter: the store is searched as
+[`/m2b-search`](#the-whole-review-and-search-in-a-pane) searches it, with `searching…` below the
+field meanwhile. Hits turn the pane to the search's view under the seventh tab `Search`, with the
+focus on the tab `Facts`, which leads back to the field with your text as it was. No hit says
+`no hits for <text>` below the field, a search m2b could not make says why in the error color, and
+the pane stays on `Facts`. Until Enter, what you type is in no state another plugin reads; the
+search's view then holds its words and hits as the view of `/m2b-search` does
+([SECURITY.md](../SECURITY.md#what-you-type-into-the-pane)). A session that starts, and the
+conversation after `/clear` or a resume, start with the field empty.
+
+A press on a fact opens its file, read with `m2b source --json --viewer` at the press, under a tab
+that bears the file's name without `.md`: its lines, the day it stops being true where it has one,
+its earlier values, and **What it rests on**, the notes and documents behind it, each with its day,
 what it is, a document's original file name and its first line. The first eight are listed, and a
 line says how many more there are.
 
-Below each of them that m2b could read stands `show`. It turns the pane to that note or document,
+`correct` under the file's title opens a field `what is right`. Type how the fact should read and
+press Enter: after the five seconds of `undo` the words go into the inbox as a correction of that
+file (`m2b capture --about`), and the next curation run applies them to it. Until then the view
+says that the correction waits, with your words, and on the machine that curates `curate now`
+stands below them, which starts that run; on another machine the line names the machine whose run
+it waits for, and nothing can be pressed. What m2b refused to keep goes back into the field with
+`not kept:` and why, in the error color. What you typed stays in the field when you leave the
+view, Escape included, and is there again when you open the same file; each fact file has a draft
+of its own.
+
+`edit` beside `correct` is for a fact a sentence cannot set right: it makes a copy of the fact file
+with `m2b store edit` and opens it in the system's text editor, where the session has a screen
+([m2b store edit](commands.md#the-stores-files)). You edit the copy, never the fact file: a
+curation run alone writes `memory/`. The copy lies on this machine, outside the store, and the view
+names its path below the buttons, the path alone where no editor opened, as in a session without a
+screen. Save it in the editor: while the view is shown, it looks every two seconds whether the
+copy was saved and then reads the file again by itself; the tab of the fact's file reads it at
+once:
+
+```text
+ Dana
+ [ correct ] [ edit ]
+ your copy differs from the fact file
+ /home/alex/.local/state/m2b/edits/dana.md
+ [ keep the edit ] [ discard ]
+ My sister. Birthday on 3 March. Would love a good
+ fountain pen.
+```
+
+Until you save, the view says `an editing copy is open: save it, and this view follows` with
+`discard`; once the copy differs,
+`your copy differs from the fact file` with `keep the edit` and `discard`; where a curation run
+changed the fact file since the copy was made, `the fact file changed since you opened the copy`
+with `discard` alone, since keeping it would put your copy over that change. `keep the edit` and
+`discard` wait five seconds with `undo`, as every press that writes. Kept, the copy goes into the
+inbox as an edit of that file and is removed from this machine; the view says
+`your edit waits for the next curation run`, with `curate now` on the machine that curates. That
+run puts your text in place as the fact file, only while the file is still as the copy found it,
+and brings its line in the distillate in step ([Correcting what a run filed](curation.md#correcting-what-a-run-filed)).
+A copy that is empty is not kept and stays for `discard`. A press m2b refused, as while a curation
+run is under way or for a fact file not downloaded, says why in the error color and makes no copy.
+A copy you saved and did not keep is counted in the overview's part "m2b".
+
+Each entry under **What it rests on** that m2b could read is a row you press, ending in `›` as a fact does. It turns the
+pane to that note or document,
 read with `m2b source --json --viewer`, under a tab beside the fact file's that bears a document's
 or a picture's original file name, or else what it is and its day (`note 2026-10-12`). **What it
 is** says what it is and when it was captured and holds the words as you captured them; **What
 stands on which page** holds a document's outline, and **What the curation run added** the lines
 the run wrote below your words. The tab of the fact's file leads back to the file as it was drawn,
-with the focus on the `show` you pressed.
+with the focus on the row you pressed.
 
-A current item has such a button too, here and in a topic's lines: `show` below it where it rests
-on a note, `show 1` and `show 2` where it rests on several, in the order the distillate names
-them, and none where it names no note. The note's file name is not drawn in the line.
+A current item leads to the notes it rests on, here and in a topic's lines. Where it rests on one
+note, the item itself is a row you press, ending in `›`. Where it rests on several, a button for
+each stands below it, in the order the distillate names them, bearing the day the note was
+captured in your time zone (`17 Nov`, the year where it is not this one), and the time as well
+where two fall on one day (`17 Nov 11:45`). An item that names no note has none. The note's file
+name is not drawn in the line.
 
 ```text
  Current
  Alex builds the shed with Sam, the roof is next (since
- 2026-11-17)
- [ show ]
+ 2026-11-17) ›
+ The offer for Acme is out, an answer is due in December
+ (since 2026-11-02)
+ [ 2 Nov ] [ 17 Nov ]
  Sorting the old photos for the family album (since
  2026-11-10)
 ```
@@ -619,14 +726,15 @@ started, since a viewer for it could run what it holds
 
 A fact's file, a note or a document that is not downloaded to this machine says so, with the
 command that fetches it; an entry under **What it rests on** that is not on this machine, could
-not be read or names no note of the archive says so and has no `show`. What these views show, your facts and your own words in a note, is held by the pane alone
+not be read or names no note of the archive says so and is no row to press. What these views show, your facts and your own words in a note, is held by the pane alone
 while they are shown, never in the session's state, which other plugins can read: turning the pane
 away from them or closing it drops it.
 
 ### Back to the start view
 
 `/m2b-review`, `/m2b-search`, `/m2b-proposals`, `/m2b-settings`, a tab, a topic's button,
-`details` and `show` turn the pane to their view and give it the keyboard. Escape there, the pane's close
+a fact's row, an evidence entry's row and a search from the field `search` turn the pane to their
+view and give it the keyboard. Escape there, the pane's close
 mark or the tab `Overview` lead back to the start view; the pane stays open. From
 `About this setup` under its own tab they lead there too, and the tab `Settings` to the other
 settings. Beside the chat it then stays
@@ -635,15 +743,19 @@ pressed twice within half a second leads back once and closes nothing. Above the
 stays a dialog, and a later Escape closes the block.
 
 With the keyboard in the pane, the band asks Claude Code to put the focus where a second Enter
-writes nothing: after a press on a tab, on the tab that leads back to the view you left, so Enter
-pressed again returns there; after a press on a topic's button on `Overview`, and from there back
-on that topic's button; after `details` or a topic's button in the tab `Facts` on that tab; after
-`show` on the tab of the fact's file, and from there back on that `show`; after `show` below a
-current item on the tab `Facts`, or for an item in a topic's lines on the tab the topic was
-opened from; after keep, drop, `ok`,
-`done`, `turn off here` or `curate now` on the row's `undo`. After `open the file` it stays on
-that button, which writes nothing. Once an answer is written its
-row is gone, and the focus stands on the row that moved up.
+writes nothing: after a press on a tab, on that tab, so the focus is the one mark in the row and
+Enter pressed again reads the view again, and the view you left is its tab or its letter away;
+after a press on a topic's button on `Overview` above its lines; after a fact's row or a topic's
+button in the tab `Facts` on that tab; after an evidence entry's row on the tab of the fact's
+file, and from there back on that row; after a fact's row in a topic's lines on the topic's tab,
+and from there back on that row; after a current item's row or a note's button below it on the
+tab `Facts`, or for an item in a topic's lines on the tab the topic was opened from; after a search
+from the field `search` that found hits on the tab `Facts`; after `edit` on the tab of the fact's
+file; after `correct` in the field `what is right`; after a day below the field `note` in that field; after keep, drop,
+`ok`, a task's mark, `turn off here`, `curate now`, Enter in the field `note` or `what is right`,
+`keep the edit` or `discard` on the row's `undo`. After `open the
+file` it stays on that button, which writes nothing. Once an answer is written its row is gone,
+and the focus stands on the row that moved up.
 
 ## The whole review, and search, in a pane
 
@@ -663,7 +775,7 @@ As text, a review with more findings and a click within its undo:
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ [ Overview ] [ Proposals ] Review [ Tasks ] [ Facts ]        │
+│ [ Overview ] [ Proposals ] [ Review ] [ Tasks ] [ Facts ]    │
 │ [ Settings ]                                                 │
 │                                                              │
 │ ╭──────────────────────────────────────────────────────────╮ │
@@ -726,7 +838,7 @@ As text, other proposals, one of them within its undo:
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ [ Overview ] Proposals 3 [ Review ] [ Tasks ] [ Facts ]      │
+│ [ Overview ] [ Proposals 3 ] [ Review ] [ Tasks ] [ Facts ]  │
 │ [ Settings ]                                                 │
 │                                                              │
 │ ╭──────────────────────────────────────────────────────────╮ │
@@ -775,7 +887,7 @@ curate, the line names the machine whose run the answers wait for
 (`1 answer waits for the next curation run on tower-1, which files what you kept`) and there is
 no button.
 
-![The pane beside the chat, driven with the keyboard. After /m2b-pane the overview counts 3 proposals from your sessions; Tab and Enter on the tab "Proposals 3" turn the pane to them. Six Tabs reach "keep" of the first, "Send Dana the photos of the shed."; Enter puts "undo" and "keeping" where keep and drop stood, and Enter on "undo" brings them back. Kept again and left alone, the proposal is written after five seconds, the tab reads "Proposals 2", and below the two proposals left the view says "1 answer waits for the next curation run, which files what you kept" with the button "curate now". Six Shift+Tabs and Enter on the tab "Overview" return to the overview, which now counts 2 proposals and 4 things that wait, and the band left of the pane reads "4 wait for you"](images/pane-answers.gif)
+![The pane beside the chat, driven with the keyboard. After /m2b-pane the overview, below its field "note", counts 3 proposals from your sessions; the letter p, the key of the tab "Proposals 3", turns the pane to them. Six Tabs reach "keep" of the first, "Send Dana the photos of the shed."; Enter puts "undo" and "keeping" where keep and drop stood, and Enter on "undo" brings them back. Kept again and left alone, the proposal is written after five seconds, the tab reads "Proposals 2", and below the two proposals left the view says "1 answer waits for the next curation run, which files what you kept" with the button "curate now". The letter o, the key of the tab "Overview", returns to the overview, which now counts 2 proposals and 4 things that wait, and the band left of the pane reads "4 wait for you"](images/pane-answers.gif)
 
 <sub>One real Claude Code session on a demo machine with invented notes, recorded by `scripts/readme-demo --only pane-answers`. Only keys are typed and no model is asked; the five seconds a press waits run as recorded.</sub>
 
@@ -984,10 +1096,16 @@ background; once an answer to a proposal is written and none waits any more, the
 `m2b curate --detach --after-answers --json`, which starts one only where a kept proposal waits
 for a run. What that run reads and writes is in [The curation run](curation.md).
 A topic's button calls `m2b distillate topic --json`, which reads `memory/MEMORY.md`, and so does
-`m2b distillate topics --json` for the tab `Facts`. `details` and `show` call `m2b source --json`,
+`m2b distillate topics --json` for the tab `Facts`. A fact's row, an evidence entry's row and a current item's way to its note
+call `m2b source --json`,
 which reads one fact file in `memory/` or one note in `corpus/`, and `open the file` calls
-`m2b store open`, which starts the system's viewer on a PDF or a picture of the archive. The tab
-`Tasks` reads your task list with `m2b todos --json`, and `done` calls `m2b tasks complete` after
+`m2b store open`, which starts the system's viewer on a PDF or a picture of the archive. In a
+fact's file, `correct` calls `m2b capture --about` with the fact file's name, `edit` calls
+`m2b store edit`, which writes the editing copy into `~/.local/state/m2b/edits/` and starts the
+system's text editor on it, and `keep the edit` and `discard` call it with `--keep` and
+`--discard`. The field `note` calls `m2b capture`, with `--follow-up` for its day, and the field
+`search` calls `m2b search --json`. The tab
+`Tasks` reads your task list with `m2b todos --json`, and a task's mark calls `m2b tasks complete` after
 reading the list again. The
 settings are read with `m2b settings --json`, and a press on a value calls `m2b settings set`,
 which writes the machine config or, for your language, `profile.json` in the store. Every open session asks about once a
@@ -1001,10 +1119,11 @@ That folder holds titles, findings and the proposals with the words they stand o
 you only. At each session start
 it writes `~/.local/state/m2b/band-seen.json`, which `m2b doctor` reads. That you closed the pane
 beside the chat by hand is one value, `paneClosedByHand`, in the store Claude Code keeps for the
-plugin under its own configuration folder. Apart from keep, drop, `ok` and `done`, which
+plugin under its own configuration folder. Apart from keep, drop, `ok` and a task's mark, which
 change that one task in your task list (with the `markdown` backend, its file in `tasks/` of the
-store) or add your answer to a proposal as an empty file in `state/core/proposal-answers/`, and
-a press on a value of `Language` in the settings, it writes nothing in the store.
+store) or add your answer to a proposal as an empty file in `state/core/proposal-answers/`, a
+note, a correction or a kept edit, each a new capture in `inbox/`, and a press on a value of
+`Language` in the settings, it writes nothing in the store.
 
 `m2b band --json` reaches and reads the task list once (with Apple Reminders, two calls to
 `reminders`) and sorts the open tasks by their marker, adds the answer of `m2b proposals --json`,
@@ -1026,7 +1145,8 @@ of the backends. With invented tasks:
     "answered": 0,
     "handed_in": 0
   },
-  "status": {"machine_id": "alex-laptop", "curating_machine": "alex-laptop", "this_machine_curates": true, "inbox": {"count": 2, "evicted": 0}, "run": {"state": "succeeded", "last_succeeded_at": "2026-03-14T21:36:00+01:00"}, "backends": {"store": {"state": "reachable", "detail": ""}, "tasks": {"state": "reachable", "detail": ""}, "calendar": {"state": "not configured", "detail": ""}}}
+  "status": {"machine_id": "alex-laptop", "curating_machine": "alex-laptop", "this_machine_curates": true, "inbox": {"count": 2, "evicted": 0}, "run": {"state": "succeeded", "last_succeeded_at": "2026-03-14T21:36:00+01:00"}, "backends": {"store": {"state": "reachable", "detail": ""}, "tasks": {"state": "reachable", "detail": ""}, "calendar": {"state": "not configured", "detail": ""}}},
+  "edits_not_kept": 0
 }
 ```
 
@@ -1041,7 +1161,9 @@ part "m2b" has `curate now`. When the task list cannot be
 read, `tasks` is `{"error": "<why>"}` and `status` still answers. The checks of the backends are
 kept for five minutes, so at most every five minutes the answer waits for the calendar too, here
 for at most 10 seconds whatever `calendar.timeout_seconds` says; a calendar that does not answer
-by then is reported as not reachable. `--tasks-only` answers `tasks` alone.
+by then is reported as not reachable. `edits_not_kept` counts the editing copies of fact files on
+this machine that differ from what they were made from (`m2b store edit`), read from this
+machine's state folder alone, a number and never a file's name. `--tasks-only` answers `tasks` alone.
 
 `proposals` lists what a reading of your sessions proposed or a session handed in and still waits for your answer (one
 without an answer for 14 days no longer does), the earliest said first, in `answered` how many answers wait for the next curation run, and in `handed_in` how many proposals sessions handed in wait for a run to take them in (`null` where their folder could not be listed), their number alone. Each

@@ -82,7 +82,7 @@ in the one after it ask where the spare key is. [Getting started](docs/getting-s
 what you should see at each step, and [Install](#install) what m2b needs. Before you install:
 [what runs on your machine](#what-runs-on-your-machine) and [uninstalling](#uninstalling).
 
-![A Claude Code session in an unrelated project is asked when Sam brings the plywood and where the spare key for the shed is. Claude answers from the notes it started with, without a tool call: Sam brings the plywood for the shed roof on 14 November (sam.md), three days before the day of the picture, which the answer notes, and the key is under the blue pot by the back door (house.md). Above the prompt the band is one row, "m2b 1 waits for you" with the button "open", and below it one task due today and one overdue, by name](docs/images/session-start.png)
+![A Claude Code session in an unrelated project is asked when Sam brings the plywood and where the spare key for the shed is. Claude answers from the notes it started with, without a tool call: Sam brings the plywood for the shed roof on 14 November (sam.md), some days before the day of the picture, which the answer notes, and the key is under the blue pot by the back door (house.md). Above the prompt the band is one row, "m2b 1 waits for you" with the button "open", and below it one task due today and one overdue, by name](docs/images/session-start.png)
 
 <sub>A new session in an unrelated repository answers from your notes. [The band](#the-band), here set to stand
 above the prompt, counts what waits for you and names what is due; in a terminal it stands below the
@@ -207,30 +207,35 @@ line appears only while something is wrong with m2b.
 
 `/m2b-review` opens the pane in the picture with the whole last run, `/m2b-proposals` the
 proposals from your sessions, `/m2b-search <text>` search hits, and `/m2b-note <text>` notes a
-text at once, without a model turn. The band is a mod, a module Claude Code loads with the plugin,
+text at once, without a model turn, with `--due tomorrow` also a task due that day. The band is a mod, a module Claude Code loads with the plugin,
 so it runs only while mods are on in Claude Code; `/m2b:m2b doctor` says whether the latest
 session ran it ([The band](docs/band.md)).
 
-`/m2b-pane` opens the pane in the view it starts in, its overview: what waits for you, what is
+`/m2b-pane` opens the pane in the view it starts in, its overview: a field `note` that keeps a
+note without a model turn, with the day of its task, then what waits for you, what is
 due today, what m2b gave this session and how m2b itself stands, with the button `curate now`
 on the machine that curates, which starts a curation run in the background. A row of tabs above
 every view leads to the others: `Proposals`, `Review`, `Tasks` with every open task of yours and
-`done` to tick one, `Facts` with what every session starts with and every topic, and `Settings`.
-In `Facts`, `details` on a fact shows its file with the notes and documents it rests on, `show`
-one of those or the note a current item rests on, and `open the file` a PDF or a picture in the
-system's viewer
+a mark `○` to tick one, `Facts` with what every session starts with and every topic, and
+`Settings`; each tab has its first letter as its key. In `Facts`, a field `search` searches the
+store, a press on a fact shows its file with the notes and documents it rests on,
+a press on one of those shows it, a current item leads to the note it rests on, and `open the file` a PDF or a picture in the
+system's viewer. A fact's file has `correct`, for how the fact should read, and `edit`, for a
+copy of the file in your text editor, which `keep the edit` hands on once you saved it; the next
+curation run applies either
 ([What m2b knows](docs/band.md#what-m2b-knows)). Under Claude Code's fullscreen layout the
 pane sits beside the conversation, where it opens by itself in a wide terminal, and
 `/m2b-settings` turns it to every setting of m2b, sorted by what you want from m2b, a switch
 with its values to press
 ([This session, what waits and today, in the pane](docs/band.md#this-session-what-waits-and-today-in-the-pane)).
 
-![A Claude Code session in the fullscreen layout after /m2b-pane: the m2b pane sits beside the chat, under the tabs Overview, Proposals 3, Review, Tasks, Facts and Settings. The part "Waits for you", framed in the warning color, counts 5: 3 proposals from your sessions, in the tab Proposals; a "Still current?" question with keep and drop; the review of the last curation run with ok and "1 fact changed: Sam". The part "Today" names one task due today and one overdue, and the part "This session" begins below it. Left of the pane the band above the prompt is one row, "m2b 5 wait for you" with the button "open", and the two tasks below it](docs/images/pane.png)
+![A Claude Code session in the fullscreen layout after /m2b-pane: the m2b pane sits beside the chat, under the tabs Overview, Proposals 3, Review, Tasks, Facts and Settings. Below them stands the field "note" with "what to keep" in it and the day of a task for the note, "no day" marked, then today, tomorrow and in a week. The part "Waits for you", framed in the warning color, counts 5: 3 proposals from your sessions, in the tab Proposals; a "Still current?" question with keep and drop; the review of the last curation run with ok and "1 fact changed: Sam". The part "Today" names one task due today and one overdue, and the part "This session" begins below it. Left of the pane the band above the prompt is one row, "m2b 5 wait for you" with the button "open", and the two tasks below it](docs/images/pane.png)
 
-![A Claude Code session in the fullscreen layout with the m2b pane beside the chat, under the tabs Overview, Proposals, Review, Tasks, Facts and Settings and a seventh tab, "dana". The part "Dana" holds the fact file's lines: my sister, birthday on 3 March, would love a good fountain pen, treasurer of the harbour rowing club, its fee 240 a year, due 31 January. The part "What it rests on" lists two entries, each with the button "show" below it: a note of 2026-10-12, "Dana's birthday is on 3 March. She would love a good fountain pen.", and a document of 2026-11-09, harbour-rowing-club-handbook.pdf, "p. 1: the harbour rowing club, handbook 2026". Left of the pane the band above the prompt is one row, "m2b 1 waits for you" with the button "open", and one task due today and one overdue below it](docs/images/fact.png)
+![A Claude Code session in the fullscreen layout with the m2b pane beside the chat, under the tabs Overview, Proposals, Review, Tasks, Facts and Settings and a seventh tab, "dana", which reads the file again. The part "Dana" has the buttons correct and edit under its title and holds the fact file's lines: my sister, birthday on 3 March, would love a good fountain pen, treasurer of the harbour rowing club, its fee 240 a year, due 31 January. The part "What it rests on" lists two entries, each a row you press, ending in ›: a note of 2026-10-12, "Dana's birthday is on 3 March. She would love a good fountain pen.", and a document of 2026-11-09, harbour-rowing-club-handbook.pdf, "p. 1: the harbour rowing club, handbook 2026". Left of the pane the band above the prompt is one row, "m2b 1 waits for you" with the button "open", and one task due today and one overdue below it](docs/images/fact.png)
 
 <sub>A fact's file, one press below the tab `Facts`: its lines, and the note and the document it
-rests on, each with `show`. All names and notes are invented.</sub>
+rests on, each a row you press, and `correct` and `edit` under the title. All names and notes
+are invented.</sub>
 
 **Proposals from your sessions.** A curation run can also read what you typed and pasted in Claude
 Code and propose what you said in passing, without "remember this", each proposal with the words

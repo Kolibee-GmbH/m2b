@@ -8,6 +8,7 @@ import type {
   BandSession,
   BandSnapshot,
   FolderSwitch,
+  NoteDay,
   SessionTopic,
 } from '../types'
 import {
@@ -24,14 +25,17 @@ import {
   taskLine,
   topicLabel,
   topicsCount,
+  under,
   waitForYou,
 } from './look'
 import type { Tone } from './look'
+import { NOTE_PRESS, noteField } from './note-field'
+import type { NoteFieldActions } from './note-field'
 import { plainLine, wholePath } from './plain-text'
 import { HANDED_IN_NOT_COUNTED, couldNotLookLine, countLine, errorBesideTasks, waitingForRunLine } from './proposals'
 import { CURATE_PRESS, CURATE_ROW, REVIEW, candidateRow, changesSummary, curateButton, reviewRow } from './rows'
 import type { CurateActions, RowActions } from './rows'
-import { isNotWorking, lessonLine } from './status-line'
+import { isNotWorking, lessonStanding, lessonTitle } from './status-line'
 
 export { CURATE_NOW, CURATE_PRESS, UNDO_CURATE } from './rows'
 
@@ -45,7 +49,7 @@ export { CURATE_NOW, CURATE_PRESS, UNDO_CURATE } from './rows'
  *
  * A part says nothing it has nothing to say about: a count of none is not said, an empty part is
  * one line that steps back, and a part m2b has not looked at is left out, except the first, which
- * says so once.
+ * says so once. Where nothing waits and nothing is due, both are one quiet line without a frame.
  */
 
 // Not `m2b`: Claude Code gives the plugin's skill of that name the short name `/m2b`. A command
@@ -66,6 +70,8 @@ const NOT_KNOWN = 'm2b holds no note of what it gave this session; that does not
 // Turning m2b off reaches this session too: the prompt hook adds no topic where it is off.
 const KEEPS = 'This session keeps what it was given and gets no more topics.'
 const NOTHING_DUE = 'Nothing due today.'
+// The first two parts at once, where neither has a row.
+export const NOTHING_AT_ALL = 'Nothing waits for you, nothing due today.'
 const TASKS_NOT_READ = 'The task list could not be read.'
 // Where the answer names no tasks due: from a core before it named them whatever the band shows.
 const DUE_NOT_SHOWN = 'Tasks due are not shown.'
@@ -78,11 +84,12 @@ const OFF_HERE = 'm2b is off under this folder.'
 const NO_NOTE = 'm2b holds no note of this session.'
 const SESSION_NOT_READ = 'm2b could not look at this session.'
 
-// How the session's start printed the distillate, as the core names it.
+// How the session's start printed the distillate, as the core names it, in the owner's words:
+// the distillate is the facts every session starts with.
 const PRINTED = new Map([
-  ['whole', 'The distillate was printed whole at the start.'],
-  ['cut', 'The distillate was printed at the start, cut to fit.'],
-  ['none', 'There was no distillate to print at the start.'],
+  ['whole', 'This session started with all your facts.'],
+  ['cut', 'This session started with your facts, cut to fit.'],
+  ['none', 'This session started without facts: the distillate is empty.'],
 ])
 
 // The press on the button for the session's folder, among the presses on rows, which go by a task's or a proposal's id.
@@ -95,7 +102,8 @@ export const UNDO_FOLDER = 'undo:folder'
  * wrote nothing, `folderNotice` the same for the folder's button, `curateNotice` why a press on
  * `curate now` started no run. `versionLine` says that this session runs an older m2b than the
  * one installed. `curatingMachine` names the machine that curates the store, null where none is
- * known: a setting's value, which the caller holds outside the session's state.
+ * known: a setting's value, which the caller holds outside the session's state, as it holds
+ * `lessonSentences`, each lesson's sentence by its name. `nowMs` is the moment a day is said against.
  */
 export type SessionModel = {
   given: BandSession | null
@@ -109,18 +117,23 @@ export type SessionModel = {
   health: BandHealth | null
   curatingMachine: string | null
   versionLine: string | null
+  lessonSentences: ReadonlyMap<string, string>
+  /** The day chosen below the field `note`. */
+  noteDay: NoteDay
+  nowMs: number
 }
 
 /**
  * What the overview's buttons do: keep, drop and `ok`; a topic's button, which turns the pane to
- * that topic's lines; m2b off or on for a folder, with its undo; and a curation run now, with its
- * undo.
+ * that topic's lines; m2b off or on for a folder, with its undo; a curation run now, with its
+ * undo; and the field `note` above the parts, with its undo and its day.
  */
 export type SessionActions = RowActions &
   CurateActions & {
     showTopic: (name: string) => Promise<void>
     switchFolder: (change: FolderSwitch, folder: string) => Promise<void>
     undoFolder: () => Promise<void>
+    note: NoteFieldActions
   }
 
 /** A line and what it is, by which it is drawn. */
@@ -259,22 +272,50 @@ function curatesElsewhere(model: SessionModel): Line[] {
 }
 
 /**
- * How m2b itself stands, as lines: what is wrong first, then the line about curation, which steps
- * back, where curation runs, and how each lesson does.
+ * The editing copies of fact files on this machine that differ and are not kept, as a count: a
+ * file's name can name a customer, and the owner finds each copy in its fact file's view.
+ */
+function editsNotKept(model: SessionModel): Line[] {
+  const count = model.health?.editsNotKept ?? 0
+  if (count === 0) {
+    return []
+  }
+  return [line(count === 1 ? '1 edited copy not kept yet' : `${count} edited copies not kept yet`, 'waits')]
+}
+
+/**
+ * How m2b itself stands, as lines: what is wrong first, the edited copies not kept, then the line
+ * about curation, which steps back, where curation runs, and how each lesson does, its standing
+ * indented below it.
  */
 function healthLines(model: SessionModel): Line[] {
   const { health } = model
   return [
     ...troubleLines(model),
+    ...editsNotKept(model),
     ...(health?.curation ? [line(plainLine(health.curation), 'quiet')] : []),
     ...curatesElsewhere(model),
-    ...lessonLines(model),
+    ...lessonLines(model).flatMap(lesson => [lesson.title, { ...lesson.standing, text: `  ${lesson.standing.text}` }]),
   ]
 }
 
-/** Each lesson the owner kept with its counts: one corrected again waits for them, the others step back. */
-function lessonLines(model: SessionModel): Line[] {
-  return (model.health?.lessons ?? []).map(lesson => line(lessonLine(lesson), isNotWorking(lesson) ? 'waits' : 'quiet'))
+/**
+ * Each lesson the owner kept: its sentence, and how it does since it was kept, which steps back,
+ * or for one corrected again waits for them.
+ */
+function lessonLines(model: SessionModel): { title: Line; standing: Line }[] {
+  return (model.health?.lessons ?? []).map(lesson => ({
+    title: line(lessonTitle(lesson, model.lessonSentences)),
+    standing: line(lessonStanding(lesson, model.nowMs), isNotWorking(lesson) ? 'waits' : 'quiet'),
+  }))
+}
+
+/**
+ * Whether "Waits for you" and "Today" are one quiet line: m2b read both, neither has a row, and m2b
+ * said nothing to a press there, which stands in "Waits for you" where it was pressed.
+ */
+function isQuiet(model: SessionModel): boolean {
+  return waitsNothing(model) && model.rowNotice === null && hasToday(model.snapshot) && noDueLine(model.snapshot) === NOTHING_DUE
 }
 
 function present<T>(value: T | null | false): value is T {
@@ -300,12 +341,13 @@ export function sessionLines(model: SessionModel): string[] {
   const today = !hasToday(snapshot) ? null : instead === null ? dueFirst(snapshot.due ?? []).map(dueLine) : [instead]
   const health = healthLines(model).map(one => one.text)
   const parts: [string, string[] | null][] = [
-    [WAITS_FOR_YOU, waits],
-    [TODAY, today],
+    [WAITS_FOR_YOU, isQuiet(model) ? null : waits],
+    [TODAY, isQuiet(model) ? null : today],
     [THIS_SESSION, sessionTexts(model)],
     [M2B_ITSELF, health.length === 0 ? null : health],
   ]
-  return parts.flatMap(([title, lines]) => (lines === null ? [] : [title, ...lines.map(one => `  ${one}`)]))
+  const drawn = parts.flatMap(([title, lines]) => (lines === null ? [] : [title, ...lines.map(one => `  ${one}`)]))
+  return isQuiet(model) ? [NOTHING_AT_ALL, ...drawn] : drawn
 }
 
 /** The lines of "This session", null where the part is left out: m2b has looked at nothing yet, which the first part says, or has nothing to say of the session. */
@@ -381,15 +423,6 @@ export function glancePane($: EngineInterface, e: ResolveInput, model: SessionMo
 
 function topicKey(index: number): string {
   return `topic:${index}`
-}
-
-/**
- * The key of the button of the topic `name`, null where the overview draws none for it. The
- * pane's other views draw no button under it.
- */
-export function topicShowKey(model: SessionModel, name: string): string | null {
-  const index = model.given === null || model.given.error !== null ? -1 : model.given.topics.findIndex(topic => topic.name === name)
-  return index === -1 ? null : topicKey(index)
 }
 
 /** "Waits for you": the proposals as a count that names their tab, every candidate and question, and the review, each with its buttons. */
@@ -522,9 +555,10 @@ function curationLines($: EngineInterface, e: ResolveInput, model: SessionModel,
 }
 
 /**
- * "m2b": what is wrong with m2b, each with its reason, why the last press started no run, how
- * curation stands, with the button that starts a run on the machine that curates, and how each
- * lesson the owner kept does, one they corrected Claude on again marked as not working. Left out
+ * "m2b": what is wrong with m2b, each with its reason, why the last press started no run, how many
+ * edited copies of fact files are not kept, how curation stands, with the button that starts a run
+ * on the machine that curates, and how each lesson the owner kept does, one they corrected Claude
+ * on again marked as not working. Left out
  * where there is nothing to say.
  */
 function healthPart($: EngineInterface, e: ResolveInput, model: SessionModel, actions: SessionActions, columns: number) {
@@ -533,20 +567,29 @@ function healthPart($: EngineInterface, e: ResolveInput, model: SessionModel, ac
   const body = [
     ...troubleLines(model).map(one => said(ui, one.text, one.tone)),
     curateNotice !== null && said(ui, plainLine(curateNotice), 'trouble'),
+    // Above the run's lines: `curate now` does nothing for a copy the owner has not kept.
+    ...editsNotKept(model).map(one => said(ui, one.text, one.tone)),
     ...(health === null ? [] : curationLines($, e, model, health, actions)),
     ...curatesElsewhere(model).map(one => said(ui, one.text, one.tone)),
-    ...lessonLines(model).map(one => said(ui, one.text, one.tone)),
+    ...lessonLines(model).flatMap(({ title, standing }) => [said(ui, title.text, title.tone), under(ui, standing.text, standing.tone)]),
   ].filter(present)
   return body.length === 0 ? null : part(ui, { key: 'm2b', title: M2B_ITSELF, waits: false, columns }, body)
 }
 
 /** The overview's drawing. `columns` is the width of the pane's body: docked beside the chat it can be 24. */
 export function sessionPane($: EngineInterface, e: ResolveInput, model: SessionModel, actions: SessionActions, columns: number) {
-  const { Box } = $.ui.resolve(e)
+  const ui = $.ui.resolve(e)
+  const { Box } = ui
   return (
     <Box flexDirection="column">
-      {waitsPart($, e, model, actions, columns)}
-      {todayPart($, e, model.snapshot, columns)}
+      {noteField($, e, model.noteDay, model.presses[NOTE_PRESS], actions.note, columns)}
+      {isQuiet(model) ? (
+        <Box key="quiet" flexDirection="column">
+          {said(ui, NOTHING_AT_ALL, 'quiet')}
+        </Box>
+      ) : (
+        [waitsPart($, e, model, actions, columns), todayPart($, e, model.snapshot, columns)]
+      )}
       {sessionPart($, e, model, actions, columns)}
       {healthPart($, e, model, actions, columns)}
     </Box>

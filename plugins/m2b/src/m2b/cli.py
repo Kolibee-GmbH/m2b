@@ -312,6 +312,7 @@ def _parser() -> argparse.ArgumentParser:
     capture.add_argument(
         "--project", action="store_true", help="make the working folder's project known, named by its git remote"
     )
+    capture.add_argument("--about", help="the fact file of memory/ the text corrects, by its name (dana.md)")
     capture_file = _command(
         commands, "capture-file", capture_commands.capture_file_command, "copy a file into the inbox, with words"
     )
@@ -431,6 +432,17 @@ def _parser() -> argparse.ArgumentParser:
     fetch.add_argument("--timeout", type=float, default=store.DEFAULT_FETCH_TIMEOUT_SECONDS)
     opener = _command(store_group, "open", store.store_open, "open a PDF or a picture of the archive in its viewer")
     opener.add_argument("name", help="the file's name, as a note or an evidence link names it; never a path")
+    editor = _command(
+        store_group,
+        "edit",
+        store.store_edit,
+        "edit a copy of a fact file, then keep it for the next curation run",
+        True,
+    )
+    editor.add_argument("name", help="the fact file's name, as a distillate line ends with it; never a path")
+    choice = editor.add_mutually_exclusive_group()
+    choice.add_argument("--keep", action="store_true", help="hand the copy to the inbox and remove it")
+    choice.add_argument("--discard", action="store_true", help="remove the copy and keep nothing")
 
     ingest_group = _group(commands, "ingest", "the curator's steps on inbox captures", listed=False)
     _command(

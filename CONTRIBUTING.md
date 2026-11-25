@@ -675,8 +675,9 @@ customer the demo project's folder names, so the pane's start view lists a topic
 given. Your sessions are never read, and the four pictures differ between recordings only in
 their dates and times. `pane` and `settings` each build that store themselves, so `--only` records
 one of them alone. The eighth, `fact`, shows a fact's file: on the everyday store, with the pane
-beside the chat, it types `/m2b-pane` and presses its way to the tab `Facts` and to `details` of
-the first fact, whose file rests on a note and on a document of the demo store. The ninth,
+beside the chat, it types `/m2b-pane` and presses its way to the tab `Facts`, past its field
+`search`, to the row of the first fact, whose file rests on a note and on a document of the demo
+store. The ninth,
 `band-below`, types nothing: on the everyday store with
 `band.place` set to `below`, on the main screen in a terminal of 130 columns, it shows the band
 at the end of the hint line below the prompt with every count. It builds its store itself.

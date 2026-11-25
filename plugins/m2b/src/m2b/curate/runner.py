@@ -64,6 +64,7 @@ from m2b import (
     current_topics,
     expiry,
     ingest,
+    kept_edits,
     launcher,
     lesson_check,
     lint,
@@ -668,6 +669,7 @@ class _Run:
         self._report_fact_changes(migrations.step_name(migration), before, after, InboxBefore())
 
     def _harvest(self, tasks: Tasks, locale: Locale) -> None:
+        self._put_kept_edits_in_place()
         result = HarvestReport()
         try:
             harvest(self.store, tasks, locale.text(PREFIX_KEY), self.clock(), result, self.config.machine_id)
@@ -692,6 +694,41 @@ class _Run:
             report.Finding(HARVEST, report.INFO, f"the lesson {name} is removed: you said it no longer holds")
             for name in removed
         ]
+
+    def _put_kept_edits_in_place(self) -> None:
+        """The owner's kept edits become their fact files, before the ingest step's snapshot.
+
+        ``memory/`` as it was before is saved first, so the copy the review names holds the fact
+        file the edit replaced. Without that copy no edit is put in place: they wait.
+        """
+        try:
+            if kept_edits.waiting(self.store):
+                self._save_memory_copy(memory_guard.Snapshot.take(self.store))
+            edits = kept_edits.put_in_place(self.store)
+        except (OSError, StoreError) as error:
+            self.findings.append(
+                report.Finding(HARVEST, report.ACTION, f"the edits you kept wait for the next run: {error}")
+            )
+            return
+        self.findings += [
+            report.Finding(
+                HARVEST,
+                report.INFO,
+                f"your edit of {placed.fact_file} is in place ({placed.capture}); "
+                "the ingest step brings its line in the distillate in step",
+            )
+            for placed in edits.placed
+        ]
+        self.findings += [
+            report.Finding(
+                HARVEST,
+                report.ACTION,
+                f"{_edit_of(refused.fact_file)} was not put in place ({refused.capture}): {refused.reason}; "
+                "it is in the archive",
+            )
+            for refused in edits.refused
+        ]
+        self.findings += [report.Finding(HARVEST, report.ACTION, text) for text in edits.waiting]
 
     def _take_in_handed_in(self) -> bool:
         """What sessions handed in becomes proposals that wait; whether there was anything to say of it.
@@ -817,7 +854,10 @@ class _Run:
             return Skipped("the inbox is empty")
         stuck = machine_state.load_stuck_inbox(self.machine)
         bundled = waiting_on_evicted(inbox.files, inbox.evicted)
-        local = [path for path in inbox.files if path not in bundled]
+        # An edit harvest could not put in place waits for it, named in the review; the model has
+        # nothing to file from it.
+        unplaced = set(kept_edits.waiting(self.store))
+        local = [path for path in inbox.files if path not in bundled and path not in unplaced]
         if all(self._mtime(path) == stuck.get(path) for path in local):
             # The ingest skill names evicted captures itself when it runs; here no model step does.
             self._name_evicted(inbox.evicted)
@@ -1020,7 +1060,12 @@ class _Run:
             before.restore(self.store)
             # The captures are in the archive by now; what they said is found there, not in memory/.
             filed = self._filed(inbox)
+            # A placed edit stays in its fact file, which was in place before the step; filed again,
+            # its line in the distillate follows.
+            edits = kept_edits.back_to_inbox(self.store, filed)
+            filed = [name for name in filed if name not in edits]
             archived = f"; the captures it filed are in the archive: {', '.join(filed)}" if filed else ""
+            archived += f"; the edits it filed are back in the inbox: {', '.join(edits)}" if edits else ""
             # A capture still waiting must not tell the next run its facts are in memory/.
             unflagged = self._unflag(inbox)
             cleared = (
@@ -1219,6 +1264,10 @@ def _expired_note(expired: int) -> str:
         f"{expired} {'proposal' if one else 'proposals'} from the sessions got no answer for "
         f"{proposals.EXPIRES_AFTER.days} days and {'waits' if one else 'wait'} no longer"
     )
+
+
+def _edit_of(fact_file: str | None) -> str:
+    return f"your edit of {fact_file}" if fact_file is not None else "an edit that names no fact file"
 
 
 def _copy_started(copy: Path) -> datetime.datetime | None:

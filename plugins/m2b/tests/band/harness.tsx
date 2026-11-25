@@ -139,8 +139,8 @@ export type FakeTopic = { name: string; facts: number | null; current: number | 
  */
 export type FakeGiven = { topics: FakeTopic[]; atStart: string | null; offUnder: string | null; folder?: string }
 
-/** A topic's lines as `m2b distillate topic --json` answers them. */
-export type FakeTopicLines = { facts: string[]; current: string[] }
+/** A topic's lines as `m2b distillate topic --json` answers them; `files` the fact file each fact names, none where not given. */
+export type FakeTopicLines = { facts: string[]; current: string[]; files?: (string | null)[] }
 
 /** A fact every session starts with, as `m2b distillate topics --json` names it: its line, and the fact file it names or null. */
 export type FakeStartFact = { statement: string; file: string | null }
@@ -181,6 +181,8 @@ export class FakeM2b {
   topicFails: string | null = null
   /** Unset, the installed core is one from before `distillate topic`: it refuses the action. */
   knowsTopics = true
+  /** Unset, `m2b distillate topic --json` answers as a core from before `facts_with_files`, without that key. */
+  namesFactFiles = true
   /** What `m2b distillate topics --json` answers. */
   distillate: FakeDistillate = { facts: [], current: [], topics: [] }
   /** When set, `m2b distillate topics --json` prints this in place of its answer, whatever its shape. */
@@ -260,6 +262,32 @@ export class FakeM2b {
   viewerAnswers: Record<string, Record<string, unknown>> = {}
   /** When set, `m2b source --json --viewer` ends with this whatever the name, as a core that does not know the option. */
   viewerRefusal: ProcessRunResult | null = null
+  /**
+   * The corrections that wait in the inbox, by the fact file they are about, as `m2b source --json
+   * --viewer` names them; a capture with `--about` adds one, as the core finds it in `inbox/`.
+   */
+  readonly corrections: Record<string, { capture: string; first_line: string }[]> = {}
+  /**
+   * This machine's editing copies, by the fact file they are of, as `m2b source --json --viewer`
+   * names them under `edit`; `m2b store edit` makes one that does not differ, `--keep` and
+   * `--discard` remove it, and a test sets `differs` or `factFileChanged` as a save in the editor or
+   * a run would.
+   */
+  readonly edits: Record<string, { differs: boolean; factFileChanged: boolean; savedAtMs?: number }> = {}
+  /** The kept edits that wait in the inbox, by the fact file they are of; `m2b store edit --keep` adds one. */
+  readonly keptEdits: Record<string, string[]> = {}
+  /** When set, `m2b store edit` without `--keep` or `--discard` ends with this, as a refusal; no copy is made. */
+  editRefusal: ProcessRunResult | null = null
+  /** When set, `m2b store edit --keep` ends with this, as for an emptied copy; the copy stays. */
+  keepRefusal: ProcessRunResult | null = null
+  /** Why `m2b store edit` opened no editor, as in a session without a screen; null where one opened. */
+  editNotOpened: string | null = null
+  /** The paths the mod looked at with `$.fs.stat`, in order. */
+  readonly stats: string[] = []
+  /** Set, a hook refuses every `$.fs.stat`, as one of another plugin might. */
+  statRefused = false
+  /** Unset, the core is one from before the copies: `m2b band --json` names no `edits_not_kept`. */
+  countsEdits = true
   /** How `m2b store open` ends; how long it takes is `delayMs`'s. */
   openAnswer: ProcessRunResult = ok("opened corpus/2026/11/20261116T165634Z-cli-7198.pdf in the system's viewer\n")
   /**
@@ -394,7 +422,7 @@ export class FakeM2b {
     if (args[0] === 'band') {
       return this.bandAnswer(args.includes('--tasks-only'))
     }
-    if (args[0] === 'source' && args.includes('--viewer')) {
+    if (readsASource(args)) {
       if (this.viewerRefusal !== null) {
         return this.viewerRefusal
       }
@@ -402,7 +430,16 @@ export class FakeM2b {
       return answer === undefined ? fail(this.sourceFails) : ok(JSON.stringify(answer))
     }
     if (args[0] === 'source') {
-      return this.sourceAnswer === null ? fail(this.sourceFails) : ok(JSON.stringify(this.sourceAnswer))
+      // A fact file read for the pane, with `--viewer`, names the corrections that wait for it.
+      const name = args.at(-1) ?? ''
+      const corrections =
+        args.includes('--viewer') && this.sourceAnswer?.['kind'] === 'fact file'
+          ? { corrections: this.corrections[name] ?? [], edit: this.editPart(name) }
+          : {}
+      return this.sourceAnswer === null ? fail(this.sourceFails) : ok(JSON.stringify({ ...this.sourceAnswer, ...corrections }))
+    }
+    if (args[0] === 'store' && args[1] === 'edit') {
+      return this.editAnswer(args)
     }
     if (args[0] === 'store' && args[1] === 'open') {
       return this.openAnswer
@@ -422,6 +459,12 @@ export class FakeM2b {
       this.captured.push(stdin ?? '')
       this.captureArgs.push(args)
       const path = 'inbox/20260314-173000-claude-ab12.md'
+      const aboutAt = args.indexOf('--about')
+      const about = aboutAt === -1 ? undefined : args[aboutAt + 1]
+      if (about !== undefined) {
+        const firstLine = (stdin ?? '').split('\n').map(line => line.trim()).find(line => line !== '') ?? ''
+        this.corrections[about] = [...(this.corrections[about] ?? []), { capture: path.slice('inbox/'.length), first_line: firstLine }]
+      }
       const dayAt = args.indexOf('--follow-up')
       const followUp = dayAt === -1 ? null : (args[dayAt + 1] ?? null)
       const stdout = args.includes('--json')
@@ -527,7 +570,10 @@ export class FakeM2b {
       return { ...fail(this.topicFails), exitCode: 3 }
     }
     const held = this.topicLines[name]
-    return ok(JSON.stringify({ name, found: held !== undefined, facts: held?.facts ?? [], current: held?.current ?? [] }))
+    const facts = held?.facts ?? []
+    const answer = { name, found: held !== undefined, facts, current: held?.current ?? [] }
+    const withFiles = facts.map((statement, at) => ({ statement, file: held?.files?.[at] ?? null }))
+    return ok(JSON.stringify(this.namesFactFiles ? { ...answer, facts_with_files: withFiles } : answer))
   }
 
   /** As `m2b distillate topics --json` answers: what every session starts with, and each topic with its counts. */
@@ -554,7 +600,7 @@ export class FakeM2b {
 
   /** The calls that read a source a fact rests on, for the pane. */
   viewerCalls(): string[][] {
-    return this.calls.filter(call => call[0] === 'source' && call.includes('--viewer'))
+    return this.calls.filter(readsASource)
   }
 
   /** The calls that opened a file of the archive in the system's viewer, or tried to. */
@@ -643,7 +689,54 @@ export class FakeM2b {
     }
     const proposals = this.proposalsPart ?? this.waitingProposals()
     const band = this.bandPart === undefined ? this.settingsPart() : { band: this.bandPart }
-    return ok(JSON.stringify({ version: this.version, ...band, tasks, ...(proposals === null ? {} : { proposals }), status: this.status }))
+    const edits = this.countsEdits ? { edits_not_kept: Object.values(this.edits).filter(edit => edit.differs).length } : {}
+    return ok(JSON.stringify({ version: this.version, ...band, tasks, ...(proposals === null ? {} : { proposals }), status: this.status, ...edits }))
+  }
+
+  /** What `m2b source --json --viewer` names under `edit` for `file`: its copy, and the kept edits that wait. */
+  editPart(file: string): Record<string, unknown> {
+    const edit = this.edits[file]
+    return {
+      copy: edit === undefined ? null : editCopyPath(file),
+      differs: edit?.differs ?? false,
+      fact_file_changed: edit?.factFileChanged ?? false,
+      kept: this.keptEdits[file] ?? [],
+    }
+  }
+
+  /** `m2b store edit --json [--keep | --discard] -- <file>`, as the core answers each. */
+  editAnswer(args: readonly string[]): ProcessRunResult {
+    const file = args.at(-1) ?? ''
+    const edit = this.edits[file]
+    if (args.includes('--keep')) {
+      if (this.keepRefusal !== null) {
+        return this.keepRefusal
+      }
+      if (edit === undefined) {
+        return fail(`there is no editing copy of ${file}; m2b store edit ${file} makes one`)
+      }
+      delete this.edits[file]
+      if (!edit.differs) {
+        return ok(JSON.stringify({ kept: null }))
+      }
+      const capture = '20261125T101500Z-cli-ef56.md'
+      this.keptEdits[file] = [...(this.keptEdits[file] ?? []), capture]
+      return ok(JSON.stringify({ kept: `inbox/${capture}` }))
+    }
+    if (args.includes('--discard')) {
+      delete this.edits[file]
+      return ok(JSON.stringify({ discarded: edit !== undefined }))
+    }
+    if (this.editRefusal !== null) {
+      return this.editRefusal
+    }
+    this.edits[file] ??= { differs: false, factFileChanged: false }
+    return ok(JSON.stringify({ copy: editCopyPath(file), opened: this.editNotOpened === null, not_opened: this.editNotOpened }))
+  }
+
+  /** The calls of `m2b store edit`, in the order they ran. */
+  editCalls(): string[][] {
+    return this.calls.filter(call => call[0] === 'store' && call[1] === 'edit')
   }
 
   /** The `band` part as the installed core names the machine's settings; none from a core before them. */
@@ -705,6 +798,20 @@ export class FakeM2b {
 }
 
 const NOT_SET_UP = 'not set up: no machine config at /home/alex/.config/m2b/config.json'
+
+/**
+ * Whether a call reads a note or a document a fact rests on, for the pane: `m2b source --json
+ * --viewer` with a name of the archive, which begins with its moment (`20261012T081500Z-`). The
+ * pane reads a fact file with `--viewer` too, by a name that has no moment.
+ */
+export function readsASource(args: readonly string[]): boolean {
+  return args[0] === 'source' && args.includes('--viewer') && /^\d{8}T\d{6}Z-/.test(args.at(-1) ?? '')
+}
+
+/** Where the core keeps the editing copy of `file` on the test's machine. */
+export function editCopyPath(file: string): string {
+  return `/home/alex/.local/state/m2b/edits/${file}`
+}
 
 export function ok(stdout: string): ProcessRunResult {
   return { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
@@ -962,6 +1069,18 @@ export async function start(
       return { deny: `ETIMEDOUT: ${e.path}` }
     }
     return { value: (e.path === fake.launcher && fake.hasLauncher) || (e.path === fake.machineConfig && fake.isSetUp) }
+  })
+  // An editing copy as the system sees it: its time of the last save, which a test sets as an editor's save would.
+  on('fs.stat', (_, e) => {
+    fake.stats.push(e.path)
+    if (fake.statRefused) {
+      return { deny: `EPERM: ${e.path}` }
+    }
+    const file = Object.keys(fake.edits).find(name => editCopyPath(name) === e.path)
+    if (file === undefined) {
+      return { deny: `ENOENT: ${e.path}` }
+    }
+    return { value: { kind: 'file' as const, size: 120, mtimeMs: fake.edits[file]?.savedAtMs ?? 0, isLink: false } }
   })
   on('fs.read', (_, e) => {
     if (e.path.endsWith('/.claude-plugin/plugin.json') && fake.bandVersion !== null) {
@@ -1256,11 +1375,19 @@ export async function shownTabs(ui: Drawn): Promise<ShownTab[]> {
 
 /** Which tab the row marks as the one shown: one of the six by its place, or the seventh beside them. */
 export async function shownTab(ui: Drawn): Promise<Shown> {
-  const at = (await shownTabs(ui)).findIndex(tab => tab.key === null)
+  // One of the six is shown as a button in the accent, a tab beside them as text.
+  const at = elementsIn((await ui.find({ key: TABS }))?.children).findIndex(tab => tab.type === 'Text' || tab.props['variant'] === 'primary')
   if (at === -1) {
     throw new Error('the pane marks no tab as the one shown')
   }
   return TAB_IDS[at] ?? 'aside'
+}
+
+/** The label of the tab the row marks as the one shown. */
+export async function shownLabel(ui: Drawn): Promise<string | undefined> {
+  const shown = await shownTab(ui)
+  const row = await shownTabs(ui)
+  return shown === 'aside' ? row.find(tab => tab.key === null)?.label : row[TAB_IDS.indexOf(shown)]?.label
 }
 
 /** Presses the tab that turns the pane to `to`, under the key it has above the view drawn now. */
@@ -1278,7 +1405,22 @@ export async function inView(ui: Drawn, ...types: string[]): Promise<Found[]> {
   expect(drawn.slice(0, inRow.length).map(found => found.key ?? found.text)).toEqual(
     inRow.map(tab => (tab.type === 'Button' ? String(tab.props['key']) : shownText(tab))),
   )
-  return drawn.slice(inRow.length)
+  // The overview's field `note` is drawn next, above its parts; `noteLines` reads it.
+  const field = await ui.find({ key: NOTE_BOX })
+  const inField = field === undefined ? 0 : types.reduce((sum, type) => sum + allIn(asElement(field), type).length, 0)
+  return drawn.slice(inRow.length + inField)
+}
+
+/** The key of the box that holds the overview's field `note`, its day and what it says. */
+export const NOTE_BOX = 'note'
+
+/** What the overview's field `note` draws, as `linesOf` reads it; null where the view has none. */
+export function noteLines(ui: Drawn): Promise<string[] | null> {
+  return linesAt(ui, NOTE_BOX)
+}
+
+function asElement(found: Found): Element {
+  return { ...found, props: found.props ?? {} } as Element
 }
 
 /** The keys of the buttons of the pane's view, without the tabs above it. */
@@ -1310,8 +1452,16 @@ function linesOf(element: Element): string[] {
   if (element.type === 'Text') {
     return [shownText(element).trim()]
   }
+  if (element.type === 'Input') {
+    // A field as `label: text`, with its placeholder in parentheses while it holds nothing.
+    const value = String(element.props['value'] ?? '')
+    const shown = value === '' ? `(${String(element.props['placeholder'] ?? '')})` : value
+    return [element.props['label'] === undefined ? shown : `${String(element.props['label'])}: ${shown}`]
+  }
   if (element.type === 'Button') {
-    return [`[${String(element.props['label'])}]`]
+    // A plain Button is drawn as its label alone, the row it stands for.
+    const label = String(element.props['label'])
+    return [element.props['plain'] === true ? label : `[${label}]`]
   }
   const inside = elementsIn(element.children).flatMap(linesOf)
   if (element.props['flexDirection'] !== 'row') {
@@ -1334,6 +1484,13 @@ export async function linesAt(ui: Drawn, key: string): Promise<string[] | null> 
 
 /** The title of each part of the overview, by the key the part is drawn under. */
 export const PARTS = { waits: 'Waits for you', today: 'Today', session: 'This session', m2b: 'm2b' } as const
+/** The line the overview draws in place of "Waits for you" and "Today" where neither has a row. */
+export const NOTHING_AT_ALL = 'Nothing waits for you, nothing due today.'
+
+/** Whether the lines drawn begin as the overview does: with what waits, or with the quiet line in its place. */
+export function isTheOverview(lines: readonly string[]): boolean {
+  return lines.includes(PARTS.waits) || lines.includes(NOTHING_AT_ALL)
+}
 /**
  * The key a part is drawn under, in whichever view: the overview's four, the one part of the
  * proposals, of a search and of a topic, the review's `run` beside its own `waits`, the

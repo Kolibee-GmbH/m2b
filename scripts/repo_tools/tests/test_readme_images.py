@@ -281,18 +281,15 @@ class ShotsTest(unittest.TestCase):
         self.assertEqual([shot.name for shot in readme_images.shots_for("settings")], ["settings"])
         self.assertEqual([shot.name for shot in readme_images.shots_for("fact")], ["fact"])
 
-    def test_the_shot_of_a_facts_file_presses_its_way_from_the_pane_to_details(self) -> None:
+    def test_the_shot_of_a_facts_file_presses_past_the_search_field_to_the_first_fact(self) -> None:
         (fact,) = [shot for shot in readme_images.SHOTS if shot.keys]
 
         steps = readme_images.steps_for(fact)
 
         self.assertEqual((fact.name, fact.prompt), ("fact", "/m2b-pane"))
-        # Four Tabs to the tab Facts, Enter, five Tabs to the first fact's details, Enter, then the wait.
-        self.assertEqual(
-            [keys for _, keys in steps[-5:]],
-            [readme_images.TAB * 4, readme_images.ENTER, readme_images.TAB * 5, readme_images.ENTER, ""],
-        )
-        self.assertEqual(steps[-5][0], fact.answer_seconds)
+        # The letter of the tab Facts, two Tabs to the first fact's row, Enter, then the wait.
+        self.assertEqual([keys for _, keys in steps[-4:]], ["f", readme_images.TAB * 3, readme_images.ENTER, ""])
+        self.assertEqual(steps[-4][0], fact.answer_seconds)
         self.assertEqual(steps[-1][0], 5)
 
 

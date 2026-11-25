@@ -3,10 +3,18 @@ import { expect, test } from 'claude-code/testing'
 import type { CommandRunResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { FakeM2b, HOME, SHOWN_WITHOUT_ENTRY, TROUBLED_STATUS, TROUBLE_LINE, start } from './harness'
+import { dayOf } from '../../hooks/note'
+import { FakeM2b, HOME, NOW, SHOWN_WITHOUT_ENTRY, TROUBLED_STATUS, TROUBLE_LINE, start } from './harness'
 import type { Files } from './harness'
 
 const NOTE = 'm2b-note'
+const ZURICH = (ms: number) => (ms >= Date.UTC(2026, 2, 29, 1) && ms < Date.UTC(2026, 9, 25, 1) ? 120 : 60)
+const NEW_YORK = () => -300
+// The harness clock as the machine that runs the tests reads it: its today and tomorrow.
+const TODAY = dayOf('today', NOW) ?? ''
+const TOMORROW = dayOf('tomorrow', NOW) ?? ''
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const inWords = (day: string) => `${Number(day.slice(8))} ${MONTH_NAMES[Number(day.slice(5, 7)) - 1]}`
 
 /** `/m2b-note <args>` as the person types it at the prompt. */
 function typed($: Engine, args: string): Promise<CommandRunResult> {
@@ -129,4 +137,97 @@ test('the confirmation never cuts an emoji in half', async ($, on) => {
   await start($, on, new FakeM2b())
   const answer = await typed($, `${'a'.repeat(49)}\u{1f6e0}\u{1f6e0} and more`)
   expect(answer.text).toBe(`noted: ${'a'.repeat(49)}\u{1f6e0}…`)
+})
+
+test('with --due tomorrow the note gets a task due the next day on the owner clock, and the answer names it', async ($, on) => {
+  // Covers: B317
+  const fake = new FakeM2b()
+  await start($, on, fake)
+
+  const answer = await typed($, '--due tomorrow Call Sam about the long boards')
+
+  expect(fake.captured).toEqual(['Call Sam about the long boards'])
+  expect(fake.captureArgs).toEqual([['capture', '--source', 'claude', '--json', '--follow-up', TOMORROW, '-']])
+  expect(answer.text).toBe(`noted: Call Sam about the long boards; a task is due ${inWords(TOMORROW)}`)
+})
+
+test('with --due today or a day as YYYY-MM-DD the task is due that day', async ($, on) => {
+  // Covers: B317
+  const fake = new FakeM2b()
+  await start($, on, fake)
+
+  await typed($, '--due today Call Sam')
+  const answer = await typed($, '--due=2027-01-04 Return the ladder')
+
+  expect(fake.captureArgs.map(args => args[5])).toEqual([TODAY, '2027-01-04'])
+  expect(fake.captured).toEqual(['Call Sam', 'Return the ladder'])
+  expect(answer.text).toBe('noted: Return the ladder; a task is due 4 Jan 2027')
+})
+
+test('today and tomorrow are the days of the owner clock, also where UTC has another day', () => {
+  // Covers: B317
+  const lateInZurich = Date.UTC(2026, 10, 25, 23, 30)
+  expect(dayOf('today', lateInZurich, ZURICH)).toBe('2026-11-26')
+  expect(dayOf('tomorrow', lateInZurich, ZURICH)).toBe('2026-11-27')
+  const eveningInNewYork = Date.UTC(2026, 10, 26, 2, 0)
+  expect(dayOf('today', eveningInNewYork, NEW_YORK)).toBe('2026-11-25')
+  expect(dayOf('tomorrow', eveningInNewYork, NEW_YORK)).toBe('2026-11-26')
+  // The night summer time ends in Zurich: tomorrow is the next date, not the same one twice.
+  const beforeTheChange = Date.UTC(2026, 9, 24, 22, 30)
+  expect(dayOf('tomorrow', beforeTheChange, ZURICH)).toBe('2026-10-26')
+})
+
+test('a day that is no day writes nothing and names the forms that are taken', async ($, on) => {
+  // Covers: B317
+  const fake = new FakeM2b()
+  await start($, on, fake)
+  const forms = 'nothing noted: --due takes today, tomorrow or YYYY-MM-DD'
+
+  expect((await typed($, '--due monday Call Sam')).text).toBe(`${forms}, not monday`)
+  expect((await typed($, '--due 2026-02-30 Call Sam')).text).toBe(`${forms}, not 2026-02-30`)
+  expect((await typed($, '--due')).text).toBe(`${forms}, before the text`)
+  expect(fake.calls.filter(call => call[0] === 'capture')).toEqual([])
+})
+
+test('a day without a text writes nothing and says what it needs', async ($, on) => {
+  // Covers: B317
+  const fake = new FakeM2b()
+  await start($, on, fake)
+  const answer = await typed($, '--due tomorrow   ')
+  expect(fake.calls.filter(call => call[0] === 'capture')).toEqual([])
+  expect(answer.text).toBe('nothing noted: write the text after the day, as in /m2b-note --due tomorrow Call Sam')
+})
+
+test('where the task list cannot be reached the note is written and the answer says so in the core words', async ($, on) => {
+  // Covers: B317
+  const fake = new FakeM2b()
+  fake.captureNotice = 'the follow-up task waits for the next curation run: Reminders did not answer'
+  await start($, on, fake)
+
+  const answer = await typed($, '--due tomorrow Call Sam')
+
+  expect(fake.captured).toEqual(['Call Sam'])
+  expect(answer.text).toBe('noted: Call Sam; the follow-up task waits for the next curation run: Reminders did not answer')
+})
+
+test('a note whose task could not be confirmed says it was noted, never "not noted"', async ($, on) => {
+  // Covers: B317
+  const fake = new FakeM2b()
+  fake.captureFails = 'inbox/20260314-173000-claude-ab12.md was captured, but its follow-up task: the list did not answer'
+  await start($, on, fake)
+
+  const answer = await typed($, '--due tomorrow Call Sam')
+
+  expect(answer.text).toBe(
+    'noted: Call Sam; inbox/20260314-173000-claude-ab12.md was captured, but its follow-up task: the list did not answer',
+  )
+})
+
+test('a word that only begins with --due is part of the text', async ($, on) => {
+  // Covers: B317
+  const fake = new FakeM2b()
+  await start($, on, fake)
+  await typed($, '--duel at dawn is a film title')
+  expect(fake.captured).toEqual(['--duel at dawn is a film title'])
+  expect(fake.captureArgs).toEqual([['capture', '--source', 'claude', '-']])
 })

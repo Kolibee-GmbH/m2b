@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { CommandRunResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { FakeM2b, STATUS, pane, partLook, pressTab, shownParts, shownTabs, start, texts } from './harness'
+import { FakeM2b, STATUS, pane, partLook, pressTab, shownLabel, shownParts, start, texts } from './harness'
 import type { PartKey } from './harness'
 
 // The form the pane's views share beside the overview: the proposals, the review, a topic, a
@@ -146,7 +146,7 @@ for (const view of VIEWS) {
 
     const ui = await shown($, view)
 
-    const tab = (await shownTabs(ui)).find(one => one.key === null)?.label
+    const tab = await shownLabel(ui)
     expect(tab).toBe(TAB[view])
     const parts = await shownParts(ui)
     const drawn = await texts(ui)

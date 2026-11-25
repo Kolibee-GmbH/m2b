@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 
@@ -26,6 +27,13 @@ MAX_TEXT = 500
 MAX_WORDS = 5
 _LINE_BREAK = re.compile("[\r\n\u2028\u2029\x85]")
 _NOT_A_SLUG = re.compile(r"[^a-z0-9]+")
+MAX_NAME = 40
+# German writes these out when the marks are dropped; any other mark is dropped alone (é is e).
+# Letters whose stroke or ligature is part of the letter have no mark Unicode splits off, so they
+# are written out here too, else they would be hyphens.
+_WRITTEN_OUT = str.maketrans(
+    {"ä": "ae", "ö": "oe", "ü": "ue", "æ": "ae", "œ": "oe", "ø": "o", "ł": "l", "đ": "d", "ħ": "h", "\u0131": "i"}
+)
 _FILE = re.compile(r"[0-9a-f]{12}\.json")
 
 
@@ -152,6 +160,22 @@ def _read(store: Store, path: str) -> KeptLesson:
     )
 
 
+def _file_name(title: str) -> str:
+    """The name a new lesson's file draws from its title, without ``.md``: ``Über Prüfungen`` is
+    ``ueber-pruefungen``. Umlauts are written out, ß is ss (``casefold`` does that), a letter with
+    another mark loses the mark, anything else between letters is one hyphen. A name longer than
+    ``MAX_NAME`` ends at the last whole word before it, one long word at the limit. A title with nothing
+    left of a to z or 0 to 9 is ``lesson``. Only new files are named here: a lesson that stands keeps the
+    name it has, whatever this function made of its title then."""
+    folded = unicodedata.normalize("NFC", title).casefold().translate(_WRITTEN_OUT)
+    plain = "".join(c for c in unicodedata.normalize("NFKD", folded) if not unicodedata.combining(c))
+    slug = _NOT_A_SLUG.sub("-", plain).strip("-")
+    if len(slug) > MAX_NAME:
+        cut = slug[: MAX_NAME + 1]
+        slug = cut[: cut.rfind("-")] if "-" in cut else slug[:MAX_NAME]
+    return slug or "lesson"
+
+
 def _place(store: Store, lesson: KeptLesson) -> str:
     """Writes the lesson under a name drawn from its title; a name taken by another lesson gets a number.
     A lesson that stands already, kept on another day, is not written twice."""
@@ -160,7 +184,7 @@ def _place(store: Store, lesson: KeptLesson) -> str:
         held = (standing.text, standing.kind, standing.target, standing.words, standing.unless, standing.ask)
         if (*held, standing.kept_at) == wanted:
             return standing.name
-    slug = _NOT_A_SLUG.sub("-", lesson.title.casefold()).strip("-")[:40].strip("-") or "lesson"
+    slug = _file_name(lesson.title)
     for number in range(1, 100):
         name = f"{slug}.md" if number == 1 else f"{slug}-{number}.md"
         text = render(

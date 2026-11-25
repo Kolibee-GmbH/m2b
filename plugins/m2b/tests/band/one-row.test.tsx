@@ -36,6 +36,7 @@ import {
   start,
   texts,
   widthsOfTheRow,
+  NOTHING_AT_ALL,
 } from './harness'
 import type { Files } from './harness'
 
@@ -200,7 +201,8 @@ for (const [layout, viewport, opens] of [
     expect(fake.looks.length).toBe(looksBefore + 1)
     const shown = await drawPane($, clock, viewport.isFullscreen ? 'dock' : 'inline', 100)
     expect(await shownTab(shown)).toBe('overview')
-    expect(await partLines(shown, 'waits')).toEqual(['Nothing waits for you.'])
+    // Nothing waits and nothing is due: both are one quiet line.
+    expect(await texts(shown)).toContain(NOTHING_AT_ALL)
     expect(fake.writes()).toEqual([])
     expect(fake.answers()).toEqual([])
     expect(await shownBand(band)).toEqual(CALM_ROW)
@@ -1403,6 +1405,9 @@ test('the small form is in the order of the overview: what waits, the tasks due,
       health: null,
       curatingMachine: null,
       versionLine: null,
+      lessonSentences: new Map(),
+      noteDay: 'none',
+      nowMs: NOW,
       ...fields,
     })
   const notLooked = 'm2b has not looked yet.'

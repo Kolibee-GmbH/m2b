@@ -66,7 +66,7 @@ class PicturesTest(unittest.TestCase):
                 self.assertEqual(act.command, tuple(readme_images.claude_command()))
                 self.assertIs(picture.build, readme_images.build_demo_after_a_run)
 
-    def test_a_picture_of_the_pane_types_one_command_of_the_band_and_then_only_tab_and_enter(self) -> None:
+    def test_a_picture_of_the_pane_types_a_command_of_the_band_then_only_tab_enter_and_letters_of_tabs(self) -> None:
         commands = {}
         for picture in readme_demo.PICTURES[1:]:
             trusted = readme_images.DOWN + readme_images.ENTER
@@ -74,8 +74,9 @@ class PicturesTest(unittest.TestCase):
             self.assertTrue(keys.startswith(trusted))
             command, _, presses = keys[len(trusted) :].partition(readme_images.ENTER)
             commands[picture.name] = command
-            self.assertEqual(
-                set(presses.replace(readme_demo.SHIFT_TAB, "")), {readme_demo.TAB, readme_images.ENTER}, picture.name
+            pressed = set(presses.replace(readme_demo.SHIFT_TAB, ""))
+            self.assertLessEqual(
+                pressed, {readme_demo.TAB, readme_images.ENTER, *readme_demo.TAB_LETTERS.values()}, picture.name
             )
 
         self.assertEqual(commands, {"pane-answers": "/m2b-pane", "pane-settings": "/m2b-settings"})
@@ -84,7 +85,7 @@ class PicturesTest(unittest.TestCase):
         # The key after the press that is written: the first step back to the start view, and Enter on the row
         # that opens what only informs.
         after_the_write = {
-            "pane-answers": (readme_demo.answering_beats(), readme_demo.SHIFT_TAB, 0),
+            "pane-answers": (readme_demo.answering_beats(), readme_demo.TAB_LETTERS["overview"], 0),
             "pane-settings": (readme_demo.settings_beats(), readme_images.ENTER, -1),
         }
         for name, (beats, key, which) in after_the_write.items():
@@ -107,7 +108,7 @@ class PicturesTest(unittest.TestCase):
             return sum(max(len(choices[held]) - 1, 0) for held in settings)
 
         at = in_sight.index(model)
-        tabs_of_the_pane = 5
+        tabs_of_the_pane = 6
         to_the_model = tabs_of_the_pane + values_to_press(in_sight[:at]) + 1
         # From the row of the folded group, the button after the last value.
         back_to_the_model = values_to_press(in_sight[at + 1 :]) + 1

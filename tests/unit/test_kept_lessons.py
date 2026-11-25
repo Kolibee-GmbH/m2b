@@ -164,5 +164,75 @@ class AddAndFileTest(KeptLessonFixture):
         self.assertEqual(sorted(lesson.name for lesson in lessons.read_all(self.store)), ["checks-2.md", "checks.md"])
 
 
+class LessonFileNameTest(KeptLessonFixture):
+    def filed_name(self, title: str) -> str:
+        self.add(text=PROOF, kind="knowledge", title=title)
+        report = harvest.harvest(self.store, MarkdownTasks(self.store), "Memory candidate: ")
+        [name] = report.lessons
+        return name
+
+    def test_umlauts_and_sharp_s_are_written_out(self) -> None:
+        """Covers: B316"""
+        self.assertEqual(self.filed_name("Über Prüfungen, Ärger und Maße"), "ueber-pruefungen-aerger-und-masse.md")
+
+    def test_an_umlaut_typed_as_letter_and_mark_is_written_out_too(self) -> None:
+        """Covers: B316"""
+        self.assertEqual(self.filed_name("Pru\u0308fungen"), "pruefungen.md")
+
+    def test_a_letter_with_another_mark_loses_the_mark(self) -> None:
+        """Covers: B316"""
+        self.assertEqual(self.filed_name("Café crème à la Señora"), "cafe-creme-a-la-senora.md")
+
+    def test_a_letter_with_a_stroke_or_a_ligature_is_written_as_plain_letters(self) -> None:
+        """Covers: B316"""
+        self.assertEqual(self.filed_name("Søren über Łódź, Æsir und Œuvre"), "soren-ueber-lodz-aesir-und-oeuvre.md")
+
+    def test_a_long_title_ends_at_the_last_whole_word_before_forty_characters(self) -> None:
+        """Covers: B316"""
+        self.assertEqual(
+            self.filed_name("Run the whole proof only when the changes give a reason"),
+            "run-the-whole-proof-only-when-the.md",
+        )
+
+    def test_a_word_that_ends_at_the_limit_is_kept_whole(self) -> None:
+        """Covers: B316"""
+        self.assertEqual(
+            self.filed_name("Run the whole proof only when the change gives a reason"),
+            "run-the-whole-proof-only-when-the-change.md",
+        )
+
+    def test_one_word_longer_than_the_limit_is_cut_at_the_limit(self) -> None:
+        """Covers: B316"""
+        self.assertEqual(self.filed_name("x" * 50), "x" * 40 + ".md")
+
+    def test_a_title_of_no_latin_letter_is_named_lesson(self) -> None:
+        """Covers: B316"""
+        self.assertEqual(self.filed_name("Проверка"), "lesson.md")
+
+    def test_a_lesson_file_that_exists_keeps_its_name(self) -> None:
+        """Covers: B316"""
+        self.add(text=PROOF, kind="knowledge", title="Über Prüfungen")
+        harvest.harvest(self.store, MarkdownTasks(self.store), "Memory candidate: ")
+        folder = self.root / lessons.FOLDER
+        (folder / "ueber-pruefungen.md").rename(folder / "ber-pr-fungen.md")
+
+        self.add(text=PROOF, kind="knowledge", title="Über Prüfungen")
+        report = harvest.harvest(self.store, MarkdownTasks(self.store), "Memory candidate: ")
+
+        self.assertEqual(report.lessons, ["ber-pr-fungen.md"])
+        self.assertEqual(sorted(path.name for path in folder.iterdir()), ["ber-pr-fungen.md"])
+
+    def test_a_written_out_name_that_is_taken_draws_its_number(self) -> None:
+        """Covers: B316"""
+        self.add(text=PROOF, kind="knowledge", title="Prüfungen")
+        self.add(text="Say what ran and why the rest did not.", kind="knowledge", title="Pruefungen")
+
+        harvest.harvest(self.store, MarkdownTasks(self.store), "Memory candidate: ")
+
+        self.assertEqual(
+            sorted(lesson.name for lesson in lessons.read_all(self.store)), ["pruefungen-2.md", "pruefungen.md"]
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

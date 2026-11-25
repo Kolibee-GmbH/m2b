@@ -1,24 +1,29 @@
 import type { EngineInterface, ResolveInput } from 'claude-code'
 
-import type { PaneView } from '../types'
+import type { BandPress, PaneView } from '../types'
+import { correctionRow, waitingForTheRun } from './correct-field'
+import type { CorrectActions } from './correct-field'
+import { editButton, editRow } from './edit-copy'
+import { searchField } from './search-field'
+import type { EditActions } from './edit-copy'
 import { currentItemRow } from './current-item'
-import { part, pressLine, said, topicLabel } from './look'
-import type { ButtonSpec } from './look'
+import { opensRow, part, pressLine, said, topicLabel } from './look'
 import { runM2b } from './m2b'
 import { OLDER_CORE } from './session'
 import { plainLine } from './plain-text'
+import type { AnswersCuration } from './proposals'
 
 /*
  * The tab "Facts": what every session starts with, the facts and the current items outside any
- * topic, as `m2b distillate topics --json` answers at the press that opens the tab, each fact with
- * `details` and each current item with a button for a note it names (`current-item.tsx`); and the
- * topics, each a button that opens its lines. `details` turns the pane to the
- * fact's file under a tab of its own, read with `m2b source --json`.
+ * topic, as `m2b distillate topics --json` answers at the press that opens the tab, each fact that
+ * names a fact file a row that opens it, and each current item with a button for a note it names
+ * (`current-item.tsx`); and the topics, each a button that opens its lines. A fact's row turns the
+ * pane to the fact's file under a tab of its own, read with `m2b source --json`.
  *
  * The facts are the owner's and often a customer's. As a topic's lines, they are this module's
  * alone, for the opening that read them, and dropped the moment the pane turns away: the session's
  * state is one every plugin can read. A fact file stays kept while a source it rests on is shown
- * (`show`, in `source-view.tsx`): the tab that leads back draws it as it was.
+ * (an evidence entry's row, in `source-view.tsx`): the tab that leads back draws it as it was.
  */
 
 export type StartFact = { statement: string; file: string | null }
@@ -39,14 +44,39 @@ export type Evidence = {
   firstLine: string | null
 }
 
+/** A correction that waits in the inbox for the next curation run: its capture, and its first line as typed. */
+export type WaitingCorrection = { capture: string; firstLine: string }
+
+/**
+ * The editing copy of a fact file on this machine, as `m2b source --json --viewer` names it under
+ * `edit`: its path, null where there is none; whether it differs from what it was made from;
+ * whether the fact file changed since; and the kept edits that wait in the inbox, by capture.
+ */
+export type EditLook = { copy: string | null; differs: boolean; factFileChanged: boolean; kept: string[] }
+
+const NO_EDIT: EditLook = { copy: null, differs: false, factFileChanged: false, kept: [] }
+
 export type FactFileLook =
   | { state: 'reading' }
-  | { state: 'read'; title: string; until: string | null; lines: string[]; earlier: string[]; evidence: Evidence[] }
+  | {
+      state: 'read'
+      title: string
+      until: string | null
+      lines: string[]
+      earlier: string[]
+      evidence: Evidence[]
+      corrections: WaitingCorrection[]
+      edit: EditLook
+    }
   | { state: 'failed'; error: string }
+
+/** The topic a fact file was opened from: the press that opened the topic, and the place of the fact in it. */
+export type FromTopic = { press: string; index: number }
 
 let heldFacts: { press: string; look: FactsLook } | null = null
 // The file's name too: it may name a customer, and the view in the session's state names only the press.
-let heldFile: { press: string; file: string; look: FactFileLook } | null = null
+// `topic` is the topic's view its tab leads back to, null for a file opened from the tab Facts.
+let heldFile: { press: string; file: string; topic: FromTopic | null; look: FactFileLook } | null = null
 
 export function beginFacts(press: string): void {
   heldFacts = { press, look: { state: 'reading' } }
@@ -64,16 +94,21 @@ export function factsOf(press: string): FactsLook {
   return heldFacts !== null && heldFacts.press === press ? heldFacts.look : { state: 'reading' }
 }
 
-export function beginFactFile(press: string, file: string): void {
-  heldFile = { press, file, look: { state: 'reading' } }
+export function beginFactFile(press: string, file: string, topic: FromTopic | null = null): void {
+  heldFile = { press, file, topic, look: { state: 'reading' } }
 }
 
 export function fillFactFile(press: string, look: FactFileLook): boolean {
   if (heldFile === null || heldFile.press !== press) {
     return false
   }
-  heldFile = { press, file: heldFile.file, look }
+  heldFile = { ...heldFile, look }
   return true
+}
+
+/** The topic the fact file the press opened was opened from; null for one opened from the tab Facts, or where nothing is kept. */
+export function topicOfFactFile(press: string): FromTopic | null {
+  return heldFile !== null && heldFile.press === press ? heldFile.topic : null
 }
 
 /** The name of the fact file the press opened; empty where nothing is kept for it, as after a reload of the mod. */
@@ -169,10 +204,12 @@ export function parseFacts(text: string): FactsLook {
   }
 }
 
-/** Reads one fact file with `m2b source --json`; a file not on this machine or not readable is could not read. */
+/** Reads one fact file with `m2b source --json --viewer`; a file not on this machine or not readable is could not read. */
 export async function readFactFile($: EngineInterface, file: string): Promise<FactFileLook> {
   // `--`: a name is the distillate's own text, and it may start with a dash.
-  const outcome = await runM2b($, ['source', '--json', '--', file], READ_TIMEOUT_MS)
+  // `--viewer`: the corrections and the kept edits that wait for the file in the inbox come with
+  // it, and this machine's editing copy of it.
+  const outcome = await runM2b($, ['source', '--json', '--viewer', '--', file], READ_TIMEOUT_MS)
   if (!outcome.ok) {
     return { state: 'failed', error: isOlderCore(outcome) ? OLDER_CORE : outcome.error }
   }
@@ -230,10 +267,29 @@ export function parseFactFile(text: string): FactFileLook {
       originalName: textOrNull(item['original_name']),
       firstLine: textOrNull(item['first_line']),
     })),
+    // A core without the field, or an answer without `--viewer`, names none.
+    corrections: (Array.isArray(answer['corrections']) ? answer['corrections'] : []).filter(isObject).map(item => ({
+      capture: String(item['capture'] ?? ''),
+      firstLine: String(item['first_line'] ?? ''),
+    })),
+    edit: editOf(answer['edit']),
   }
 }
 
-/** The key of `details` on the fact drawn at `index`; a fact's file can be named by more than one fact. */
+/** The part `edit` of the answer; a core without it, or an answer without `--viewer`, names no copy. */
+function editOf(part: unknown): EditLook {
+  if (!isObject(part)) {
+    return NO_EDIT
+  }
+  return {
+    copy: textOrNull(part['copy']),
+    differs: part['differs'] === true,
+    factFileChanged: part['fact_file_changed'] === true,
+    kept: strings(part['kept']) ?? [],
+  }
+}
+
+/** The key of the row of the fact drawn at `index`, which opens its file; a fact's file can be named by more than one fact. */
 export function detailsKey(index: number): string {
   return `details:${index}`
 }
@@ -243,17 +299,29 @@ export function factsTopicKey(index: number): string {
   return `facts-topic:${index}`
 }
 
-/** The key of `show` on the evidence row drawn at `index`. */
+/** The key of the evidence row drawn at `index`, which shows its source. */
 export function showKey(index: number): string {
   return `show:${index}`
 }
 
 export type FactFileActions = { show: (index: number, evidence: Evidence) => Promise<void> }
 
+/**
+ * What the view of a fact file draws its correction and its editing copy from: the press of the
+ * field and that of keep or discard, how curation stands, and the presses.
+ */
+export type FactFileCorrection = {
+  pressed: BandPress | undefined
+  curation: AnswersCuration
+  actions: CorrectActions
+  edit: { pressed: BandPress | undefined; actions: EditActions }
+}
+
 export type FactsActions = {
   details: (file: string) => Promise<void>
   showNote: (note: string) => Promise<void>
   showTopic: (name: string) => Promise<void>
+  search: (value: string) => Promise<void>
 }
 
 export function textOrNull(value: unknown): string | null {
@@ -266,29 +334,34 @@ function counts(topic: TopicCount): string {
   return topic.current === 0 ? facts : `${facts}, ${topic.current} current`
 }
 
-/** The tab's view: what every session starts with, then the topics, each part under when a session gets it. */
-export function factsPane($: EngineInterface, e: ResolveInput, look: FactsLook, actions: FactsActions, columns: number) {
+/**
+ * The tab's view: the field `search`, then what every session starts with, then the topics, each
+ * part under when a session gets it. `nowMs` is the moment a note's day is said against.
+ */
+export function factsPane($: EngineInterface, e: ResolveInput, look: FactsLook, actions: FactsActions, columns: number, nowMs: number) {
   const ui = $.ui.resolve(e)
+  // The search needs no distillate: the field stands while it is read, and where it could not be.
+  const field = searchField($, e, { search: actions.search }, columns)
   if (look.state !== 'read') {
     const line =
       look.state === 'reading' ? said(ui, READING, 'quiet') : said(ui, `m2b could not read the distillate: ${plainLine(look.error)}`, 'trouble')
-    return part(ui, { key: 'facts:start', title: AT_THE_START, waits: false, columns }, [line])
+    return [field, part(ui, { key: 'facts:start', title: AT_THE_START, waits: false, columns }, [line])]
   }
   const { Box } = ui
   const start = [
     look.facts.length === 0 && look.current.length === 0 && said(ui, NOTHING_YET, 'quiet'),
     ...look.facts.map((fact, index) => {
-      const buttons: ButtonSpec[] =
-        fact.file === null ? [] : [{ key: detailsKey(index), label: 'details', kind: 'quiet', onPress: () => actions.details(fact.file ?? '') }]
+      const file = fact.file
       return (
         <Box key={`fact:${index}`} flexDirection="column">
-          {said(ui, plainLine(fact.statement))}
-          {buttons.length > 0 && pressLine(ui, buttons, null)}
+          {file === null
+            ? said(ui, plainLine(fact.statement))
+            : opensRow(ui, { key: detailsKey(index), text: plainLine(fact.statement), onPress: () => actions.details(file) })}
         </Box>
       )
     }),
     look.current.length > 0 && said(ui, CURRENT, 'strong'),
-    ...look.current.map((item, index) => currentItemRow($, e, index, item, actions.showNote)),
+    ...look.current.map((item, index) => currentItemRow($, e, index, item, actions.showNote, nowMs)),
   ]
   const topics = look.topics.length === 0
     ? [said(ui, NO_TOPICS, 'quiet')]
@@ -298,6 +371,7 @@ export function factsPane($: EngineInterface, e: ResolveInput, look: FactsLook, 
         </Box>
       ))
   return [
+    field,
     part(ui, { key: 'facts:start', title: AT_THE_START, waits: false, columns }, start),
     part(ui, { key: 'facts:topics', title: WHEN_NAMED, waits: false, columns }, topics),
   ]
@@ -323,7 +397,14 @@ function evidenceLine(item: Evidence): string {
 }
 
 /** The fact file under its own tab: its title, last day, lines, earlier values and evidence. */
-export function factFilePane($: EngineInterface, e: ResolveInput, press: string, actions: FactFileActions, columns: number) {
+export function factFilePane(
+  $: EngineInterface,
+  e: ResolveInput,
+  press: string,
+  actions: FactFileActions,
+  correction: FactFileCorrection,
+  columns: number,
+) {
   const ui = $.ui.resolve(e)
   const file = factFileNameOf(press)
   const look = factFileOf(press)
@@ -335,11 +416,15 @@ export function factFilePane($: EngineInterface, e: ResolveInput, press: string,
   const { Box } = ui
   const shown = look.evidence.slice(0, EVIDENCE_SHOWN)
   const more = look.evidence.length - shown.length
-  const facts = part(ui, { key: 'fact', title: plainLine(look.title), waits: false, columns }, [
+  const waits = look.corrections.length > 0 || look.edit.kept.length > 0
+  const facts = part(ui, { key: 'fact', title: plainLine(look.title), waits, columns }, [
+    correctionRow($, e, file, correction.pressed, correction.actions, [editButton(correction.edit.actions)], columns),
+    editRow($, e, file, look.edit, correction.edit.pressed, correction.edit.actions),
     look.until !== null && said(ui, `true until ${plainLine(look.until)}`, 'quiet'),
     ...look.lines.map(line => said(ui, plainLine(line))),
     look.earlier.length > 0 && said(ui, 'Earlier', 'strong'),
     ...look.earlier.map(line => said(ui, plainLine(line), 'quiet')),
+    waitingForTheRun($, e, look.corrections, look.edit.kept.length, correction.curation),
   ])
   if (look.evidence.length === 0) {
     return facts
@@ -348,8 +433,7 @@ export function factFilePane($: EngineInterface, e: ResolveInput, press: string,
     ...shown.map((item, index) =>
       item.state === 'read' ? (
         <Box key={`evidence:${index}`} flexDirection="column">
-          {said(ui, evidenceLine(item))}
-          {pressLine(ui, [{ key: showKey(index), label: 'show', kind: 'quiet', onPress: () => actions.show(index, item) }], null)}
+          {opensRow(ui, { key: showKey(index), text: evidenceLine(item), onPress: () => actions.show(index, item) })}
         </Box>
       ) : (
         said(ui, evidenceLine(item), 'trouble')

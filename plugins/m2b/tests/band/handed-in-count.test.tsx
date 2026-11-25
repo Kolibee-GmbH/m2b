@@ -25,6 +25,8 @@ import {
   start,
   startView,
   viewButtons,
+  NOTHING_AT_ALL,
+  texts,
 } from './harness'
 import type { Files } from './harness'
 
@@ -60,7 +62,8 @@ test('while proposals a session handed in wait for a run, the part "m2b" of the 
   expect(await lookOf(ui, TWO_HANDED_IN)).toEqual(DIM)
   expect((await buttonsAt(ui, ROW)).map(button => button.key)).toEqual([CURATE_NOW])
   // They wait for the run, not for the person: the part of what waits has no row for them.
-  expect(await partLines(ui, 'waits')).toEqual(['Nothing waits for you.'])
+  // Nothing waits and nothing is due: both are one quiet line.
+  expect(await texts(ui)).toContain(NOTHING_AT_ALL)
 
   // One is said in the singular, and once a run took them in the line is gone.
   fake.handedInWaiting = 1

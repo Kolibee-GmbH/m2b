@@ -140,6 +140,27 @@ def _checked(name: str) -> NoteName | None:
     return None
 
 
+def fact_file_named(store: Store, name: str) -> str:
+    """The path of the fact file ``name`` names, for a capture that is about it.
+
+    Refuses with ``SourceRefusedError``, before the store is touched, every name that is no fact
+    file's: a path, the distillate, a note's name. A lesson lies under ``memory/lessons/`` and is
+    named only by a path, so it is refused as well. ``SourceNotFoundError`` when ``memory/`` holds
+    no such file; a fact file that is not downloaded is named all the same, since only its name is
+    kept.
+    """
+    if _checked(name) is not None:
+        raise SourceRefusedError(f"{name} is a note, not a fact file: give the name of a fact file of memory/")
+    relative = f"{MEMORY}/{name}"
+    try:
+        found = _located(store.scan(MEMORY), relative, name)
+    except SourceNotFoundError as error:
+        raise SourceNotFoundError(f"no fact file is named {name} in {MEMORY}/") from error
+    if found is not None and not found.evicted:
+        raise SourceRefusedError(found.reason)
+    return relative
+
+
 def _fact_file(store: Store, name: str) -> Source:
     relative = f"{MEMORY}/{name}"
     found = _located(store.scan(MEMORY), relative, name)

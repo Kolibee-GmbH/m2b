@@ -23,6 +23,7 @@ import {
   start,
   startView,
   texts,
+  NOTHING_AT_ALL,
 } from './harness'
 import type { Files } from './harness'
 
@@ -269,7 +270,8 @@ test('keep completes the candidate and drop drops it', async ($, on) => {
   // The look before each write reads the tasks alone, without the status and its probes.
   expect(fake.calls.slice(before)[0]).toEqual(['band', '--json', '--tasks-only'])
   expect(await answerKeys(ui)).toEqual([])
-  expect(await texts(ui)).toContain('Nothing waits for you.')
+  // Nothing waits and nothing is due: both are one quiet line.
+  expect(await texts(ui)).toContain(NOTHING_AT_ALL)
   await ui.unmount()
 })
 

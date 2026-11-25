@@ -20,6 +20,7 @@ import {
   start,
   startView,
   texts,
+  NOTHING_AT_ALL,
 } from './harness'
 import type { ShownPiece } from './harness'
 
@@ -100,7 +101,8 @@ test('ok closes the review after the undo window, and undo within it writes noth
   await clock.advance(UNDO_MS)
   expect(fake.writes()).toEqual([['tasks', 'complete', '--', 'r1']])
   expect(await linesAt(ui, REVIEW_ROW)).toBeNull()
-  expect(await partLines(ui, 'waits')).toEqual(['Nothing waits for you.'])
+  // Nothing waits and nothing is due: both are one quiet line.
+  expect(await texts(ui)).toContain(NOTHING_AT_ALL)
   await ui.unmount()
 })
 

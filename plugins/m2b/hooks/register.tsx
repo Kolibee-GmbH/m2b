@@ -16,6 +16,7 @@ import type {
   BandShows,
   BandSnapshot,
   CurateRefusal,
+  EditCopy,
   FolderSwitch,
   PaneView,
 } from '../types'
@@ -24,7 +25,33 @@ import type { BandModel } from './band'
 import { tabRow } from './look'
 import { launcherPath, m2bHome, machineConfigPath, runM2b } from './m2b'
 import { timeOrDay } from './moment'
-import { NOTE_COMMAND, note } from './note'
+import { NOTE_COMMAND, note, writeNote } from './note'
+import {
+  NOTE_FIELD,
+  NOTE_PRESS,
+  UNDO_NOTE,
+  dueOf,
+  forgetNoteField,
+  giveNoteBack,
+  noteWritten,
+  takeNote,
+} from './note-field'
+import type { NoteFieldActions, TakenNote } from './note-field'
+import {
+  CORRECT_FIELD,
+  CORRECT_PRESS,
+  UNDO_CORRECT,
+  correctionWritten,
+  forgetCorrection,
+  giveCorrectionBack,
+  openCorrection,
+  takeCorrection,
+  writeCorrection,
+} from './correct-field'
+import type { CorrectActions, TakenCorrection } from './correct-field'
+import { forgetSearchField, searched, takeSearch } from './search-field'
+import { EDIT_PRESS, UNDO_EDIT, focusAfterUndo, forgetEdits, giveEditPressBack, openEditCopy, takeEditPress, writeEditCopy } from './edit-copy'
+import type { EditActions } from './edit-copy'
 import { isInOwnWords, isOwnPrompt, withPrompt } from './own-words'
 import {
   AS_A_DIALOG,
@@ -45,7 +72,7 @@ import {
   showPane,
 } from './pane'
 import { CLOSED_BY_HAND, closeAnswer, docksFor, staysBesideChat } from './pane-seat'
-import { BACK_TO_THE_FACT_FILE_KEY, focusKeyAfterTab, paneTabs, tabKeyAfterTurn } from './pane-tabs'
+import { BACK_TO_THE_FACT_FILE_KEY, BACK_TO_THE_TOPIC_KEY, FACT_FILE_TAB_KEY, backTabKey, focusKeyAfterTab, paneTabs } from './pane-tabs'
 import type { TabId } from './pane-tabs'
 import { plainLine, wholePath } from './plain-text'
 import {
@@ -93,6 +120,7 @@ import {
   curatingMachineOf,
   healthOf,
   isLessonStanding,
+  lessonSentencesOf,
   noRunStarted,
   parseRunAfterAnswers,
   parseRunStart,
@@ -130,19 +158,23 @@ import {
   factFilePane,
   factsOf,
   factsPane,
+  factFileNameOf,
+  factFileOf,
   fillFactFile,
   fillFacts,
   forgetFactsUnless,
   readFactFile,
   readFacts,
   showKey,
+  topicOfFactFile,
 } from './facts-tab'
-import type { Evidence, FactsActions } from './facts-tab'
+import type { Evidence, FactsActions, FromTopic } from './facts-tab'
 import { NO_LONGER_OPEN, beginTasks, fillTasks, forgetTasksUnless, heldTasks, isOpenIn, noteRefusal, readTasks, taskPressKey, tasksPane } from './tasks-tab'
 import type { OpenTask, TaskActions } from './tasks-tab'
 import { beginNote, beginSource, evidenceIndexOf, fillSource, forgetSourceUnless, noteOpening, openFile, openingOf, readSource, sourcePane } from './source-view'
 import type { SourceActions } from './source-view'
-import { beginTopic, fillTopic, forgetTopicUnless, heldTopic, readTopic, topicNameOf, topicOriginOf, topicPane } from './topic'
+import { beginTopic, fillTopic, forgetTopicUnless, heldTopic, readTopic, topicFactKey, topicNameOf, topicOriginOf, topicPane } from './topic'
+import type { TopicActions } from './topic'
 import {
   NOTE_COMMAND_LINE,
   NOTE_TOOL,
@@ -182,6 +214,8 @@ const sessionAtom = atom({ plugin: 'm2b', key: 'bandSession' } as const, null)
 const notesAtom = atom({ plugin: 'm2b', key: 'sessionNotes' } as const, null)
 const sessionNoticeAtom = atom({ plugin: 'm2b', key: 'sessionNotice' } as const, null)
 const curateNoticeAtom = atom({ plugin: 'm2b', key: 'curateNotice' } as const, null)
+// The day chosen below the overview's field `note`, `none` until a value is pressed and again after a note is written.
+const noteDayAtom = atom({ plugin: 'm2b', key: 'noteDay' } as const, 'none')
 // The command's own account of a start that failed. Its words can name a folder or a machine: they
 // are drawn, and never put into the session's state, which holds only that the start failed.
 let curateFailure: string | null = null
@@ -244,6 +278,11 @@ type BandView = {
 // The machine that curates the store, from the last answer. A setting's value: it is drawn, and
 // never put into the session's state, which every plugin can read.
 let curatingMachine: string | null = null
+// Each lesson's sentence by its name, held as `curatingMachine` is: from the answer this session
+// read itself, never in its state nor in the answer the sessions share. `readSentences` are those
+// of the last read, taken once the read is known to be for a store that is set up.
+let lessonSentences: ReadonlyMap<string, string> = new Map()
+let readSentences: ReadonlyMap<string, string> | null = null
 
 /** Runs jobs one after another, in the order they were queued. */
 function serialQueue(): <T>(job: () => Promise<T>) => Promise<T> {
@@ -271,15 +310,23 @@ async function loadView($: EngineInterface, answer: readonly string[] = BAND_ANS
     return { snapshot: failed('m2b band answered something that is not JSON'), status: COULD_NOT_LOOK, version: null, health: NO_HEALTH }
   }
   const fields = isObject(parsed) ? parsed : {}
+  // The lessons' sentences stay in this module: the view goes to the session's state and to the
+  // other sessions, and carries the lessons' counts alone. `loadNow` takes them once m2b is set up.
+  readSentences = lessonSentencesOf(fields['status']) ?? readSentences
   return {
     snapshot: snapshotOf(fields['tasks'], parseBandShows(fields['band'])),
     status: statusLine(fields['status']),
     version: typeof fields['version'] === 'string' ? fields['version'] : null,
     run: runOf(fields['status']),
     proposals: parseProposals(fields['proposals']),
-    health: healthOf(fields['status'], await $.clock.now()),
+    health: { ...healthOf(fields['status'], await $.clock.now()), ...editsNotKeptOf(fields['edits_not_kept']) },
     curatingMachine: curatingMachineOf(fields['status']),
   }
+}
+
+/** The count of editing copies that differ and are not kept; nothing where none is, as from a core before the copies, so the answer the sessions share keeps its shape. */
+function editsNotKeptOf(count: unknown): { editsNotKept?: number } {
+  return typeof count === 'number' && Number.isInteger(count) && count > 0 ? { editsNotKept: count } : {}
 }
 
 function snapshotOf(part: unknown, shows: BandShows | undefined): BandSnapshot {
@@ -347,8 +394,17 @@ async function loadNow($: EngineInterface, isForced: boolean): Promise<void> {
   await update($, runAtom, current => (view.run === undefined ? current : view.run))
   // Nor has an answer a session without proposals stored, or one m2b could not give, a word on them.
   await update($, proposalsAtom, current => view.proposals ?? current)
+  const wasCurating = (await read($, healthAtom))?.isCurating === true
   await update($, healthAtom, current => view.health ?? current)
   curatingMachine = view.health === undefined ? curatingMachine : (view.curatingMachine ?? null)
+  // A run that ended may have applied the corrections a fact file's view names as waiting.
+  if (wasCurating && view.health !== undefined && !view.health.isCurating) {
+    // Outside the band's queue: the read touches nothing it guards, and the status line waits for it.
+    $.clock.after(0, inBackground($, () => readShownFactFileAgain($)))
+  }
+  // Another session's answer, which this session did not read, leaves the sentences as they were.
+  lessonSentences = readSentences ?? lessonSentences
+  readSentences = null
   $.ui.status(view.status === null ? undefined : plainLine(view.status))
   await toastFailedRun($, view.run ?? null)
 }
@@ -455,7 +511,8 @@ function isHealth(value: unknown): value is BandHealth {
     // A band from before the button shared its answer without these: it is not taken, and m2b is asked.
     (value['curates'] === null || typeof value['curates'] === 'boolean') &&
     typeof value['isCurating'] === 'boolean' &&
-    (value['lessons'] === undefined || (Array.isArray(value['lessons']) && value['lessons'].every(isLessonStanding)))
+    (value['lessons'] === undefined || (Array.isArray(value['lessons']) && value['lessons'].every(isLessonStanding))) &&
+    (value['editsNotKept'] === undefined || Number.isInteger(value['editsNotKept']))
   )
 }
 
@@ -529,6 +586,8 @@ async function clearBand($: EngineInterface): Promise<void> {
   await update($, versionNoticeAtom, () => null)
   await update($, healthAtom, () => null)
   curatingMachine = null
+  lessonSentences = new Map()
+  readSentences = null
   await update($, runAtom, () => null)
   await update($, proposalsAtom, () => null)
   await update($, proposalsNoticeAtom, () => null)
@@ -644,21 +703,25 @@ async function sessionModel($: EngineInterface): Promise<SessionModel> {
     curateNotice: curateNoticeOf(await read($, curateNoticeAtom)),
     health: await read($, healthAtom),
     curatingMachine,
+    lessonSentences,
+    noteDay: (await read($, noteDayAtom)) ?? 'none',
     versionLine: await read($, versionNoticeAtom),
     snapshot: await read($, snapshotAtom),
     proposals: await read($, proposalsAtom),
     presses: await read($, pressesAtom),
+    nowMs: await $.clock.now(),
   }
 }
 
 /**
- * A press on a tab: the pane turns to that tab's view, and the focus goes to the tab that leads
- * back to the view that is left, which that view did not draw. Left at its place in the row of
- * buttons, the focus could stand on a button of the new view that writes. Escape leads to the
- * start view without it: it hands the keyboard back to the prompt.
+ * A press on a tab, by Enter, a click or its letter: the pane turns to that tab's view, or reads it
+ * again where it is the one shown, and the focus goes to that tab, drawn as the one shown, so the
+ * focus is the one mark in the row. Left at its place in the row of buttons, the focus could stand
+ * on a button of the new view that writes. Escape leads to the start view without it: it hands the
+ * keyboard back to the prompt.
  */
 async function turnByTab($: EngineInterface, to: TabId): Promise<void> {
-  const focusKey = await focusKeyAfterPress($, to)
+  const focusKey = focusKeyAfterTab(to)
   if (to === 'overview') {
     await backToStart($)
     await focusInPane($, focusKey)
@@ -682,16 +745,6 @@ async function turnByTab($: EngineInterface, to: TabId): Promise<void> {
   await focusMoved
 }
 
-/** Where the focus goes after a press on the tab `to`, null where what the pane shows cannot be read. */
-async function focusKeyAfterPress($: EngineInterface, to: TabId): Promise<string | null> {
-  try {
-    return focusKeyAfterTab(await read($, paneViewAtom), to, await sessionModel($))
-  } catch {
-    // The pane turns all the same.
-    return null
-  }
-}
-
 /**
  * Turns the open pane to another of its views, as a dialog. A pane that opened by itself does not
  * close on Escape; opened anew it does, and Escape on the view leads back to the one the pane
@@ -712,7 +765,8 @@ async function asDialog($: EngineInterface, view: PaneView): Promise<void> {
  * no way out of either view can keep them.
  */
 async function turnTo($: EngineInterface, view: PaneView | null): Promise<void> {
-  forgetTopicUnless(view)
+  // Before the fact file's module forgets: it names the topic a fact file was opened from.
+  forgetTopicUnless(view, topicBehind(view))
   forgetSettingsUnless(view)
   forgetTasksUnless(view)
   forgetFactsUnless(view)
@@ -731,7 +785,7 @@ async function showTopic($: EngineInterface, name: string, from: TabId = 'overvi
   beginTopic(press, name, from)
   await asDialog($, { kind: 'topic', press, isRead: false })
   // The read does not wait for the focus.
-  const focusMoved = focusInPane($, tabKeyAfterTurn(from, 'aside'))
+  const focusMoved = focusInPane($, backTabKey(from))
   if (fillTopic(press, await readTopic($, name))) {
     // The lines are the module's; this write is what draws the pane again.
     await update($, paneViewAtom, view => (view !== null && view.kind === 'topic' && view.press === press ? { ...view, isRead: true } : view))
@@ -767,7 +821,7 @@ async function drawTasks($: EngineInterface, opening: string): Promise<void> {
 }
 
 /**
- * `done` on a task: the same press as keep on a candidate, five seconds of undo, then
+ * The mark on a task: the same press as keep on a candidate, five seconds of undo, then
  * `m2b tasks complete`. Written, the tab reads the list again and the band its counts; refused,
  * the row stays and says why until the next press on it.
  */
@@ -836,20 +890,34 @@ async function showFacts($: EngineInterface, focusKey: string | null): Promise<v
   await focusMoved
 }
 
-/** `details` on a fact: its file under a tab of its own, read with `m2b source --json`; the focus on the tab that leads back. */
-async function showFactFile($: EngineInterface, file: string): Promise<void> {
+/**
+ * The press of the topic whose lines a view leads back to: a fact file opened from a topic, and a
+ * source shown from such a file, keep the topic's lines for the way back; null for any other view.
+ */
+function topicBehind(view: PaneView | null): string | null {
+  const file = view?.kind === 'fact' ? view.press : view?.kind === 'source' ? view.from : null
+  return file === null ? null : (topicOfFactFile(file)?.press ?? null)
+}
+
+/**
+ * A press on a fact's row: its file under a tab of its own, read with `m2b source --json`; the
+ * focus on the tab that leads back, `Facts` or, for a fact of a topic, the topic's tab.
+ */
+async function showFactFile($: EngineInterface, file: string, topic: FromTopic | null = null): Promise<void> {
   const opening = await newPressToken($)
-  beginFactFile(opening, file)
+  beginFactFile(opening, file, topic)
   await asDialog($, { kind: 'fact', press: opening, drawn: 0 })
-  const focusMoved = focusInPane($, tabKeyAfterTurn('facts', 'aside'))
+  const focusMoved = focusInPane($, topic === null ? backTabKey('facts') : BACK_TO_THE_TOPIC_KEY)
   if (fillFactFile(opening, await readFactFile($, file))) {
     await redrawn($, 'fact', opening)
+    // A copy made in an earlier opening of this view, its editor perhaps still open.
+    await watchShownCopy($, opening)
   }
   await focusMoved
 }
 
 /**
- * `show` on an evidence row of the fact file shown as `from`: that source under a tab of its own,
+ * A press on an evidence row of the fact file shown as `from`: that source under a tab of its own,
  * read with `m2b source --json --viewer`; the focus on the tab of the fact file, which leads back.
  */
 async function showSource($: EngineInterface, from: string, index: number, evidence: Evidence): Promise<void> {
@@ -873,7 +941,7 @@ async function showNote($: EngineInterface, note: string, back: TabId): Promise<
   const opening = await newPressToken($)
   beginNote(opening)
   await asDialog($, { kind: 'source', press: opening, from: null, drawn: 0 })
-  const focusMoved = focusInPane($, tabKeyAfterTurn(back, 'aside'))
+  const focusMoved = focusInPane($, backTabKey(back))
   if (fillSource(opening, await readSource($, note))) {
     await redrawn($, 'source', opening)
   }
@@ -882,13 +950,27 @@ async function showNote($: EngineInterface, note: string, back: TabId): Promise<
 
 /**
  * The tab of the fact file above a source: the fact file as it was drawn, which its module kept,
- * the focus on `show` of the row the source was opened from.
+ * the focus on the row the source was opened from.
  */
 async function backToFactFile($: EngineInterface, from: string): Promise<void> {
   const view = await read($, paneViewAtom)
   const index = view?.kind === 'source' ? evidenceIndexOf(view.press) : null
   await asDialog($, { kind: 'fact', press: from, drawn: 0 })
-  await focusInPane($, index === null ? tabKeyAfterTurn('facts', 'aside') : showKey(index))
+  await focusInPane($, index === null ? backTabKey('facts') : showKey(index))
+  await watchShownCopy($, from)
+}
+
+/**
+ * The topic's tab above a fact file opened from it: the topic's lines as they were drawn, which
+ * their module kept, the focus on the row of the fact the file was opened from.
+ */
+async function backToTopic($: EngineInterface, fact: string): Promise<void> {
+  const topic = topicOfFactFile(fact)
+  if (topic === null) {
+    return
+  }
+  await asDialog($, { kind: 'topic', press: topic.press, isRead: heldTopic(topic.press).state !== 'reading' })
+  await focusInPane($, topicFactKey(topic.index))
 }
 
 function sourceActions($: EngineInterface, press: string): SourceActions {
@@ -913,12 +995,53 @@ async function redrawn($: EngineInterface, kind: 'facts' | 'fact' | 'source', op
   )
 }
 
-function factsActions($: EngineInterface): FactsActions {
+/** The presses in the topic's view of the press `press`: a fact opens its file, a note's button the note. */
+function topicActions($: EngineInterface, press: string): TopicActions {
+  return {
+    details: (index, file) => showFactFile($, file, { press, index }),
+    showNote: note => showNote($, note, topicOriginOf(press)),
+  }
+}
+
+/** The presses in the tab Facts the press `opening` opened: a fact opens its file, a note's button the note, a topic its lines, and the field searches. */
+function factsActions($: EngineInterface, opening: string): FactsActions {
   return {
     details: file => showFactFile($, file),
     showNote: note => showNote($, note, 'facts'),
     showTopic: name => showTopic($, name, 'facts'),
+    search: value => searchFromFacts($, opening, value),
   }
+}
+
+/**
+ * Enter in the field `search` of the tab Facts: the store is searched as `/m2b-search` does it.
+ * Hits turn the pane to the search's view, the command's own, with the focus on `Facts`, which
+ * leads back; no hit, or a search m2b could not make, is said below the field, and the pane stays.
+ */
+async function searchFromFacts($: EngineInterface, opening: string, value: string): Promise<void> {
+  const taken = takeSearch(value)
+  if (taken === null) {
+    return
+  }
+  await redrawn($, 'facts', opening)
+  const outcome = await searchStore($, taken.text)
+  const hits = 'line' in outcome || outcome.search.total === 0 ? null : outcome.search
+  const line = 'line' in outcome ? outcome.line : hits === null ? searchSummary(outcome.search) : null
+  // A search the field forgot while it ran, at `/clear` or a resume, says nothing and turns nothing.
+  if (!searched(taken, line, 'line' in outcome ? 'trouble' : 'quiet')) {
+    return
+  }
+  const view = await read($, paneViewAtom)
+  // A pane that turned away while m2b searched is left where it is.
+  if (view?.kind !== 'facts' || view.press !== opening) {
+    return
+  }
+  if (hits === null) {
+    await redrawn($, 'facts', opening)
+    return
+  }
+  await asDialog($, { kind: 'search', search: hits })
+  await focusInPane($, backTabKey('facts'))
 }
 
 type SettingsView = Extract<PaneView, { kind: 'settings' }>
@@ -1077,7 +1200,7 @@ function settingsActions($: EngineInterface, press: string): SettingsActions {
       undoChange(press)
       await turnSettings($, press, view => ({ ...view, aside: { name, title }, drawn: view.drawn + 1 }))
       // The group stands under a tab of its own, which holds no button: the focus goes to the tab that leads back.
-      await focusInPane($, tabKeyAfterTurn('settings', 'aside'))
+      await focusInPane($, backTabKey('settings'))
     },
     choose: async (at, place, surface) => {
       const token = await newPressToken($)
@@ -1122,15 +1245,22 @@ async function viewOfPane(
     case 'proposals':
       return proposalsPane($, e, proposals, presses, await read($, proposalsNoticeAtom), proposalActions($), await answersCuration($, presses), bodyColumns)
     case 'topic':
-      return topicPane($, e, topicNameOf(view.press), heldTopic(view.press), note => showNote($, note, topicOriginOf(view.press)), bodyColumns)
+      return topicPane($, e, topicNameOf(view.press), heldTopic(view.press), topicActions($, view.press), bodyColumns, await $.clock.now())
     case 'search':
       return searchPane($, e, view.search, bodyColumns)
     case 'tasks':
       return tasksPane($, e, heldTasks(view.press), presses, taskActions($, view.press), bodyColumns)
     case 'facts':
-      return factsPane($, e, factsOf(view.press), factsActions($), bodyColumns)
-    case 'fact':
-      return factFilePane($, e, view.press, { show: (index, evidence) => showSource($, view.press, index, evidence) }, bodyColumns)
+      return factsPane($, e, factsOf(view.press), factsActions($, view.press), bodyColumns, await $.clock.now())
+    case 'fact': {
+      const correction = {
+        pressed: presses[CORRECT_PRESS],
+        curation: await answersCuration($, presses),
+        actions: correctActions($, view.press),
+        edit: { pressed: presses[EDIT_PRESS], actions: editActions($, view.press) },
+      }
+      return factFilePane($, e, view.press, { show: (index, evidence) => showSource($, view.press, index, evidence) }, correction, bodyColumns)
+    }
     case 'source':
       return sourcePane($, e, view.press, sourceActions($, view.press), bodyColumns)
     case 'review': {
@@ -1277,6 +1407,292 @@ function sessionActions($: EngineInterface): SessionActions {
       await press($, FOLDER_PRESS, change, folderWrite($, change, folder), UNDO_FOLDER)
     },
     undoFolder: () => undo($, FOLDER_PRESS),
+    note: noteFieldActions($),
+  }
+}
+
+/**
+ * `correct` in the view of the fact file the press `opening` opened: the field opens for that
+ * file; Enter takes the text for a press that waits five seconds for `undo`, then writes it as a
+ * capture about the file and reads the file again, so the view names the correction as the core
+ * found it in the inbox. Undo puts the text back.
+ */
+function correctActions($: EngineInterface, opening: string): CorrectActions {
+  return {
+    open: async () => {
+      const file = factFileNameOf(opening)
+      if (file === '') {
+        return
+      }
+      openCorrection(file)
+      await redrawn($, 'fact', opening)
+      await focusInPane($, CORRECT_FIELD)
+    },
+    keep: async value => {
+      // A correction whose write has not landed yet keeps the field's press; the text stays in the field.
+      if ((await read($, pressesAtom))[CORRECT_PRESS] !== undefined) {
+        return
+      }
+      const taken = takeCorrection(factFileNameOf(opening), value)
+      if (taken === null) {
+        return
+      }
+      await press($, CORRECT_PRESS, 'correct', correctionWrite($, taken), UNDO_CORRECT)
+    },
+    undo: async () => {
+      // A press whose window ended while undo was on its way is written: its text stays out of the field.
+      if (!(await takeBack($, CORRECT_PRESS))) {
+        return
+      }
+      giveCorrectionBack()
+      await redrawn($, 'fact', opening)
+      await focusInPane($, CORRECT_FIELD)
+    },
+  }
+}
+
+/**
+ * A press on the shown fact file's own tab: the file is read again, with what became of its
+ * editing copy, and the band reads again, so the overview counts a copy saved since it last read.
+ */
+async function readFactFileByItsTab($: EngineInterface): Promise<void> {
+  $.clock.after(0, inBackground($, () => refresh($, true)))
+  await readShownFactFileAgain($)
+}
+
+// While the core makes or opens a copy: a second press on `edit` would start the editor twice.
+let isOpeningACopy = false
+
+/**
+ * The editing copy of the fact file the press `opening` opened. `edit` has the core make the copy,
+ * or find the one there is, and open it; the view reads the file again to name the copy, and the
+ * focus goes to the file's own tab, whose press reads it again once the copy is saved. `keep the
+ * edit` and `discard` wait five seconds for `undo`, then keep the copy for the next curation run or
+ * remove it, and the file is read again.
+ */
+function editActions($: EngineInterface, opening: string): EditActions {
+  const settled = (choice: EditCopy) => async () => {
+    // A press of keep or discard whose write has not landed yet keeps the copy as it is.
+    if ((await read($, pressesAtom))[EDIT_PRESS] !== undefined) {
+      return
+    }
+    const file = factFileNameOf(opening)
+    if (file === '' || !takeEditPress(file)) {
+      return
+    }
+    await press($, EDIT_PRESS, choice, editWrite($, file, choice), UNDO_EDIT)
+  }
+  return {
+    open: async () => {
+      const file = factFileNameOf(opening)
+      if (file === '' || isOpeningACopy) {
+        return
+      }
+      isOpeningACopy = true
+      try {
+        await openEditCopy($, file)
+      } finally {
+        isOpeningACopy = false
+      }
+      await readShownFactFileAgain($, file)
+      await focusInPane($, FACT_FILE_TAB_KEY)
+    },
+    keep: settled('keep the edit'),
+    discard: settled('discard'),
+    undo: async () => {
+      const choice = (await read($, pressesAtom))[EDIT_PRESS]?.action
+      // A press whose window ended while undo was on its way is written: the copy is kept or gone.
+      if (!(await takeBack($, EDIT_PRESS))) {
+        return
+      }
+      giveEditPressBack()
+      await redrawn($, 'fact', opening)
+      await focusInPane($, focusAfterUndo(choice === 'keep the edit' ? 'keep the edit' : 'discard'))
+    },
+  }
+}
+
+/** Keeps or removes the copy, then reads its fact file again where a view of it is shown. */
+function editWrite($: EngineInterface, file: string, choice: EditCopy): PressWrite {
+  return async () => {
+    await writeEditCopy($, file, choice)
+    // Outside the band's queue, which this write holds: the read touches nothing it guards.
+    $.clock.after(0, inBackground($, () => readShownFactFileAgain($, file)))
+    // The band counts the copies not kept, and the inbox, again.
+    return true
+  }
+}
+
+/**
+ * Reads the fact file the pane shows again, where it shows one, and `only` where that is given:
+ * its lines, the corrections and kept edits that wait, and its editing copy, which it then watches.
+ */
+async function readShownFactFileAgain($: EngineInterface, only?: string): Promise<void> {
+  const view = await read($, paneViewAtom)
+  const file = view?.kind === 'fact' ? factFileNameOf(view.press) : ''
+  if (view?.kind !== 'fact' || file === '' || (only !== undefined && file !== only)) {
+    return
+  }
+  if (fillFactFile(view.press, await readFactFile($, file))) {
+    await redrawn($, 'fact', view.press)
+  }
+  await watchShownCopy($, view.press)
+}
+
+// How often the time of an editing copy's last save is looked at while its fact file is shown.
+const COPY_LOOK_MS = 2_000
+
+/**
+ * The editing copy watched: the opening of the fact file's view it belongs to, its path, the time
+ * of its last save at the last look (null before the first, or where it cannot be looked at), and
+ * the number of the chain of looks that watches it. Held by this module alone: the path names the
+ * file. A copy made again at the same path after a keep or discard gets a chain of its own, and a
+ * look of an older chain ends.
+ */
+let watched: { opening: string; copy: string; savedAtMs: number | null; chain: number } | null = null
+let chains = 0
+
+/**
+ * Watches the editing copy of the fact file the opening `opening` shows, where it has one: every
+ * two seconds the time of its last save is looked at (`$.fs.stat`, no call of m2b), and when it
+ * changed the file is read again and the band with it, so a save in the editor shows `keep the
+ * edit` without a press. A new chain knows no time yet, so its first look reads the file once: a
+ * save between a read and the first look is not lost. It stops once the view is left or the copy
+ * is gone; where a hook refuses the look, the press on the file's tab stays the way.
+ */
+async function watchShownCopy($: EngineInterface, opening: string): Promise<void> {
+  const look = factFileOf(opening)
+  const copy = look.state === 'read' ? look.edit.copy : null
+  if (copy === null) {
+    watched = watched?.opening === opening ? null : watched
+    return
+  }
+  if (watched?.opening === opening && watched.copy === copy) {
+    return
+  }
+  chains += 1
+  const chain = chains
+  watched = { opening, copy, savedAtMs: null, chain }
+  $.clock.after(COPY_LOOK_MS, inBackground($, () => lookAtCopy($, chain)))
+}
+
+/** One look of the chain `chain` at its copy; the next is scheduled while the chain is the one watching. */
+async function lookAtCopy($: EngineInterface, chain: number): Promise<void> {
+  const mine = watched
+  if (mine === null || mine.chain !== chain) {
+    return
+  }
+  const view = await read($, paneViewAtom)
+  if (view?.kind !== 'fact' || view.press !== mine.opening) {
+    watched = watched?.chain === chain ? null : watched
+    return
+  }
+  const savedAtMs = await savedAt($, mine.copy)
+  try {
+    // A stat refused before and now says nothing new; the first look of a chain that can look reads once.
+    if (watched?.chain === chain && savedAtMs !== null && savedAtMs !== mine.savedAtMs) {
+      // The time this look saw is the next look's start: a save during the read below is seen then.
+      mine.savedAtMs = savedAtMs
+      $.clock.after(0, inBackground($, () => refresh($, true)))
+      await readShownFactFileAgain($)
+    }
+  } finally {
+    if (watched?.chain === chain) {
+      $.clock.after(COPY_LOOK_MS, inBackground($, () => lookAtCopy($, chain)))
+    }
+  }
+}
+
+/** The time of the last save of `copy`, null where it cannot be looked at. */
+async function savedAt($: EngineInterface, copy: string): Promise<number | null> {
+  try {
+    return (await $.fs.stat(copy)).mtimeMs
+  } catch {
+    return null
+  }
+}
+
+/** Writes the correction Enter took, then reads its fact file again where a view of it is shown. */
+function correctionWrite($: EngineInterface, taken: TakenCorrection): PressWrite {
+  return async () => {
+    const refused = await writeCorrection($, taken)
+    correctionWritten(taken, refused)
+    if (refused === null) {
+      // Outside the band's queue, which this write holds: the read touches nothing it guards.
+      $.clock.after(0, inBackground($, () => readShownFactFileAgain($, taken.file)))
+    }
+    // The band counts the capture in the inbox.
+    return refused === null
+  }
+}
+
+/** Forgets what was typed into the pane's fields: the field `note`, with its day back to `no day`, every correction, what a press on an editing copy could not do, and the field `search`. */
+async function forgetTypedFields($: EngineInterface): Promise<void> {
+  forgetCorrection()
+  forgetEdits()
+  forgetSearchField()
+  forgetNoteField()
+  await update($, noteDayAtom, () => 'none')
+  // The tab Facts, shown, draws its field empty at once, without a search that was running.
+  const view = await read($, paneViewAtom)
+  if (view?.kind === 'facts') {
+    await redrawn($, 'facts', view.press)
+  }
+}
+
+/**
+ * The field `note`: Enter takes the text for a press that waits five seconds for `undo`, as keep
+ * and drop do, and then writes it with a task due the day chosen; the session counts it and the
+ * status line reads again, as after `/m2b-note`. Undo puts the text and its day back.
+ */
+function noteFieldActions($: EngineInterface): NoteFieldActions {
+  return {
+    keep: async value => {
+      // A note whose write has not landed yet keeps the field's press; the text stays in the field.
+      if ((await read($, pressesAtom))[NOTE_PRESS] !== undefined) {
+        return
+      }
+      const taken = takeNote(value, (await read($, noteDayAtom)) ?? 'none')
+      if (taken === null) {
+        return
+      }
+      await press($, NOTE_PRESS, 'note', noteWrite($, taken), UNDO_NOTE)
+    },
+    undo: async () => {
+      // A press whose window ended while undo was on its way is written: its text stays out of the field.
+      if (!(await takeBack($, NOTE_PRESS))) {
+        return
+      }
+      const day = giveNoteBack()
+      if (day !== null) {
+        await update($, noteDayAtom, () => day)
+        await focusInPane($, NOTE_FIELD)
+      }
+    },
+    chooseDay: async day => {
+      await update($, noteDayAtom, () => day)
+      // The pressed value becomes text; left in place the focus would stand on the next value, and
+      // what follows a day is the text.
+      await focusInPane($, NOTE_FIELD)
+    },
+  }
+}
+
+/**
+ * Writes the note Enter took, held here and not read again when the write comes: a write that waits
+ * behind a read of the band still writes what was pressed, and only undo, through the press's token,
+ * takes it back.
+ */
+function noteWrite($: EngineInterface, taken: TakenNote): PressWrite {
+  return async () => {
+    const outcome = await writeNote($, taken.text, dueOf(taken.day, await $.clock.now()), () => isSetUp($))
+    noteWritten(taken, outcome)
+    if (!outcome.isWritten) {
+      return false
+    }
+    await update($, noteDayAtom, () => 'none')
+    await countNote($)
+    return true
   }
 }
 
@@ -1593,6 +2009,11 @@ async function press(
 }
 
 async function undo($: EngineInterface, id: string): Promise<void> {
+  await takeBack($, id)
+}
+
+/** Takes a press back while it waits; answers whether it did, false once its write has begun. */
+async function takeBack($: EngineInterface, id: string): Promise<boolean> {
   let isUndone = false
   await update($, pressesAtom, presses => {
     const pressed = presses[id]
@@ -1603,6 +2024,7 @@ async function undo($: EngineInterface, id: string): Promise<void> {
     undoTimers.get(id)?.cancel()
     undoTimers.delete(id)
   }
+  return isUndone
 }
 
 /**
@@ -1823,6 +2245,7 @@ export const register: Register = on => {
     }
     undoTimers.clear()
     lockTimers.clear()
+    await forgetTypedFields($)
     lookTimers.clear()
     isOpeningDue = true
     await carryPressesOver($)
@@ -1875,6 +2298,8 @@ export const register: Register = on => {
         openSoon($)
       }
       await forgetSession($)
+      // A note half typed belongs to the conversation that ended, as what the last write said does.
+      await forgetTypedFields($)
       // A topic's lines were opened from the list of the conversation that ended.
       if ((await read($, paneViewAtom))?.kind === 'topic') {
         await turnTo($, null)
@@ -2120,7 +2545,7 @@ export const register: Register = on => {
     const { Box } = ui
     return (
       <Box flexDirection="column">
-        <Box marginBottom={1}>{tabRow(ui, paneTabs(view, proposals?.waiting.length ?? 0, to => turnByTab($, to), from => backToFactFile($, from)))}</Box>
+        <Box marginBottom={1}>{tabRow(ui, paneTabs(view, proposals?.waiting.length ?? 0, to => turnByTab($, to), { toFactFile: from => backToFactFile($, from), toTopic: fact => backToTopic($, fact), readFactFileAgain: () => readFactFileByItsTab($) }))}</Box>
         {await viewOfPane($, e, view, proposals, e.props.bodyColumns)}
       </Box>
     )

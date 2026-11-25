@@ -58,11 +58,16 @@ def capture(
     now: datetime.datetime | None = None,
     from_candidate: str | None = None,
     from_proposal: str | None = None,
+    about: str | None = None,
+    kind: str | None = None,
+    base: str | None = None,
 ) -> CaptureResult:
     """Writes the capture; empty text or a bad source raise ``ValueError`` before anything is written.
 
     ``from_candidate`` and ``from_proposal`` name what harvest made the capture from, so a rerun
-    knows its own capture.
+    knows its own capture. ``about`` names the fact file the capture corrects; the caller has
+    checked that it is one. ``kind`` and ``base`` mark an edit of that fact file and the hash of
+    the file it was made from.
     """
     if not text.strip():
         raise ValueError("there is nothing to capture: the text is empty")
@@ -71,7 +76,13 @@ def capture(
     created = (now or datetime.datetime.now()).astimezone().replace(microsecond=0)
     name = NoteName.for_capture(created, source)
     body = text if text.endswith("\n") else text + "\n"
-    origin = {frontmatter.FROM_CANDIDATE: from_candidate, frontmatter.FROM_PROPOSAL: from_proposal}
+    origin = {
+        frontmatter.FROM_CANDIDATE: from_candidate,
+        frontmatter.FROM_PROPOSAL: from_proposal,
+        frontmatter.ABOUT: about,
+        frontmatter.KIND: kind,
+        frontmatter.BASE: base,
+    }
 
     task_id: str | None = None
     pending: datetime.date | None = None

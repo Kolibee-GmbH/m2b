@@ -58,6 +58,8 @@ SETTINGS_ROWS = 38
 PANE_FONT_SIZE = 14
 TAB = "\t"
 SHIFT_TAB = "\x1b[Z"
+# The letter of a tab of the pane, which turns the pane to it while the pane holds the keys.
+TAB_LETTERS = {"overview": "o", "proposals": "p", "facts": "f"}
 # A press in the pane writes after five seconds, in which it can be taken back.
 PRESS_SECONDS = 6.5
 KEPT_MODEL = "sonnet"
@@ -214,30 +216,29 @@ def pane_beats(command: str, presses: Sequence[Beat]) -> tuple[Beat, ...]:
 
 
 def answering_beats() -> tuple[Beat, ...]:
-    """To the proposals by their tab, keep the first and take that back, keep it again and let it be
-    written, back to the start view by its tab.
+    """To the proposals by their tab's letter, keep the first and take that back, keep it again and
+    let it be written, back to the start view by the letter of its tab.
 
-    The tabs are the first buttons of every view: ``Proposals`` is one Tab into the start view, the
-    first ``keep`` six Tabs past ``Overview``, where the focus stands after the turn, and from the
-    row that moved up once the answer is written ``Overview`` is six back."""
+    The tabs are the first buttons of every view: after the turn the focus stands on ``Proposals 3``,
+    and the first ``keep`` is six Tabs past it (four tabs, ``keep all``, then it)."""
     return pane_beats(
         "/m2b-pane",
         (
-            *pressed([TAB, ENTER], 2.0),
+            Beat(2.0, TAB_LETTERS["proposals"]),
             *pressed([*[TAB] * 6, ENTER], 2.5),
             Beat(1.5, ENTER),
             Beat(1.5, ENTER),
-            *pressed([*[SHIFT_TAB] * 6, ENTER], PRESS_SECONDS + 1.5),
+            Beat(PRESS_SECONDS + 1.5, TAB_LETTERS["overview"]),
             Beat(3.0),
         ),
     )
 
 
 # How many Tabs lead from the prompt to ``sonnet`` of the model of curation in the settings of the
-# demo store: five tabs of the pane, then every value that is not in force of the settings above
-# it (two each of where the band stands and of the tasks in the band, one each of the topics, of
-# reading the sessions and of handing in), then it.
-TABS_TO_THE_MODEL = 13
+# demo store: the six tabs of the pane, the one shown among them, then every value that is not in
+# force of the settings above it (two each of where the band stands and of the tasks in the band,
+# one each of the topics, of reading the sessions and of handing in), then it.
+TABS_TO_THE_MODEL = 14
 # How many Shift+Tabs lead back to it from the row of "About this setup", the last button of the
 # view: every value that is not in force of the settings below the model (one each of the pause,
 # of the run after the answers, of the git commit and of the language), then it.

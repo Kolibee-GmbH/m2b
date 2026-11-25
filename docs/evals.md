@@ -13,11 +13,11 @@ yourself.
 
 | | |
 |---|---|
-| Day | 2026-11-23 |
+| Day | 2026-11-25 |
 | m2b | 0.15.0 |
-| Claude Code | 2.1.330 |
-| Model | `claude-sonnet-5-5` |
-| Runs | 102 |
+| Claude Code | 2.1.332 |
+| Model | `claude-opus-5-5` |
+| Runs | 102, of which 1 ended in an error and count as failed |
 
 | Case | With m2b | Without m2b |
 |---|---|---|

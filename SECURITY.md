@@ -107,6 +107,15 @@ the store or delete the archive, but it can:
 - create tasks in your task list;
 - move its own and other waiting captures into the archive with misleading notes.
 
+A capture marked as an edit (`kind: edit`, as `m2b store edit --keep` writes it) does not need the
+model for the fact files: the run's harvest step puts its text in place as the fact file it names,
+in code. Whoever can write `inbox/` can write such a capture. It replaces only a fact file directly
+under `memory/`, never `MEMORY.md` or a lesson, only while that file has the hash the capture
+names, and only with a text in a fact file's form, with no frontmatter key but `until` and no
+character that hides or reorders text; anything else is archived with the reason and named in
+the review task. `memory/` as it was before is kept as the copy the review names, and the facts
+line the run then rewrites for it is listed in the review like any other.
+
 Reading outside the store stays out of reach for whoever can put a file there, too: an
 integration, another device, a sync service. Below the store's folder m2b follows no symlink,
 whatever it points at. Its commands and hooks neither list nor read one and write through no
@@ -392,6 +401,36 @@ session that reads it, and a run adds a proposal with the same text once.
 A store that is a git repository keeps every proposal a run committed in its history, a dropped
 one too, beyond the 90 days the proposals file remembers it. That holds for the proposals of a
 reading as well.
+
+## What you type into the pane
+
+A note typed into the field `note` of the m2b pane is held by the field and by the band's module
+until it is written as a capture, never in the session's state: another plugin that reads or
+watches m2b's state sees that a note waits for `undo`, and the day chosen, but not its words. A
+correction typed into the field `what is right` of a fact's file is held the same way, together
+with the name of the fact file it corrects, which can name a customer. What you type into the
+field `search` of the tab `Facts` stays in the band's module until Enter. The search Enter starts
+is the view `/m2b-search` makes, which keeps its words and its hits in the session's state, as
+the command does.
+
+`edit` in a fact's file makes a copy of that file on this machine, outside the store, in
+`~/.local/state/m2b/edits/<name>`, beside the hash of the file it was made from: the file readable
+and writable by you alone (0600), in a folder only you can enter (0700). The copy holds the
+fact file whole, as long as it lies there; `keep the edit` or `discard` removes it. The band
+keeps the copy's path and the fact file's name in its module, never in the session's state, and
+the band's shared answer counts the copies that differ without naming one. m2b opens the copy
+with the system's own way of opening a text file, `open -t` on a Mac (not in a session over SSH)
+and `xdg-open` on Linux where a display is named, and with nothing else: it never starts
+`$EDITOR`, `$VISUAL` or an editor a config names, since a project's settings can set the
+environment and the config of a session. Neither the copy nor the editor writes `memory/`:
+`keep the edit` hands the copy to the inbox as a capture, and only the next curation run, on the
+curating machine, puts it in place, while the fact file still has the hash the copy was made from
+([docs/curation.md](docs/curation.md#correcting-what-a-run-filed)).
+
+The input itself is another matter. Claude Code hands each key typed into a pane to the hooks every
+plugin may put on that input (`ui.input`), as it hands a prompt you submit to the hooks on the
+prompt; such a hook sees the note, the correction and the search as they are typed. A plugin with
+code of its own runs as you.
 
 ## The tools the model calls
 

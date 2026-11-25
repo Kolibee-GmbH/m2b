@@ -1,0 +1,91 @@
+{
+  "description": "E44 a fact file rewritten whole: `m2b store edit dana.md` makes a copy in the machine's state folder (over SSH nothing opens, the path is named), the owner rewrites the copy, `--keep` writes it into the inbox as an edit with the hash of the fact file; the curation run's harvest step puts the text in place before ingest, whose step (replayed by the stub under the step's real rules) only links the capture and rewrites the facts line; the run succeeds, the fact file holds the owner's text, and the review task names the rewritten line.",
+  "model": {
+    "skills": {
+      "/m2b:ingest": {
+        "actions": [
+          {
+            "tool": "Bash",
+            "command": "m2b ingest list --json"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest normalize --json"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest list --json"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/memory/MEMORY.md"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/inbox/<capture:cli>"
+          },
+          {
+            "tool": "Read",
+            "file_path": "<store>/memory/dana.md"
+          },
+          {
+            "tool": "Edit",
+            "file_path": "<store>/memory/dana.md",
+            "old_string": "- [[20261003T080000Z-cli-d4e5.md]]\n",
+            "new_string": "- [[20261003T080000Z-cli-d4e5.md]]\n- [[<capture:cli>]]\n"
+          },
+          {
+            "tool": "Edit",
+            "file_path": "<store>/memory/MEMORY.md",
+            "old_string": "- Dana lives in Zurich (dana.md)",
+            "new_string": "- Dana lives in Basel since October, works at Acme (dana.md)"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest note <capture:cli> 'filed: edit of dana.md, its facts line rewritten'"
+          },
+          {
+            "tool": "Bash",
+            "command": "m2b ingest finish <capture:cli>"
+          }
+        ]
+      }
+    }
+  },
+  "steps": [
+    {
+      "run": ["m2b", "store", "edit", "--json", "dana.md"],
+      "env": {"SSH_CONNECTION": "sb-test 22 sb-test 22"},
+      "stdout": "\"opened\": false",
+      "save": {"copy": "\"copy\": \"([^\"]+)\""}
+    },
+    {
+      "run": [
+        "python3",
+        "-c",
+        "import pathlib, sys; copy = pathlib.Path(sys.argv[1]); copy.write_text(copy.read_text().replace('- Lives in Zurich.', '- Lives in Basel since October.\\n- Works at Acme.'))",
+        "{copy}"
+      ]
+    },
+    {
+      "run": ["m2b", "store", "edit", "--keep", "--json", "dana.md"],
+      "stdout": "\"kept\": \"inbox/"
+    },
+    {
+      "run": ["m2b", "source", "--json", "--viewer", "dana.md"],
+      "stdout": "Lives in Zurich"
+    },
+    {
+      "run": ["m2b", "curate", "--force"],
+      "stdout": "\\Athe curation run succeeded\\ninbox: 1 capture filed, 0 waiting; the review task in your list says what to look at\\n"
+    },
+    {
+      "run": ["m2b", "source", "--json", "--viewer", "dana.md"],
+      "stdout": "Works at Acme"
+    },
+    {
+      "run": ["m2b", "band", "--json"],
+      "stdout": "Dana lives in Basel since October"
+    }
+  ]
+}

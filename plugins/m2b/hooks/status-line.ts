@@ -1,5 +1,5 @@
 import type { BandHealth, CurateRefusal, LessonStanding } from '../types'
-import { timeOrDay } from './moment'
+import { dayInWords, timeOrDay } from './moment'
 import { plainLine } from './plain-text'
 
 export const COULD_NOT_LOOK = 'could not look'
@@ -49,6 +49,20 @@ export function healthOf(answer: unknown, nowMs: number): BandHealth {
   }
 }
 
+/**
+ * The sentence of each lesson `m2b status --json` names in its part `lessons`, by the lesson's name:
+ * the owner's words, which the answer the sessions share leaves out. Null where the answer has no
+ * such part, as one of the tasks alone, which says nothing of the lessons.
+ */
+export function lessonSentencesOf(status: unknown): ReadonlyMap<string, string> | null {
+  const each = isObject(status) && isObject(status['lessons']) ? status['lessons']['each'] : undefined
+  if (!Array.isArray(each)) {
+    return null
+  }
+  const named = each.filter(isObject).filter(lesson => typeof lesson['name'] === 'string' && typeof lesson['sentence'] === 'string')
+  return new Map(named.map(lesson => [String(lesson['name']), String(lesson['sentence'])]))
+}
+
 function lessonsPart(part: unknown): { lessons?: LessonStanding[] } {
   const each = isObject(part) ? part['each'] : undefined
   const lessons = Array.isArray(each) ? each.map(lessonOf).filter((one): one is LessonStanding => one !== null) : []
@@ -94,18 +108,27 @@ function halfToEven(exact: number): number {
 }
 
 /**
- * How one lesson does since it was kept, as `m2b status` says it: "lesson proof.md (action, kept
- * 2026-11-20): fired 1 time in 40 Bash calls (2%), corrected again 1 time: not working".
+ * How one lesson does since it was kept, in words, for the line below its sentence: "kept 20 Nov,
+ * not corrected again", and for a lesson about a command "kept 20 Nov, fired 1 time in 40 Bash
+ * calls (2%), corrected again 1 time: not working". `nowMs` is the moment the year is said against.
  */
-export function lessonLine(lesson: LessonStanding): string {
-  const parts: string[] = []
+export function lessonStanding(lesson: LessonStanding, nowMs: number): string {
+  const parts = [`kept ${dayInWords(lesson.kept, nowMs)}`]
   if (lesson.fired !== undefined && lesson.calls !== undefined) {
     const share = lesson.calls > 0 ? ` (${halfToEven((100 * lesson.fired) / lesson.calls)}%)` : ''
     parts.push(`fired ${times(lesson.fired)} in ${lesson.calls} Bash calls${share}`)
   }
-  parts.push(lesson.correctedAgain === null ? 'corrections not counted' : `corrected again ${times(lesson.correctedAgain)}`)
-  const verdict = isNotWorking(lesson) ? ': not working' : ''
-  return `lesson ${plainLine(lesson.name)} (${plainLine(lesson.kind)}, kept ${plainLine(lesson.kept)}): ${parts.join(', ')}${verdict}`
+  if (lesson.correctedAgain === null) {
+    parts.push('corrections not counted')
+  } else {
+    parts.push(lesson.correctedAgain === 0 ? 'not corrected again' : `corrected again ${times(lesson.correctedAgain)}: not working`)
+  }
+  return parts.join(', ')
+}
+
+/** What a lesson says: its sentence among `sentences`, where this session read it, else its file's name. */
+export function lessonTitle(lesson: LessonStanding, sentences: ReadonlyMap<string, string>): string {
+  return plainLine(sentences.get(lesson.name) ?? lesson.name)
 }
 
 /** A lesson the owner corrected Claude on again since it was kept. */
