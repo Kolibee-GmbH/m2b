@@ -620,7 +620,7 @@ The tab `Facts` shows what m2b knows, read with `m2b distillate topics --json` t
 turn the pane to it, in two parts named by when a session gets them. **Every session starts
 with** holds the facts outside any topic, each a row you press to open its fact file where its
 line names one (it ends in `›`), and the current items, each as its words and since when it holds. **When a prompt names them** holds every topic as a button with its
-counts (`2 facts, 1 current`); a press opens [its lines](#a-topics-lines) as the button in "This
+counts (`2 facts, 1 current`; a count of none is left out); a press opens [its lines](#a-topics-lines) as the button in "This
 session" does, with the focus on the tab `Facts`, which leads back.
 
 Above the two parts stands a field `search`, also while the distillate is read and where it could
