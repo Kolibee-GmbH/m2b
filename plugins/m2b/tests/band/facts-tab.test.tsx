@@ -152,6 +152,29 @@ test('the tab Facts reads the distillate once and shows what every session start
   await ui.unmount()
 })
 
+test('a count of none is not said beside a topic: no "0 facts" where it holds only current items, nothing where it holds neither', async ($, on) => {
+  // Covers: B226
+  const fake = fullDistillate()
+  fake.distillate = {
+    ...fake.distillate,
+    topics: [
+      { name: 'Northwind', facts: 3, current: 0 },
+      { name: 'Acme Ltd', facts: 0, current: 2 },
+      { name: 'Globex', facts: 0, current: 0 },
+    ],
+  }
+  await start($, on, fake)
+
+  const ui = await factsView($)
+
+  expect((await shownParts(ui)).find(shown => shown.key === 'facts:topics')?.lines).toEqual([
+    '[Northwind] 3 facts',
+    '[Acme Ltd] 2 current',
+    '[Globex]',
+  ])
+  await ui.unmount()
+})
+
 test('Current is bold, the facts and the current items are plain, and a topic\'s counts step back', async ($, on) => {
   // Covers: B226
   await start($, on, fullDistillate())

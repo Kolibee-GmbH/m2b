@@ -328,10 +328,16 @@ export function textOrNull(value: unknown): string | null {
   return typeof value === 'string' ? value : null
 }
 
-/** `2 facts, 1 current`; a topic without current items says only its facts. */
-function counts(topic: TopicCount): string {
-  const facts = `${topic.facts} ${topic.facts === 1 ? 'fact' : 'facts'}`
-  return topic.current === 0 ? facts : `${facts}, ${topic.current} current`
+/**
+ * `2 facts, 1 current`. A count of none is not said, as beside a topic in the overview: a topic
+ * with only current items says `1 current`, one that holds neither says nothing.
+ */
+function counts(topic: TopicCount): string | null {
+  const held = [
+    ...(topic.facts === 0 ? [] : [`${topic.facts} ${topic.facts === 1 ? 'fact' : 'facts'}`]),
+    ...(topic.current === 0 ? [] : [`${topic.current} current`]),
+  ]
+  return held.length === 0 ? null : held.join(', ')
 }
 
 /**
