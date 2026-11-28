@@ -5,6 +5,14 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/), with tags `vX.Y.Z`. How a release is made is in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [0.16.2] - 2026-11-28
+
+### Fixed
+
+- In the tab `Facts` of the pane, a topic no longer says a count of none, as in the overview: one
+  with only current items reads `2 current` instead of `0 facts, 2 current`, and one that holds
+  neither shows no count ([#67](https://github.com/Kolibee-GmbH/m2b/pull/67)).
+
 ## [0.16.1] - 2026-11-25
 
 ### Fixed
